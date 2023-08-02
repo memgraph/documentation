@@ -16,7 +16,7 @@ using [Memgraph Lab](cloud-connect#connect-with-memgraph-lab),
 encryption with a self-signed certificate. 
 
 
-![Cloud-Img](../data/memgraph-cloud/cloud-img.svg)
+<!-- ![Cloud-Img](../data/memgraph-cloud/cloud-img.svg) -->
 
 
 Use Memgraph Cloud to stream data into Memgraph in real-time and run complex
