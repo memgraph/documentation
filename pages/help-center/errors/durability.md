@@ -1,8 +1,4 @@
----
-id: durability
-title: Durability errors
-sidebar_label: Durability
----
+# Durability errors
 
 import Help from '../templates/_help.mdx';
 

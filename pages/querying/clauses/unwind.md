@@ -1,8 +1,4 @@
----
-id: unwind
-title: UNWIND clause
-sidebar_label: UNWIND
----
+# UNWIND clause
 
 The `UNWIND` clause is used to unwind a list of values as individual rows.
 

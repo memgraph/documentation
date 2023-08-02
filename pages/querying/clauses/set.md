@@ -1,8 +1,4 @@
----
-id: set
-title: SET clause
-sidebar_label: SET
----
+# SET clause
 
 The `SET` clause is used to update labels on nodes and properties on nodes and relationships.
 

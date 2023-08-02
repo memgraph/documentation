@@ -1,8 +1,4 @@
----
-id: configuration-settings
-title: Configuration settings
-sidebar_label: Configuration settings
----
+# Configuration settings
 
 [![Related - How-to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/config-logs.md)
 

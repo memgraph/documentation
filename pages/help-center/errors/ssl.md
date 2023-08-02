@@ -1,8 +1,4 @@
----
-id: ssl
-title: SSL errors
-sidebar_label: SSL
----
+# SSL errors
 
 import Help from '../templates/_help.mdx';
 

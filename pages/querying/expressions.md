@@ -1,8 +1,4 @@
----
-id: expressions
-title: Expressions
-sidebar_label: Expressions
----
+# Expressions
 
 The following sections describe some of the other supported features.
 

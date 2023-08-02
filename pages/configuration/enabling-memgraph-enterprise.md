@@ -1,8 +1,4 @@
----
-id: enabling-memgraph-enterprise
-title: Enabling Memgraph Enterprise
-sidebar_label: Enabling Memgraph Enterprise
----
+#  Enabling Memgraph Enterprise
 
 Some of Memgraph's features are only available in Enterprise Edition. They are
 present in the same binary but protected by a license key.

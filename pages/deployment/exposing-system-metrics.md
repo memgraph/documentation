@@ -1,8 +1,4 @@
----
-id: exposing-system-metrics
-title: Exposing system metrics (Enterprise)
-sidebar_label: Exposing system metrics
----
+# Exposing system metrics (Enterprise)
 
 In production systems, monitoring of applications is crucial, and that includes databases as well. 
 Memgraph allows tracking information about transactions, query latencies, snapshot recovery latencies, 

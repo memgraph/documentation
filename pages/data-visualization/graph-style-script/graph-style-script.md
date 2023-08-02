@@ -1,9 +1,4 @@
----
-id: graph-style-script-language
-title: Graph Style Script language
-sidebar_label: Graph Style Script language
-slug: /graph-style-script-language
----
+# Graph Style Script language
 
 [![Related - Tutorial](https://img.shields.io/static/v1?label=Related&message=Tutorial&color=008a00&style=for-the-badge)](/memgraph/tutorials/style-your-graphs-in-memgraph-lab)
 

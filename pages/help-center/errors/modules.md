@@ -1,8 +1,4 @@
----
-id: modules
-title: Module errors
-sidebar_label: Modules
----
+# Module errors
 
 import Help from '../templates/_help.mdx';
 

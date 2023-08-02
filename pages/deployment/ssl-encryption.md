@@ -1,7 +1,4 @@
----
-id: ssl-encryption
-title: SSL encryption
----
+# SSL encryption
 
 import Tabs from "@theme/Tabs"; 
 import TabItem from "@theme/TabItem";

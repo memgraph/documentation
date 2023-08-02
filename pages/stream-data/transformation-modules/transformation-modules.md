@@ -1,9 +1,4 @@
----
-id: overview
-title: Transformation modules
-sidebar_label: Transformation modules overview
-slug: /reference-guide/streams/transformation-modules
----
+# Transformation modules
 
 In order to connect Memgraph to a data stream, it needs to know how to transform
 the incoming messages in order to consume them correctly. This is done with a

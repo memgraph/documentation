@@ -1,9 +1,4 @@
----
-id: querying
-title: Querying
-sidebar_label: Querying
----
-
+# Querying
 
 **Cypher** is the most widely adopted, fully-specified, and open query language
 for property graph databases. It provides an intuitive way to work with property

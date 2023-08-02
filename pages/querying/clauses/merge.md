@@ -1,8 +1,4 @@
----
-id: merge
-title: MERGE clause
-sidebar_label: MERGE
----
+# MERGE clause
 
 The `MERGE` clause is used to ensure that a pattern you are looking for exists
 in the database. This means that if the pattern is not found, it will be

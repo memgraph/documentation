@@ -1,8 +1,4 @@
----
-id: return
-title: RETURN clause
-sidebar_label: RETURN
----
+# RETURN clause
 
 The `RETURN` clause defines which data should be included in the resulting set.
 

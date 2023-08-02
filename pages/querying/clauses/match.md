@@ -1,8 +1,4 @@
----
-id: match
-title: MATCH clause
-sidebar_label: MATCH
----
+# MATCH clause
 
 The `MATCH` clause is used to obtain data from the database by matching it to a given pattern.
 

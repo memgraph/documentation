@@ -1,9 +1,4 @@
----
-id: overview
-title: Help Center
-sidebar_label: Help Center
-slug: /
----
+# Help Center
 
 Are you stuck? Don't worry, here at Memgraph we are all eager to help - we'll
 not leave you stranded!

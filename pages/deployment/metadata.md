@@ -1,8 +1,4 @@
----
-id: metadata
-title: Metadata
-sidebar_label: Metadata
----
+# Metadata
 
 Bolt protocol specifies additional data that can be sent along with the
 requested results. Such data is called metadata and can be divided into two

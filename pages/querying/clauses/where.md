@@ -1,8 +1,4 @@
----
-id: where
-title: WHERE clause
-sidebar_label: WHERE
----
+# WHERE clause
 
 `WHERE` isn't usually considered a standalone clause but rather a part of the
 `MATCH`, `OPTIONAL MATCH` and `WITH` clauses.

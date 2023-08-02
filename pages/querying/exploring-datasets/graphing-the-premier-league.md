@@ -1,8 +1,4 @@
----
-id: graphing-the-premier-league
-title: Graphing the Premier League
-sidebar_label: Graphing the Premier League
----
+# Graphing the Premier League
 
 This article is a part of a series intended to show users how to use Memgraph on
 real-world data and, by doing so, retrieve some interesting and useful

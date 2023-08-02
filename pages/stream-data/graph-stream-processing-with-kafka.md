@@ -1,8 +1,4 @@
----
-id: graph-stream-processing-with-kafka
-title: Graph stream processing with Kafka and Memgraph
-sidebar_label: Graph stream processing with Kafka
----
+# Graph stream processing with Kafka and Memgraph
 
 In this tutorial, you will learn how to connect Memgraph to an existing Kafka
 stream using Memgraph Lab, and transform data into graph database objects to

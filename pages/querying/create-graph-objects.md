@@ -1,8 +1,4 @@
----
-id: create-graph-objects
-title: Create graph objects
-sidebar_label: Create graph objects
----
+# Create graph objects
 
 For creating graph objects, you can use the following clauses.
 

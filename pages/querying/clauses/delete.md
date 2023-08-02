@@ -1,8 +1,4 @@
----
-id: delete
-title: DELETE clause
-sidebar_label: DELETE
----
+# DELETE clause
 
 The `DELETE` clause is used to delete nodes and relationships from the database.
 

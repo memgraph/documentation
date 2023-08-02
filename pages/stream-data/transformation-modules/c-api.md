@@ -1,8 +1,4 @@
----
-id: c-api
-title: Transformation modules C API
-sidebar_label: C API
----
+# Transformation modules C API
 
 This is the C API documentation for `mg_procedure.h` that contains declarations
 of all functions that can be used to implement a transformation. This source

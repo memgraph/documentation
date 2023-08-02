@@ -1,8 +1,4 @@
----
-id: replication
-title: Replication
-sidebar_label: Replication
----
+# Replication
 
 :::caution
 

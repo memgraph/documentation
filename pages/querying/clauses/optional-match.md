@@ -1,8 +1,4 @@
----
-id: optional-match
-title: OPTIONAL MATCH clause
-sidebar_label: OPTIONAL MATCH
----
+# OPTIONAL MATCH clause
 
 The `MATCH` clause can be modified by prepending the `OPTIONAL` keyword.
 `OPTIONAL MATCH` clause behaves the same as a regular `MATCH`, but when it fails to find the pattern,

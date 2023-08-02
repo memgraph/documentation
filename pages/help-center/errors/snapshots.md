@@ -1,8 +1,4 @@
----
-id: snapshots
-title: Snapshot errors
-sidebar_label: Snapshots
----
+# Snapshot errors
 
 import Help from '../templates/_help.mdx';
 

@@ -1,9 +1,4 @@
----
-id: overview
-title: Streams
-sidebar_label: Streams overview
-slug: /reference-guide/streams
----
+# Streams
 
 Memgraph can connect to existing Kafka, Redpanda, and Pulsar sources to ingest
 the data, which you can then query with the power of MAGE algorithms or your own

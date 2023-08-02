@@ -1,8 +1,4 @@
----
-id: ports
-title: Port errors
-sidebar_label: Ports
----
+# Port errors
 
 import Help from '../templates/_help.mdx';
 

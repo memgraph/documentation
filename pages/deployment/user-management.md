@@ -1,8 +1,4 @@
----
-id: user-management
-title: User management
-sidebar_label: User management
----
+# User management
 
 import Tabs from "@theme/Tabs"; 
 import TabItem from "@theme/TabItem";

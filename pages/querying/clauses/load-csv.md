@@ -1,8 +1,4 @@
----
-id: load-csv
-title: LOAD CSV clause
-sidebar_label: LOAD CSV
----
+# LOAD CSV clause
 
 The `LOAD CSV` clause enables you to load and use data from a CSV file of your
 choosing in a row-based manner within a query. We support the Excel CSV dialect,

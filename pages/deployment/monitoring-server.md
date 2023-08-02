@@ -1,8 +1,4 @@
----
-id: monitoring-server
-title: Monitoring server
-sidebar_label: Monitoring server
----
+# Monitoring server
 
 Memgraph allows you to connect to its monitoring server via WebSocket and
 receive certain information from it.  

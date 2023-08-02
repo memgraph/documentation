@@ -1,8 +1,4 @@
----
-id: union
-title: UNION clause
-sidebar_label: UNION
----
+# UNION clause
 
 The `UNION` clause is used to combine the result of multiple queries.
 

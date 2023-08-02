@@ -1,8 +1,4 @@
----
-id: got-deaths
-title: Game of Thrones deaths
-sidebar_label: Game of Thrones deaths
----
+# Game of Thrones deaths
 
 This article is part of a series intended to show how to use Memgraph on
 real-world data to retrieve some interesting and useful information.

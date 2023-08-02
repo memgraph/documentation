@@ -1,8 +1,4 @@
----
-id: manage-streams-query
-title: Manage data streams with queries
-sidebar_label: Manage data streams with queries
----
+# Manage data streams with queries
 
 The following page instructs how to manage streams using queries. Streams can
 also be [managed through the **Stream** section in the Memgraph

@@ -1,8 +1,4 @@
----
-id: replication
-title: Replication errors
-sidebar_label: Replication
----
+# Replication errors
 
 import Help from '../templates/_help.mdx';
 

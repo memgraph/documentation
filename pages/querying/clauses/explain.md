@@ -1,8 +1,4 @@
----
-id: explain
-title: EXPLAIN clause
-sidebar_label: EXPLAIN
----
+# EXPLAIN clause
 
 The EXPLAIN clause can be used to inspect a particular Cypher query in order to see its
 execution plan.

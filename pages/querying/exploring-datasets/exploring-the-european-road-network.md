@@ -1,8 +1,4 @@
----
-id: exploring-the-european-road-network
-title: Exploring the European road network
-sidebar_label: Exploring the European road network
----
+# Exploring the European road network
 
 This article is a part of a series intended to show users how to use Memgraph on
 real-world data and, by doing so, retrieve some interesting and useful

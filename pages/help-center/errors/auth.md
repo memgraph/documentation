@@ -1,8 +1,4 @@
----
-id: auth
-title: Auth module errors
-sidebar_label: Auth module
----
+# Auth module errors
 
 import Help from '../templates/_help.mdx';
 

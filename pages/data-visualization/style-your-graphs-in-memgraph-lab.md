@@ -1,8 +1,4 @@
----
-id: style-your-graphs-in-memgraph-lab
-title: Style your graphs in Memgraph Lab
-sidebar_label: Style your graphs in Memgraph Lab
----
+# Style your graphs in Memgraph Lab
 
 [![Related - Blog
 Post](https://img.shields.io/static/v1?label=Related&message=Blog%20post&color=9C59DB&style=for-the-badge)](https://memgraph.com/blog/how-to-style-your-graphs-in-memgraph-lab)

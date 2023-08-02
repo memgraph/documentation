@@ -1,8 +1,4 @@
----
-id: reading-and-modify-data
-title: Read and modify data
-sidebar_label: Read and modify data
----
+# Read and modify data
 
 The simplest usage of the language is to find data stored in the database. For
 that, you can use one of the following clauses:

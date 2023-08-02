@@ -1,8 +1,4 @@
----
-id: call
-title: CALL clause
-sidebar_label: CALL
----
+# CALL clause
 
 The `CALL` clause is used to call a subquery inside the existing query.
 

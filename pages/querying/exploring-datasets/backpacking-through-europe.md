@@ -1,8 +1,4 @@
----
-id: backpacking-through-europe
-title: Backpacking through Europe
-sidebar_label: Backpacking through Europe
----
+# Backpacking through Europe
 
 This article is a part of a series intended to show users how to use Memgraph on
 real-world data and, by doing so, retrieve some interesting and useful

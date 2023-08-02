@@ -1,8 +1,4 @@
----
-id: python-api
-title: Transformations Python API
-sidebar_label: Python API
----
+# Transformations Python API
 
 This is the additional API documentation for `mgp.py`  which contains
 definitions of the public Transformation Python API provided by Memgraph. At the

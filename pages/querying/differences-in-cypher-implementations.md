@@ -1,8 +1,4 @@
----
-id: differences-in-cypher-implementations
-title: Differences in Cypher implementations
-sidebar_label: Differences in Cypher implementations
----
+# Differences in Cypher implementations
 
 Although we try to implement the [openCypher](https://www.opencypher.org/) query
 language as close to the language reference as possible, we had to make some

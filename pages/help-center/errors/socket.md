@@ -1,8 +1,4 @@
----
-id: socket
-title: Socket errors
-sidebar_label: Socket
----
+# Socket errors
 
 import Help from '../templates/_help.mdx';
 

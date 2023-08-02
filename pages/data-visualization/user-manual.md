@@ -1,7 +1,4 @@
----
-title: Memgraph Lab user manual
-sidebar_label: User manual
----
+# Memgraph Lab user manual
 
 **Memgraph Lab** is a **visual user interface** that enables you to import and
 export data to and from Memgraph database, write and execute Cypher queries,

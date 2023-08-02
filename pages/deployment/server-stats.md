@@ -1,8 +1,4 @@
----
-id: server-stats
-title: Server stats
-sidebar_label: Server stats
----
+# Server stats
 
 Memgraph supports multiple queries to get information about the instance that is
 being queried.

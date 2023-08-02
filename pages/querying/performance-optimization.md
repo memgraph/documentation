@@ -1,7 +1,4 @@
----
-id: performance-optimization
-title: Performance optimization
----
+# Performance optimization
 
 The `ANALYZE GRAPH` will check and calculate certain properties of a graph so
 the database can choose a more optimal index or `MERGE` transaction. 

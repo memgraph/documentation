@@ -1,8 +1,4 @@
----
-id: security
-title: Security (Enterprise)
-sidebar_label: Security
----
+# Security (Enterprise)
 
 [![Related - How to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](how-to-guides/manage-user-privileges.md)
 

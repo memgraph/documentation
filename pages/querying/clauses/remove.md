@@ -1,8 +1,4 @@
----
-id: remove
-title: REMOVE clause
-sidebar_label: REMOVE
----
+# REMOVE clause
 
 The `REMOVE` clause is used to remove labels and properties from nodes and relationships.
 

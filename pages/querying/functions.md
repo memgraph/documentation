@@ -1,8 +1,4 @@
----
-id: functions
-title: Functions
-sidebar_label: Functions
----
+# Functions
 
 ## User-defined Memgraph Magic functions
 

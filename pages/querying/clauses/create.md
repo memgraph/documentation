@@ -1,8 +1,4 @@
----
-id: create
-title: CREATE clause
-sidebar_label: CREATE
----
+# CREATE clause
 
 The `CREATE` clause is used to create nodes and relationships in a graph.
 

@@ -1,3 +1,5 @@
+# CASE
+
 Conditional expressions can be expressed in the Cypher language with the `CASE`
 expression. A simple form is used to compare an expression against multiple
 predicates. For the first matched predicate result of the expression provided

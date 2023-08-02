@@ -1,9 +1,4 @@
----
-id: overview
-title: Errors overview
-sidebar_label: Errors overview
-slug: /
----
+# Errors overview
 
 import Help from '../templates/_help.mdx';
 

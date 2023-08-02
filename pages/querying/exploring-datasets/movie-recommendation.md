@@ -1,8 +1,4 @@
----
-id: movie-recommendation
-title: Movie recommendation system
-sidebar_label: Movie recommendation system
----
+# Movie recommendation system
 
 This article is a part of a series intended to show users how to use Memgraph on
 real-world data and, by doing so, retrieve some interesting and useful

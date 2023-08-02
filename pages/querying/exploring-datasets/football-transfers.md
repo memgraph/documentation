@@ -1,8 +1,4 @@
----
-id: football-transfers
-title: Football transfers
-sidebar_label: Football transfers
----
+# Football transfers
 
 This article is a part of a series intended to show how to use Memgraph on
 real-world data to retrieve some interesting and useful information.

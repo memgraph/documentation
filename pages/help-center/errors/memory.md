@@ -1,8 +1,4 @@
----
-id: memory
-title: Memory (RAM) errors
-sidebar_label: Memory (RAM)
----
+# Memory (RAM) errors
 
 import Help from '../templates/_help.mdx';
 

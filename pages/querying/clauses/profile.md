@@ -1,8 +1,4 @@
----
-id: profile
-title: PROFILE clause
-sidebar_label: PROFILE
----
+# PROFILE clause
 
 The PROFILE clause can be used to profile the execution of a query and get a detailed
 report on how the query's plan behaved. To get a query plan, use the [EXPLAIN

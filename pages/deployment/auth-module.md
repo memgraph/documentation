@@ -1,8 +1,4 @@
----
-id: auth-module
-title: Auth module (Enterprise)
-sidebar_label: Auth module
----
+# Auth module (Enterprise)
 
 Memgraph supports authentication and (optional) authorization using a custom
 built external auth module.  The two supported operation modes are:

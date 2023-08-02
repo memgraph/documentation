@@ -1,8 +1,4 @@
----
-id: manage-streams-lab
-title: Manage data streams from Memgraph Lab
-sidebar_label: Manage data streams from Memgraph Lab
----
+# Manage data streams from Memgraph Lab
 
 If you prefer to use GUI, you can connect to data streams by using a wizard in
 the **Stream** section of Memgraph Lab. If you prefere writing commands, you can

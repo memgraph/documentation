@@ -1,8 +1,4 @@
----
-id: python-modules
-title: Python module errors
-sidebar_label: Python modules
----
+# Python module errors
 
 import Help from '../templates/_help.mdx';
 

@@ -1,8 +1,4 @@
----
-id: unknown
-title: Unknown errors
-sidebar_label: Unknown
----
+# Unknown errors
 
 import Help from '../templates/_help.mdx';
 

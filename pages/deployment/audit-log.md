@@ -1,8 +1,4 @@
----
-id: audit-log
-title: Audit log (Enterprise)
-sidebar_label: Audit log
----
+# Audit log (Enterprise)
 
 Memgraph supports all query audit logging. When enabled, the audit log contains
 records of all queries executed on the database.  Each executed query is one
