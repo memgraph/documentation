@@ -1,11 +1,4 @@
----
-id: ubuntu-installation
-title: Install Memgraph on Ubuntu
-sidebar_label: Ubuntu
-slug: /install-memgraph-on-ubuntu
-pagination_prev: installation/overview
-pagination_next: connect-to-memgraph/overview
----
+# Install Memgraph on Ubuntu
 
 This article briefly outlines the basic steps necessary to install and run
 Memgraph on Ubuntu.

@@ -1,8 +1,4 @@
----
-id: graph-modeling
-title: Graph modeling
-sidebar_label: Graph modeling
----
+# Graph modeling
 
 In this tutorial, you will learn the basic terminology and practices related to
 graph databases and graph modeling.

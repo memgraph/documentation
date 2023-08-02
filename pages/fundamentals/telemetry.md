@@ -1,8 +1,4 @@
----
-id: telemetry
-title: Telemetry
-sidebar_label: Telemetry
----
+# Telemetry
 
 Telemetry is an automated process that collects data at a remote point. We at Memgraph use telemetry data for the soul purpose of improving our products by focusing on areas that we believe are important to users. Telemetry is **completely optional** and can be **[fully disabled](#how-to-disable-telemetry)** before starting the database.
 

@@ -1,8 +1,4 @@
----
-id: cli
-title: Command line interface
-sidebar_label: CLI
----
+# Command line interface
 
 import Tabs from "@theme/Tabs"; import TabItem from "@theme/TabItem";
 

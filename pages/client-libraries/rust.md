@@ -1,8 +1,4 @@
----
-id: rust
-title: Rust quick start
-sidebar_label: Rust
----
+# Rust quick start
 
 At the end of this guide, you will have created a Rust program that connects to the Memgraph database and executes simple
 queries.

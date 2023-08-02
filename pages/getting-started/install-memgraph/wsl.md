@@ -1,8 +1,4 @@
----
-id: wsl
-title: Install MemgraphDB on Windows with WSL
-sidebar_label: Windows Subsystem for Linux
----
+#  Install MemgraphDB on Windows with WSL
 
 [![Related - Tutorial](https://img.shields.io/static/v1?label=Related&message=Tutorial&color=008a00&style=for-the-badge)](/tutorials/install-memgraph-on-windows-10.md)
 

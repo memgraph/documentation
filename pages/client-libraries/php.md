@@ -1,8 +1,4 @@
----
-id: php
-title: PHP quick start
-sidebar_label: PHP
----
+#  PHP quick start
 
 At the end of this guide, you will have created a simple PHP **`Hello, World!`**
 program that connects to the Memgraph database and executes simple queries.

@@ -1,8 +1,4 @@
----
-id: java
-title: Java quick start
-sidebar_label: Java
----
+# Java quick start
 
 At the end of this guide, you will have created a simple Java console **`Hello,
 World!`** program that connects to the Memgraph database and executes simple

@@ -1,8 +1,4 @@
----
-id: c-sharp
-title: C# quick start
-sidebar_label: C#
----
+# C# quick start
 
 At the end of this guide, you will have created a simple . NET console **`Hello,
 World!`** program that connects to the Memgraph database and executes simple

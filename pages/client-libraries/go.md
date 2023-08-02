@@ -1,8 +1,4 @@
----
-id: go
-title: Go quick start
-sidebar_label: Go
----
+# Go quick start
 
 At the end of this guide, you will have created a simple Go **`Hello, World!`**
 program that connects to the Memgraph database and executes simple queries.

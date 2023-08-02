@@ -1,8 +1,4 @@
----
-id: memgraph-cloud
-title: Memgraph Cloud
-sidebar_label: Memgraph Cloud
----
+# Memgraph Cloud
 
 import EmbedYTVideo from '@site/src/components/EmbedYTVideo';
 

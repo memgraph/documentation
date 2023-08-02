@@ -1,8 +1,4 @@
----
-id: rpm-package
-title: Install Memgraph from RPM package
-sidebar_label: RPM package
----
+# Install Memgraph from RPM package
 
 This article briefly outlines the basic steps necessary to install and run
 Memgraph from a RPM package.

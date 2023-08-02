@@ -1,8 +1,4 @@
----
-id: client-libraries
-title: Client libraries
-sidebar_label: Client libraries
----
+# Client libraries
 
 Memgraph supports the following languages: 
 

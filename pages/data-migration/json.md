@@ -1,8 +1,4 @@
----
-id: json
-title: Import data from JSON files
-sidebar_label: JSON
----
+# Import data from JSON files
 
 A JSON file is a file that stores simple data structures and objects in
 JavaScript Object Notation format, which is a standard data interchange format.

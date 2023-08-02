@@ -1,9 +1,4 @@
----
-id: overview
-title: Export data
-sidebar_label: Export data
-slug: /export-data
----
+#  Export data
 
 Memgraph allows you to export all the data from the database, or results from an executed query.
 

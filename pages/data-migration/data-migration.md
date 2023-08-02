@@ -1,8 +1,4 @@
----
-id: data-migration
-title: Data migration
-sidebar_label: Data migration
----
+# Data migration
 
 What data do you want to import?
 <!-- no toc -->

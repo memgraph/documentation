@@ -1,8 +1,4 @@
----
-id: storage-memory-usage
-title: Storage memory usage
-sidebar_label: Storage memory usage
----
+# Storage memory usage
 
 Estimating Memgraph's storage memory usage is not entirely straightforward
 because it depends on a lot of variables, but it is possible to do so quite

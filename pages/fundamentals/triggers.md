@@ -1,8 +1,4 @@
----
-id: triggers
-title: Triggers
-sidebar_label: Triggers
----
+# Triggers
 
 **Database triggers** are an integral part of most database systems. A trigger is a procedural code that is automatically executed in response to specific events. Events are related to some change in data, such as created, updated and deleted data records. The trigger is often used for maintaining the integrity of the information in the database. For example, in a graph database, when a new property is added to the Employee node, a new Tax, Vacation, and Salary node should be created, along with the relationships between them. Triggers can also be used to log historical data, for example, to keep track of employees' previous salaries.
 

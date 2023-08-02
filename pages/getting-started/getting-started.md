@@ -1,8 +1,4 @@
----
-id: getting-started
-title: Getting started with Memgraph
-sidebar_label: Getting started
----
+# Getting started with Memgraph
 
 Memgraph is an open source graph database built for teams who expect highly
 performant, advanced analytical insights - as compatible with your current

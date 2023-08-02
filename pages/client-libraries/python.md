@@ -1,8 +1,4 @@
----
-id: python
-title: Python quick start
-sidebar_label: Python
----
+# Python quick start
 
 At the end of this guide, you will have created a simple Python **`Hello,
 World!`** program that connects to the Memgraph database and executes simple

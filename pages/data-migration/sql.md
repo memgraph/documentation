@@ -1,4 +1,4 @@
-## Migrate MySQL database to Memgraph
+# Migrate MySQL database to Memgraph
 
 ### Prerequisites
 

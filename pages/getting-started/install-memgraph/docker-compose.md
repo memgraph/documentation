@@ -1,8 +1,4 @@
----
-id: docker-compose
-title: Docker Compose
-sidebar_label: Docker Compose
----
+# Docker Compose
 
 If you define an application with **Docker Compose**, you can use that
 definition to run the application in CI, staging, or production environments.

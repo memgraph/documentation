@@ -1,8 +1,4 @@
----
-id: direct-download-links
-title: Memgraph direct download links
-sidebar_label: Direct download links
----
+# Memgraph direct download links
 
 You can download all of the MemgraphDB packages from the [Memgraph download
 hub](https://memgraph.com/download/). If you need direct links for the latest

@@ -1,8 +1,4 @@
----
-id: first-steps-with-memgraph
-title: First steps with Memgraph
-sidebar_label: First steps with Memgraph
----
+# First steps with Memgraph
 
 import EmbedYTVideo from '@site/src/components/EmbedYTVideo';
 

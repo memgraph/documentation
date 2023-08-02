@@ -1,8 +1,4 @@
----
-id: data-types
-title: Data types
-sidebar_label: Data types
----
+# Data types
 
 import Tabs from "@theme/Tabs"; import TabItem from "@theme/TabItem";
 

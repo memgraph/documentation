@@ -1,8 +1,4 @@
----
-id: javascript
-title: JavaScript quick start
-sidebar_label: JavaScript
----
+# JavaScript quick start
 
 At the end of this guide, you will have created a JavaScript program that connects to the Memgraph database and executes simple
 queries.

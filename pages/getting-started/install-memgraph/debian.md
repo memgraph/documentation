@@ -1,8 +1,4 @@
----
-id: debian
-title: Install Memgraph on Debian
-sidebar_label: Debian
----
+# Install Memgraph on Debian
 
 This article briefly outlines the basic steps necessary to install and run
 Memgraph on Debian.

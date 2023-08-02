@@ -1,9 +1,4 @@
----
-id: overview
-title: Drivers overview
-sidebar_label: Drivers overview
-slug: /connect-to-memgraph/drivers
----
+# Drivers overview
 
 Memgraph supports the following languages: 
 

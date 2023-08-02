@@ -1,8 +1,4 @@
----
-id: kubernetes
-title: Kubernetes
-sidebar_label: Kubernetes
----
+# Kubernetes
 
 To include **standalone Memgraph** as a part of your Kubernetes cluster, you can use the Helm chart provided in the [**Memgraph Helm charts repository**](https://github.com/memgraph/helm-charts). Due to numerous possible use cases and deployment setups via Kubernetes, the provided Helm chart is just a starting point you can modify according to your needs. 
 

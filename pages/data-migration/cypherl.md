@@ -1,9 +1,5 @@
----
-id: cypherl
-title: Importing Cypher queries (CYPHERL format)
-sidebar_label: CYPHERL
-pagination_prev: import-data/overview
----
+# Importing Cypher queries (CYPHERL format)
+
 import Tabs from "@theme/Tabs"; import TabItem from "@theme/TabItem";
 
 If your data is in the form of Cypher queries (for example, `CREATE` and `MERGE`

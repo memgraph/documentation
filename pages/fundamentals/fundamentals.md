@@ -1,8 +1,4 @@
----
-id: fundamentals
-title: Fundamentals
-sidebar_label: Fundamentals
----
+#  Fundamentals
 
 ## [Constraints](/fundamentals/constraints.md)
 

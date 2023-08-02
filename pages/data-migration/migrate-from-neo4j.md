@@ -1,8 +1,4 @@
----
-id: migrate-from-neo4j
-title: Migrate from Neo4j to Memgraph
-sidebar_label: Migrate from Neo4j
----
+# Migrate from Neo4j to Memgraph
 
 import EmbedYTVideo from '@site/src/components/EmbedYTVideo';
 

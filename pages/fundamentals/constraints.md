@@ -1,8 +1,4 @@
---
-id: constraints
-title: Enforce constraints
-sidebar_label: constraints
---
+# Enforce constraints
 
 ## Existence constraint
 

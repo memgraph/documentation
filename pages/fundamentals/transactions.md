@@ -1,8 +1,4 @@
----
-id: transactions
-title: Transactions
-sidebar_label: Transactions
----
+# Transactions
 
 All Cypher queries are run within transactions, which means that all modification
 made by a single query are held in memory by the transaction until the query

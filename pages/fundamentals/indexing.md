@@ -1,8 +1,4 @@
----
-id: indexing
-title: Indexing
-sidebar_label: Indexing
----
+# Indexing
 
 [![Related -
 How-to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/indexes.md)

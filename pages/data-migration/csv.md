@@ -1,8 +1,4 @@
----
-id: csv
-title: Import data from CSV files
-sidebar_label: CSV
----
+# Import data from CSV files
 
 import Tabs from "@theme/Tabs"; import TabItem from "@theme/TabItem";
 
