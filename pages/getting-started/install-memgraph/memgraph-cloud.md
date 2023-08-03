@@ -46,7 +46,7 @@ If you are looking for a quick start, take a look at our short tutorial.
 
 For a more detailed explanation of Memgraph Cloud, take a look at the demo video made for the launch that will take you through it's features:
 
-[<img alt="memgraph_cloud" src={require('../data/memgraph-cloud/cloud-login.png').default} style={{width:'100%'}}/>](https://youtu.be/Tt5KPKylU8k?t=683 "Get started with Memgraph Cloud")
+
 
 ## Cloud account
 
@@ -55,7 +55,7 @@ Find out how to sign up for Memgraph Cloud, manage passwords and add payment met
 Fell free to watch a demo video made for the Cloud launch that will explain
 the Account section of Memgraph Cloud: 
 
-[<img alt="account-payment" src={require('../data/memgraph-cloud/account-payment.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=941 "Account section")
+
 
 ### Create Memgraph Cloud account
 
@@ -87,7 +87,7 @@ project.
 Below is a demo video made for the launch that will take you through setting up
 the Cloud account: 
 
-[<img alt="cloud-singup" src={require('../data/memgraph-cloud/cloud-login.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=683 "How to create Cloud account")
+
 
 ### Change Memgraph Cloud password
 
@@ -122,7 +122,7 @@ for Memgraph Cloud projects.
 Below is a demo video made for the launch that will explain the importance of
 Memgraph Cloud project password: 
 
-[<img alt="project-password" src={require('../data/memgraph-cloud/admin-credentials.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=862 "Why is it important to remember your project password")
+
 
 ### Manage payment methods
 
@@ -160,7 +160,7 @@ To create a new project:
 Below is a demo video made for the launch that will take you through setting up
 a new Cloud project: 
 
-[<img alt="cloud-new-project" src={require('../data/memgraph-cloud/new-project.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=774 "How to create Cloud project")
+
 
 ### Pause, resume or delete a project
 
@@ -192,7 +192,6 @@ To delete a project:
 Fell free to watch a demo video made for the Cloud launch that will explain
 the Projects section of Memgraph Cloud where you manage projects: 
 
-[<img alt="project-management" src={require('../data/memgraph-cloud/project-management.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=1029 "Projects section")
 
 ### Back up a project
 
@@ -260,7 +259,6 @@ one of many **drivers** below.
 Fell free to watch a demo video made for the Cloud launch that will explain
 how to connect to Memgraph using Memgraph Cloud: 
 
-[<img alt="paused-project" src={require('../data/memgraph-cloud/paused-project.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=1233 "Connect to Memgraph from Memgraph Cloud")
 
 ### Connect with Memgraph Lab
 
@@ -761,7 +759,7 @@ Cloud rates.
 Fell free to watch a demo video made for the Cloud launch that will explain
 the Account section of Memgraph Cloud where you handle your payment methods: 
 
- [<img alt="account-payment" src={require('../data/memgraph-cloud/account-payment.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=941 "Account section")
+
 
 ### Add a payment method
 
@@ -806,8 +804,6 @@ Cloud.
 
 Fell free to watch a demo video made for the Cloud launch that will explain
 the logic behind payment rates: 
-
-[<img alt="paused-project" src={require('../data/memgraph-cloud/paused-project.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=1070 "How are rates applied")
 
 #### Project rates
 
