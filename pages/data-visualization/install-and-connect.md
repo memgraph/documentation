@@ -96,7 +96,7 @@ you will have to change the connection string to point to that port, i.e.
 **4.** Click on connect, and you should be presented with the following
 dashboard:
 
-![lab-dashboard](../data/installation/lab-dashboard.png)
+<!-- ![lab-dashboard](../data/installation/lab-dashboard.png) -->
 
 Congratulations! You have successfully installed Memgraph Lab and connected it
 to Memgraph. You are now ready to start building your graph and querying it.
@@ -105,7 +105,7 @@ to Memgraph. You are now ready to start building your graph and querying it.
 
 You might receive the following error message when trying to connect.
 
-![failed_connection](../data/failed_connection.png)
+<!-- ![failed_connection](../data/failed_connection.png) -->
 
 In this case, make sure that Memgraph is properly up and running and that you
 have entered the correct port number.
@@ -136,7 +136,7 @@ MATCH (u:User)-[r]->(x) RETURN u, r, x;
 
 You should get the following result:
 
-![graph_result](../data/installation/lab-graph.png)
+<!-- ![graph_result](../data/installation/lab-graph.png) -->
 
 Now that you know your development environment is working, you are ready to
 continue exploring Memgraph and building much more interesting projects
@@ -178,7 +178,7 @@ to that port, i.e. `localhost:<your port number>`.
 **3.** Click on connect, and you should be presented with the following
 dashboard:
 
-![lab-dashboard](../data/installation/lab-dashboard.png)
+<!-- ![lab-dashboard](../data/installation/lab-dashboard.png) -->
 
 Congratulations! You have successfully installed Memgraph Lab and connected it
 to Memgraph. You are now ready to start building your graph and querying it.
@@ -187,7 +187,7 @@ to Memgraph. You are now ready to start building your graph and querying it.
 
 You might receive the following error message when trying to connect.
 
-![failed_connection](../data/failed_connection.png)
+<!-- ![failed_connection](../data/failed_connection.png) -->
 
 In this case, make sure that Memgraph is properly up and running and that you
 have entered the correct port number.
@@ -218,7 +218,7 @@ MATCH (u:User)-[r]->(x) RETURN u, r, x;
 
 You should get the following result:
 
-![graph_result](../data/installation/lab-graph.png)
+<!-- ![graph_result](../data/installation/lab-graph.png) -->
 
 Now that you know your development environment is working, you are ready to
 continue exploring Memgraph and building much more interesting projects
@@ -267,7 +267,7 @@ you will have to change the connection string to point to that port, i.e.
 **4.** Click on connect, and you should be presented with the following
 dashboard:
 
-![lab-dashboard](../data/installation/lab-dashboard.png)
+<!-- ![lab-dashboard](../data/installation/lab-dashboard.png) -->
 
 Congratulations! You have successfully installed Memgraph Lab and connected it
 to Memgraph. You are now ready to start building your graph and querying it.
@@ -276,7 +276,7 @@ to Memgraph. You are now ready to start building your graph and querying it.
 
 You might receive the following error message when trying to connect.
 
-![failed_connection](../data/failed_connection.png)
+<!-- ![failed_connection](../data/failed_connection.png) -->
 
 In this case, make sure that Memgraph is properly up and running and that you
 have entered the correct port number.
@@ -307,7 +307,7 @@ MATCH (u:User)-[r]->(x) RETURN u, r, x;
 
 You should get the following result:
 
-![graph_result](../data/installation/lab-graph.png)
+<!-- ![graph_result](../data/installation/lab-graph.png)-->
 
 Now that you know your development environment is working, you are ready to
 continue exploring Memgraph and building much more interesting projects
