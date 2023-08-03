@@ -1,8 +1,4 @@
----
-id: bridges
-title: bridges
-sidebar_label: bridges
----
+# bridges
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

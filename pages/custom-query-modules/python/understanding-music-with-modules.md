@@ -1,8 +1,4 @@
----
-id: understanding-music-with-modules
-title: Exploring a music social network
-sidebar_label: Exploring a music social network
----
+# Exploring a music social network
 
 This article is part of a series intended to show users how to use Memgraph on
 real-world data and, by doing so, retrieve some interesting and useful

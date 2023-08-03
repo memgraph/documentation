@@ -1,8 +1,4 @@
----
-id: node-classification-with-gnn
-title: node_classification_with_gnn
-sidebar_label: node_classification_with_gnn
----
+# node_classification_with_gnn
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

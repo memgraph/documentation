@@ -1,8 +1,4 @@
----
-id: max-flow
-title: max_flow
-sidebar_label: max_flow
----
+# max_flow
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

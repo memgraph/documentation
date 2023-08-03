@@ -1,8 +1,4 @@
----
-id: elasticsearch-synchronization
-title: elasticsearch_synchronization
-sidebar_label: elasticsearch_synchronization
----
+# elasticsearch_synchronization
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

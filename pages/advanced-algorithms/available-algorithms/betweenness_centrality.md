@@ -1,8 +1,4 @@
----
-id: betweenness-centrality
-title: betweenness_centrality
-sidebar_label: betweenness_centrality
----
+# betweenness_centrality
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

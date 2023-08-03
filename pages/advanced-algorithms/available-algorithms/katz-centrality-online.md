@@ -1,8 +1,4 @@
----
-id: katz-centrality-online
-title: katz_centrality_online
-sidebar_label: katz_centrality_online
----
+# katz_centrality_online
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

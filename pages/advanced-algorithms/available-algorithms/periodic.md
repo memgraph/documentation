@@ -1,8 +1,4 @@
----
-id: periodic
-title: periodic
-sidebar_label: periodic
----
+# periodic
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

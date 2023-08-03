@@ -1,8 +1,4 @@
----
-id: create-a-new-module-python
-title: How to create a query module in Python
-sidebar_label: Create a Python query module
----
+# How to create a query module in Python
 
 The [Python API](/memgraph/reference-guide/query-modules/api/python-api)
 provided by Memgraph lets you develop query modules. It is accompanied by the

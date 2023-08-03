@@ -1,8 +1,4 @@
----
-id: llm-util
-title: llm_util
-sidebar_label: llm_util
----
+# llm_util
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

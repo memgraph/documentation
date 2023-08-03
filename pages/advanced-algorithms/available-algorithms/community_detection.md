@@ -1,8 +1,4 @@
----
-id: community-detection
-title: community_detection
-sidebar_label: community_detection
----
+# community_detection
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

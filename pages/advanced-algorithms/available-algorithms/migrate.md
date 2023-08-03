@@ -1,7 +1,4 @@
----
-title: migrate
-sidebar_label: migrate
----
+# migrate
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

@@ -1,8 +1,4 @@
----
-id: degree-centrality
-title: degree_centrality
-sidebar_label: degree_centrality
----
+# degree_centrality
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

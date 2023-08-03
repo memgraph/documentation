@@ -1,7 +1,4 @@
----
-title: meta_util
-sidebar_label: meta_util
----
+# meta_util
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

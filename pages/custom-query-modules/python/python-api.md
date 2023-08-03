@@ -1,9 +1,4 @@
----
-id: python-api
-title: Query modules Python API
-sidebar_label: Python API
-slug: /reference-guide/query-modules/api/python-api
----
+# Query modules Python API
 
 This is the API documentation for `mgp.py` that contains definitions of the
 public Python API provided by Memgraph. In essence, this is a wrapper around the

@@ -1,8 +1,4 @@
----
-id: node2vec
-title: node2vec
-sidebar_label: node2vec
----
+# node2vec
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

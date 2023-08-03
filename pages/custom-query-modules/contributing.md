@@ -1,8 +1,4 @@
----
-id: contributing
-title: How to contribute to MAGE?
-sidebar_label: Contributing
----
+# How to contribute to MAGE?
 
 ## Contributing
 

@@ -1,8 +1,4 @@
----
-id: union-find
-title: union_find
-sidebar_label: union_find
----
+# union_find
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

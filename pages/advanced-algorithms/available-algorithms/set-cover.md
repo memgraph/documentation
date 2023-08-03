@@ -1,8 +1,4 @@
----
-id: set-cover
-title: set_cover
-sidebar_label: set_cover
----
+# set_cover
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

@@ -1,8 +1,4 @@
----
-id: conditional-execution
-title: conditional_execution
-sidebar_label: conditional_execution
----
+# conditional_execution
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

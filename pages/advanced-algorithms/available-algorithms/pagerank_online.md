@@ -1,8 +1,4 @@
----
-id: pagerank-online
-title: pagerank_online
-sidebar_label: pagerank_online
----
+# pagerank_online
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

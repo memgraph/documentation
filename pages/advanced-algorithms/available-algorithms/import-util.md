@@ -1,8 +1,4 @@
----
-id: import-util
-title: import_util
-sidebar_label: import_util
----
+# import_util
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

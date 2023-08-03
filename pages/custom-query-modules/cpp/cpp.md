@@ -1,8 +1,4 @@
----
-id: create-a-new-module-cpp
-title: How to create a query module in C++
-sidebar_label: Create a C++ query module
----
+# How to create a query module in C++
 
 Query modules can be implemented using the [C++
 API](/memgraph/reference-guide/query-modules/api/cpp-api)

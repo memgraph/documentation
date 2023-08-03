@@ -1,8 +1,4 @@
----
-id: biconnected-components
-title: biconnected_components
-sidebar_label: biconnected_components
----
+# biconnected_components
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

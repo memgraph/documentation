@@ -1,8 +1,4 @@
----
-id: bipartite-matching
-title: bipartite_matching
-sidebar_label: bipartite_matching
----
+# bipartite_matching
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

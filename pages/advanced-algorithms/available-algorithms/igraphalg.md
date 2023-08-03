@@ -1,8 +1,4 @@
----
-id: igraphalg
-title: igraphalg
-sidebar_label: igraphalg
----
+# igraphalg
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

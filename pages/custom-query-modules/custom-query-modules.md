@@ -1,3 +1,5 @@
+# Custom query modules
+
 [![Related - How-to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/query-modules.md)
 
 Memgraph supports extending the query language with user-written procedures in

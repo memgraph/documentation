@@ -1,8 +1,4 @@
----
-id: node-similarity
-title: node_similarity
-sidebar_label: node_similarity
----
+# node_similarity
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

@@ -1,8 +1,4 @@
----
-id: json-util
-title: json_util
-sidebar_label: json_util
----
+# json_util
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

@@ -1,8 +1,4 @@
----
-id: weakly-connected-components
-title: weakly_connected_components
-sidebar_label: weakly_connected_components
----
+# weakly_connected_components
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

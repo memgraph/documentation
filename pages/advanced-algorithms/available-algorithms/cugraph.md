@@ -1,8 +1,4 @@
----
-id: cugraph
-title: cugraph
-sidebar_label: cugraph
----
+# cugraph
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

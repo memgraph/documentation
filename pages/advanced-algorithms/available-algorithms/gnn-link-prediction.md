@@ -1,8 +1,4 @@
----
-id: link-prediction-with-gnn
-title: link_prediction_with_gnn
-sidebar_label: link_prediction_with_gnn
----
+# link_prediction_with_gnn
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

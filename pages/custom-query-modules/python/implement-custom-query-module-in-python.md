@@ -1,8 +1,4 @@
----
-id: implement-custom-query-module-in-python
-title: Implement a custom query module in Python
-sidebar_label: Implement a custom query module in Python
----
+# Implement a custom query module in Python
 
 This tutorial will give you a basic idea of how to develop a custom query module
 in Python with Memgraph Lab 2.0 and use it on a dataset.

@@ -1,8 +1,4 @@
----
-id: graph-util
-title: graph_util
-sidebar_label: graph_util
----
+# graph_util
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

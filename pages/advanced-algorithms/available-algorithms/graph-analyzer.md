@@ -1,9 +1,4 @@
----
-id: graph-analyzer
-title: graph_analyzer
-sidebar_label: graph_analyzer
----
-
+# graph_analyzer
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

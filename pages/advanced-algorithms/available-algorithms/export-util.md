@@ -1,8 +1,4 @@
----
-id: export-util
-title: export_util
-sidebar_label: export_util
----
+# export_util
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

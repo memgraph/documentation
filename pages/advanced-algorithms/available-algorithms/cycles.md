@@ -1,8 +1,4 @@
----
-id: cycles
-title: cycles
-sidebar_label: cycles
----
+# cycles
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

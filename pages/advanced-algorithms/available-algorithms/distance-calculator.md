@@ -1,8 +1,4 @@
----
-id: distance-calculator
-title: distance_calculator
-sidebar_label: distance_calculator
----
+# distance_calculator
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

@@ -1,8 +1,4 @@
----
-id: vrp
-title: vrp
-sidebar_label: vrp
----
+# vrp
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

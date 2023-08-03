@@ -1,8 +1,4 @@
----
-id: kmeans
-title: kmeans
-sidebar_label: kmeans
----
+# kmeans
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

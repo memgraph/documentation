@@ -1,8 +1,4 @@
----
-id: temporal-graph-networks
-title: temporal_graph_networks
-sidebar_label: temporal_graph_networks
----
+# temporal_graph_networks
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

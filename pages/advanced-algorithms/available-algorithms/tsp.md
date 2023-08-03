@@ -1,8 +1,4 @@
----
-id: tsp
-title: tsp
-sidebar_label: tsp
----
+# tsp
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

@@ -1,8 +1,4 @@
----
-id: pagerank
-title: pagerank
-sidebar_label: pagerank
----
+# pagerank
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

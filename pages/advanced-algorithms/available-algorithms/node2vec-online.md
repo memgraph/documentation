@@ -1,8 +1,4 @@
----
-id: node2vec-online
-title: node2vec_online
-sidebar_label: node2vec_online
----
+# node2vec_online
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

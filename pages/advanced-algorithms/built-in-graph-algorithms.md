@@ -1,8 +1,4 @@
----
-id: built-in-graph-algorithms
-title: Built-in graph algorithms
-sidebar_label: Built-in graph algorithms
----
+# Built-in graph algorithms
 
 Graph algorithms are a set of instructions that traverse (visits nodes of) a
 graph and find specific nodes, paths, or a path between two nodes. Some of these

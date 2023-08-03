@@ -1,8 +1,4 @@
----
-id: community-detection-online
-title: community_detection_online
-sidebar_label: community_detection_online
----
+# community_detection_online
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

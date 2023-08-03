@@ -1,9 +1,4 @@
----
-id: cpp-api
-title: Query modules C++ API
-sidebar_label: C++ API
-slug: /reference-guide/query-modules/api/cpp-api
----
+# Query modules C++ API
 
 This is the API documentation for `mgp.hpp`, which contains declarations of all
 functions in the C++ API for implementing query module procedures and functions.

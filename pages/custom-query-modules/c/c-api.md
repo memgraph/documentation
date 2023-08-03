@@ -1,9 +1,4 @@
----
-id: c-api
-title: Query modules C API
-sidebar_label: C API
-slug: /reference-guide/query-modules/api/c-api
----
+# Query modules C API
 
 This is the API documentation for `mg_procedure.h` that contains declarations
 of all functions that can be used to implement a query module procedure. The

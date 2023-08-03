@@ -1,9 +1,4 @@
----
-id: mock-python-api
-title: Mock Python query module API
-sidebar_label: Mock Python API
-slug: /reference-guide/query-modules/api/mock-python-api
----
+#  Mock Python query module API
 
 The mock Python query module API enables you to develop and test query modules
 for Memgraph without having to run a Memgraph instance by simulating its

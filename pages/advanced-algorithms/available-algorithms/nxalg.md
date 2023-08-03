@@ -1,8 +1,4 @@
----
-id: nxalg
-title: nxalg
-sidebar_label: nxalg
----
+# nxalg
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

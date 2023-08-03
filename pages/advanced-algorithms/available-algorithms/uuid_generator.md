@@ -1,8 +1,4 @@
----
-id: uuid-generator
-title: uuid_generator
-sidebar_label: uuid_generator
----
+# uuid_generator
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

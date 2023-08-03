@@ -1,8 +1,4 @@
----
-id: graph-coloring
-title: graph_coloring
-sidebar_label: graph_coloring
----
+# graph_coloring
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
