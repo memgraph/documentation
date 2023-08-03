@@ -99,7 +99,7 @@ To change your Memgraph Cloud account password, login into your account and:
 3. In the pop-up, fill in the **Old Password** and **New Password**.
 4. Click **Confirm** to save changes.
 
-<img src={require('../data/memgraph-cloud/cloud-password.png').default} className={"imgBorder"}/>
+<!-- <img src={require('../data/memgraph-cloud/cloud-password.png').default} className={"imgBorder"}/> -->
 
 ### Retrieve Memgraph Cloud password
 
@@ -187,7 +187,7 @@ To delete a project:
 3. In the **Actions** section, click **Delete Project**.
 4. In the confirmation pop-up, click the **Confirm** button.
 
-<img src={require('../data/memgraph-cloud/memgraph-cloud/pause-project.png').default} className={"imgBorder"}/>
+<!-- <img src={require('../data/memgraph-cloud/memgraph-cloud/pause-project.png').default} className={"imgBorder"}/> -->
 
 Fell free to watch a demo video made for the Cloud launch that will explain
 the Projects section of Memgraph Cloud where you manage projects: 
@@ -274,7 +274,7 @@ To connect using the in-browser application:
    login form will be automatically filled with the connection data, except for
    the password.
 
-<img src={require('../data/memgraph-cloud/connect-to-cloud-memgraph-lab-web.png').default} className={"imgBorder"}/>
+<!-- <img src={require('../data/memgraph-cloud/connect-to-cloud-memgraph-lab-web.png').default} className={"imgBorder"}/> -->
 
 To use the desktop version of Memgraph Lab:
 1. Download [Memgraph Lab](https://memgraph.com/download/#memgraph-lab).
@@ -761,7 +761,7 @@ Cloud rates.
 Fell free to watch a demo video made for the Cloud launch that will explain
 the Account section of Memgraph Cloud where you handle your payment methods: 
 
-[<img alt="account-payment" src={require('../data/memgraph-cloud/account-payment.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=941 "Account section")
+ [<img alt="account-payment" src={require('../data/memgraph-cloud/account-payment.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=941 "Account section")
 
 ### Add a payment method
 

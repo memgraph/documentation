@@ -42,7 +42,7 @@ SHOW TRANSACTIONS;
 The query shows only the transactions you started or transactions for which you
 have the necessary [privileges](#privileges-needed-to-manage-all-transactions).
 
-<img src={require('../data/transactions/show_transactions.png').default}/>
+<!-- <img src={require('../data/transactions/show_transactions.png').default}/> -->
 
 If you are connecting to Memgraph using a client, you can pass additional
 metadata when starting a transaction (if the client supports additional
@@ -155,11 +155,11 @@ TERMINATE TRANSACTIONS "9223372036854775809";
 
 Upon the transaction termination, the following confirmation will appear:
 
-<img src={require('../data/transactions/terminate_transactions.png').default}/>
+![Terminate transaction](../data/transactions/terminate_transactions.png)
 
 The following message will appear in the session in which the infinite query was being run:
 
-<img src={require('../data/transactions/transaction_aborted_message.png').default}/>
+![Transaction aborted message](../data/transactions/transaction_aborted_message.png)
 
 ## Isolation levels
 
