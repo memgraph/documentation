@@ -134,7 +134,7 @@ property of `Hero` and `Comic` vertices, and on the `title` property of
 `ComicSeries` vertices. The `ComicSeries` vertices also have the `publishYear`
 property.
 
- <img src={require('../data/under-the-hood/marvel-dataset-schema.png').default}/>
+![](/pages/fundamentals/storage-memory-usage/marvel-dataset-schema.png)
 
 There are 6487 `Hero` and 12,661 `Comic` vertices with the property `name`.
 That's 19,148 vertices in total. To calculate how much storage those vertices

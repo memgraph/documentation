@@ -160,7 +160,7 @@ The following graph is used by all examples here:
 }>
   <TabItem value="visualization">
 
-  <img src={require('../data/how-to-guides/map-projection-example.png').default}/>
+ ![](/pages/fundamentals/data-types/map-projection-example.png)
 
   </TabItem>
 
