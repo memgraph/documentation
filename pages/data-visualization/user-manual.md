@@ -16,7 +16,7 @@ Every time you open Memgraph Lab, it will greet you with an **Overview**,
 offering resources and actions depending whether your database is empty or not,
 and whether you ran any queries or not.
 
-<img src={require('./data/lab-user-manual/overview.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+![](/pages/data-visualization/lab-user-manual/overview.png)
 
 At the top of the screen, you will find information about: 
 - Connection status
@@ -44,7 +44,7 @@ can help you with clause completion and give information about signatures and
 parameters. If you need help writing Cypher queries, check out the [Cypher
 manual](/cypher-manual).
 
-<img src={require('./data/lab-user-manual/intelisense.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+![](/pages/data-visualization/lab-user-manual/intelisense.png)
 
 Once you **Run** a query (by clicking a button or pressing **CTRL** +
 **Enter**), you can **Cancel** it, but if the query has already
@@ -64,7 +64,7 @@ The Graph Style Editor allows you to customize the visual appearance  of the
 graph results by editing the System Style or create a custom style and change
 the color, size, and shape of graph elements, even add pictures or backgrounds. 
 
-<img src={require('./data/lab-user-manual/gss.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+![](/pages/data-visualization/lab-user-manual/gss.png)
 
 When saving a style, the graph results of an executed query will be used as a
 preview picture of the style. Custom styles can be defined as a default style
@@ -97,7 +97,7 @@ Here, you can also **Download Results** in JSON, CSV and TSV format.
 
 Table rows can be expanded to show additional information about entities.
 
-<img src={require('./data/lab-user-manual/rows.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+![](/pages/data-visualization/lab-user-manual/rows.png)
 
 ### Graph results
 
@@ -106,7 +106,7 @@ see additional information. You can also **Expand** a node to see its
 relationships, **Collapse** a node to hide its relationships, or **Hide** the node from
 the canvas. 
 
-<img src={require('./data/lab-user-manual/graph-results.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+![](/pages/data-visualization/lab-user-manual/graph-results.png)
 
 In the bottom left corner, you can **Enable physics**, that is, make nodes interact
 with each other, by pulling away or closing in to one another, depending on the
@@ -118,13 +118,13 @@ center, the repel force that dictates how strongly nodes repel each other, and
 the link distance that dictates the minimum required distance between two
 connected nodes. 
 
-<img src={require('./data/lab-user-manual/physics.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+![](/pages/data-visualization/lab-user-manual/physics.png)
 
 Another interesting feature you can use on graph data results is the map
 background. This feature automatically turns on when the result nodes have
 numeral `lat` and `lng` properties. 
 
-<img src={require('./data/lab-user-manual/map.png').default} className={"imgBorder"}/>
+![](/pages/data-visualization/lab-user-manual/map.png)
 
 ## Run History
 
@@ -157,7 +157,7 @@ You can clear the run history in the **Settings** section.
 In the Collections section, you can gather your favorite queries so they are always
 at hand.
 
-<img src={require('./data/lab-user-manual/query-collection.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+![](/pages/data-visualization/lab-user-manual/query-collection.png)
 
 Queries can be added to the collection from the **Query Execution** and the **Latest
 Queries** section. 
@@ -187,7 +187,7 @@ All the query modules and procedures are listed in the **Query Modules**
 section. By expanding the information about each query module, you can see the
 procedures it contains, as well as their signatures and examples. 
 
-<img src={require('./data/lab-user-manual/query-modules.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+![](/pages/data-visualization/lab-user-manual/query-modules.png)
 
 In this section, you can also implement your own custom query modules written in
 Python by clicking on the **+ New Module**. A new file will open with example
@@ -195,7 +195,7 @@ procedures you can examine and learn from. Once you have written and saved the
 query module, Memgraph Lab will automatically detect procedures within it, which
 you can then call from queries. 
 
-<img src={require('./data/lab-user-manual/custom-query-modules.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+![](/pages/data-visualization/lab-user-manual/custom-query-modules.png)
 
 If you need help writing custom query modules, check out the [reference
 guide](/memgraph/reference-guide/query-modules/implement-custom-query-modules/overview),
@@ -218,7 +218,7 @@ stream.
 Adding Kafka Configuration Parameters is also done via the Stream section, as
 well as managing the connection - starting, pausing or deleting it. 
 
-<img src={require('./data/lab-user-manual/streams.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+![](/pages/data-visualization/lab-user-manual/streams.png)
 
 Check out the [reference guide on
 streams](/memgraph/reference-guide/streams), and check [a how-to
@@ -237,7 +237,7 @@ about the current number of nodes or relationships of that type, as well as
 percentage of existence of each property across the nodes and relationships of
 that type. 
 
-<img src={require('./data/lab-user-manual/schema.png').default} className={"imgBorder"}/>
+![](/pages/data-visualization/lab-user-manual/schema.png)
 
 ## Datasets
 
@@ -249,7 +249,7 @@ more complex issues.
 You can check the structure of the dataset by checking its graph schema, as well
 as reading the explanations of all the entities and their properties. 
 
-<img src={require('./data/lab-user-manual/dataset.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+![](/pages/data-visualization/lab-user-manual/dataset.png)
 
 There are several
 [tutorials](/memgraph/tutorials/exploring-datasets) you can use to
@@ -264,7 +264,7 @@ Cypher queries.
 To import data from other sources, check the [guides on
 importing](/memgraph/import-data).
 
-<img src={require('./data/lab-user-manual/import-export.png').default} className={"imgBorder"}/>
+![](/pages/data-visualization/lab-user-manual/import-export.png)
 
 ## Logs
 
@@ -272,7 +272,7 @@ To be able to see logs from Memgraph Lab application you need to open port 7444
 when starting Memgraph with Docker. 
 
 
-<img src={require('./data/lab-user-manual/logs.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+![](/pages/data-visualization/lab-user-manual/logs.png)
 
 Check the [reference guide on
 configuration](/memgraph/reference-guide/configuration#other) regarding logs
@@ -302,7 +302,7 @@ time, or vertically to work with up to 5 sections simultaneously.
 
 You can also combine the horizontal and vertical split. 
 
-<img src={require('./data/lab-user-manual/layouts.png').default} className={"imgBorder"}/>
+![](/pages/data-visualization/lab-user-manual/layouts.png)
 
 ## Memgraph Lab demo video
 

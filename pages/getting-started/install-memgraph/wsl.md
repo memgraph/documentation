@@ -336,7 +336,7 @@ Once the installation is completed, Memgraph Lab will launch, and you will be
 presented with the Home screen. Click **Connect now** to connect to your
 Memgraph instance.
 
-![Connect to MemgraphDB](../data/install-memgraph-on-windows-10/memgraph-lab-connect-now.png)
+![Connect to MemgraphDB](/pages/getting-started/install-memgraph/wsl/memgraph-lab-connect-now.png)
 
 :::note
 
@@ -359,7 +359,7 @@ You can test the Memgraph Lab's connection to Memgraph by running your first
 query. You will use the Cypher query to create a simple graph that has two nodes
 and one relationship.
 
-![memgraph-lab-run-match-query-result](../data/install-memgraph-on-windows-10/memgraph-lab-run-match-query-result.png)
+![memgraph-lab-run-match-query-result](/pages/getting-started/install-memgraph/wsl/memgraph-lab-run-match-query-result.png)
 
 1.  First, click the **Query** in the sidebar.
 2.  Next, enter this first query at the query editor which is located at the top
@@ -373,7 +373,7 @@ and one relationship.
 
 3.  Lastly, click "Run" or press `Ctrl + Enter` to execute the query.
 
-![memgraph-lab-run-query](../data/install-memgraph-on-windows-10/memgraph-lab-run-query.png)
+![memgraph-lab-run-query](/pages/getting-started/install-memgraph/wsl/memgraph-lab-run-query.png)
 
 If no error message appeared, that means your query was executed successfully.
 
@@ -387,11 +387,11 @@ RETURN u, r, x;
 
 On the **Data** tab your result should look similar to this:
 
-![memgraph-lab-run-match-query-data](../data/install-memgraph-on-windows-10/memgraph-lab-run-match-query-data.png)
+![memgraph-lab-run-match-query-data](/pages/getting-started/install-memgraph/wsl/memgraph-lab-run-match-query-data.png)
 
 If you switch to the **Graph** tab you will see something like this:
 
-![memgraph-lab-run-match-query-graph](../data/install-memgraph-on-windows-10/memgraph-lab-run-match-query-graph.png)
+![memgraph-lab-run-match-query-graph](/pages/getting-started/install-memgraph/wsl/memgraph-lab-run-match-query-graph.png)
 
 Now you have the Memgraph Lab working correctly on your system. Memgraph Lab's
 visual presentation of query results is one of its best features.

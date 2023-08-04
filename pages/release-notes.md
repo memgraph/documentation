@@ -469,11 +469,11 @@ module](/query-modules/cpp/conditional-execution.md) lets you define
 * If there are several Cypher queries in the query editor you can select a single query and run
   it without commenting out all the other queries.
 
-![run-selected-query-in-the-lab](/pages/release-notes/lab/lab-run-selected-demo.gif)
+![run-selected-query-in-the-lab](/pages/release-notes/lab-250/lab-run-selected-demo.gif)
 
 * You can now open multiple query executions views side by side and compare query execution speed or results.
 
-![multiple-query-executions-in-the-lab](/pages/release-notes/lab/lab-multiple-editors-demo.gif)
+![multiple-query-executions-in-the-lab](/pages/release-notes/lab-250/lab-multiple-editors-demo.gif)
 
 * Query modules are now sorted alphabetically for easier and faster browsing. A search box has also been added to query modules with more
   than 5 procedures to help narrow them down (e.g. `nxalg` query module has [49 procedures](https://memgraph.com/docs/mage/query-modules/python/nxalg)).

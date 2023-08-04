@@ -44,19 +44,20 @@ If you are looking for a quick start, take a look at our short tutorial.
 <EmbedYTVideo videoId="Hfs2lGTwyuo" width="100%" />
 <br/>  
 -->
+<!---
 For a more detailed explanation of Memgraph Cloud, take a look at the demo video made for the launch that will take you through it's features:
 
 [<img alt="memgraph_cloud" src={require('../data/memgraph-cloud/cloud-login.png').default} style={{width:'100%'}}/>](https://youtu.be/Tt5KPKylU8k?t=683 "Get started with Memgraph Cloud")
-
+-->
 ## Cloud account
 
 Find out how to sign up for Memgraph Cloud, manage passwords and add payment method.
-
+<!---
 Fell free to watch a demo video made for the Cloud launch that will explain
 the Account section of Memgraph Cloud: 
 
 [<img alt="account-payment" src={require('../data/memgraph-cloud/account-payment.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=941 "Account section")
-
+-->
 ### Create Memgraph Cloud account
 
 To create Memgraph Cloud account:
@@ -83,12 +84,12 @@ Cloud, in which you can create one project that uses up to 2GB RAM.
 
 If you require more compute, enter a valid payment method and upgrade your
 project.
-
+<!---
 Below is a demo video made for the launch that will take you through setting up
 the Cloud account: 
 
 [<img alt="cloud-singup" src={require('../data/memgraph-cloud/cloud-login.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=683 "How to create Cloud account")
-
+-->
 ### Change Memgraph Cloud password
 
 To change your Memgraph Cloud account password, login into your account and:
@@ -99,7 +100,7 @@ To change your Memgraph Cloud account password, login into your account and:
 3. In the pop-up, fill in the **Old Password** and **New Password**.
 4. Click **Confirm** to save changes.
 
-<img src={require('../data/memgraph-cloud/cloud-password.png').default} className={"imgBorder"}/>
+![](/pages/getting-started/install-memgraph/memgraph-cloud/cloud-password.png)
 
 ### Retrieve Memgraph Cloud password
 
@@ -118,11 +119,12 @@ Each project within your Memgraph Cloud has its password. The project
 password is not the same password you use to log into Memgraph Cloud. Memgraph
 **doesn't have access** to those credentials and can't retrieve lost credentials
 for Memgraph Cloud projects.
-
+<!---
 Below is a demo video made for the launch that will explain the importance of
 Memgraph Cloud project password: 
 
 [<img alt="project-password" src={require('../data/memgraph-cloud/admin-credentials.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=862 "Why is it important to remember your project password")
+-->
 
 ### Manage payment methods
 
@@ -156,12 +158,12 @@ To create a new project:
    **Next**. Keep in mind that Memgraph can't retrieve this password if you lose
    it. 
 5. Click **Go to project** to complete the project creation.
-
+<!---
 Below is a demo video made for the launch that will take you through setting up
 a new Cloud project: 
 
 [<img alt="cloud-new-project" src={require('../data/memgraph-cloud/new-project.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=774 "How to create Cloud project")
-
+-->
 ### Pause, resume or delete a project
 
 When you don't need compute you can pause the project and you won't be charged
@@ -187,13 +189,13 @@ To delete a project:
 3. In the **Actions** section, click **Delete Project**.
 4. In the confirmation pop-up, click the **Confirm** button.
 
-<img src={require('../data/memgraph-cloud/memgraph-cloud/pause-project.png').default} className={"imgBorder"}/>
-
+![](/pages/getting-started/install-memgraph/memgraph-cloud/memgraph-cloud/pause-project.png)
+<!---
 Fell free to watch a demo video made for the Cloud launch that will explain
 the Projects section of Memgraph Cloud where you manage projects: 
 
 [<img alt="project-management" src={require('../data/memgraph-cloud/project-management.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=1029 "Projects section")
-
+-->
 ### Back up a project
 
 A project is backed up by creating a snapshot with Amazon EBS. You cannot create
@@ -256,12 +258,12 @@ privileges](/docs/memgraph/how-to-guides/manage-user-privileges).
 ou can connect to an instance running within the Memgraph Cloud project via
 **Memgraph Lab**, a visual interface, **mgconsole**, command-line interface, or
 one of many **drivers** below. 
-
+<!---
 Fell free to watch a demo video made for the Cloud launch that will explain
 how to connect to Memgraph using Memgraph Cloud: 
 
 [<img alt="paused-project" src={require('../data/memgraph-cloud/paused-project.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=1233 "Connect to Memgraph from Memgraph Cloud")
-
+-->
 ### Connect with Memgraph Lab
 
 Memgraph Lab comes in two flavors, as a desktop application and as an in-browser
@@ -274,7 +276,7 @@ To connect using the in-browser application:
    login form will be automatically filled with the connection data, except for
    the password.
 
-<img src={require('../data/memgraph-cloud/connect-to-cloud-memgraph-lab-web.png').default} className={"imgBorder"}/>
+![](/pages/getting-started/install-memgraph/memgraph-cloud/connect-to-cloud-memgraph-lab-web.png)
 
 To use the desktop version of Memgraph Lab:
 1. Download [Memgraph Lab](https://memgraph.com/download/#memgraph-lab).
@@ -758,11 +760,12 @@ Read more about it on [Node.js Quick Start Guide](/memgraph/connect-to-memgraph/
 Below are instructions on how to manage Memgraph Cloud payment, and current
 Cloud rates. 
 
+<!--
 Fell free to watch a demo video made for the Cloud launch that will explain
 the Account section of Memgraph Cloud where you handle your payment methods: 
 
 [<img alt="account-payment" src={require('../data/memgraph-cloud/account-payment.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=941 "Account section")
-
+-->
 ### Add a payment method
 
 To add a payment method:
@@ -803,12 +806,12 @@ You can also download paid invoices as PDF to check the cost breakdown.
 
 Below are daily and monthly project and snapshot rates within the Memgraph
 Cloud.
-
+<!--
 Fell free to watch a demo video made for the Cloud launch that will explain
 the logic behind payment rates: 
 
 [<img alt="paused-project" src={require('../data/memgraph-cloud/paused-project.png').default} style={{width:'30%'}}/>](https://youtu.be/Tt5KPKylU8k?t=1070 "How are rates applied")
-
+-->
 #### Project rates
 
 Once your 2-week free trial is finished, the cost of the project will be
