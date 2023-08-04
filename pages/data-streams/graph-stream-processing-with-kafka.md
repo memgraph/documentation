@@ -4,8 +4,6 @@ In this tutorial, you will learn how to connect Memgraph to an existing Kafka
 stream using Memgraph Lab, and transform data into graph database objects to
 analyze it in real-time.
 
-[![Related - Reference Guide](https://img.shields.io/static/v1?label=Related&message=Reference%20Guide&color=yellow&style=for-the-badge)](/reference-guide/streams/overview.md)
-
 If you are still very new to streaming, feel free to first read some of our blog
 posts about the topic to learn [what stream processing
 is](https://memgraph.com/blog/introduction-to-stream-processing), [how it

@@ -1,7 +1,5 @@
 # Configuration settings
 
-[![Related - How-to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/config-logs.md)
-
 The main Memgraph configuration file is available in
 `/etc/memgraph/memgraph.conf` . You can modify that file to suit your specific
 needs. Additional configuration can be specified by including another
@@ -123,8 +121,6 @@ Example:
  `--flag-file=another.conf`
 
  ## Set configuration flags
-
-[![Related - Reference Guide](https://img.shields.io/static/v1?label=Related&message=Reference%20Guide&color=yellow&style=for-the-badge)](/reference-guide/configuration.md)
 
 import Tabs from "@theme/Tabs"; 
 import TabItem from "@theme/TabItem";

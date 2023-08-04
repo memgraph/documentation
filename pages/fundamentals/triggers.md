@@ -352,9 +352,6 @@ Memgraph supports **database triggers** that can be executed if a particular
 type of event occurs. Events are related to changes in data, such as created,
 updated, and deleted nodes or relationships. 
 
-[![Related - Reference Guide](https://img.shields.io/static/v1?label=Related&message=Reference%20Guide&color=yellow&style=for-the-badge)](/reference-guide/triggers.md) 
-
-
 ### How to create a trigger?
 
 You can create a trigger by executing Cypher clauses. Creating a trigger will

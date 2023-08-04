@@ -1,7 +1,5 @@
 # Graph Style Script language
 
-[![Related - Tutorial](https://img.shields.io/static/v1?label=Related&message=Tutorial&color=008a00&style=for-the-badge)](/memgraph/tutorials/style-your-graphs-in-memgraph-lab)
-
 This guide will show you how to easily get started with the Graph Style Script
 language. GSS is a language for customizing the visual display of graphs. For a
 complete list of available features consult the [Style script

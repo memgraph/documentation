@@ -1,10 +1,5 @@
 # Indexing
 
-[![Related -
-How-to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/indexes.md)
-[![Related - Under the
-Hood](https://img.shields.io/static/v1?label=Related&message=Under%20the%20hood&color=orange&style=for-the-badge)](/under-the-hood/indexing.md)
-
 ## When to create indexes?
 
 When you are running queries, you want to get results as soon as possible. In

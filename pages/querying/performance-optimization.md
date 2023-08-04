@@ -32,16 +32,6 @@ average group size and uniform distribution would be misleading. That's why the
 database always selects the label-property index with >= 10x fewer nodes than
 the other label-property index.
 
-[![Related - Reference
-Guide](https://img.shields.io/static/v1?label=Related&message=Reference%20Guide&color=yellow&style=for-the-badge)](/reference-guide/indexing.md)
-[![Related - How
-to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/indexes.md)
-[![Related - Under the
-Hood](https://img.shields.io/static/v1?label=Related&message=Under%20the%20hood&color=orange&style=for-the-badge)](/under-the-hood/indexing.md)
-[![Related - Blog
-Post](https://img.shields.io/static/v1?label=Related&message=Blog%20post&color=9C59DB&style=for-the-badge)](https://memgraph.com/blog/implementing-data-replication)
-
-
 ## Calculate the statistic
 
 Run the following query to calculate the statistics:

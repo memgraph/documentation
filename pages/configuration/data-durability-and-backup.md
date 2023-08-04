@@ -35,8 +35,6 @@ To encrypt the data directory, use
 of the box and is undetectable from the applications perspective so it shouldn't
 break any existing applications. 
 
-[![Related - How-to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/create-backup.md)
-
 ## Durability mechanisms
 
 To configure the durability mechanisms check their respective configuration
@@ -231,8 +229,6 @@ You can configure the exact snapshot creation behavior [by defining the
 relevant](/memgraph/reference-guide/configuration#storage). If you need
 help adjusting the configuration, check out the [how-to guide on changing the
 configuration](/how-to-guides/config-logs.md).
-
-[![Related - Reference Guide](https://img.shields.io/static/v1?label=Related&message=Reference%20Guide&color=yellow&style=for-the-badge)](/reference-guide/backup.md)
 
 ### Create backup
 

@@ -36,15 +36,6 @@ replication instead.
 
 :::
 
-
-[![Related - How
-to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/replication.md)
-[![Related - Under the
-Hood](https://img.shields.io/static/v1?label=Related&message=Under%20the%20hood&color=orange&style=for-the-badge)](/under-the-hood/replication.md)
-[![Related - Blog
-Post](https://img.shields.io/static/v1?label=Related&message=Blog%20post&color=9C59DB&style=for-the-badge)](https://memgraph.com/blog/implementing-data-replication)
-
-
 ## Data replication implementation basics
 
 In Memgraph, all instances are MAIN upon starting. When creating a replication
@@ -259,13 +250,6 @@ instance) to another (REPLICA instances), thus providing a combination of
 consistency, availability and partition tolerance when distributing data over
 several instances.
 
-[![Related - Reference
-Guide](https://img.shields.io/static/v1?label=Related&message=Reference%20Guide&color=yellow&style=for-the-badge)](/reference-guide/replication.md)
-[![Related - Under the
-Hood](https://img.shields.io/static/v1?label=Related&message=Under%20the%20hood&color=orange&style=for-the-badge)](/under-the-hood/replication.md)
-[![Related - Blog
-Post](https://img.shields.io/static/v1?label=Related&message=Blog%20post&color=9C59DB&style=for-the-badge)](https://memgraph.com/blog/implementing-data-replication)
-
 This example demonstrates how to create a simple cluster of nodes running
 Memgraph instances, and set up replication using various replication modes.
 
@@ -416,13 +400,6 @@ SET REPLICATION ROLE TO MAIN;
 
 Uninterrupted data and operational availability in production systems are
 critical and can be achieved in many ways. In Memgraph we opted for replication.
-
-[![Related - How
-to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/replication.md)
-[![Related - Reference
-Guide](https://img.shields.io/static/v1?label=Related&message=Reference%20Guide&color=yellow&style=for-the-badge)](/reference-guide/replication.md)
-[![Related - Blog
-Post](https://img.shields.io/static/v1?label=Related&message=Blog%20post&color=9C59DB&style=for-the-badge)](https://memgraph.com/blog/implementing-data-replication)
 
 In distributed systems theory the CAP theorem, also named Brewer's theorem,
 states that any distributed system can simultaneously guarantee two out of the

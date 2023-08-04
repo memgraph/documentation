@@ -164,9 +164,6 @@ WebSocket over SSL is currently not supported in Memgraph.
 Memgraph uses SSL (Secure Sockets Layer) protocol for establishing an
 authenticated and encrypted connection to a database instance.
 
-[![Related - Reference
-Guide](https://img.shields.io/static/v1?label=Related&message=Reference%20Guide&color=yellow&style=for-the-badge)](/reference-guide/encryption.md)
-
 ## Docker
 
 1. Start a Memgraph instance with `docker run` command including the `-v

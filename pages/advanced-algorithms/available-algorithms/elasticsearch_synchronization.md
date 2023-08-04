@@ -18,9 +18,6 @@ style={{
 
 **Elasticsearch** is a **text-processing platform** that can be used to enhance the capabilities of a graph database like Memgraph. It offers many fine-grained features useful when working on a text that is impossible to develop in databases. Data residing in Elasticsearch and Memgraph should be **synchronized** because otherwise, the whole system could be in an inconsistent state. Such a feature can be added inside Memgraph by using triggers: every time a new entity is added (node or edge) it gets indexed to the Elasticsearch index.
 
-[![docs-source](https://img.shields.io/badge/source-Elasticsearch_sync-FB6E00?logo=github&style=for-the-badge)](https://github.com/memgraph/mage/blob/main/python/elastic_search_serialization.py) [![Related - Blog
-Post](https://img.shields.io/static/v1?label=Related&message=Blog%20post&color=9C59DB&style=for-the-badge)](https://memgraph.com/blog/synchronize-data-between-memgraph-graph-database-and-elasticsearch)
-
 The module supports the following features:
 - creating **Elasticsearch index** from Memgraph clients using Cypher
 - **indexing all data** inside Memgraph to Elasticsearch indexes

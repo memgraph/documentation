@@ -4,9 +4,6 @@ Memgraph can connect to existing Kafka, Redpanda, and Pulsar sources to ingest
 the data, which you can then query with the power of MAGE algorithms or your own
 custom procedures.
 
-[![Related -
-Tutorial](https://img.shields.io/static/v1?label=Related&message=Tutorial&color=008a00&style=for-the-badge)](/tutorials/graph-stream-processing-with-kafka.md) [![Related - How to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/import-data/data-streams/overview.md)
-
 To use streams, a user must:
 
 1. [Create a transformation

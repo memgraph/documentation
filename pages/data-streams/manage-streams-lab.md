@@ -7,9 +7,6 @@ the **Stream** section of Memgraph Lab. If you prefere writing commands, you can
 If you need a Kafka stream to play around with, we've provided some at [Awesome
 Data Stream](https://awesomedata.stream/)! 
 
-[![Related - Reference Guide](https://img.shields.io/static/v1?label=Related&message=Reference%20Guide&color=yellow&style=for-the-badge)](/reference-guide/streams/overview.md) [![Related -
-Tutorial](https://img.shields.io/static/v1?label=Related&message=Tutorial&color=008a00&style=for-the-badge)](/tutorials/graph-stream-processing-with-kafka.md)
-
 ## How to add a stream?
 
 To add a stream in Memgraph Lab: 

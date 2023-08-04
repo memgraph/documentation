@@ -1,7 +1,5 @@
 # LDAP Security (Enterprise)
 
-[![Related - How to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/manage-users-using-ldap.md)
-
 For the purpose of supporting LDAP authentication and (optional)
 authorization, we have built an auth module that is packaged with Memgraph
 Enterprise. For more information about auth modules see the
@@ -70,8 +68,6 @@ to hold and manage the permissions.  Because LDAP servers are already set-up in
 most large organizations, it is convenient for the organization to allow all
 staff members to have access to the database using the already available
 centralized user management system.
-
-[![Related - Reference Guide](https://img.shields.io/static/v1?label=Related&message=Reference%20Guide&color=yellow&style=for-the-badge)](/reference-guide/ldap-security.md)
 
 :::warning
 This is an Enterprise feature.

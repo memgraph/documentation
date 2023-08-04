@@ -1,7 +1,5 @@
 # Security (Enterprise)
 
-[![Related - How to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](how-to-guides/manage-user-privileges.md)
-
 Before reading this article we highly recommend going through a how-to guide
 on [managing user privileges](../how-to-guides/manage-user-privileges.md)
 which contains more thorough explanations of the concepts behind `openCypher`
@@ -179,8 +177,6 @@ found in the [reference guide](/reference-guide/streams/overview.md#create-a-str
 Sometimes, disabling users from executing certain commands is too restrictive.
 Label-based access control enables database administrators to disable users from 
 viewing or manipulating nodes with certain labels and relationships of certain types.
-
-[![Related - How to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/manage-label-based-access-control.md)
 
 Label-based permissions are divided into 4 hierarchical parts or levels:
 - `NOTHING` - denies user visibility and manipulation over nodes and relationships
@@ -415,8 +411,6 @@ SET ROLE FOR bob TO supervisor;
 ```
 
 ## Manage label-based access control
-
-[![Related - Reference Guide](https://img.shields.io/static/v1?label=Related&message=Reference%20Guide&color=yellow&style=for-the-badge)](/reference-guide/security.md)
 
 :::warning
 This is an Enterprise feature.

@@ -1,8 +1,5 @@
 # Style your graphs in Memgraph Lab
 
-[![Related - Blog
-Post](https://img.shields.io/static/v1?label=Related&message=Blog%20post&color=9C59DB&style=for-the-badge)](https://memgraph.com/blog/how-to-style-your-graphs-in-memgraph-lab)
-
 In this tutorial, you'll learn how to use **Style script** to add style to your
 graphs. You'll use [**Memgraph Cloud**](https://memgraph.com/cloud) or the sandbox
 site **Memgraph Playground** that runs **Memgraph Lab** to try out styling
@@ -225,9 +222,6 @@ The complete styling code for this graph is:
 ```
 
 ## Use font awesome for node images
-
-[![Related - Tutorial](https://img.shields.io/static/v1?label=Related&message=Tutorial&color=008a00&style=for-the-badge)](/tutorials/style-your-graphs-in-memgraph-lab.md) [![Related - Blog
-Post](https://img.shields.io/static/v1?label=Related&message=Blog%20post&color=9C59DB&style=for-the-badge)](https://memgraph.com/blog/how-to-style-your-graphs-in-memgraph-lab)
 
 [Font Awesome](https://fontawesome.com/) is a popular icon library. If you ever
 tried to use a font awesome icon as a background image for a node, you might

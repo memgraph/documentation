@@ -3,11 +3,6 @@
 This tutorial will give you a basic idea of how to develop a custom query module
 in Python with Memgraph Lab 2.0 and use it on a dataset.
 
-[![Related - How
-to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/query-modules.md)
-[![Related - Reference
-Guide](https://img.shields.io/static/v1?label=Related&message=Reference%20Guide&color=yellow&style=for-the-badge)](/reference-guide/query-modules/overview.md)
-
 In short, query modules allow you to expand the Cypher query module with various
 procedures. Procedures can be written in Python or C languages. Our MAGE library
 has various modules dealing with complex graph algorithms, but you can implement
