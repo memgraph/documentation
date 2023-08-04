@@ -1,7 +1,7 @@
 # Memgraph Cloud
-
+<!---
 import EmbedYTVideo from '@site/src/components/EmbedYTVideo';
-
+ -->
 [Memgraph Cloud](https://memgraph.com/cloud) is a cloud service fully managed
 on AWS and available in 6 geographic regions around the world. Memgraph Cloud
 allows you to create projects with Enterprise instances of MemgraphDB from your
@@ -40,10 +40,10 @@ with feedback on [Discord](https://discord.com/invite/memgraph):
    start querying!
 
 If you are looking for a quick start, take a look at our short tutorial.
-
+<!---
 <EmbedYTVideo videoId="Hfs2lGTwyuo" width="100%" />
 <br/>  
-
+-->
 For a more detailed explanation of Memgraph Cloud, take a look at the demo video made for the launch that will take you through it's features:
 
 [<img alt="memgraph_cloud" src={require('../data/memgraph-cloud/cloud-login.png').default} style={{width:'100%'}}/>](https://youtu.be/Tt5KPKylU8k?t=683 "Get started with Memgraph Cloud")

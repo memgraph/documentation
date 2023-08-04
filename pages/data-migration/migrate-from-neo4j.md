@@ -1,7 +1,7 @@
 # Migrate from Neo4j to Memgraph
-
+<!---
 import EmbedYTVideo from '@site/src/components/EmbedYTVideo';
-
+--->
 Memgraph is a native in-memory graph database specialized for real-time
 use-cases such us streaming, analytical processing etc. It uses Cypher query
 language and Bolt protocol. This means that you can use the same tools and
@@ -9,11 +9,12 @@ drivers that you are already using with Neo4j. Due to the ACID compliance, data
 persistency and replication support in community version, Memgraph can be used
 as main database for your applications, instead of Neo4j. 
 
+<!---
 This tutorial is also available as a video:
 
 <EmbedYTVideo videoId="LNHH1Od6ZqM" width="100%" />
 <br/>  
-
+--->
 ## Prerequisites
 
 To follow this tutorial, you will need to have the following:

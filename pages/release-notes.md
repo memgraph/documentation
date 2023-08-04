@@ -1,7 +1,7 @@
 # Release notes
-
+<!---
 import VideoBySide from '@site/src/components/VideoBySide';
-
+--->
 ## Memgraph v2.9 - Jul 21, 2023
 
 :::caution
@@ -73,9 +73,9 @@ instance, then the REPLICA instances.
   no longer consumes memory excessively. [#1025](https://github.com/memgraph/memgraph/pull/1025) 
 - When no values are returned from a map, a null is returned instead of an
   exception occurring. [#1039](https://github.com/memgraph/memgraph/pull/1039)
-
+<!---
 <VideoBySide videoSrc="https://www.youtube.com/embed/5JvBBUjpGRA">
-
+--->
 ## MAGE v1.8.0 - Jul 21, 2023
 
 ### Features and improvements
@@ -213,9 +213,9 @@ instance, then the REPLICA instances.
 - Performance has been improved by optimizing the deallocation of resources in
   Memgraph's custom `PoolResource` memory allocator.
   [#898](https://github.com/memgraph/memgraph/pull/898)
-
+<!---
 </VideoBySide>
-
+--->
 ### Bug fixes
 
 - Running Python procedures now consume less memory.
@@ -224,9 +224,9 @@ instance, then the REPLICA instances.
   degradation. [#877](https://github.com/memgraph/memgraph/pull/877) 
 - Query profiles of the LOAD CSV queries now show the correct values of memory
   usage. [#885](https://github.com/memgraph/memgraph/pull/885)
-
+<!---
 <VideoBySide videoSrc="https://www.youtube.com/embed/kJG98VkPMGU">
-
+--->
 ## Memgraph Lab v2.6.0 - Apr 20, 2023
 
 ### What's new
@@ -311,9 +311,9 @@ instance, then the REPLICA instances.
   been further improved by using a memory allocator which will reuse memory
   blocks allocated while processing the `LOAD CSV` query.
   [#825](https://github.com/memgraph/memgraph/pull/825)
-
+<!---
 </VideoBySide>
-
+--->
 ### Bug fixes
 
 - The users who have [global visibility on the
