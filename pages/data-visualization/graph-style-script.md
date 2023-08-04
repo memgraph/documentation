@@ -156,7 +156,7 @@ Define(Normalize, Function(n, g,
 }
 ```
 
-<!-- ![Using Graph Style Script to style different nodes by its size](../data/caching-results-gss.png) -->
+![Using Graph Style Script to style different nodes by its size](/pages/data-visualization/graph-style-script/caching-results-gss.png)
 
 The problem with the solution above is slow performance. The `Normalize` function is called twice
 for each node in the graph view. Each `Normalize` call iterates through all nodes three times: two

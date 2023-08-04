@@ -13,7 +13,7 @@ enables you to:
 It was designed to help you with every stage of your learning process and graph
 development.
 
-<img alt="memgraph_lab_screenshot" src={require('./data/installation/lab-graph.png').default} style={{width:'80%'}}/>
+![](/pages/data-visualization/lab-graph.png)
 
 ## Quick start
 

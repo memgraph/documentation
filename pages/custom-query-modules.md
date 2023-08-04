@@ -31,7 +31,7 @@ Just navigate to **Query Modules**.
 
 <details>
   <summary>Screenshot of Query Modules from Memgraph Lab</summary>
-<img src={require('../../data/memgraph_lab_query_modules.png').default} className={"imgBorder"}/>
+![](/pages/custom-query-modules/memgraph_lab_query_modules.png)
 </details>
 
 Once you start Memgraph, it will attempt to load query modules from all *.so and
@@ -58,7 +58,7 @@ to help you start developing your own modules.
 You can develop query modules in Python from Memgraph Lab (v2.0 and newer). Just
 navigate to **Query Modules** and click on **New Module** to start.
 
-<img src={require('../../../data/memgraph_lab_query_modules.png').default} className={"imgBorder"}/>
+![](/pages/custom-query-modules/memgraph_lab_query_modules.png)
 
 Custom modules developed via Memgraph Lab are located at
 `/var/lib/memgraph/internal_modules`.
