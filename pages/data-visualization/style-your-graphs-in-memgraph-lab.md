@@ -25,14 +25,14 @@ the tutorial.
 3. Open the project and [connect to it via Memgraph
    Lab](/memgraph-cloud/cloud-connect#connect-with-memgraph-lab).
 
-  <img src={require('../data/tutorials/style-your-graphs-in-memgraph-lab/style-graphs-open-lab.gif').default} className={"imgBorder"}/>
+![](/pages/data-visualization/style-your-graphs-in-memgraph-lab/style-graphs-open-lab.gif)
 
 4. In Memgraph Lab, navigate to **Datasets** section and upload the Europe
    backpacking dataset.
 5. Run the sample query provided by the Lab. 
 6. Open the **Graph Style Editor** tab. 
 
-  <img src={require('../data/tutorials/style-your-graphs-in-memgraph-lab/style-graphs-upload-dataset.gif').default} className={"imgBorder"}/>
+![](/pages/data-visualization/style-your-graphs-in-memgraph-lab/style-graphs-upload-dataset.gif)
 
 Notice there is code already present in the _Graph Style Editor_. In the next few
 steps, you'll learn how to adjust that code to style your graph using colors and
@@ -48,7 +48,7 @@ the sandbox is loaded, do the following:
 2. Run the first query to display the shortest path from Spain to Russia.
 3. Click the gear icon to open the **Style editor**
 
-![style-graphs-open-style-editor](../data/tutorials/style-your-graphs-in-memgraph-lab/style-graphs-open-style-editor.png)
+![style-graphs-open-style-editor](/pages/data-visualization/style-your-graphs-in-memgraph-lab/style-graphs-open-style-editor.png)
 
 Notice there is code already present in the _Style editor_. In the next few
 steps, you'll learn how to adjust that code to style your graph using colors and
@@ -91,7 +91,7 @@ code should now look like this:
 
 Click **Apply** to see what your graph looks like now.
 
-![style-graphs-node-size](../data/tutorials/style-your-graphs-in-memgraph-lab/style-graphs-node-size.png)
+![style-graphs-node-size](/pages/data-visualization/style-your-graphs-in-memgraph-lab/style-graphs-node-size.png)
 
 Now change the color of the nodes from red to gold and make them orange on
 hover. Find the following code:
@@ -117,7 +117,7 @@ Update value of the property `color` to `#ffd700` and `color-hover` to
 
 Don't forget to click **Apply** to see your updated graph.
 
-![style-graphs-node-colors](../data/tutorials/style-your-graphs-in-memgraph-lab/style-graphs-node-colors.png)
+![style-graphs-node-colors](/pages/data-visualization/style-your-graphs-in-memgraph-lab/style-graphs-node-colors.png)
 
 ## Step 3 - Add images to the nodes
 
@@ -142,7 +142,7 @@ script:
 Click **Apply** to update the style of your graph. Your graph is looking better
 with each step, isn't it?
 
-![style-graphs-node-with-images](../data/tutorials/style-your-graphs-in-memgraph-lab/style-graphs-node-with-images.png)
+![style-graphs-node-with-images](/pages/data-visualization/style-your-graphs-in-memgraph-lab/style-graphs-node-with-images.png)
 
 ## Step 4 - Using colors to style graph relationships
 
@@ -171,14 +171,14 @@ Now replace that code with this one:
 
 Click **Apply** and your relationships will have a new style!
 
-![style-graphs-relationships-colors](../data/tutorials/style-your-graphs-in-memgraph-lab/style-graphs-relationships-colors.png)
+![style-graphs-relationships-colors](/pages/data-visualization/style-your-graphs-in-memgraph-lab/style-graphs-relationships-colors.png)
 
 ## Step 5 - Checking the final result
 
 We are at the end of this tutorial. Move the nodes around to get the final look.
 Your result could look similar to the image below.
 
-![style-graphs-graph-with-new-style](../data/tutorials/style-your-graphs-in-memgraph-lab/style-graphs-graph-with-new-style.png)
+![style-graphs-graph-with-new-style](/pages/data-visualization/style-your-graphs-in-memgraph-lab/style-graphs-graph-with-new-style.png)
 
 The complete styling code for this graph is:
 
