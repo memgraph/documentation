@@ -4,9 +4,6 @@ In order to connect Memgraph to a data stream, it needs to know how to transform
 the incoming messages in order to consume them correctly. This is done with a
 transformation module.
 
-[![Related -
-Tutorial](https://img.shields.io/static/v1?label=Related&message=Tutorial&color=008a00&style=for-the-badge)](/tutorials/graph-stream-processing-with-kafka.md#create-a-transformation-module)
-
 To create a transformation module, you need to:
 
 1. Create a [Python](./api/python-api.md) or a [shared library](./api/c-api.md)
