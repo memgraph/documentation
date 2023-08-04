@@ -78,7 +78,7 @@ unique conceptual identity.
 As you can see in the example further down, in our university model, a typical
 node could represent a university student, a professor, or a course.
 
-![graph-modeling-nodes](../data/tutorials/graph-modeling/graph-modeling-nodes.png)
+![graph-modeling-nodes](/pages/graph-modeling/graph-modeling-nodes.png)
 
 ### 2.2 Relationships
 
@@ -94,7 +94,7 @@ In our example, the relationship between a `Student` node and a `Subject` node
 could be of the type `ATTENDS`, while the relationship between `Professor` and
 `Subject` is represented by the type `TEACHES`.
 
-![graph-modeling-relationships](../data/tutorials/graph-modeling/graph-modeling-relationships.png)
+![graph-modeling-relationships](/pages/graph-modeling/graph-modeling-relationships.png)
 
 ### 2.3 Labels
 
@@ -110,7 +110,7 @@ The node in the example below demonstrates how an entity can belong to multiple
 groups. A university student can at the same time have the label `Person` and
 `Student`.
 
-![graph-modeling-labels](../data/tutorials/graph-modeling/graph-modeling-labels.png)
+![graph-modeling-labels](/pages/graph-modeling/graph-modeling-labels.png)
 
 ### 2.4 Properties
 
@@ -133,7 +133,7 @@ would be:
 - What year of studies does the student attend? - `yearOfStudies`
 - How to get in touch with the professor? - `email`
 
-![graph-modeling-properties](../data/tutorials/graph-modeling/graph-modeling-properties.png)
+![graph-modeling-properties](/pages/graph-modeling/graph-modeling-properties.png)
 
 ## 3. Designing a graph database schema
 
@@ -169,7 +169,7 @@ steps: nodes, labels, relationships, and properties.
 
 This will allow you to go from your whiteboard sketch to a full graph model.
 
-![graph-modeling-whiteboard](../data/tutorials/graph-modeling/graph-modeling-whiteboard.png)
+![graph-modeling-whiteboard](/pages/graph-modeling/graph-modeling-whiteboard.png)
 
 To make things not so abstract, imagine the following scenario that you will
 model:
@@ -194,7 +194,7 @@ pieces and then connect them:
 Now it is easy to piece them together to form a graph. Your final result should
 look something like the image below.
 
-![graph-modeling-describe-domain](../data/tutorials/graph-modeling/graph-modeling-describe-domain.png)
+![graph-modeling-describe-domain](/pages/graph-modeling/graph-modeling-describe-domain.png)
 
 ### 3.2 Defining the requirements
 
@@ -246,7 +246,7 @@ relationships between the nodes: `[:Client]-[:OFFERS]->[:Course]`,
 Now that we know all of the relationships and node types, you can draw our graph
 schema.
 
-![graph-modeling-mapping-relationships](../data/tutorials/graph-modeling/graph-modeling-mapping-relationships.png)
+![graph-modeling-mapping-relationships](/pages/graph-modeling/graph-modeling-mapping-relationships.png)
 
 ### 3.4 Properties to store
 
@@ -262,7 +262,7 @@ teacher’s name and surname, an e-mail address, the date of birth, and language
 they can teach. In a similar manner, we decide the data for the rest of the
 nodes. In the end, our graph should look like this:
 
-![graph-modeling-storing-properties](../data/tutorials/graph-modeling/graph-modeling-storing-properties.png)
+![graph-modeling-storing-properties](/pages/graph-modeling/graph-modeling-storing-properties.png)
 
 ### 3.5 Should I use property or relationship?
 
@@ -295,7 +295,7 @@ want to avoid.
 So, if you model your categories as separate nodes and create a relationship
 between them, your model would get more complicated.
 
-![graph-modeling-property-or-relationship](../data/tutorials/graph-modeling/graph-modeling-property-or-relationship.png)
+![graph-modeling-property-or-relationship](/pages/graph-modeling/graph-modeling-property-or-relationship.png)
 
 Choosing between setting a value as a property or a separate entity depends on
 the type of analysis you want to make on the dataset. If the data serves only as
@@ -312,7 +312,7 @@ basic types:
   have no orientation. These relationships are sometimes referred to as
   **bi-directional**. The relationships in a directed graph have an orientation.
 
-![graph-modeling-undirected-graph](../data/tutorials/graph-modeling/graph-modeling-undirected-graph.png)![graph-modeling-directed-graph](../data/tutorials/graph-modeling/graph-modeling-directed-graph.png)
+![graph-modeling-undirected-graph](/pages/graph-modeling/graph-modeling-undirected-graph.png)![graph-modeling-directed-graph](/pages/graph-modeling/graph-modeling-directed-graph.png)
 
 - **Weighted And Unweighted Graphs** - A weighted graph has attributes on its
   relationships that specify their weight. For example, a relationship that
@@ -320,7 +320,7 @@ basic types:
   a relationship attribute. Unweighted graphs have no such relationship
   attributes and are sometimes referred to as **Non-Weighted Graphs**.
 
-![graph-modeling-weighted-graph](../data/tutorials/graph-modeling/graph-modeling-weighted-graph.png)
+![graph-modeling-weighted-graph](/pages/graph-modeling/graph-modeling-weighted-graph.png)
 
 On top of direction and graph can also have a **self-loop** (also called a loop
 or a buckle). Self-loop is a relationship that connects a node to itself, while
