@@ -35,7 +35,7 @@ We will learn how to import data from a relational database to Memgraph using
 the example of an online store. The data model of the relational database that
 we will use for this tutorial includes 5 tables with the following properties:
 
-<img src={require('../data/migrate-from-rdbms/migrate_relational_database_data_model.png').default}/>
+![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_data_model.png').default}/>
 
 ## Migrate data using CSV files
 
@@ -50,7 +50,7 @@ In this example, we are using the *Export Wizard* in the *MySQL Workbench*. To
 export the **Customer** table, right-click on the table name and select the
 **Table Data Export Wizard**.
 
-<img src={require('../data/migrate-from-rdbms/migrate_relational_database_export_wizard.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_export_wizard.png)
 
 Click **Next** and on the second step of the Wizard do the following:
 
@@ -65,9 +65,7 @@ Click **Next** and on the second step of the Wizard do the following:
 
 Continue clicking **Next** until **Finish**.
 
-<img
-src={require('../data/migrate-from-rdbms/migrate_relational_database_export_wizard_step_2.png').default}
-className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_export_wizard_step_2.png)
 
 In the root folder of your computer, you should find the **customer.csv** file.
 When opened in a text editor or a spreadsheet program, the data from the
@@ -97,7 +95,7 @@ SHOW VARIABLES LIKE "secure_file_priv";
 I got this value as a response `'secure_file_priv', 'C:\ProgramData\MySQL\MySQL
 Server 8.0\Uploads\'` which I can now use as a destination for my CSV file.
 
-<img src={require('../data/migrate-from-rdbms/migrate_relational_database_file_location.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_file_location.png)
 
 Check that you've selected the database you want to export data from as your
 default one. If the database is selected the name is bolded. If it is not,
@@ -209,7 +207,7 @@ Memgraph Lab in your browser by visiting
 Place yourself in the **Query** tab where we will write queries in the **Query
 editor** to import data into Memgraph.
 
-<img src={require('../data/migrate-from-rdbms/migrate_relational_database_lab_query.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_lab_query.png)
 
 ### 4. Import nodes into Memgraph
 
@@ -272,7 +270,7 @@ MATCH (n)
 RETURN n;
 ```
 
-<img src={require('../data/migrate-from-rdbms/migrate_relational_database_nodes.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_nodes.png)
 
 If you click on each node, you can see its properties. The nodes are still not
 connected to each other, so let's focus on that by importing the rest of the CSV
@@ -316,13 +314,13 @@ SET o.id = row.id
 SET o.quantity = ToInteger(row.quantity);
 ```
 
-<img src={require('../data/migrate-from-rdbms/migrate_relational_database_lab_overview.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_lab_overview.png)
 
 ### 6. Data model and updating the schema
 
 The data model in a graph database now looks like this:
 
-<img src={require('../data/migrate-from-rdbms/migrate_relational_database_graph_data_model.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_graph_data_model.png)
 
 If you decided you want to add a property to any of the nodes or relationships
 you can do so at any point without disrupting the schema.
@@ -351,7 +349,7 @@ MATCH (c)-[m]-(p)-[o]-(pr)
 RETURN c,m,p,o,pr;
 ```
 
-<img src={require('../data/migrate-from-rdbms/migrate_relational_database_graph_database.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_graph_database.png)
 
 ## Where to next?
 
