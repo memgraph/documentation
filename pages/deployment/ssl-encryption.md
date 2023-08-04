@@ -6,9 +6,6 @@ import TabItem from "@theme/TabItem";
 Memgraph uses SSL (Secure Sockets Layer) protocol for establishing an
 authenticated and encrypted connection to a database instance.
 
-[![Related -
-How-to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/encryption.md)
-
 Achieving a secure connection is a three-step process that requires
 
 1. Owning a SSL certificate
