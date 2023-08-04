@@ -124,18 +124,18 @@ instance, then the REPLICA instances.
   - The capacity of run history and its clearing
   - The limit for visible logs
 
-  <img src={require('./data/lab-270/settings.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+  ![](/public/pages/release-notes/lab-270/settings.png)
 - The new interfaces for managing saved styles enables searching and changing
   the default style in the Lab. The saved styles now also have a preview. 
-  <img src={require('./data/lab-270/styles.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+  ![](/public/pages/release-notes/lab-270/styles.png)
 - The run history now also tracks changes to the query, style, or both. You can
   also filter out records to show All (both queries runs and applied styles),
   Query history (only query runs), and Style history (only applied style
   changes). You can expand both the query and style to see the full Cypher or
   GSS code.
-  <img src={require('./data/lab-270/run_history.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
-  <img src={require('./data/lab-270/run_history_expand.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
-  <img src={require('./data/lab-270/run_history_queries.png').default} className={"imgBorder"} style={{marginBottom:'20px'}}/>
+  ![](/public/pages/release-notes/lab-270/run_history.png)
+  ![](/public/pages/release-notes/lab-270/run_history_expand.png)
+  ![](/public/pages/release-notes/lab-270/run_history_queries.png)
 - Queries inside a collection can be expanded and collapsed by clicking on their
   name.
 - When testing and trying out different functions in the GSS you can use
@@ -233,10 +233,10 @@ instance, then the REPLICA instances.
 
 - If you execute multiple Cypher queries, you can now view the result of each
   query instead of viewing just the last result.
-  ![results](./data/lab-260/results.png)
+  ![results](/public/pages/release-notes/lab-260/results.png)
 - Besides exporting query results to JSON, you can also export them to CSV and
   TSV file format.
-  ![download](./data/lab-260/download.png)
+  ![download](/public/pages/release-notes/lab-260/download.png)
 - If the dataset contains millions or billions nodes and relationships, their
   count in the status bar will be in the following format: X.XXM or X.XXB.
 - Syntax of code blocks in the query collection description can now be
@@ -244,12 +244,12 @@ instance, then the REPLICA instances.
   styles: `cypher`, `bash`, `python`, `css`, `c`, `cpp`, `json`, `sql`,
   and `yaml`. Check the examples of syntax highlighting in the [Markdown
   Guide](https://www.markdownguide.org/extended-syntax/#syntax-highlighting).
-  ![markdown](./data/lab-260/markdown.png)
+  ![markdown](/public/pages/release-notes/lab-260/markdown.png)
 - [New functions of the Graph Style Script
   language](/style-script/gss-functions.md) used for customizing graph appearance
   are: `Reduce`, `Sum`, `Avg`, `Min`, `Max`, `IsArray`, `Hue`, `Saturation`,
   `Lightness`, `HSL`.
-  ![gss](./data/lab-260/gss.png)
+  ![gss](/public/pages/release-notes/lab-260/gss.png)
 
 ### Bug fixes
 
