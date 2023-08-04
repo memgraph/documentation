@@ -99,7 +99,8 @@ At the moment, privileges are confined to users' abilities to perform certain
 of the following commands: `CREATE`, `DELETE`, `MATCH`, `MERGE`, `SET`,
 `REMOVE`, `INDEX`, `STATS`, `AUTH`, `REPLICATION`, `READ_FILE`, `DURABILITY`,
 `FREE_MEMORY`, `TRIGGER`, `STREAM`, `CONFIG`, `CONSTRAINT`, `DUMP`,
-`MODULE_READ`, `MODULE_WRITE`, `WEBSOCKET`, `TRANSACTION_MANAGEMENT` and `STORAGE_MODE`.
+`MODULE_READ`, `MODULE_WRITE`, `WEBSOCKET`, `TRANSACTION_MANAGEMENT`,
+`STORAGE_MODE` and `DATABASE`.
 
 
 Granting a certain set of privileges to a specific user or user role can be
@@ -258,6 +259,11 @@ SHOW PRIVILEGES FOR user_or_role;
 
 and all the values of clause privileges, as well as label-based permissions will be displayed.
 
+## Multi-tenant management permissions
+Multi-tenant management queries are protected via the following privileges:
+ * `MULTI_DATABASE_EDIT` manages the user's ability to create and delete isolated databases (`CREATE DATABASE x` and `DROP DATABASE x`)
+ * `MULTI_DATABASE_USE` manages the user's ability to switch between isolated databases (`USE DATABASE x` and `SHOW DATABASES`)
+
 ## Manage user privileges
 
 :::warning
@@ -311,7 +317,8 @@ At the moment, privileges are confined to users' abilities to perform certain
 of the following commands: `CREATE`, `DELETE`, `MATCH`, `MERGE`, `SET`,
 `REMOVE`, `INDEX`, `STATS`, `AUTH`, `REPLICATION`, `READ_FILE`, `DURABILITY`,
 `FREE_MEMORY`, `TRIGGER`, `STREAM`, `CONFIG`, `CONSTRAINT`, `DUMP`,
-`MODULE_READ`, `MODULE_WRITE`, `WEBSOCKET` and `TRANSACTION_MANAGEMENT`.
+`MODULE_READ`, `MODULE_WRITE`, `WEBSOCKET`, `TRANSACTION_MANAGEMENT`, `STORAGE
+MODE` and `DATABASE`.
 
 We could naturally cluster those privileges into groups:
 
@@ -333,6 +340,7 @@ We could naturally cluster those privileges into groups:
   * Privilege to connect to [Memgraph monitoring server](/reference-guide/monitoring-server.md) (`WEBSOCKET`)
   * Privilege to show and terminate transactions (`TRANSACTION_MANAGEMENT`).
   * Privilege to change storage mode (`STORAGE_MODE`).
+  * Privilege to manage [Multi-tenant](/reference-guide/multi-tenancy.md) databases (`DATABASE`).
 
 If you are unfamiliar with any of these commands, you can look them up in our
 [Cypher manual](/cypher-manual).

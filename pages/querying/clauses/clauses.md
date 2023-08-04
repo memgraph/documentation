@@ -1,16 +1,13 @@
----
-id: clauses
-title: Cypher clauses overview
-sidebar_label: Clauses overview
-slug: /clauses
----
+# Clauses
 
 The **Cypher** language enables users to perform standard database operations by using the following clauses:
 
   * [`CALL`](call.md) - calls a subquery inside the query
+  * ['CASE'](case.md)
   * [`CREATE`](create.md) - creates new nodes and relationships
   * [`DELETE`](delete.md) - deletes nodes and relationships
   * [`EXPLAIN`](explain.md) - 
+  * [`FOREACH`](foreach.md) - 
   * [`LOAD CSV`](load-csv.md) - loads data from CSV file
   * [`MATCH`](match.md) - searches for patterns
   * [`MERGE`](merge.md) - creates patterns if they don't exist

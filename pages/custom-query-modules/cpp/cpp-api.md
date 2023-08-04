@@ -325,7 +325,10 @@ Inserts a value of given type under field `field_name`.
 ```cpp
   void Insert(const char *field_name, const Duration value)
 ```
-
+```cpp
+  void Insert(const char *field_name, const Value &value)
+```
+ 
 ### Result
 
 Represents a **result** - the single return value of a Cypher function.
@@ -633,8 +636,10 @@ Node(Node &&other) noexcept
 | `InRelationships`  | Returns an iterable structure of the node’s inbound relationships.  |
 | `OutRelationships` | Returns an iterable structure of the node’s outbound relationships. |
 | `AddLabel`         | Adds a label to the node.                                           |
+| `RemoveLabel`      | Removes a label from the node.                                      |
 | `SetProperty`      | Set value of node's property                                        |
 | `GetProperty`      | Get value of node's property                                        |
+| `RemoveProperty`   | Removes the node's property                                         |
 
 ##### Id
 
@@ -684,6 +689,14 @@ Sets value of node's property.
 void SetProperty(std::string key, std::string value) const
 ```
 
+##### RemoveProperty
+
+Removes the node's property.
+
+```cpp
+void RemoveProperty(std::string property)
+```
+
 ##### InRelationships
 
 Returns an iterable structure of the node’s inbound relationships.
@@ -706,6 +719,14 @@ Adds a label to the node.
 
 ```cpp
 void AddLabel(const std::string_view label)
+```
+
+##### RemoveLabel
+
+Removes a label from a node.
+
+```cpp
+void RemoveLabel(const std::string_view label)
 ```
 
 #### Operators
@@ -821,6 +842,11 @@ Returns the value of the relationship’s `property_name` property.
 
 ```cpp
 const Value operator[](std::string_view property_name) const
+```
+
+Object is hashable using
+```cpp
+std::hash<mgp::Relationship>
 ```
 
 #### Relationships
@@ -1053,6 +1079,11 @@ Returns the value of the relationship’s `property_name` property.
 const Value operator[](std::string_view property_name) const
 ```
 
+Object is hashable using
+```cpp
+std::hash<mgp::Date>
+```
+
 ### LocalTime
 
 Represents a time within the day without timezone information.
@@ -1164,6 +1195,11 @@ LocalTime operator-(const Duration &dur) const
 ```
 ```cpp
 Duration operator-(const LocalDateTime &other) const
+```
+
+Object is hashable using
+```cpp
+std::hash<mgp::LocalTime>
 ```
 
 ### LocalDateTime
@@ -1307,6 +1343,11 @@ LocalDateTime operator-(const Duration &dur) const
 Duration operator-(const LocalDateTime &other) const
 ```
 
+Object is hashable using
+```cpp
+std::hash<mgp::LocalDateTime>
+```
+
 ### Duration
 
 Represents a period of time in Memgraph.
@@ -1370,6 +1411,11 @@ Duration operator-(const Duration &other) const
 ```
 ```cpp
 Duration operator-() const
+```
+
+Object is hashable using
+```cpp
+std::hash<mgp::Duration>
 ```
 
 ### Path
@@ -1442,6 +1488,11 @@ void Expand(const Relationship &relationship)
 | Name                          | Description          |
 | ----------------------------- | -------------------- |
 | `operator==`<br/>`operator!=` | comparison operators |
+
+Object is hashable using
+```cpp
+std::hash<mgp::Path>
+```
 
 ### List
 
@@ -1559,6 +1610,11 @@ Returns the value at the given `index`.
 const Value operator[](size_t index) const
 ```
 
+Object is hashable using
+```cpp
+std::hash<mgp::List>
+```
+
 ### Map
 
 A map of key-value pairs where keys are strings, and values can be of any supported type.
@@ -1608,6 +1664,8 @@ Map(Map &&other) noexcept
 | `Empty`                                   | Returns whether the map is empty.                  |
 | `At`                                      | Returns the value at the given `key`.              |
 | `Insert`                                  | Inserts the given `key`-`value` pair into the map. |
+| `Update`                                  | Inserts or updates the value at the given `key`.   |
+| `Erase`                                   | Erases a mapping by key.                            |
 | `begin`<br/>`end`<br/>`cbegin`<br/>`cend` | Returns the beginning/end of the `Map` iterator.   |
 
 ##### Size
@@ -1648,6 +1706,30 @@ The behavior of accessing `value` after performing this operation is undefined.
 void Insert(std::string_view key, Value &&value)
 ```
 
+##### Update
+
+Updates the `key`-`value` pair in the map. If the key doesn't exist, the value gets inserted.
+The `value` is copied.
+
+```cpp
+void Update(std::string_view key, const Value &value)
+```
+Updates the `key`-`value` pair in the map. If the key doesn't exist, the value gets inserted.
+The `value` is copied. Takes the ownership of `value` by moving it.
+The behavior of accessing `value` after performing this operation is undefined.
+
+```cpp
+void Update(std::string_view key, Value &&value)
+```
+
+##### Erase
+
+Erases the element associated with the key from the map, if it doesn't exist nothing happens.
+
+```cpp
+void Erase(std::string_view key);
+```
+
 #### Operators
 
 | Name                          | Description                           |
@@ -1661,6 +1743,11 @@ Returns the value at the given `key`.
 
 ```cpp
 const Value operator[](std::string_view key) const
+```
+
+Object is hashable using
+```cpp
+std::hash<mgp::Map>
 ```
 
 #### MapItem
@@ -1679,6 +1766,11 @@ Auxiliary data structure representing key-value pairs where keys are strings, an
 | Name                                          | Description          |
 | --------------------------------------------- | -------------------- |
 | `operator==`<br/>`operator!=`<br/>`operator<` | comparison operators |
+
+Object is hashable using
+```cpp
+std::hash<mgp::MapItem>
+```
 
 ### Value
 
@@ -1771,61 +1863,76 @@ mgp::Type Type() const
 
 Depending on the exact function called, returns a typed value of the appropriate type.
 Throws an exception if the type stored in the `Value` object is not compatible with the function called.
+An overloaded function is available which returns a modifiable (non-const) value of the appropriate type.
 
 ```cpp
 bool ValueBool() const
+bool ValueBool()
 ```
 
 ```cpp
 int64_t ValueInt() const
+int64_t ValueInt()
 ```
 
 ```cpp
 double ValueDouble const
+double ValueDouble
 ```
 
 ```cpp
 double ValueNumeric const
+double ValueNumeric
 ```
 
 ```cpp
 std::string_view ValueString() const
+std::string_view ValueString()
 ```
 
 ```cpp
 const List ValueList() const
+List ValueList()
 ```
 
 ```cpp
 const Map ValueMap() const
+Map ValueMap()
 ```
 
 ```cpp
 const Node ValueNode() const
+Node ValueNode()
 ```
 
 ```cpp
 const Relationship ValueRelationship() const
+Relationship ValueRelationship()
 ```
 
 ```cpp
 const Path ValuePath() const
+Path ValuePath()
 ```
 
 ```cpp
 const Date ValueDate() const
+Date ValueDate()
 ```
 
 ```cpp
 const LocalTime ValueLocalTime() const
+LocalTime ValueLocalTime()
 ```
 
 ```cpp
 const LocalDateTime ValueLocalDateTime() const
+LocalDateTime ValueLocalDateTime()
 ```
 
 ```cpp
-const Map ValueMap() const
+const Duration ValueDuration() const
+Duration ValueDuration()
 ```
 
 ##### Is[TYPE]
@@ -1896,7 +2003,19 @@ bool IsDuration() const
 
 | Name                          | Description          |
 | ----------------------------- | -------------------- |
-| `operator==`<br/>`operator!=` | comparison operators |
+| `operator==`<br/>`operator!=` <br/> `operator<` | comparison operators |
+
+
+Object is hashable using
+```cpp
+std::hash<mgp::Value>
+```
+
+Additionally, operator `<<` is overloaded for `Value` and usage of this operator will print the value of the `mgp::Value` instance (currently doesn't support values of type `Path`, `Map` and `List`).
+
+```cpp
+std::ostream &operator<<(std::ostream &os, const mgp::Value &value)
+```
 
 ### Type
 
@@ -1918,6 +2037,12 @@ The types are listed and described [on this page](https://memgraph.com/docs/memg
 - `Type::LocalTime`
 - `Type::LocalDateTime`
 - `Type::Duration`
+
+Additionally, operator<< is overloaded for Type enum, and usage of this operator will print the type represented by mgp::Type enum.
+
+```cpp
+std::ostream &operator<<(std::ostream &os, const mgp::Type &type) 
+```
 
 ## Exceptions
 

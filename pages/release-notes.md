@@ -2,6 +2,127 @@
 <!---
 import VideoBySide from '@site/src/components/VideoBySide';
 --->
+
+## Lab v2.8.0 - Aug 04, 2023
+
+### New features and improvements
+
+- You can now save and edit connection details so you don't have to type them in
+  on every reconnect.
+- A list of recent connections is now shown in the sidebar and you can use it to
+  quickly connect to any of the recent successful connections.
+- When you click on a node or relationship in the Graph View, the object
+  properties will be shown in a sidebar next to the Graph View rather then on
+  the canvas next to the object. 
+- Nodes can be expanded by a double-click.
+- As Memgraph now supports multi-tenant architecture, you can see the database
+  you are currently working in the status bar with an option to switch to another
+  database.
+- Along with the number of nodes and relationships in the database, the status
+  bar now also shows the number of indexes, constraints, and triggers.
+- Now you can recenter, zoom in and zoom out the graph view by clicking on the
+  action buttons in the bottom right corner of the Graph Results view.
+- Now you can copy query results to the clipboard in JSON, CSV, or TSV format.
+- You can start a name of a variable in Graph Style Script with an underscore
+  `_` which is pretty handy for defining local variables in `@NodeStyle` and
+  `@EdgeStyle` directives. 
+
+### Bug fixes
+
+- Setting up the `z-index` for edges in Graph Style Script now works as expected.
+- Large integer numbers in query table results are now shown correctly, e.g. it
+  shows `10,000,000,000,000,001` for the query `RETURN 10000000000000000 + 1`
+  instead of incorrect result `10000000000000000`.
+- Results now correctly show "No results" when there are no results in the query
+  response, instead of a previously fetched result.
+- The Lab web application is no longer unexpectedly crashing when using the
+  Memgraph Platform Docker image.
+
+## v1.9.0 - Aug 03, 2023
+
+## Features and improvements
+
+- With the new [`collections` module](/query-modules/cpp/collections.md) you can
+  filter, sort and modify lists within Cypher queries.
+  [#284](https://github.com/memgraph/mage/pull/284)
+- The new [`map` module](/query-modules/cpp/map.md) enables manipulating
+  collections of key-value pairs, and consequently advanced data operations
+  within a graph database context.
+  [#282](https://github.com/memgraph/mage/pull/282)
+
+## v2.10 - Aug 2, 2023
+
+### New features and improvements
+
+- The new [multi-tenant support](/reference-guide/multi-tenancy.md) available in
+  the Enterprise Edition of Memgraph enables you to manage multiple isolated
+  databases within a single instance. The primary objective is to facilitate
+  efficient resource isolation, maintain data integrity, and manage access for
+  different clients. [#952](https://github.com/memgraph/memgraph/pull/952)
+- The configuration flag `storage-recover-on-startup` has been deprecated and
+  replaced with `data_recovery_on_startup`to support multi-tenancy. The
+  `storage-recover-on-startup` can still be used until the next release planned
+  for mid-September. 
+- If you want to replace procedure names your application calls without changing
+  the application code, you can define the mapping of the old and new procedure
+  names in a JSON file, then set the path to the files as the value of the
+  `query-callable-mappings-path` [configuration
+  flag](/reference-guide/configuration.md).
+  [#1018](https://github.com/memgraph/memgraph/pull/1018)
+- The [C++
+  API](/reference-guide/query-modules/implement-custom-query-modules/api/cpp-api.md)
+  for writing custom query modules now enables: 
+  - inserting `mgp::Any` datatype into Record. [#1094](https://github.com/memgraph/memgraph/pull/1094)
+  - comparing two `mgp::Value` variables with the `<` operator. [#1090](https://github.com/memgraph/memgraph/pull/1090)
+  - printing the type of `mgp::Type` enumeration using the `<<` operator. For
+  example, if you have a `mgp::List` list, `cout<< list <<endl` will output
+  `"list"`. [#1080](https://github.com/memgraph/memgraph/pull/1080)
+  - printing `mgp::Value` variables (except `mgp::Path`, `mgp::List` and
+    `mgp::Map` types) using the `<<` operator.
+    [#1127](https://github.com/memgraph/memgraph/pull/1127)
+  - using the `mgp::Value` variables and all its subtypes (`mgp::Map`,
+    `mgp::Path`, ...) inside hash structures such as `std::unordered_map` and
+    `std::unordered_set`. [#1093](https://github.com/memgraph/memgraph/pull/1093)
+  - deleting and updating map elements with `mgp::Map.Update(key, &value)`,
+    `mgp::Map.Update(key, &&value)` and `mgp::Map.Erase(key)` functions.
+    [#1103](https://github.com/memgraph/memgraph/pull/1103)
+  - removing properties from nodes with `RemoveProperty()` function and labels
+    with `RemoveLabel()` function.
+    [#1128](https://github.com/memgraph/memgraph/pull/1128)
+    [#1126](https://github.com/memgraph/memgraph/pull/1126)
+
+  Also, the `mgp::Value` wrapper for Memgraph's data types has been extended to
+  return subtypes which are modifiable (non-const).
+  [#1099](https://github.com/memgraph/memgraph/pull/1099)
+- The [C
+  API](/reference-guide/query-modules/implement-custom-query-modules/api/c-api.md)
+  for writing custom query modules now enables:
+    - deleting and updating map elements with `mgp_map_update(map, key, value)`
+  and `mgp_map_erase(map, key)` functions. [#1103](https://github.com/memgraph/memgraph/pull/1103)
+    - removing labels from nodes with `RemoveLabel()` function.
+      [#1126](https://github.com/memgraph/memgraph/pull/1126)
+- Memgraph supports transaction timeouts defined by the Bolt protocol if the
+  connection to the database is established via the [JavaScript
+  client](/connect-to-memgraph/drivers/javascript.md).
+  [#1046](https://github.com/memgraph/memgraph/pull/1046)
+- Queries exploring all shortest paths now use considerably less memory without
+  significant performance deterioration.
+  [#981](https://github.com/memgraph/memgraph/pull/981)
+- Users with fine grained privileges will experience better performance when
+  running queries due to user information cashing. Any changes to the user
+  privileges will be ignored until the next login.
+  [#1109](https://github.com/memgraph/memgraph/pull/1109)
+
+### Bug fixes
+
+- Connection with Bolt v5.2 now works as expected when returning a path as a
+  result. [#1108](https://github.com/memgraph/memgraph/pull/1108) 
+- Serializing vertex and edge properties to RocksDB now works as expected even
+  when the serialization buffer is exactly 15B.
+  [#1111](https://github.com/memgraph/memgraph/pull/1111)
+- Users created in the Community Edition remain valid after the instance is
+  upgraded to an Enterprise Edition. [#1067](https://github.com/memgraph/memgraph/pull/1067)
+
 ## Memgraph v2.9 - Jul 21, 2023
 
 :::caution
