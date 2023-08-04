@@ -64,7 +64,7 @@ insecure connection.
 To enable SSL connection in Memgraph Lab, switch to **Connect Manually** view
 and turn the SSL on.
 
-<img src={require('../data/encryption/memgraph_lab_ssl.png').default} className={"imgBorder"}/>
+![](/pages/deployment/ssl-encryption/memgraph_lab_ssl.png)
 
 When Memgraph Lab is connected to MemgraphDB using SSL encryption, logs cannot
 be viewed inside the Lab.
@@ -205,8 +205,7 @@ authenticated and encrypted connection to a database instance.
 6. Open Memgraph Lab and switch to **Connect Manually** view, turn the **SSL
    On** and connect.
 
-   <img src={require('../data/encryption/memgraph_lab_ssl.png').default}
-   className={"imgBorder"}/>
+   ![](/pages/deployment/ssl-encryption/memgraph_lab_ssl.png)
 
 7. If you are using [pymgclient](https://github.com/memgraph/pymgclient) to
    query the database with Python, add `sslmode=mgclient.MG_SSLMODE_REQUIRE` to

@@ -412,7 +412,7 @@ three properties:
 3. **Partition tolerance** (P) - the system continues to work as expected despite a
    partial network failure
 
-<img src={require('../data/replication/memgraph-replication-CAP-theorem.png').default} className={"imgBorder"}/>
+![](/pages/deployment/replication/memgraph-replication-CAP-theorem.png)
 
 Most of the Memgraph use-cases do not benefit from well-known algorithms that
 strive to achieve all three CAP properties, such as Raft, because due to their
@@ -462,7 +462,7 @@ implemented in Memgraph replication:
 - SYNC
 - ASYNC
 
-<img src={require('../data/replication/memgraph-replication-async-sync.png').default} className={"imgBorder"}/>
+![](/pages/deployment/replication/memgraph-replication-async-sync.png)
 
 When a REPLICA instance is registered and added to the cluster, it will start
 replicating in ASYNC mode. That will allow it to catch up to the current state
@@ -481,17 +481,17 @@ SYNC REPLICA doesn't answer within the expected timeout.
 
 ##### SYNC REPLICA going down when creating index, uniqueness constraint or existence constraint
 
-![sync-replicas-down-when-creating-index-or-constraints](data/replication/workflow_diagram_data_definition_creation.drawio.png)
+![sync-replicas-down-when-creating-index-or-constraints](/pages/deployment/replication/workflow_diagram_data_definition_creation.drawio.png)
 
 
 ##### SYNC REPLICA going down when dropping index, uniqueness constraint or existence constraint
 
-![sync-replicas-down-when-dropping-index-or-constraints](data/replication/workflow_diagram_data_definition_dropping.drawio.png)
+![sync-replicas-down-when-dropping-index-or-constraints](/pages/deployment/replication/workflow_diagram_data_definition_dropping.drawio.png)
 
 
 ##### SYNC REPLICA going down adding/updating/deleting data
 
-![sync-replicas-down-when-modifying-data](data/replication/workflow_diagram_data_manipulation.drawio.png)
+![sync-replicas-down-when-modifying-data](/pages/deployment/replication/workflow_diagram_data_manipulation.drawio.png)
 
 #### ASYN replication mode
 
@@ -508,7 +508,7 @@ replication tasks to the REPLICA instance, creates a custom thread pool pattern,
 and receives confirmations of successful replication from the REPLICATION
 instance.
 
-<img src={require('../data/replication/memgraph-replication-async.png').default} className={"imgBorder"}/>
+![](/pages/deployment/replication/memgraph-replication-async.png)
 
 ASYNC mode ensures system availability and partition tolerance.
 
@@ -529,7 +529,7 @@ calculates the optimal synchronization path based on the REPLICA instance's
 timestamp and the current state of the durability files while keeping the
 overall size of the files necessary for synchronization to a minimum.
 
-<img src={require('../data/replication/memgraph-replication-sync-process.png').default} className={"imgBorder"}/>
+![](/pages/deployment/replication/memgraph-replication-sync-process.png)
 
 Imagine there were 5 changes made to the database. Each change is saved in a WAL
 file, so there are 5 WAL files, and the snapshot was created after 2 changes.
@@ -580,7 +580,7 @@ was not blocked, new data can be written. The content of the buffer (including
 any new data) is then written in a new WAL file that will be sent in the next
 synchronization process.
 
-<img src={require('../data/replication/memgraph-replication-buffer.png').default} className={"imgBorder"}/>
+![](/pages/deployment/replication/memgraph-replication-buffer.png)
 
 #### Fixing timestamp consistency
 
@@ -620,4 +620,4 @@ brought back online, the timestamp would be of no help, but the `epoch_id` would
 indicate incomparability, thus preventing the original MAIN from reclaiming its
 original role.
 
-<img src={require('../data/replication/memgraph-replication-ids.png').default} className={"imgBorder"}/>
+![](/pages/deployment/replication/memgraph-replication-ids.png)
