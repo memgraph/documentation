@@ -1,7 +1,5 @@
 # Custom query modules
 
-[![Related - How-to](https://img.shields.io/static/v1?label=Related&message=How-to&color=blue&style=for-the-badge)](/how-to-guides/query-modules.md)
-
 Memgraph supports extending the query language with user-written procedures in
 **C**, **C++**, **Python**, and **Rust**. These procedures are grouped into
 modules - **query modules** files (either `*.so` or `*.py` files).
