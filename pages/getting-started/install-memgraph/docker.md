@@ -205,7 +205,7 @@ docker pull memgraph/memgraph-platform
 
 The picture below shows the architecture of the Memgraph Docker ecosystem.
 
-<img src={require('../data/how-to-guides/docker-architecture.png').default} className={"imgBorder"}/>
+![](/pages/getting-started/install-memgraph//docker/docker-architecture.png)
 
 ### Run a Memgraph Docker image
 
