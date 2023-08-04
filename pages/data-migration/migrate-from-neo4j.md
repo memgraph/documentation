@@ -40,7 +40,7 @@ The sample dataset consists of 3 different kinds of nodes (Employee, Order and
 Product) connected with 3 types of relationships as described by the graph
 schema below: 
 
-<img src={require('../data/migrate-from-neo4j/shipping_schema.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-neo4j/shipping_schema.png)
 
 To create this graph in your Neo4j instance run the following queries:
 
@@ -95,7 +95,7 @@ To get your data out of Neo4j instance, use the Neo4j APOC export functionality.
 To install APOC, select the project, then in the right-side menu select *Plugins
 -> APOC* and press install.
 
-<img src={require('../data/migrate-from-neo4j/install_APOC.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-neo4j/install_APOC.png)
 
 Then enable export by setting the configuration flag `apoc.export.file.enabled`
 to `true` in the `apoc.config` file located in the `config` directory. To open
@@ -111,7 +111,7 @@ CALL apoc.export.csv.all("shipping.csv", {})
 Once exported, the file is located in Neo4j's *Import* folder. To open it,
 select the active project, click on *...* -> *Open folder* -> *Import*.
 
-<img src={require('../data/migrate-from-neo4j/import_folder.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-neo4j/import_folder.png)
 
 ## Importing data into Memgraph
 
@@ -296,7 +296,7 @@ The second query will show all 9 created nodes.
 
 Copy the query in the **Cypher Editor** and **Run Query**.
 
-<img src={require('../data/migrate-from-neo4j/employees.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-neo4j/employees.png)
 
 #### Order nodes
 
@@ -315,7 +315,7 @@ RETURN o;
 
 The second query will show all 830 created nodes:
 
-<img src={require('../data/migrate-from-neo4j/orders.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-neo4j/orders.png)
 
 #### Product nodes
 
@@ -338,7 +338,7 @@ RETURN p;
 
 The second query will show all 77 created nodes:
 
-<img src={require('../data/migrate-from-neo4j/product.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-neo4j/product.png)
 
 ### 4. Graph improvements
 
@@ -378,7 +378,7 @@ changes:
 }
 ```
 
-<img src={require('../data/migrate-from-neo4j/GSS.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-neo4j/GSS.png)
 
 Visual appearance of the graph can be changed in many different ways, so be sure
 to check the [GSS documentation](/memgraph-lab/graph-style-script-language). 
@@ -431,7 +431,7 @@ RETURN p;
 The second query returns all the nodes connected with the `REPORTS_TO` type of
 relationship. 
 
-<img src={require('../data/migrate-from-neo4j/reports_to.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-neo4j/reports_to.png)
 
 #### :SOLD relationships
 
@@ -450,7 +450,7 @@ RETURN p;
 The second query returns all the nodes connected with the `SOLD` type of
 relationship. 
 
-<img src={require('../data/migrate-from-neo4j/sold.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-neo4j/sold.png)
 
 #### :CONTAINS relationships
 
@@ -476,7 +476,7 @@ RETURN p;
 The second query returns all the nodes connected with the `CONTAINS` type of
 relationship. 
 
-<img src={require('../data/migrate-from-neo4j/contains.png').default} className={"imgBorder"}/>
+![](/pages/data-migration/migrate-from-neo4j/contains.png)
 
 ## After import
 
