@@ -340,7 +340,7 @@ RETURN p1, r, p2;
 
 The output is:
 
-![patterns-in-a-query](data/read-existing-data/patterns-in-a-query.png)
+![patterns-in-a-query](/pages/querying/read-and-modify-data/patterns-in-a-query.png)
 
 Because the `FRIENDS_WITH` relationship is directional, only these two nodes are
 returned.
@@ -357,7 +357,7 @@ RETURN p1, r, p2;
 
 The output is:
 
-![reversing-traversals](data/read-existing-data/reversing-traversals.png)
+![reversing-traversals](/pages/querying/read-and-modify-data/reversing-traversals.png)
 
 ### Bidirectional traversals
 
@@ -372,7 +372,7 @@ RETURN p1, r, p2;
 
 The output is:
 
-![bidirectional-traversals](data/read-existing-data/bidirectional-traversals.png)
+![bidirectional-traversals](/pages/querying/read-and-modify-data/bidirectional-traversals.png)
 
 ### Traversing multiple relationships
 
@@ -391,7 +391,7 @@ RETURN p1, r1, p2, r2, p3;
 Keep in mind that the first relationship is directional while the second one
 isn't. The output is:
 
-![traversing-multiple-relationships](data/read-existing-data/traversing-multiple-relationships.png)
+![traversing-multiple-relationships](/pages/querying/read-and-modify-data/traversing-multiple-relationships.png)
 
 ## Modify data
 

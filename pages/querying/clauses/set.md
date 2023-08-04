@@ -16,7 +16,7 @@ The `SET` clause is used to update labels on nodes and properties on nodes and r
 The following examples are executed with this dataset. You can create this dataset
 locally by executing the queries at the end of the page: [Dataset queries](#data-set-queries).
 
-![Data set](../data/clauses/data_set.png)
+![Data set](/pages/querying/clauses/data_set.png)
 
 ## 1. Setting a property
 

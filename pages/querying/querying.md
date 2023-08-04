@@ -49,7 +49,7 @@ properties.
 In the following image, you can see one such example. We have a graph that
 consists of two nodes and one relationship:
 
-![](data/cypher-query-language/graph-example.png)
+![](/pages/querying/graph-example.png)
 
 We can interpret this graph by using the said method of mapping patterns to
 language structures: 

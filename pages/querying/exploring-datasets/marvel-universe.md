@@ -58,7 +58,7 @@ Now, the data we'll be using in our queries can be classified as follows:
 
 A visual scheme of our graph database is given below.
 
-![MCU](../../data/mcu_metagraph.png)
+![MCU](/pages/querying/exploring-datasets/marvel-universe/mcu_metagraph.png)
 
 ## Exploring the dataset
 

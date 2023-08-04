@@ -25,7 +25,7 @@ Each movie can be connected with `:OF_GENRE` relationship to different genres. A
 rate some movies. Rating is modeled with `:RATED` relationship and this relationship has
 a property `rating` &mdash; float number between 0 and 5.
 
-![Movies](../../data/movielens_model.png)
+![Movies](/pages/querying/exploring-datasets/movie-recommendation/movielens_model.png)
 
 ## Exploring the dataset
 

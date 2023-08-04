@@ -31,7 +31,7 @@ nodes to the game node and are labeled as `:Played`.
 Every bit of information regarding the data model is nicely condensed in the
 following visual representation.
 
-![Football](../../data/football_metagraph.png)
+![Football](/pages/querying/exploring-datasets/graphing-the-premier-league/football_metagraph.png)
 
 ## Exploring the dataset
 

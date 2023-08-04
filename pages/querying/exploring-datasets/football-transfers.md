@@ -77,7 +77,7 @@ Nodes are connected with the following edges:
   transfer has happened.
 - `:PLAYS_IN` - connects node `Team` that plays in league node `League`.
 
-![Football transfers](../../data/football_transfers_metagraph.png)
+![Football transfers](/pages/querying/exploring-datasets/football-transfers/football_transfers_metagraph.png)
 
 ## Exploring the dataset
 
@@ -367,4 +367,4 @@ all the information for the graph visual:
 
 Here is a picture of how it will look if you run the query in MemgraphLab.
 
-![football_transfers_MemgraphLab_visual](../../data/football_transfers_MemgraphLab_visual.png)
+![football_transfers_MemgraphLab_visual](/pages/querying/exploring-datasets/football-transfers/football_transfers_MemgraphLab_visual.png)

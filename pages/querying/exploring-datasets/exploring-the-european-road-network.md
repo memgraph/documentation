@@ -24,7 +24,7 @@ city is connected to the country it belongs to via an edge of type `:In_`. There
 are edges of type `:Road` connecting cities less than 500 kilometers apart.
 Distance between cities is specified in the `length` property of the edge.
 
-![Road network](../../data/road_network_metagraph.png)
+![Road network](/pages/querying/exploring-datasets/exploring-the-european-road-network/road_network_metagraph.png)
 
 ## Exploring the dataset
 

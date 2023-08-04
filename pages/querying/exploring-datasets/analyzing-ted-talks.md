@@ -32,7 +32,7 @@ few example queries.
   and relationship`HasRating` with property `user_count` between talk and rating
   nodes.
 
-![TED](../../data/TED_metagraph.png)
+![TED](/pages/querying/exploring-datasets/analyzing-ted-talks/TED_metagraph.png)
 
 ## Exploring the dataset
 

@@ -33,7 +33,7 @@ for tourist information such as `local_currency`, `local_currency_code`, and
 if they are neighboring countries. This edge also has the `eu_border` property.
 Every city node is connected to its parent country node via the `:Inside` edge.
 
-![Backpacking](../../data/backpacking_metagraph.png)
+![Backpacking](/pages/querying/exploring-datasets/backpacking-through-europe/backpacking_metagraph.png)
 
 ## Exploring the dataset
 

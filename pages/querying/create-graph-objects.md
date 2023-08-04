@@ -104,7 +104,7 @@ Relationships can also store data in the form of **properties**, just as nodes.
 In most cases, relationships store quantitative properties such as weight,
 costs, distances, ratings, etc.
 
-![](data/connecting-nodes/connecting-nodes.png)
+![](/pages/querying/connecting-nodes/connecting-nodes.png)
 
 In our example, the relationship between two nodes labeled `Person` could be of
 the type `MARRIED_TO`. The relationship between `Person` and `City` is

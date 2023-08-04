@@ -72,7 +72,7 @@ Nodes are connected with the following edges:
   nodes representing details of the death
 - `:PART_OF` connects node `Episode` with `Season` node which episode is part of
 
-![GOT deaths](../../data/got-deaths.png)
+![GOT deaths](/pages/querying/exploring-datasets/got-deaths/got-deaths.png)
 
 ## Exploring the dataset
 
