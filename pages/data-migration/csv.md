@@ -362,7 +362,7 @@ Let's import a simple dataset from the `people_nodes` and `people_relationships`
   
    </p>
   <div>
-    <img src={require('../../data/import-data/load_csv_one_type_of_nodes_and_relationships.png').default}/>
+    ![](/pages/data-migration/csv/load_csv_one_type_of_nodes_and_relationships.png)
   </div>
 </details>
 
@@ -376,7 +376,7 @@ relationship types.
 <details>
   <summary>Let's say we want to create a graph like this:</summary>
   <div>
-    <img src={require('../../data/import-data/load_csv_multiple_nodes_and_relationships.png').default}/>
+    ![](/pages/data-migration/csv/load_csv_multiple_nodes_and_relationships.png)
   </div>
 </details>
 
@@ -454,7 +454,7 @@ We will create that graph by using `LOAD CSV` clause to import four CSV files.
     
     </p>
     <div>
-      <img src={require('../../data/import-data/load_csv_people_nodes.png').default}/>
+      ![](/pages/data-migration/csv/load_csv_people_nodes.png)
     </div>
   </details>
 
@@ -535,7 +535,7 @@ file, where each row represents one friendship and the year it started:
   
   </p>
   <div>
-    <img src={require('../../data/import-data/load_csv_people_relationships.png').default}/>
+    ![](/pages/data-migration/csv/load_csv_people_relationships.png)
   </div>
 </details>
 
@@ -600,7 +600,7 @@ file that holds a list of restaurants people ate at:
     
     </p>
     <div>
-      <img src={require('../../data/import-data/load_csv_restaurant_nodes.png').default}/>
+      ![](/pages/data-migration/csv/load_csv_restaurant_nodes.png)
     </div>
   </details>
 
@@ -680,7 +680,7 @@ where they ate:
   
   </p>
   <div>
-    <img src={require('../../data/import-data/load_csv_restaurants_relationships.png').default}/>
+    ![](/pages/data-migration/csv/load_csv_restaurants_relationships.png)
   </div>
 </details>
 

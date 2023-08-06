@@ -30,17 +30,17 @@ Check out the [installation guide](/docs/memgraph/installation) for other instal
 
 Head over to the **Datasets** section to load a dataset and load the **Europe backpacking dataset**. 
 
-<img src={require('../data/how-to-guides/nxalg-how-to-1.png').default} className={"imgBorder"}/>
+![](/pages/advanced-algorithms/utilize-networkx/nxalg-how-to-1.png)
 
 ### 3. Run NetworkX algorithm
 
 Once the dataset is loaded, go to the **Query Modules** section and search for `nxalg` module. Click on the arrow next to the module name to **view module details**. 
 
-<img src={require('../data/how-to-guides/nxalg-how-to-2.png').default} className={"imgBorder"}/>
+![](/pages/advanced-algorithms/utilize-networkx/nxalg-how-to-2.png)
 
 The goal is to run the [`is_bipartite()`](/docs/mage/query-modules/python/nxalg#is_bipartite) procedure to check whether the graph is bipartite. 
 
-<img src={require('../data/how-to-guides/nxalg-how-to-3.png').default} className={"imgBorder"}/>
+![](/pages/advanced-algorithms/utilize-networkx/nxalg-how-to-3.png)
 
 Copy the query, go to the **Query Execution** tab and paste the query into the **Cypher Editor**:
 
@@ -50,7 +50,7 @@ CALL nxalg.is_bipartite() YIELD is_bipartite;
 
 By clicking on the **Run Query** button, you can see that the Europe backpacking graph is not bipartite.
 
-<img src={require('../data/how-to-guides/nxalg-how-to-4.png').default} className={"imgBorder"}/>
+![](/pages/advanced-algorithms/utilize-networkx/nxalg-how-to-4.png)
 
 In the same way, you can run other procedures from the `nxalg` module and the procedures from the `graph_analyzer` module, which can be found in the **Query Modules** section.
 
@@ -78,13 +78,13 @@ Check out the [installation guide](/docs/memgraph/installation) for other instal
 
 In the **Datasets** section, find and load the Karate club friendship network dataset. 
 
-<img src={require('../data/how-to-guides/nxalg-how-to-5.png').default} className={"imgBorder"}/>
+![](/pages/advanced-algorithms/utilize-networkx/nxalg-how-to-5.png)
 
 ### 3. Implement a custom query module
 
 Once the dataset is loaded, go to the **Query modules** section. The goal is to create a community detection algorithm that can partition a network into multiple communities with the help of the NetworkX library. Click on the **New Module** and type in the module name, e.g., `communities`. 
 
-<img src={require('../data/how-to-guides/nxalg-how-to-6.png').default} className={"imgBorder"}/>
+![](/pages/advanced-algorithms/utilize-networkx/nxalg-how-to-6.png)
 
 There is a sample Python code on the next screen, inside the code editor. Select it, delete it and paste the following code:
 
@@ -111,7 +111,7 @@ In the above code we are creating a read procedure which creates a NetworkX DiGr
 
 Here is what the code looks like in the code editor:
 
-<img src={require('../data/how-to-guides/nxalg-how-to-7.png').default} className={"imgBorder"}/>
+![](/pages/advanced-algorithms/utilize-networkx/nxalg-how-to-7.png)
 
 Click **Save & close**, and head over to the **Query Execution** tab. 
 
@@ -128,7 +128,7 @@ RETURN community;
 
 After you click on **Run Query**, you can see the result, which consists of two lists. Each list represents one community. 
 
-<img src={require('../data/how-to-guides/nxalg-how-to-8.png').default} className={"imgBorder"}/>
+![](/pages/advanced-algorithms/utilize-networkx/nxalg-how-to-8.png)
 
 
 ## Where to next?

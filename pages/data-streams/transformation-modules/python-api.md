@@ -216,7 +216,7 @@ def employees_transformation(messages: mgp.Messages) -> mgp.Record(query = str, 
 Upon creating three separate streams in Memgraph (one for each topic), and
 ingesting the data, the graph schema looks like this:
 
-<img src={require('../../../../data/import-data/kafka-graph.png').default} height="300px"/>
+![](/pages/data-streams/transformation-modules/python-api/kafka-graph.png)
 
 If you need help writing transformation modules, check out [the tutorial on
 writing modules in
@@ -356,7 +356,7 @@ def company_transformation(messages: mgp.Messages) -> mgp.Record(query = str, pa
 Upon creating three separate streams in Memgraph (one for each topic), and ingesting the data, the
 graph schema looks like this:
 
-<img src={require('../../../../data/import-data/kafka-graph.png').default} height="300px"/>
+![](/pages/data-streams/transformation-modules/python-api/kafka-graph.png)
 
 
 ### Protobuf
@@ -473,4 +473,4 @@ def company_transformation(messages: mgp.Messages) -> mgp.Record(query = str, pa
 Upon creating three separate streams in Memgraph (one for each topic), and ingesting the data, the
 graph schema looks like this:
 
-<img src={require('../../../../data/import-data/kafka-graph.png').default} height="300px"/>
+![](/pages/data-streams/transformation-modules/python-api/kafka-graph.png)

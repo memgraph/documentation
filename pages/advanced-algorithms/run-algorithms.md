@@ -172,7 +172,7 @@ the query module will be executed on the whole graph.
 In this practical example, PageRank algorithm will be executed on a fictional Twitter dataset.
 PageRank execution is grouped by the Twitter hashtag, and each Tweet can have a different number of retweets.
 
-<img src={require('../data/how-to-guides/subgraphs-guide/whole-graph.png').default}/>
+![](/pages/advanced-algorithms/run-algorithms/whole-graph.png)
 
 ```cypher
 CREATE (n:Tweet {id: 1, hashtag: "#WorldCup", text: "Cool world cup! #WorldCup"});
@@ -221,7 +221,7 @@ RETURN node.hashtag, node.text, rank
 ORDER BY rank DESC;
 ```
 
-<img src={require('../data/how-to-guides/subgraphs-guide/christmas-subgraph.png').default}/>
+![](/pages/advanced-algorithms/run-algorithms/christmas-subgraph.png)
 
 The above query successfully updated the rank of the Christmas tweets only! Let's do the same
 on the World Cup tweets by changing the value of the hashtag property:
@@ -235,7 +235,7 @@ RETURN node.hashtag, node.text, rank
 ORDER BY rank DESC;
 ```
 
-<img src={require('../data/how-to-guides/subgraphs-guide/world-cup-subgraph.png').default}/>
+![](/pages/advanced-algorithms/run-algorithms/world-cup-subgraph.png)
 
 ### Mapping costume procedure names to existing query procedures
 
@@ -259,7 +259,7 @@ Example of a JSON file:
 You can inspect query modules in Memgraph Lab (v2.0 and newer).
 Just navigate to **Query Modules**.
 
-<img src={require('../../data/memgraph_lab_query_modules.png').default} className={"imgBorder"}/>
+![](/pages/advanced-algorithms/run-algorithms/memgraph_lab_query_modules.png)
 
 There you can see all the loaded query modules, delete them, or see procedures
 and transformations they define by clicking on the arrow icon.
@@ -271,7 +271,7 @@ query you can run directly from the **Query Modules** view.
 Custom modules developed via Memgraph Lab are located at
 `/var/lib/memgraph/internal_modules`.
 
-<img src={require('../../data/memgraph_lab_query_modules_details.png').default} className={"imgBorder"}/>
+![](/pages/advanced-algorithms/run-algorithms/memgraph_lab_query_modules_details.png)
 
 ## Control procedure memory usage
 

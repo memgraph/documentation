@@ -21,7 +21,7 @@ If you are trying to connect to MovieLens Kafka data stream from the [Awesome Da
 Stream](https://awesomedata.stream/#/movielens), the stream configuration should
 look like this:
 
-<img src={require('../../data/tutorials/create-stream-lab/creating-stream-movielens.png').default}className={"imgBorder"}/>
+![](/pages/data-streams/manage-streams-lab/creating-stream-movielens.png)
 
 Once the basic configuration is finished, you need to define a transformation
 module and attach it to the stream. 
@@ -60,7 +60,7 @@ attach it to a stream.
 Check the transformation module for MovieLens on [Awesome Data
 Stream](https://awesomedata.stream/#/movielens).
 
-<img src={require('../../data/tutorials/create-stream-lab/transformation-module.png').default}className={"imgBorder"}/>
+![](/pages/data-streams/manage-streams-lab/transformation-module.png)
 
 ## How to set Kafka configuration parameters?
 
@@ -79,7 +79,7 @@ the following Kafka configuration parameters:
 * **security.protocol** \| SASL_PLAINTEXT <br/>
 * **sasl.mechanism** \| PLAIN <br/>
 
-<img src={require('../../data/tutorials/create-stream-lab/config-parameters.png').default}className={"imgBorder"}/>
+![](/pages/data-streams/manage-streams-lab/config-parameters.png)
 
 ## How to connect Memgraph to the stream and start ingesting the data?
 
@@ -103,7 +103,7 @@ Switch to **Query Execution** and run a query to visualize the data coming in:
 MATCH p=(n)-[r]-(m)
 RETURN p LIMIT 100;
 ```
-<img src={require('../../data/tutorials/create-stream-lab/graph.png').default}lassName={"imgBorder"}/>
+![](/pages/data-streams/manage-streams-lab/graph.png)
 
 ## How to manage a stream?
 

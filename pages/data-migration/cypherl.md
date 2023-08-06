@@ -27,7 +27,7 @@ CYPHERL file or drag and drop it into Memgraph Lab.
 You can import up to 1 million nodes and relationships via Memgraph Lab using
 the CYPHERL file. 
 
-<img src={require('../../data/import-data/import-lab.png').default}className={"imgBorder"}/>
+![](/pages/data-migration/cypherl/import-lab.png)
 
 ## Importing via mgconsole
 
@@ -143,7 +143,7 @@ mgconsole < queries.cypherl
 <details>
   <summary>This is how the graph should look like in Memgraph after the import:</summary>
   <div>
-    <img src={require('../../data/import-data/cypherl_one_type_nodes_and_relationships.png').default}/>
+    ![](/pages/data-migration/cypherl/cypherl_one_type_nodes_and_relationships.png)
   </div>
 </details>
 
@@ -217,6 +217,6 @@ mgconsole < queries.cypherl
 <details>
   <summary>This is how the graph should look like in Memgraph after the import:</summary>
   <div>
-    <img src={require('../../data/import-data/cypherl_multiple_type_nodes_and_relationships.png').default}/>
+    ![](/pages/data-migration/cypherl/cypherl_multiple_type_nodes_and_relationships.png)
   </div>
 </details>

@@ -23,7 +23,7 @@ from The European Backpacker Index (2018). The data set contains information
 about 56 cities from 36 European countries, such as what cities are close, what
 countries border each other, various pricing and recommended accommodation.
 
-![Backpacking](../data/backpacking_metagraph.png)
+![](/pages/custom-query-modules/python/implement-custom-query-module-in-python/backpacking_metagraph.png)
 
 <details>
   <summary>A detailed explanation of the data model</summary>
@@ -86,8 +86,7 @@ In Memgraph Lab, navigate to the **Datasets** menu item, click on the **Europe
 backpacking** dataset to import it into Memgraph. You can also check the details
 of the dataset by clicking on **Quick View**
 
-<img src={require('../data/tutorials/query-modules/import-dataset.png').default}
-className={"imgBorder"}/>
+![](/pages/custom-query-modules/python/implement-custom-query-module-in-python/import-dataset.png)
 
 Go to the **Query Execution** and try running a test query that will show
 the city Vienna and all its relationships:
@@ -97,15 +96,13 @@ MATCH p=(:City {name: "Vienna"})-[]-()
 RETURN (p);
 ```
 
-<img src={require('../data/tutorials/query-modules/vienna.png').default}
-className={"imgBorder"}/>
+![](/pages/custom-query-modules/python/implement-custom-query-module-in-python/vienna.png)
 
 You can click on the `:City` nodes to check the nodes' properties and get better
 acquainted with the dataset. We will come back to this view every time we want
 to test our query modules in making.
 
-<img src={require('../data/tutorials/query-modules/vienna-details.png').default}
-className={"imgBorder"}/>
+![](/pages/custom-query-modules/python/implement-custom-query-module-in-python/vienna-details.png)
 
 Now navigate to **Query Modules**. Here you can see all the query modules
 available in Memgraph, such as utility modules or query modules from the MAGE
@@ -114,8 +111,7 @@ button, give the new module name `backpacking` and create the module. Memgraph
 Lab creates sample procedures to kick off your development. But before we start,
 let's decide how we will expand the query language.
 
-<img src={require('../data/tutorials/query-modules/new-module.png').default}
-className={"imgBorder"}/>
+![](/pages/custom-query-modules/python/implement-custom-query-module-in-python/new-module.png)
 
 ## Goals
 
@@ -330,8 +326,7 @@ def total_cost(context: mgp.ProcCtx,
 Save and close the query module. You will get an overview of the module that
 lists procedures and their signature.
 
-<img src={require('../data/tutorials/query-modules/module-details.png').default}
-className={"imgBorder"}/>
+![](/pages/custom-query-modules/python/implement-custom-query-module-in-python/module-details.png)
 
 ### Testing the read procedure
 
@@ -358,8 +353,7 @@ CALL backpacking.total_cost("Whatever", 2) YIELD *;
 
 Result -> `Total_cost_per_night = null`
 
-<img src={require('../data/tutorials/query-modules/total-cost.png').default}
-className={"imgBorder"}/>
+![](/pages/custom-query-modules/python/implement-custom-query-module-in-python/total-cost.png)
 
 ## Detecting errors
 
@@ -466,8 +460,7 @@ following query:
 CALL backpacking.new_city("Zagreb","Croatia") YIELD *;
 ```
 
-<img src={require('../data/tutorials/query-modules/existing.png').default}
-className={"imgBorder"}/>
+![](/pages/custom-query-modules/python/implement-custom-query-module-in-python/existing.png)
 
 ### The country node exists but the city node doesn't
 
@@ -532,8 +525,7 @@ procedure, by running the following query:
 CALL backpacking.new_city("Makarska","Croatia") YIELD *;
 ```
 
-<img src={require('../data/tutorials/query-modules/no-city.png').default}
-className={"imgBorder"}/>
+![](/pages/custom-query-modules/python/implement-custom-query-module-in-python/no-city.png)
 
 ### Neither the country node nor the city node exist
 

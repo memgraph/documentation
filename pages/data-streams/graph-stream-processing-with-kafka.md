@@ -73,7 +73,7 @@ Memgraph Lab allows you to develop Python transformation modules in-app:
    library. Here you will also be able to check out and edit any transformation
    modules you develop while using Memgraph.
 
-   <img src={require('../data/tutorials/create-stream-lab/query-modules.png').default}className={"imgBorder"}/>
+   ![](/pages/data-streams/graph-stream-processing-with-kafka/query-modules.png)
 
 2. Click on the **+ New Module** button, give the new module name `movielens`
    and create the module.
@@ -81,7 +81,7 @@ Memgraph Lab allows you to develop Python transformation modules in-app:
 3. Memgraph Lab creates sample procedures you can erase, so you have a clean
    slate for writing the `movielens` transformation module.
 
-   <img src={require('../data/tutorials/create-stream-lab/query-modules-empty.png').default}className={"imgBorder"}/>
+   ![](/pages/data-streams/graph-stream-processing-with-kafka/query-modules-empty.png)
  
 ### Python API 
 
@@ -208,12 +208,12 @@ Congratulations, you just created your first transformation procedure! Save it
 and you should be able to see transformation `rating() -> ()` among the
 **Detected procedures & transformations**. 
 
-<img src={require('../data/tutorials/create-stream-lab/transformation-module-from-qm.png').default}className={"imgBorder"}/>
+![](/pages/data-streams/graph-stream-processing-with-kafka/transformation-module-from-qm.png)
 
 You can now **Save and Close** the module to get an overview of the module that
 lists procedures and their signature.
 
-<img src={require('../data/tutorials/create-stream-lab/signature.png').default}className={"imgBorder"}/>
+![](/pages/data-streams/graph-stream-processing-with-kafka/signature.png)
 
 ## 3. Create a stream
 
@@ -230,7 +230,7 @@ the streams are public, consumer groups need to be unique.
 
 The stream configuration should look something like this:
 
-<img src={require('../data/tutorials/create-stream-lab/creating-stream-movielens.png').default}className={"imgBorder"}/>
+![](/pages/data-streams/graph-stream-processing-with-kafka/creating-stream-movielens.png)
 
 ## 4. Add a transformation module
 
@@ -243,7 +243,7 @@ To add the `movielens` Python transformation module you developed earlier to a s
    transformation functions** on the right.
 5. Select it and **Attach to Stream**.
 
-<img src={require('../data/tutorials/create-stream-lab/transformation-module.png').default}className={"imgBorder"}/>
+![](/pages/data-streams/graph-stream-processing-with-kafka/transformation-module.png)
 
 ## 5. Set Kafka configuration parameters
 
@@ -262,7 +262,7 @@ In order to do so:
 3. To add another parameter, **Add parameter filed**.
 4. **Save Configuration** once you have set all parameters.
 
-<img src={require('../data/tutorials/create-stream-lab/config-parameters.png').default}className={"imgBorder"}/>
+![](/pages/data-streams/graph-stream-processing-with-kafka/config-parameters.png)
 
 ## 6. Connect Memgraph to the stream and start ingesting the data
 
@@ -286,7 +286,7 @@ Switch to **Query Execution** and run a query to visualize the data coming in:
 MATCH p=(n)-[r]-(m)
 RETURN p LIMIT 100;
 ```
-<img src={require('../data/tutorials/create-stream-lab/graph.png').default}className={"imgBorder"}/>
+![](/pages/data-streams/graph-stream-processing-with-kafka/graph.png)
 
 Congratulations! You have connected Memgraph to a Kafka stream. We've prepared
 queries that utilize the most powerful graph algorithms to gain every last bit

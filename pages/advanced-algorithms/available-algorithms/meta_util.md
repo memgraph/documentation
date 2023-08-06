@@ -108,10 +108,10 @@ The graph result of the `schema` procedure can be seen in Memgraph Lab, and it l
 <div style={{textAlign:"center"}}> -->
 <div className={"imgRow"}>
 <div className={"imgColumn"}>
-<img src={require('../../data/query-modules/python/meta_util/meta_result.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/meta_util/meta_result.png)
 </div>
 <div className={"imgColumn"}>
-<img src={require('../../data/query-modules/python/meta_util/meta_result_count_without_props.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/meta_util/meta_result_count_without_props.png)
 </div>
 </div>
   </TabItem>
@@ -263,10 +263,10 @@ The graph result of the `schema` procedure can be seen in Memgraph Lab, and it l
 <div style={{textAlign:"center"}}> -->
 <div className={"imgRow"}>
 <div className={"imgColumn"}>
-<img src={require('../../data/query-modules/python/meta_util/meta_result.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/meta_util/meta_result.png)
 </div>
 <div className={"imgColumn"}>
-<img src={require('../../data/query-modules/python/meta_util/meta_result_count.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/meta_util/meta_result_count.png)
 </div>
 </div>
   </TabItem>

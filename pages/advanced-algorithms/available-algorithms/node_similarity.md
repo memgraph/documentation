@@ -33,7 +33,7 @@ If we're interested in how similar two nodes in a graph are, we'll want to get a
 <a href="https://www.codecogs.com/eqnedit.php?latex=Overlap(A,B)&space;=&space;\frac{|A&space;\cap&space;B|}&space;{min(|A|,&space;|B|)}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?Overlap(A,B)&space;=&space;\frac{|A&space;\cap&space;B|}&space;{min(|A|,&space;|B|)}" title="Overlap(A,B) = \frac{|A \cap B|} {min(|A|, |B|)}" /></a>
 
 **The cosine similarity** computes similarity between two nodes based on some property. This property should be a vector and it can be computed using the following formula:
-<img src={require('../../data/query-modules/cpp/node-similarity/cosine_sim.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/node-similarity/cosine_sim.png)
 
 Set A represents all outgoing neighbors of one node, set B represents all outgoing neighbors of the other node. In all the given formulas, the numerator is the cardinality of the intersection of set A and set B (in other words, the cardinality of the common neighbors set). The denominator differs but requires the cardinality of sets A and B in some way.
 
@@ -186,7 +186,7 @@ RETURN node1, node2, similarity;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/cpp/node-similarity/node-similarity-1.png').default}/>
+  ![](/pages/advanced-algorithms/available-algorithms/node-similarity/node-similarity-1.png)
 
   </TabItem>
 
@@ -265,7 +265,7 @@ RETURN node1, node2, cosine_similarity;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/cpp/node-similarity/node-similarity-1.png').default}/>
+  ![](/pages/advanced-algorithms/available-algorithms/node-similarity/node-similarity-1.png)
 
   </TabItem>
 
@@ -338,7 +338,7 @@ RETURN node1, node2, jaccard_similarity;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/cpp/node-similarity/node-similarity-1.png').default}/>
+  ![](/pages/advanced-algorithms/available-algorithms/node-similarity/node-similarity-1.png)
 
   </TabItem>
 
