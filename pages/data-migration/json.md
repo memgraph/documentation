@@ -139,12 +139,9 @@ UNWIND objects AS o
 CREATE (:Person {first_name: o.first_name, last_name: o.last_name, pets: o.pets});
 ```
 
-<details>
-  <summary>After you execute the above query, the graph in Memgraph should look like this:</summary>
-  <div>
-    <img src={require('../../data/import-data/load_json_from_path.png').default}/>
-  </div>
-</details>
+After you execute the above query, the graph in Memgraph should look like this:
+
+![](/pages/data-migration/json/load_json_from_path.png)
 
 ####  `import_util.json()` procedure
 
@@ -178,12 +175,10 @@ UNWIND objects AS o
 CREATE (:Person {first_name: o.first_name, last_name: o.last_name, pets: o.pets});
 ```
 
-<details>
-  <summary>After you run the above query, the graph in Memgraph should look like this:</summary>
-  <div>
-    <img src={require('../../data/import-data/load_json_from_url.png').default}/>
-  </div>
-</details>
+After you run the above query, the graph in Memgraph should look like this:
+
+![](/pages/data-migration/json/load_json_from_url.png)
+
 
 :::note
 
