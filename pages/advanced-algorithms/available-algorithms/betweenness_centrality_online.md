@@ -167,7 +167,7 @@ values={[
 ]}>
   <TabItem value="visualization">
 
-<img src={require('../../data/query-modules/cpp/betweenness-centrality-online/betweenness-centrality-online-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/betweenness_centrality_online/betweenness-centrality-online-1.png)
 
   </TabItem>
   <TabItem value="cypher-trigger">

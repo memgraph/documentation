@@ -65,7 +65,7 @@ YIELD bcc_id, node_from, node_to;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/cpp/biconnected-components/biconnected-components-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/biconnected_components/biconnected-components-1.png)
 
   </TabItem>
 

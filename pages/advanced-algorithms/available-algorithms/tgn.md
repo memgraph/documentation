@@ -396,7 +396,7 @@ values={[
 }>
 <TabItem value="visualization">
 
-<img src={require('../../data/query-modules/python/tgn/graph_visualization.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/tgn/graph_visualization.png)
 
   </TabItem>
   <TabItem value="cypher-param-set">

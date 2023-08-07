@@ -189,7 +189,7 @@ CREATE (n)-[:IS_FRIENDS_WITH]->(m), (n)-[:IS_FRIENDS_WITH]->(k), (m)-[:IS_MARRIE
 
 The image below shows the above data as a graph:
 
-<img src={require('../../data/query-modules/python/export-util/export-util-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/export_util/export-util-1.png)
     
 </TabItem>
 
@@ -335,7 +335,7 @@ CREATE
 
 The image below shows the above data as a graph:
 
-<img src={require('../../data/query-modules/python/export-util/export-util-csv-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/export_util/export-util-csv-1.png)
     
 </TabItem>
 

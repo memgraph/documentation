@@ -247,7 +247,7 @@ values={[
 
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/python/gnn-node-classification/example.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/gnn_node_classification/gnn-node-classification/example.png)
 
   </TabItem>
 

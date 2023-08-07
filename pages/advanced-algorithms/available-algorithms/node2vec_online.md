@@ -215,7 +215,7 @@ CALL node2vec_online.help();
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/python/node2vec-online/node2vec-online.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/node2vec_online/node2vec-online.png)
 
   </TabItem>
   <TabItem value="cypher-preset">

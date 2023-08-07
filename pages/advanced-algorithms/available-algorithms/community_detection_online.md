@@ -198,7 +198,7 @@ CALL community_detection_online.reset() YIELD message;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/cpp/community-detection-online/community-detection-online-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/community_detection_online/community-detection-online-1.png)
 
   </TabItem>
   <TabItem value="cypher-preset">

@@ -62,7 +62,7 @@ RETURN n.uuid AS node_uuid;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/cpp/uuid-generator/uuid-generator-1.png').default} height="300px"/>
+![](/pages/advanced-algorithms/available-algorithms/uuid_generator/uuid-generator-1.png)
 
   </TabItem>
 

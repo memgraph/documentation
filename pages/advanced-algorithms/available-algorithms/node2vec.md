@@ -197,7 +197,7 @@ values={[
 }>
   <TabItem value="visualization">
 
-<img src={require('../../data/query-modules/python/node2vec/node2vec.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/node2vec/node2vec.png)
 
   </TabItem>
   <TabItem value="cypher-load">

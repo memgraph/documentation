@@ -86,7 +86,7 @@ values={[
 }>
 <TabItem value="visualization">
 
-<img src={require('../../data/query-modules/cpp/betweenness-centrality/betweenness-centrality-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/betweenness_centrality/betweenness-centrality-1.png)
 
   </TabItem>
 

@@ -150,7 +150,7 @@ values={[
 }>
 <TabItem value="visualization">
 
-<img src={require('../../data/query-modules/cpp/katz-centrality/memgraph-katz.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/katz_centrality/memgraph-katz.png)
 
   </TabItem>
   <TabItem value="cypher-preset">

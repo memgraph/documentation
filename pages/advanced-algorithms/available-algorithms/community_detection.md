@@ -125,7 +125,7 @@ YIELD node, community_id;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/cpp/community-detection/community-detection-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/community_detection/community-detection-1.png)
 
   </TabItem>
 

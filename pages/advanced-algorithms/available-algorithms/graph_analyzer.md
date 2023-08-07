@@ -104,7 +104,7 @@ RETURN name, value;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/python/graph-analyzer/graph-analyzer-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/graph_analyzer/graph-analyzer-1.png)
 
   </TabItem>
 

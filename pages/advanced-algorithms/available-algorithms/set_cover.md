@@ -71,7 +71,7 @@ YIELD containing_set;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/python/set-cover/set-cover-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/set_cover/set-cover-1.png)
 
   </TabItem>
 
@@ -131,7 +131,7 @@ RETURN animal, l, national_park;
 
   <TabItem value="result">
 
-  <img src={require('../../data/query-modules/python/set-cover/set-cover-2.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/set_cover/set-cover-2.png)
 
   </TabItem>
 

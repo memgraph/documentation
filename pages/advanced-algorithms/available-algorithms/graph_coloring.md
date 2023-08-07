@@ -130,7 +130,7 @@ YIELD node, color;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/python/graph-coloring/graph-coloring-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/graph_coloring/graph-coloring-1.png)
 
   </TabItem>
 

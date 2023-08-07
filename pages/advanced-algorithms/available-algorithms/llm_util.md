@@ -89,7 +89,7 @@ CREATE (n)-[:LIVES_IN]->(:City {name: "Zagreb"})<-[:LIVES_IN]-(m);
 The schema of the created graph can be seen in Memgraph Lab, under the <em>Graph Schema</em> tab:
 
 <div className={"imgSmaller"}>
-<img src={require('../../data/query-modules/python/llm-util/memgraph-lab-schema.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/llm_util/memgraph-lab-schema.png)
 </div>
 
 </TabItem>
@@ -169,7 +169,7 @@ CREATE (n)-[:LIVES_IN]->(:City {name: "Zagreb"})<-[:LIVES_IN]-(m);
 The schema of the created graph can be seen in Memgraph Lab, under the <em>Graph Schema</em> tab:
 
 <div className={"imgSmaller"}>
-<img src={require('../../data/query-modules/python/llm-util/memgraph-lab-schema.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/llm_util/memgraph-lab-schema.png)
 </div>
 
 </TabItem>

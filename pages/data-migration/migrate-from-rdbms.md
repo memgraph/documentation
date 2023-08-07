@@ -35,7 +35,7 @@ We will learn how to import data from a relational database to Memgraph using
 the example of an online store. The data model of the relational database that
 we will use for this tutorial includes 5 tables with the following properties:
 
-![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_data_model.png').default}/>
+![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_data_model.png)
 
 ## Migrate data using CSV files
 

@@ -118,7 +118,7 @@ RETURN path, flow;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/python/max-flow/max-flow-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/max_flow/max-flow-1.png)
 
   </TabItem>
   <TabItem value="cypher">

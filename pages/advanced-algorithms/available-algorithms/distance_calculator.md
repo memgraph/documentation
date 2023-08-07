@@ -93,7 +93,7 @@ RETURN distances;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/python/distance-calculator/distance-calculator-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/distance_calculator/distance-calculator-1.png)
 
   </TabItem>
 

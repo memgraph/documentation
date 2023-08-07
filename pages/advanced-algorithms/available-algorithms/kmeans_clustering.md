@@ -110,7 +110,7 @@ values={[
 }>
   <TabItem value="visualization">
 
-<img src={require('../../data/query-modules/python/kmeans-clustering/img.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/kmeans_clustering/img.png)
 
   </TabItem>
   <TabItem value="cypher-load">

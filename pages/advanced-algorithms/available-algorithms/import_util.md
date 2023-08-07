@@ -241,7 +241,7 @@ CALL import_util.json("/users/my_user/import_folder/import.json");
 
 After you import the `import.json` file, you get the following graph database:
 
-<img src={require('../../data/query-modules/python/import-util/import-util-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/import_util/import-util-1.png)
 
 </TabItem>
 

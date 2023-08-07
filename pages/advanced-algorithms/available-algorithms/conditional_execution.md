@@ -139,7 +139,7 @@ RETURN value.graph_status AS graph_status;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/python/conditional-execution/conditional-execution-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/conditional_execution/conditional-execution-1.png)
 
   </TabItem>
 

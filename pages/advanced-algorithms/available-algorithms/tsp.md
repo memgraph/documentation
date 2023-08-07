@@ -76,7 +76,7 @@ CALL tsp_module.solve(points) YIELD sources, destinations;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/python/tsp/tsp-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/tsp/tsp-1.png)
 
   </TabItem>
 

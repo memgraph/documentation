@@ -88,7 +88,7 @@ In heterogeneous graphs, all edges are used for creating the node’s neighbourh
 
 > For each gradient descent step, we select a mini-batch of nodes whose final representations at the L-th layer are to be computed. We then take all or some of their neighbours at the L−1 layer. This process continues until we reach the input. This iterative process builds the dependency graph starting from the output and working backwards to the input, as the figure below shows:
 
-<img src={require('../../data/query-modules/python/gnn-link-prediction/gnn-link-prediction-neighborhood-sampling.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/gnn_link_prediction/gnn-link-prediction-neighborhood-sampling.png)
 
 >
 > -- DGL docs
@@ -274,7 +274,7 @@ values={[
 
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/python/gnn-link-prediction/gnn-link-prediction-example-visualization.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/gnn_link_prediction/gnn-link-prediction-example-visualization.png)
 
   </TabItem>
 
@@ -366,7 +366,7 @@ Having a `reverse_edge` in your dataset can be a problem if they are not exclude
 
 The transductive dataset split assumes that the entire graph can be observed in all dataset splits. We distinguish four types of edges, and those are: `validation`, `training`, `message passing` and `supervision edges`.
 
-<img src={require('../../data/query-modules/python/gnn-link-prediction/gnn-link-prediction-transductive-dataset-split.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/gnn_link_prediction/gnn-link-prediction-transductive-dataset-split.png)
 
 The transductive dataset split is described in detail by prof. Jure Leskovec at one of its presentations for [Graph ML course](http://web.stanford.edu/class/cs224w/slides/08-GNN-application.pdf).
 

@@ -162,7 +162,7 @@ values={[
 }>
 <TabItem value="visualization">
 
-<img src={require('../../data/query-modules/cpp/pagerank-online/memgraph-pagerank-online.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/pagerank_online/memgraph-pagerank-online.png)
 
   </TabItem>
   <TabItem value="cypher-preset">

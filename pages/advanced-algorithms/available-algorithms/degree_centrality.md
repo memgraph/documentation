@@ -87,7 +87,7 @@ values={[
 }>
 <TabItem value="visualization">
 
-<img src={require('../../data/query-modules/cpp/degree-centrality/memgraph-degree-centrality.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/cycles/memgraph-degree-centrality.png)
 
   </TabItem>
   <TabItem value="cypher">

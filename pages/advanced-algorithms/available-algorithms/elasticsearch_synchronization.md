@@ -294,7 +294,7 @@ CALL elastic_search_serialization.scan("docs_nodes", "{\"query\": {\"match_all\"
 
   <TabItem value="scan-results">
 
-  <img src={require('../../data/query-modules/python/elasticsearch-synchronization/scan_results.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/elasticsearch_synchronization/scan_results.png)
 
   </TabItem>
 
@@ -328,7 +328,7 @@ CALL elastic_search_serialization.search("docs_nodes",  "{\"match_all\": {}}", 1
 
   <TabItem value="search-results">
 
-  <img src={require('../../data/query-modules/python/elasticsearch-synchronization/trigger_results.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/elasticsearch_synchronization/trigger_results.png)
 
   </TabItem>
 

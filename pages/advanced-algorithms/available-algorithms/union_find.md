@@ -84,7 +84,7 @@ RETURN node1, node2, connected;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/python/union-find/union-find-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/union_find/union-find-1.png)
 
   </TabItem>
 

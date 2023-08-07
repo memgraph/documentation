@@ -97,7 +97,7 @@ YIELD node, rank;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/cpp/pagerank/memgraph-pagerank.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/pagerankmemgraph-pagerank.png)
 
   </TabItem>
   <TabItem value="cypher">

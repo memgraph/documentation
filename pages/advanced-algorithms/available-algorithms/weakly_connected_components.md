@@ -62,7 +62,7 @@ YIELD node, component_id;
 }>
   <TabItem value="visualization">
 
-  <img src={require('../../data/query-modules/cpp/weakly-connected-components/weakly-connected-components-1.png').default}/>
+![](/pages/advanced-algorithms/available-algorithms/weakly_connected_components/weakly-connected-components-1.png)
 
   </TabItem>
 
