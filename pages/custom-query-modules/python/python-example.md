@@ -51,7 +51,7 @@ copy it from the Docker container.
 You can develop query modules in Python from Memgraph Lab (v2.0 and newer). Just
 navigate to **Query Modules** and click on **New Module** to start.
 
-<img src={require('../../../data/memgraph_lab_query_modules.png').default} className={"imgBorder"}/>
+![](/pages/custom-query-modules/python/python-example/memgraph_lab_query_modules.png)
 
 :::info
 If you need an additional Python library not included with Memgraph, check out

@@ -48,7 +48,7 @@ is primarily a site for watching videos, can be classified as a social network.
 For this tutorial, we'll use data consisting of users of the music streaming
 platform called [Deezer](https://www.deezer.com/).
 
-<img src={require('../data/music-genres-social-network.png').default} className={"imgBorder"}/>
+![](/pages/custom-query-modules/python/understanding-music-with-modules/music-genres-social-network.png)
 
 The data consists of around 50k Deezer users from Croatia, but we prepared a
 subset of the dataset only composed of 2k users. Each user is defined by id and
@@ -259,7 +259,8 @@ by implementing a custom betweenness centrality algorithm within the MAGE librar
 For our last trick, let's try to locate communities inside our network.
 Communities are a set of nodes that are densely connected. The goal of the
 community detection algorithms can be nicely described with the next
-visualization: ![](../data/community_detection_visualization.png)
+visualization: 
+![](/pages/custom-query-modules/python/understanding-music-with-modules/community_detection_visualization.png)
 
 As for centrality, there are multiple algorithms for finding communities in a
 graph. We will write a function that takes a method for calculating communities,
@@ -373,7 +374,7 @@ ORDER BY community.size DESC;
 ```
 
 Your results should look something like this:
-![](../data/community_genre_statistics.png)
+![](/pages/custom-query-modules/python/understanding-music-with-modules/community_genre_statistics.png)
 
 Hmm, `Pop` sure is popular. Let's ignore that genre in the code:
 

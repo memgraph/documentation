@@ -233,7 +233,7 @@ Lab doesn't support `SVG` format at this time, but it supports `PNG`, `JPEG`,
    Awesome](https://fontawesome.com/icons/) website and locate the icon that you
    want to use as a node background and download it in SVG format.
 
-<img src={require('../data/how-to-guides/font-awesome-locate-icon.png').default} className={"imgBorder"}/>
+![](/pages/data-visualization/style-your-graphs-in-memgraph-lab/font-awesome-locate-icon.png)
 
 
 2. Convert SVG file to PNG with your favorite image editing program, or you can use one of the dozen online services for file conversion.
@@ -276,7 +276,7 @@ for additional info on the syntax.
 
 5. Apply the style and review changes.
 
-<img src={require('../data/how-to-guides/font-awesome-node-style.png').default} className={"imgBorder"}/>
+![](/pages/data-visualization/style-your-graphs-in-memgraph-lab/font-awesome-node-style.png)
 
 ## Where to next?
 

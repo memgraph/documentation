@@ -348,7 +348,7 @@ Example of a JSON file:
 You can inspect query modules in Memgraph Lab (v2.0 and newer).
 Just navigate to **Query Modules**.
 
-<img src={require('../../data/memgraph_lab_query_modules.png').default} className={"imgBorder"}/>
+![](/pages/custom-query-modules/manage-query-modules/memgraph_lab_query_modules.png)
 
 There you can see all the loaded query modules, delete them, or see procedures
 and transformations they define by clicking on the arrow icon.
@@ -360,7 +360,7 @@ query you can run directly from the **Query Modules** view.
 Custom modules developed via Memgraph Lab are located at
 `/var/lib/memgraph/internal_modules`.
 
-<img src={require('../../data/memgraph_lab_query_modules_details.png').default} className={"imgBorder"}/>
+![](/pages/custom-query-modules/manage-query-modules/memgraph_lab_query_modules_details.png)
 
 ## Controlling procedure memory usage
 
