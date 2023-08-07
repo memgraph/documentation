@@ -108,7 +108,7 @@ memgraph> MATCH (n)-[r]-(m) RETURN n,r,m;
   </TabItem>
   <TabItem value='memgraphlab'>
 
-<!--![memgraph-docs-mgmigrate-results](../../data/import-data/memgraph-docs-mgmigrate-results.png)-->
+![memgraph-docs-mgmigrate-results](/pages/data-migration/sql/memgraph-docs-mgmigrate-results.png)
 
   </TabItem>
 </Tabs>
@@ -218,7 +218,7 @@ memgraph> MATCH (n)-[r]-(m) RETURN n,r,m;
   </TabItem>
   <TabItem value='memgraphlab'>
 
-<!--![memgraph-docs-mgmigrate-results](../../data/import-data/memgraph-docs-mgmigrate-results.png)-->
+![memgraph-docs-mgmigrate-results](/pages/data-migration/sql/memgraph-docs-mgmigrate-results.png)
 
   </TabItem>
 </Tabs>
