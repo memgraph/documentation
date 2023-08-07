@@ -347,7 +347,7 @@ If the `Host` address is wrong, take a look at the [Docker
 note](/memgraph/how-to-work-with-docker#docker-container-ip-address) in the
 installation guide.
 
-![Memgraph Lab](./data/getting-started/memgraph-lab-login.png)
+![Memgraph Lab](/pages/data-visualization/install-and-connect/memgraph-lab-login.png)
 
 ## Executing queries
 
