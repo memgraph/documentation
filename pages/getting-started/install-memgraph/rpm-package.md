@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Install Memgraph from RPM package
 
 This article briefly outlines the basic steps necessary to install and run

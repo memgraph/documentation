@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Transactions
 
 All Cypher queries are run within transactions, which means that all modification

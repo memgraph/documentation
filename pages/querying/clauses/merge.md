@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # MERGE clause
 
 The `MERGE` clause is used to ensure that a pattern you are looking for exists

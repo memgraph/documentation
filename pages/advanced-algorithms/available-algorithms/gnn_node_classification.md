@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # node_classification_with_gnn
 
 import Tabs from '@theme/Tabs';

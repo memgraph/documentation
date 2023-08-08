@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Exploring a music social network
 
 This article is part of a series intended to show users how to use Memgraph on

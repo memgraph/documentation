@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Style your graphs in Memgraph Lab
 
 In this tutorial, you'll learn how to use **Style script** to add style to your

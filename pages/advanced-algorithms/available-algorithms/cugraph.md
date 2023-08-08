@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # cugraph
 
 import Tabs from '@theme/Tabs';

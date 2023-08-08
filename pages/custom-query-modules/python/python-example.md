@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Example of a query module written in Python
 
 We will examine how the query module `example` is implemented using the

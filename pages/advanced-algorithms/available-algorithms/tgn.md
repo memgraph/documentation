@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # temporal_graph_networks
 
 import Tabs from '@theme/Tabs';

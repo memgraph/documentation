@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # CREATE clause
 
 The `CREATE` clause is used to create nodes and relationships in a graph.

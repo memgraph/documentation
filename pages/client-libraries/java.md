@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Java quick start
 
 At the end of this guide, you will have created a simple Java console **`Hello,

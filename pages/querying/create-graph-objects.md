@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Create graph objects
 
 For creating graph objects, you can use the following clauses.

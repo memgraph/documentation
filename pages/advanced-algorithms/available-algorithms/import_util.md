@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # import_util
 
 import Tabs from '@theme/Tabs';

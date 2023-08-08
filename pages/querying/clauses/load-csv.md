@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # LOAD CSV clause
 
 The `LOAD CSV` clause enables you to load and use data from a CSV file of your

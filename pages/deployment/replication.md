@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Replication
 
 :::caution

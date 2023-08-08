@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Custom query modules
 
 Memgraph supports extending the query language with user-written procedures in

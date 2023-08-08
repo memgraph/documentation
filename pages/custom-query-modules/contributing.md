@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # How to contribute to MAGE?
 
 ## Contributing

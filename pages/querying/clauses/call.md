@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # CALL clause
 
 The `CALL` clause is used to call a subquery inside the existing query.
