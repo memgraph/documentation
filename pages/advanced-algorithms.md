@@ -1,7 +1,5 @@
 # Advanced algorithms
 
-import MageSpells from '../mage/templates/_mage_spells.mdx';
-
 **Memgraph Advanced Graph Extensions**, **MAGE** to friends, is an [**open-source
 repository**](https://github.com/memgraph/mage) that contains **graph algorithms** and **modules** written by the
 team behind Memgraph and its users in the form of **query modules**. The project
@@ -49,12 +47,6 @@ problem that's been keeping you awake.
 
 The spellbook has been written to help you utilize all the [currently
 available query modules](/mage/query-modules/available-queries).
-
-<details>
-  <summary><b>Spellbook</b> 📖</summary>
-  
-  <MageSpells/>
-</details>
 
 ### Create query modules
 
