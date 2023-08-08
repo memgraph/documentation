@@ -28,13 +28,13 @@ The  **igraphalg** module provides a comprehensive set of thin wrappers around s
 | **Edge weights**    | <Highlight color="#FB6E00">**weighted**</Highlight>/<Highlight color="#FB6E00">**unweighted**</Highlight> |
 | **Parallelism**     | <Highlight color="#FB6E00">**sequential**</Highlight>                                                     |
 
-:::tip
+<Callout>
 
 If you are not satisfied with the performance of algorithms from the igraphalg
 module, check Memgraph's native implementation of algorithms such as PageRank,
 shortest path, and others written in C++
 
-:::
+</Callout>
 
 ## Procedures
 

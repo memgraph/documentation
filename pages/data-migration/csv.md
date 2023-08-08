@@ -12,7 +12,7 @@ it's the most common one.
 `LOAD CSV` clause cannot be used with a Memgraph Cloud instance because at the
 moment it is impossible to make files accessible by Memgraph. 
 
-:::tip
+<Callout>
 
 If the data is importing slower than expected, you can [speed it
 up](#increase-import-speed) by creating indexes or switching the storage mode to
@@ -21,7 +21,7 @@ analytical.
 If the import speed is still unsatisfactory, don't hesitate to contact us on
 [Discord](https://discord.com/invite/memgraph).
 
-:::
+</Callout>
 
 ## Clause syntax
 

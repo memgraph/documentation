@@ -13,12 +13,12 @@ version will soon be available.
 
 :::
 
-:::tip
+<Callout>
 
 For an example of how to implement transformation modules in C, check out the
 [transformation module example](#transformation-module-example).
 
-:::
+</Callout>
 
 ## Types
 

@@ -82,13 +82,13 @@ data from Memgraph into a JSON file.
 To be able to call the procedures, you need to [install MAGE and load query
 modules](/mage/how-to-guides/run-a-query-module). 
 
-:::tip
+<Callout>
 
 If you can choose the format of the data you want to import, the fastest way to
 import data into Memgraph is from a CSV file using the [LOAD CSV
 clause](/import-data/files/load-csv-clause.md). 
 
-:::
+</Callout>
 
 ## Examples
 

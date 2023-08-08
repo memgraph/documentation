@@ -7,7 +7,7 @@ Memgraph's command-line tool, **mgconsole**.
 
 ## 1. Install mgconsole 
 
-:::tip
+<Callout>
 
 If you installed **Memgraph Platform** with the Docker image
 (`memgraph/memgraph-platform`), mgconsole will start automatically when you run
@@ -18,7 +18,7 @@ If you installed any other Docker image or want to explicitly start the
 mgconsole from the Memgraph Platform image, you need to manually run mgconsole
 following the steps described below.
 
-:::
+</Callout>
 
 If you want to install or run mgconsole to query a running Memgraph database
 instance, use the following steps:
@@ -139,7 +139,7 @@ memgraph>
 At this point, it is possible to execute Cypher queries against a running
 Memgraph database instance. 
 
-:::tip
+<Callout>
 
 You can use the `TAB` key to autocomplete commands in `mgconsole`.
 

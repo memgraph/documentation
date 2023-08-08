@@ -12,13 +12,13 @@ What data do you want to import?
 - [NetworkX, PyG or DGL graph](#networkx-pyg-or-dgl-graph)
 
 
-:::tip
+<Callout>
 
 If you can choose the format of the data you want to import, the fastest way to
 import data into Memgraph is from a CSV file using the [LOAD CSV
 clause](/import-data/files/load-csv-clause.md). 
 
-:::
+</Callout>
 
 ## CSV files
 

@@ -5,21 +5,21 @@ of all functions that can be used to implement a query module procedure. The
 source file can be found in the Memgraph installation directory, under
 `/usr/include/memgraph`.
 
-:::tip
+<Callout>
 
 For an example of how to implement query modules in C, take a look at [the
 example we
 provided](/reference-guide/query-modules/implement-custom-query-modules/custom-query-module-example.md#c-api).
 
-:::
+</Callout>
 
-:::tip
+<Callout>
 
 If you install any C modules after running Memgraph, you'll have to [load
 them into Memgraph](../load-call-query-modules#loading-query-modules) or restart
 Memgraph in order to use them.
 
-:::
+</Callout>
 
 ## Classes
 

@@ -14,7 +14,7 @@ version will soon be available.
 
 :::
 
-:::tip 
+<Callout> 
 
 For an example how to implement transformation modules in Python with Memgraph Lab, check out
 this [tutorial](/tutorials/graph-stream-processing-with-kafka.md#2-create-a-transformation-module).
@@ -23,7 +23,7 @@ Below, you can find [transformation examples of different format
 messages](#transformation-examples-of-different-format-messages) such as JSON,
 Avro and Protobuf.
 
-:::
+</Callout>
 
 ## `mgp.transformation(func)`
 Transformation modules in Python have to follow certain rules in order to work:

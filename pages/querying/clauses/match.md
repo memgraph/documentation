@@ -22,13 +22,13 @@ The `MATCH` clause is used to obtain data from the database by matching it to a 
     4.1. [Cartesian product of nodes](#41-cartesian-product-of-nodes) <br />
     4.2. [Creating a list](#42-creating-a-list) <br />
 
-:::tip
+<Callout>
 
 Each node and relationship gets a identifier generated during their initialization which is persisted through the durability mechanism.
 
 Return it with the [`id()` function](/cypher-manual/functions#scalar-functions). 
 
-:::
+</Callout>
 
 ## Data Set
 

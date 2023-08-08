@@ -35,12 +35,12 @@ that the formula is correct.
 Let's dive deeper into the memory usage values. Because Memgraph works on the
 x86 architecture, calculations are based on the x86 Linux memory usage.
 
-:::tip 
+<Callout> 
 For the latest and most precise memory layout please clone
 [Memgraph](https://github.com/memgraph/memgraph) and use, e.g.,
 [pahole](https://github.com/PhilArmstrong/pahole-gdb) to discover accurate
 information. 
-:::
+</Callout>
 
 Each `Vertex` and `Edge` object has a pointer to a `Delta` object. The
 `Delta` object stores all changes on a certain `Vertex` or `Edge` and that's

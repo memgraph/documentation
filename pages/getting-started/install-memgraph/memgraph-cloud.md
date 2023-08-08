@@ -51,11 +51,11 @@ To create Memgraph Cloud account:
    that we haven’t listed helps us leave no man behind once a user base is
    established. 
 
-:::tip
+<Callout>
 
 You can also register to Memgraph Cloud with your Google account. 
 
-:::
+</Callout>
 
 
 As a new user, you will start using a 14-day free trial version of Memgraph

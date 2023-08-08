@@ -140,11 +140,11 @@ properties that are used in label property-indexes. This list is ordered to make
 the search faster. All property types can be ordered. First, they are ordered
 based on the type and then within that type.
 
-:::tip
+<Callout>
 
 For the best performance, create index on properties containing unique integer values.
 
-:::
+</Callout>
 
 :::caution
 
@@ -260,7 +260,7 @@ their age, it might be beneficial to create an index on nodes labeled as
 CREATE INDEX ON :Person(age);
 ```
 
-:::tip
+<Callout>
 
 For the best performance, create index on properties containing unique integer values.
 

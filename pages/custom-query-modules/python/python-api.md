@@ -5,15 +5,15 @@ public Python API provided by Memgraph. In essence, this is a wrapper around the
 **[C API](./c-api)**. This source file can be found in the Memgraph
 installation directory, under `/usr/lib/memgraph/python_support`.
 
-:::tip
+<Callout>
 
 For an example of how to implement query modules in Python, take a look at [the
 example we
 provided](/reference-guide/query-modules/implement-custom-query-modules/custom-query-module-example.md#python-api). 
 
-:::
+</Callout>
 
-:::tip
+<Callout>
 
 If you install any Python modules after running Memgraph, you'll have to [load
 them into Memgraph](../load-call-query-modules#loading-query-modules) or restart
@@ -22,7 +22,7 @@ Memgraph in order to use them.
 You can also develop query modules in Python from Memgraph Lab (v2.0 and newer). Just
 navigate to **Query Modules** and click on **New Module** to start.
 
-:::
+</Callout>
 
 :::info
 If you need an additional Python library not included with Memgraph, check out
@@ -75,7 +75,7 @@ CALL example.procedure(1) YIELD args, result;
 
 Naturally, you may pass in different arguments or yield less fields.
 
-:::tip
+<Callout>
 Install the `mgp` Python module so your editor can use typing annotations
 properly and suggest methods and classes it contains. You can install the module
 by running `pip install mgp`.

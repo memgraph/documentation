@@ -172,12 +172,12 @@ In this code snippet, the result consists of an integer and the corresponding ne
 of the random walk algorithm. The types of the results are not arbitrary, as they are
 registered in the initialization module, further below.
 
-:::tip
+<Callout>
 
 Analogous methods for other supported data types are outlined in the
 [C++ API reference](/memgraph/reference-guide/query-modules/api/cpp-api).
 
-:::
+</Callout>
 
 ### Initialization of the module
 
@@ -234,7 +234,7 @@ different procedures in one module, each of which can be invoked using the
 library). Since we compile our example to `random_walk.so`, the module is called
 `random_walk`.
 
-:::tip
+<Callout>
 
 As the procedure name is defined upon registration, it can differ from its 
 respective callback.

@@ -19,13 +19,13 @@ You can write Python transformation modules, create and start streams using the
 **Stream** section in the Memgraph Lab, [check out
 how](/import-data/data-streams/manage-streams-lab.md). 
 
-:::tip
+<Callout>
 
 Check out the **example-streaming-app** on
 [GitHub](https://github.com/memgraph/example-streaming-app) to see a sample
 Memgraph-Kafka application.
 
-:::
+</Callout>
 
 ## Create a stream
 

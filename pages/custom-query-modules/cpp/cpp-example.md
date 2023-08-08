@@ -100,13 +100,13 @@ Callbacks for query procedures all share the same signature, as laid out below.
 Parameter by parameter, the callback receives the procedure arguments (`args`),
 graph context (`memgraph_graph`), result stream (`result`), and memory access.
 
-:::tip
+<Callout>
 
 In place of working with the raw `mgp_` type arguments, use the C++ API classes
 that provide familiar standard library-like interfaces and do away with needing
 manual memory management.
 
-:::
+</Callout>
 
 ```cpp
 void RandomWalk(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
