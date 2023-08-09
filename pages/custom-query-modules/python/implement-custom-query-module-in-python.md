@@ -25,8 +25,8 @@ countries border each other, various pricing and recommended accommodation.
 
 ![](/pages/custom-query-modules/python/implement-custom-query-module-in-python/backpacking_metagraph.png)
 
-<details>
-  <summary>A detailed explanation of the data model</summary>
+
+A detailed explanation of the data model:
 
 Nodes:
 
@@ -133,8 +133,7 @@ installation directory `/usr/lib/memgraph/python_support`. If you are using
 Docker, you can copy the file from the Docker container into your computer for
 faster access.
 
-<details>
-  <summary>Copy the <code>mgp</code> module from a Docker container</summary>
+Copy the <code>mgp</code> module from a Docker container:
 
 **1.** If it's not running, start your Memgraph instance using Docker.
 
@@ -162,7 +161,6 @@ Example of a command when copying the `mgp.py` file to the user's desktop:
 C:\Users\Vlasta\Desktop>docker cp 63e35:/usr/lib/memgraph/python_support/mgp.py mgp.py
 ```
 
-</details>
 
 In essence, Python API is a wrapper around the C API. If you look at row 15 of
 the new module we've created in Memgraph Lab, you can see you need to import the

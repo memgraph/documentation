@@ -228,8 +228,7 @@ with
 }
 ```
 
-<details>
-  <summary>In case you need it, here is the complete Graph Style Code:</summary>
+In case you need it, here is the complete Graph Style Code:
 
 ```
 @NodeStyle {
@@ -268,8 +267,6 @@ with
   label: Type(edge)
 }
 ```  
-
-</details>
 
 Below you can see how the graph looks like in the end. We hope that you have
 enjoyed this short tutorial. Now that you have seen Memgraph in action, we
