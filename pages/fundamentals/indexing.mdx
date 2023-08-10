@@ -2,15 +2,14 @@ import { Callout } from 'nextra/components'
 
 # Indexing
 
-## When to create indexes?
+When running queries, you want to get results as soon as possible. In the
+worst-case scenario, during query execution all nodes need to be checked to find
+a match.
 
-When you are running queries, you want to get results as soon as possible. In
-the worst-case scenario, when you execute a query, all nodes need to be checked
-to see if there is a match.
+This is how [the query plan](/querying/performance-optimization) looks when there is
+no index on the data:
 
-Here is what the query plan looks like if there is no index on the data:
-
-```nocopy
+```console copy=false
 memgraph> EXPLAIN MATCH (n:Person {prop: 1}) RETURN n;
 +---------------------------------+
 | QUERY PLAN                      |
@@ -22,23 +21,20 @@ memgraph> EXPLAIN MATCH (n:Person {prop: 1}) RETURN n;
 +---------------------------------+
 ```
 
-By enabling indexes, this process can be much faster:
+Notice the `ScanAllByLabel` operations. By creating indexes, query execution
+can be much faster because indexes partition data with a key. When a query is
+executed, the engine first checks if there is an index, and instead of
+explicitly checking every node, it can just check the indexed ones, making
+retrieving indexed data more efficient. 
+
+The following query creates an index on a property of a certain label:
 
 ```cypher
 CREATE INDEX ON :Person(prop);
 ```
 
-When a query is executed, the engine first checks if there is an index. An index
-stores additional information on certain types of data so that retrieving
-indexed data becomes more efficient. Indexes basically store data in a different
-kind of way, i.e., they partition it with a key. For example, if you set an
-index on a label, the query `MATCH (:Label)` won't have to explicitly check
-every node. You just need to check the nodes that were placed on a "shelf". Each
-"shelf" has nodes with a specific label. The data is not copied or duplicated to
-the "shelf". You actually create a memory map to those nodes and there is no
-need to look anywhere else for them.
-
-Here is what the query plan looks like if indexing is enabled:
+[The query plan](/querying/performance-optimization) of a query matching that
+specific node and property:
 
 ```nocopy
 memgraph> EXPLAIN MATCH (n:Person {prop: 1}) RETURN n;
@@ -51,61 +47,58 @@ memgraph> EXPLAIN MATCH (n:Person {prop: 1}) RETURN n;
 +-----------------------------------------------------+
 ```
 
-## When not to create indexes?
+The `ScanAllByLabel` operations has been replaced by
+`ScanAllByLabelPropertyValue`, a more efficient operation.
 
-There are some downsides to indexing, so it is important to carefully choose the
-right data for creating an index. The downsides of indexing are:
+But there are also some downsides to indexing:
 
-- requiring extra storage (memory) for each index and
-- slowing down write operations to the database.
+- each index requires extra storage (memory)
+- indexes slow down write operations to the database.
 
-Indexing all of the content will not improve the database speed. The structures
-in the index are dynamically updated on modifications or insertions of new
-nodes. Once a new node is created, it needs to be assigned to an index group.
-Such an indexed node will be retrieved much faster from the database.
+It is important to choose the right data to create indexes on, as indexing all
+of the content will not improve the database speed. 
 
-Indexing will also not bring any improvement if a large number of properties
-have the same value. Take a look at the following example. Let's say you have
-some property that can have 10 distinct values. Those values are integers in the
-range 1 to 10. If you have 100 nodes stored in the database and 1 of them has a
-score of 1 while the others have a score of 10 (99 of them), then that is not a
-good distinguisher. If 10 of them have a score of 1, 10 of them have a score of
-2, etc. then it is a good distinguisher because it partitions them to cut the
-order of searching by one magnitude.
+The structures in the index are dynamically updated on modifications or
+insertions of new nodes, slowing down the write operations.
 
-Also, indexing certain data types will not bring any significant performance
-gain, e.g., for boolean in the best case scenario, the time will be cut in half.
+Indexing won't bring any improvements on properties that are mostly of the same
+value, as they have no proper distinguishers.
 
-## Creating an index
+For the same reason, indexing certain data types will not bring any significant performance
+gain. For example, for properties with boolean values, the time will be cut in half.
 
-Indexing can be applied to data with a specific label or a combination of label
-and property. They are not automatically created, and the user needs to create
-them explicitly. Creation is done using a special `CREATE INDEX ON
-:Label(property)` language construct.
+## Create an index
 
-When you create an index, it is added to the registry of indexes.
+Indexes are not created automatically. 
 
-Memgraph supports two types of indexes:
-
-- label index
-- label-property index
+You can explicitly create indexes on a data with a specific label or
+label-property combination using the `CREATE INDEX ON` syntax.
 
 ### Label index
 
-Memgraph will not automatically index labeled data. If you want to optimize
-queries that fetch nodes by label, you need to create the indexes:
+To optimize queries that fetch nodes by label, you need to create a label index:
 
 ```cypher
 CREATE INDEX ON :Person;
 ```
 
-Retrieving nodes using this query is now much more efficient:
+Creating an index will optimize the following type of queries:
 
 ```cypher
 MATCH (n:Person) RETURN n;
 ```
 
 ### Label-property index
+
+To optimize queries that fetch nodes with a certain label and property
+combination, you need to create a label-property index. For the best
+performance, create index on properties containing unique integer values.
+
+<Callout type="warning">
+
+Creating a label-property index will not create a label index!
+
+</Callout>
 
 For example, to index nodes that are labeled as `:Person` and have a property
 named `age`:
@@ -114,51 +107,41 @@ named `age`:
 CREATE INDEX ON :Person(age);
 ```
 
-After the index is created, retrieving those nodes will become more efficient.
-For example, the following query will retrieve all nodes which have an `age`
-property, instead of fetching each `:Person` node and checking whether the
-property exists:
+Creating an index will optimize the queries that need to match a specific label
+and property combination:
 
 ```cypher
 MATCH (n :Person {age: 42}) RETURN n;
 ```
 
-Using index-based retrieval also works when filtering labels and properties with
-`WHERE`. For example, the same effect as in the previous example can be done
-with:
+Index will also optimize queries that filter labels and properties with the
+`WHERE` clause:
 
 ```cypher
 MATCH (n) WHERE n:Person AND n.age = 42 RETURN n;
 ```
 
-Since the filter inside `WHERE` can contain any kind of an expression, the
-expression can be complicated enough so that the index does not get used. We are
-continuously improving the recognition of index usage opportunities from a
-`WHERE` expression. If there is any suspicion that an index may not be used, we
-recommend putting properties and labels inside the `MATCH` pattern.
+Be aware that since the filter inside `WHERE` can contain any kind of an
+expression, the expression can so complicated that the index doesn't get used.
+If there is any suspicion that an index isn't used, we recommend writing
+labels and properties inside the `MATCH` pattern.
 
-When it comes to label-property indexes, MemgraphDB stores a list of specific
-properties that are used in label property-indexes. This list is ordered to make
-the search faster. All property types can be ordered. First, they are ordered
-based on the type and then within that type.
+#### Analyze graph
 
-<Callout>
+When multiple label-property indices exist, the database can sometimes select a
+non-optimal index due to the data's distribution. 
 
-For the best performance, create index on properties containing unique integer values.
-
-</Callout>
-
-<Callout type="warning">
-
-Creating a label-property index will not create a label index!
-
-</Callout>
+The [`ANALYZE GRAPH;`](/querying/performance-optimization#analyze-graph) query
+calculates the distribution of property values so the database can select a more
+optimal label-property index with the smallest average property value size. The
+query is run only once after all indexes have been created and data inserted in
+the database.
 
 ### Speed comparison
 
-After the query execution, you can see how much time the query took to finish.
-Below you can see a comparison of the same query run without an index and with
-an index.
+Below is a comparison of the same query run without an index and with an index.
+The query without an index took 0.015 seconds to execute, and the query with an
+index 0.006 seconds.
 
 ```nocopy
 memgraph> SHOW INDEX INFO;
@@ -190,111 +173,33 @@ memgraph> MATCH (n:Person) WHERE n.name =~ ".*an$" RETURN n.name;
 4 rows in set (0.006 sec)
 ```
 
-## Display available indexes
+## Show created indexes
 
-Information about available indexes can be retrieved by using the following
-syntax:
+To check all the labels and label-property pairs that Memgraph currently
+indexes, use the following query: 
 
 ```cypher
 SHOW INDEX INFO;
 ```
 
-The results of this query will be all of the labels and label-property pairs
-that Memgraph currently indexes.
+## Delete an index
 
-## Deleting index
+Created indexes can be deleted using the following syntax:
 
-Created indexes can also be deleted by using the following syntax:
+```cypher
+DROP INDEX ON :Label;
+```
 
 ```cypher
 DROP INDEX ON :Label(property);
 ```
-## Analyze graph
 
-When multiple label-property indices exist, the database can sometimes select a non-optimal index due to the data's distribution. The [`ANALYZE GRAPH;`](/reference-guide/analyze-graph.md) query calculates the distribution of property values so the database can select a more optimal label-property index with the smallest average property value size. The query is run only once after all indexes have been created and data inserted in the database.
-
-## How-to guide
-
-A database index is a data structure used to improve the speed of data retrieval
-within a database at the cost of additional writes and storage space for
-maintaining the index data structure.
-
-When a query is executed, the engine first checks if there is an index. An index
-stores additional information on certain types of data so that retrieving
-indexed data becomes more efficient.
-
-Memgraph supports two types of indexes:
-
-- label index
-- label-property index
-
-## How to check if indexes exist?
-
-To check if indexes exist, use the following Cypher query:
-
-```cypher
-SHOW INDEX INFO;
-```
-
-The results of this query will be all of the labels and label-property pairs
-that Memgraph currently indexes.
-
-## How to create indexes?
-
-Memgraph will not automatically index labeled data. If you want to optimize
-queries that fetch nodes using labels, you need to create indexes.
-
-If you have a node `Person` and you want to create an index for it, run the
-following query:
-
-```cypher
-CREATE INDEX ON :Person;
-```
-
-You can also create indexes on data with a specific combination of label and
-property, hence the name label-property index.
-
-For example, if you are storing information about people and you often retrieve
-their age, it might be beneficial to create an index on nodes labeled as
-`:Person` with a property named `age` by using the following language construct:
-
-```cypher
-CREATE INDEX ON :Person(age);
-```
-
-<Callout>
-
-For the best performance, create index on properties containing unique integer values.
-
-</Callout>
-
-<Callout type="warning">
-
-Creating a label-property index will not create a label index!
-
-</Callout>
-
-## How to delete indexes?
-
-You can delete created indexes by using the following Cypher queries:
-
-```cypher
-DROP INDEX ON :Person;
-```
-
-```cypher
-DROP INDEX ON :Person(age);
-```
-
-These queries instruct all active transactions to abort as soon as possible. Once all transactions have finished, the index will be deleted.
-
-## Analyze graph
-
-When multiple label-property indices exist, the database can sometimes select a non-optimal index due to the data's distribution. The [`ANALYZE GRAPH;`](/reference-guide/analyze-graph.md) query calculates the distribution of property values so the database can select a more optimal label-property index with the smallest average property value size. The query is run only once after all indexes have been created and data inserted in the database.
+These queries instruct all active transactions to abort as soon as possible.
+Once all transactions have finished, the index will be deleted.
 
 ## Underlying implementation
 
-The central part of our index data structure is a highly-concurrent [skip
+The central part of Memgraph's index data structure is a highly-concurrent [skip
 list](https://en.wikipedia.org/wiki/Skip_list). Skip lists are probabilistic
 data structures that allow fast search within an ordered sequence of elements.
 The structure itself is built in layers where the bottom layer is an ordinary
@@ -312,4 +217,7 @@ in a skip list):
 - The average search time is `O(log(n))`
 - The average memory consumption is `O(n)`
 
-Read more about [memory usage in Memgraph](/under-the-hood/storage.md). 
+When it comes to label-property indexes, Memgraph stores a list of specific
+properties that are used in label-property indexes. This list is ordered to make
+the search faster. All property types can be ordered. First, they are ordered
+based on the type and then within that type.
