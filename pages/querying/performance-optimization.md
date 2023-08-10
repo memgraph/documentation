@@ -1,5 +1,7 @@
 # Performance optimization
 
+## Analyze graph
+
 The `ANALYZE GRAPH` will check and calculate certain properties of a graph so
 the database can choose a more optimal index or `MERGE` transaction. 
 
@@ -32,7 +34,7 @@ average group size and uniform distribution would be misleading. That's why the
 database always selects the label-property index with >= 10x fewer nodes than
 the other label-property index.
 
-## Calculate the statistic
+### Calculate the statistic
 
 Run the following query to calculate the statistics:
 
@@ -57,7 +59,7 @@ you can specify which labels to use by adding the labels to the query:
 ANALYZE GRAPH ON LABELS :Label1, :Label2;
 ```
 
-## Delete statistic
+### Delete statistic
 
 If you want the database to ignore information about the average group size, the
 chi-squared statistic and the average degree, the existing statistic can be
@@ -96,7 +98,7 @@ processing.
 Using the `EXPLAIN` clause, it is possible for the user to inspect the
 produced plan and gain insight into the execution of a query.
 
-## Operators
+### Operators
 
 | Operator                      | Description                                                                                                                |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -138,7 +140,7 @@ produced plan and gain insight into the execution of a query.
 | `Unwind`                        | Unwinds an expression to multiple records.                                                                               |
 | `Distinct`                      | Applies a distinct filter on the input it received.                                                                      |
 
-## Example plans
+### Example plans
 
 As an example, let's inspect the plan produced for a simple query:
 
@@ -268,11 +270,4 @@ PROFILE MATCH (n :Node)-[:Edge]-(m :Node) WHERE n.prop = 42 RETURN *;
 | * Once        | 2             |   0.562844 %  |   0.000312 ms |
 +---------------+---------------+---------------+---------------+
 ```
-
-## Where to next?
-
-To learn more about Memgraph's functionalities, visit the **[Reference
-guide](/reference-guide/overview.md)**. For real-world examples of how to use
-Memgraph, we strongly suggest going through one of the available
-**[Tutorials](/tutorials/overview.md)**.
 

@@ -1,0 +1,223 @@
+import { Callout } from 'nextra/components'
+
+# Indexes
+
+When running queries, you want to get results as soon as possible. In the
+worst-case scenario, during query execution all nodes need to be checked to find
+a match.
+
+This is how [the query plan](/querying/performance-optimization) looks when there is
+no index on the data:
+
+```console copy=false
+memgraph> EXPLAIN MATCH (n:Person {prop: 1}) RETURN n;
++---------------------------------+
+| QUERY PLAN                      |
++---------------------------------+
+| " * Produce {n}"                |
+| " * Filter"                     |
+| " * ScanAllByLabel (n :Person)" |
+| " * Once"                       |
++---------------------------------+
+```
+
+Notice the `ScanAllByLabel` operations. By creating indexes, query execution
+can be much faster because indexes partition data with a key. When a query is
+executed, the engine first checks if there is an index, and instead of
+explicitly checking every node, it can just check the indexed ones, making
+retrieving indexed data more efficient. 
+
+The following query creates an index on a property of a certain label:
+
+```cypher
+CREATE INDEX ON :Person(prop);
+```
+
+[The query plan](/querying/performance-optimization) of a query matching that
+specific node and property:
+
+```nocopy
+memgraph> EXPLAIN MATCH (n:Person {prop: 1}) RETURN n;
++-----------------------------------------------------+
+| QUERY PLAN                                          |
++-----------------------------------------------------+
+| " * Produce {n}"                                    |
+| " * ScanAllByLabelPropertyValue (n :Person {prop})" |
+| " * Once"                                           |
++-----------------------------------------------------+
+```
+
+The `ScanAllByLabel` operations has been replaced by
+`ScanAllByLabelPropertyValue`, a more efficient operation.
+
+But there are also some downsides to indexing:
+
+- each index requires extra storage (memory)
+- indexes slow down write operations to the database.
+
+It is important to choose the right data to create indexes on, as indexing all
+of the content will not improve the database speed. 
+
+The structures in the index are dynamically updated on modifications or
+insertions of new nodes, slowing down the write operations.
+
+Indexing won't bring any improvements on properties that are mostly of the same
+value, as they have no proper distinguishers.
+
+For the same reason, indexing certain data types will not bring any significant performance
+gain. For example, for properties with boolean values, the time will be cut in half.
+
+## Create an index
+
+Indexes are not created automatically. 
+
+You can explicitly create indexes on a data with a specific label or
+label-property combination using the `CREATE INDEX ON` syntax.
+
+### Label index
+
+To optimize queries that fetch nodes by label, you need to create a label index:
+
+```cypher
+CREATE INDEX ON :Person;
+```
+
+Creating an index will optimize the following type of queries:
+
+```cypher
+MATCH (n:Person) RETURN n;
+```
+
+### Label-property index
+
+To optimize queries that fetch nodes with a certain label and property
+combination, you need to create a label-property index. For the best
+performance, create index on properties containing unique integer values.
+
+<Callout type="warning">
+
+Creating a label-property index will not create a label index!
+
+</Callout>
+
+For example, to index nodes that are labeled as `:Person` and have a property
+named `age`:
+
+```cypher
+CREATE INDEX ON :Person(age);
+```
+
+Creating an index will optimize the queries that need to match a specific label
+and property combination:
+
+```cypher
+MATCH (n :Person {age: 42}) RETURN n;
+```
+
+Index will also optimize queries that filter labels and properties with the
+`WHERE` clause:
+
+```cypher
+MATCH (n) WHERE n:Person AND n.age = 42 RETURN n;
+```
+
+Be aware that since the filter inside `WHERE` can contain any kind of an
+expression, the expression can so complicated that the index doesn't get used.
+If there is any suspicion that an index isn't used, we recommend writing
+labels and properties inside the `MATCH` pattern.
+
+#### Analyze graph
+
+When multiple label-property indices exist, the database can sometimes select a
+non-optimal index due to the data's distribution. 
+
+The [`ANALYZE GRAPH;`](/querying/performance-optimization#analyze-graph) query
+calculates the distribution of property values so the database can select a more
+optimal label-property index with the smallest average property value size. The
+query is run only once after all indexes have been created and data inserted in
+the database.
+
+### Speed comparison
+
+Below is a comparison of the same query run without an index and with an index.
+The query without an index took 0.015 seconds to execute, and the query with an
+index 0.006 seconds.
+
+```nocopy
+memgraph> SHOW INDEX INFO;
+Empty set (0.001 sec)
+
+memgraph> MATCH (n:Person) WHERE n.name =~ ".*an$" RETURN n.name;
++-------------+
+| n.name      |
++-------------+
+| "Lillian"   |
+| "Logan"     |
+| "Susan"     |
+| "Sebastian" |
++-------------+
+4 rows in set (0.021 sec)
+
+memgraph> CREATE INDEX ON :Person(name);
+Empty set (0.015 sec)
+
+memgraph> MATCH (n:Person) WHERE n.name =~ ".*an$" RETURN n.name;
++-------------+
+| n.name      |
++-------------+
+| "Lillian"   |
+| "Logan"     |
+| "Susan"     |
+| "Sebastian" |
++-------------+
+4 rows in set (0.006 sec)
+```
+
+## Show created indexes
+
+To check all the labels and label-property pairs that Memgraph currently
+indexes, use the following query: 
+
+```cypher
+SHOW INDEX INFO;
+```
+
+## Delete an index
+
+Created indexes can be deleted using the following syntax:
+
+```cypher
+DROP INDEX ON :Label;
+```
+
+```cypher
+DROP INDEX ON :Label(property);
+```
+
+These queries instruct all active transactions to abort as soon as possible.
+Once all transactions have finished, the index will be deleted.
+
+## Underlying implementation
+
+The central part of Memgraph's index data structure is a highly-concurrent [skip
+list](https://en.wikipedia.org/wiki/Skip_list). Skip lists are probabilistic
+data structures that allow fast search within an ordered sequence of elements.
+The structure itself is built in layers where the bottom layer is an ordinary
+linked list that preserves the order. Each higher level can be imagined as a
+highway for layers below.
+
+The implementation details behind skip list operations are well documented in
+the literature and are out of scope for this document. Nevertheless, we believe
+that it is important for more advanced users to understand the following
+implications of this data structure (`n` denotes the current number of elements
+in a skip list):
+
+- The average insertion time is `O(log(n))`
+- The average deletion time is `O(log(n))`
+- The average search time is `O(log(n))`
+- The average memory consumption is `O(n)`
+
+When it comes to label-property indexes, Memgraph stores a list of specific
+properties that are used in label-property indexes. This list is ordered to make
+the search faster. All property types can be ordered. First, they are ordered
+based on the type and then within that type.
