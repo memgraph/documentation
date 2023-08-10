@@ -96,7 +96,7 @@ continue with the tutorial.
 
 ## Example queries using Cypher
 
-In the queries below, we are using [Cypher](/cypher-manual) to query Memgraph
+In the queries below, we are using [Cypher](/querying) to query Memgraph
 via the console.
 
 Now when we have a dataset of football transfers from season 1992/1993 to season

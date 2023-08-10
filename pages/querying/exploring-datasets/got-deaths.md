@@ -91,7 +91,7 @@ with the tutorial.
 
 ## Example queries using Cypher
 
-In the queries below, we are using [Cypher](/cypher-manual) to query Memgraph
+In the queries below, we are using [Cypher](/querying) to query Memgraph
 via the console.
 
 Here are some queries you might find interesting:

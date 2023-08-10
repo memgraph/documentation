@@ -38,7 +38,7 @@ MATCH (n:Person {age: 42}) RETURN n;
 
 Each node and relationship gets a identifier generated during their initialization which is persisted through the durability mechanism.
 
-Return it with the [`id()` function](/cypher-manual/functions#scalar-functions). 
+Return it with the [`id()` function](/querying/functions). 
 
 ```
 
@@ -75,12 +75,12 @@ This is especially useful when matching variable length paths:
 MATCH path = ()-[r*2..4]->() RETURN path;
 ```
 
-More details on how `MATCH` works can be found [here](./clauses/match.md).
+More details on how `MATCH` works can be found [here](/querying/clauses/match).
 
 The `MATCH` clause can be modified by prepending the `OPTIONAL` keyword.
 `OPTIONAL MATCH` clause behaves the same as a regular `MATCH`, but when it fails
 to find the pattern, missing parts of the pattern will be filled with `null`
-values. Examples can be found [here](./clauses/optional-match.md).
+values. Examples can be found [here](/querying/clauses/optional-match).
 
 ## WHERE
 
@@ -93,7 +93,7 @@ person older than 20 is done with this query:
 MATCH (n:Person) WHERE n.age > 20 RETURN n;
 ```
 
-Additional examples can be found [here](./clauses/where.md).
+Additional examples can be found [here](/querying/clauses/where).
 
 ### Regular expressions
 
@@ -157,7 +157,7 @@ clause can also be used to:
 - order results with `ORDER BY` sub-clause and
 - perform aggregations (such as `count`).
 
-More details on `RETURN` can be found [here](./clauses/return.md).
+More details on `RETURN` can be found [here](/querying/clauses/return).
 
 ### SKIP & LIMIT
 
@@ -277,7 +277,7 @@ MATCH (n:Person) RETURN collect(n.name, n.age) AS map_name_to_age;
 ```
 
 Check the detailed signatures of [aggregation
-functions](./functions.md#aggregation-functions).
+functions](/querying/functions).
 
 ## UNION and UNION ALL
 
@@ -319,7 +319,7 @@ To produce rows out of a single list, use the following query:
 UNWIND [1,2,3] AS listElement RETURN listElement;
 ```
 
-More examples can be found [here](./clauses/unwind.md).
+More examples can be found [here](/querying/clauses/unwind).
 
 ## Traversing relationships
 
@@ -400,7 +400,7 @@ isn't. The output is:
 Use the `SET` clause to update labels on nodes and properties on nodes and
 relationships.
 
-Click [here](./clauses/set.md) for a more detailed explanation of what can be
+Click [here](/querying/clauses/set) for a more detailed explanation of what can be
 done with `SET`.
 
 Cypher supports combining multiple reads and writes using the `WITH` clause.
@@ -501,7 +501,7 @@ will remove relationships from a node you are deleting. The following should wor
 MATCH (node) DETACH DELETE node;
 ```
 
-More examples are available [here](./clauses/delete.md).
+More examples are available [here](/querying/clauses/delete).
 
 ### REMOVE
 
