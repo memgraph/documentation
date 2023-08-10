@@ -58,13 +58,6 @@ tools and features to help optimize query performance, including label and
 label-property indexes and a custom visualization library. Check our
 [benchmark](https://memgraph.com/benchgraph/) comparing Memgraph and Neo4j.
 
-### Is Memgraph a distributed database? 
-
-At the moment, Memgraph does not support running and storing data across
-multiple physical locations, but the next version of Memgraph, Memgraph 3.0 will
-enable horizontal scaling. Check out plans for [Memgraph 3.0 on
-GitHub](https://github.com/orgs/memgraph/projects/5).
-
 ### How does Memgraph ensures persistency and durability? 
 
 Although Memgraph is an in-memory database, the data is persistent and durable.
@@ -98,12 +91,6 @@ replicating data from one MAIN instance to one or several REPLICA instances. If
 a MAIN instance fails, another REPLICA instance can be upgraded and serve as the
 MAIN instance, thus ensuring continuous data availability. 
 
-### Does Memgraph support multitenancy? 
-
-Memgraph doesn't support multitenancy, but it is planned that the next version
-of Memgraph, Memgraph 3.0 does. Check out plans [for Memgraph 3.0 on
-GitHub](https://github.com/orgs/memgraph/projects/5).
-
 ### How many cores does Memgraph utilizes?
 
 Memgraph is designed to utilize all available CPU cores on a machine to process
@@ -125,7 +112,7 @@ data, we recommend having at least 16 GB of RAM. Of course, the actual memory
 needs depend on the complexity of executed queries. The more graph objects query
 needs to return as a result, the more RAM will be required. To calculate the
 Memgraph RAM instance requirements based on your data, check out [how Memgraph
-uses memory](/fundamentals/memory-usage). 
+uses memory](/fundamentals/storage-memory-usage). 
 
 ### Are there any graph size limits?
 
@@ -194,26 +181,25 @@ Currently, the fastest way to import data is from a CSV file with a [LOAD CSV
 clause](/data-migration/csv). LOAD CSV clause imports between
 100K and 350K nodes per second and between 60K and 80K edges per second. To
 achieve this import speed, indexes have to be [set up
-appropriately](/getting-started/indexes).
+appropriately](/fundamentals/indexing).
 
-[Other import methods](/migrate-data) include importing data from JSON
-and CYPHERL files, migrating from SQL and Neo4j with mgmigrate tool, or
+[Other import methods](/data-migration) include importing data from JSON
+and CYPHERL files, or
 connecting to a data stream.
 
 ### How to import data from MySQL or PostgreSQL?
 
-You can migrate from [MySQL](/migrate-data/sql) or
-[PostgreSQL](/migrate-data/sql) using the
-[mgmigrate](https://github.com/memgraph/mgmigrate) tool. 
+You can migrate from [MySQL](/data-migration/sql) or
+[PostgreSQL](/data-migration/sql) using [CSV files](/data-migration/csv).
 
 ### What file formats does Memgraph support for import? 
 
 You can import data from [CSV](/data-migration/csv),
-[JSON](/migrate-data/json) or
-[CYPHERL](/migrate-data/cypherl) files. 
+[JSON](/data-migration/json) or
+[CYPHERL](/data-migration/cypherl) files. 
 
 CSV files can be imported in on-premise instances using the [LOAD CSV
-clause](/migrate-data/csv).
+clause](/data-migration/csv).
 
 Local JSON files and files on a remote address can be imported in on-premise
 instances using a [json_util](/advanced-algorithms/available-algorithms/json_util) module
@@ -237,7 +223,7 @@ relationships and you can export files via Memgraph Lab.
 
 ### Can Memgraph database ingest streaming data?
 
-Yes, you can [connect your instance](/data-streams/data-streams) to Kafka, Redpanda or
+Yes, you can [connect your instance](/data-streams) to Kafka, Redpanda or
 Pulsar streams and ingest data. You will need to write a transformation module
 that will instruct Memgraph on how to transform the incoming messages and
 consume them correctly.
@@ -245,7 +231,7 @@ consume them correctly.
 ### Is data automatically indexed during import?
 
 No, data is not automatically indexed during import. You need to [create a label
-or label-property indexes](/getting-started/indexes) manually once the
+or label-property indexes](/fundamentals/indexing) manually once the
 import is finished. 
 
 ### What languages can be used to communicate with the database?
@@ -258,7 +244,7 @@ Python, Ruby, and Rust.
 ### Can I create logically separated graphs within the same database instance?
 
 You can create logically separated graphs within the same instance by [using different labels](/querying/read-and-modify-data). Each node can have multiple
-labels and [the cost of labels is 8B per label](/fundamentals/memory-usage) (but
+labels and [the cost of labels is 8B per label](/fundamentals/storage-memory-usage) (but
 the memory is allocated dynamically, so 3 labels take up as much memory as 4,
 and 5-7 labels take as much space as 8, etc.) You can use the same technique to
 save multilayer networks. 
@@ -266,7 +252,7 @@ save multilayer networks.
 ### Can I run MAGE modules and algorithms on just a part of the graph/subgraph?
 
 You can [run MAGE modules and algorithms on
-subgraphs](/advanced-algorithms/run-algorithm) by using the [project()
+subgraphs](/advanced-algorithms/run-algorithms) by using the [project()
 function](/querying/functions). 
 
 ### How can I visualize query results?
@@ -317,15 +303,14 @@ supports both Memgraph and Neo4j.
 
 Although we tried to implement openCypher query language as closely to the
 language reference as possible, we made some changes that can enhance the user
-experience. You can find the differences listed in the [Cypher
-manual](/cypher-manual/differences).
+experience. You can find the differences listed in the [Cypher manual](/querying/differences-in-cypher-implementations).
 
 ### Can I expand Cypher query language with custom procedures?
 
 Yes, you can expand the Cypher query language with custom procedures grouped in
 query modules. Modules can be written in C/C++ and Python (which also has a mock
 API). For more details, check out the documentation on [query
-modules](/advanced-algorithms/advanced-algorithms). 
+modules](/advanced-algorithms). 
 
 ## MAGE graph library
 
@@ -358,7 +343,7 @@ No, Memgraph Lab can connect only to a running Memgraph instance.
 
 ### Can I customize the visual appearance of my graph results?
 
-Yes, you can customize the visual appearance of your graph results by using [the Graph Style Script language](/data-visualization/graph-style-script/graph-style-script). You can add images to nodes, change their shape, size and color. Change the line appearance of relationships and their thickness. For a complete list of available features, consult [the GSS reference guide](/data-visualization/graph-style-script/graph-style-script).
+Yes, you can customize the visual appearance of your graph results by using [the Graph Style Script language](/data-visualization/graph-style-script). You can add images to nodes, change their shape, size and color. Change the line appearance of relationships and their thickness. For a complete list of available features, consult [the GSS reference guide](/data-visualization/graph-style-script).
 
 ## Memgraph Cloud
 
