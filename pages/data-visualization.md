@@ -22,15 +22,15 @@ Lab**, be sure to:
 
 ### 1. Install Memgraph Platform or Memgraph Lab
 
-We recommend you [install **Memgraph Platform**](/memgraph/installation) and get
+We recommend you [install **Memgraph Platform**](/getting-started/install-memgraph) and get
 the complete streaming graph application platform that includes **MemgraphDB**,
 command-line tool **mgconsole**, visual user interface **Memgraph Lab** running
 within the browser and **MAGE** - graph algorithms and modules library.
 
 If you already have a running Memgraph database instance, the web application is
 available at https://lab.memgraph.com/ or you can install Memgraph Lab as a
-desktop application on [Windows](/installation/windows.md),
-[macOS](/installation/macos.md) or [Linux](/installation/linux.md). 
+desktop application on [Windows](/data-visualization/install-and-connect),
+[macOS](/data-visualization/install-and-connect) or [Linux](/data-visualization/install-and-connect). 
 
 ### 2. Connect to Memgraph
 
@@ -40,13 +40,13 @@ experimenting with data and Cypher.
 ### 3. Check out Graph Style Script
 
 To give your graphs a bit more pizzazz, dive into the [Graph Style Script
-language](/style-script/overview.md) and learn how to customize the visual
+language](/data-visualization/graph-style-script) and learn how to customize the visual
 appearance of your graphs to make them truly remarkable.
 
 ### 4. Browse through the Changelog
 
 Want to know what's new in Memgraph Lab? Take a look at
-[Changelog](/changelog.md) to see a list of new features.
+[Changelog](/release-notes) to see a list of new features.
 
 ## What to do next?
 
