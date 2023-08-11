@@ -50,7 +50,7 @@ Memgraph Lab. We specified three useful volumes:
 
 The exact location of the local directories depends on your specific setup.
 
-[Configuration settings](/reference-guide/configuration.md) can be changed by
+[Configuration settings](/configuration/configuration-settings) can be changed by
 setting the value of the `MEMGRAPH` environment variable. In the above example,
 you can see how to set `--log-level` to `TRACE`. Since Memgraph Platform is not
 a single service, the process manager
@@ -94,7 +94,7 @@ Memgraph Lab application. We specified three useful volumes:
 
 The exact location of the local directories depends on your specific setup.
 
-[Configuration settings](/reference-guide/configuration.md) can be changed by
+[Configuration settings](/configuration/configuration-settings) can be changed by
 adding the `entrypoint`. You first need to add `/usr/lib/memgraph/memgraph` and
 then the configuration setting you'd like to change. In the above example, you
 can see how to set `--log-level` to `TRACE`. Since the MAGE library is included
@@ -134,7 +134,7 @@ Memgraph Lab application. We specified three useful volumes:
 
 The exact location of the local directories depends on your specific setup.
 
-[Configuration settings](/reference-guide/configuration.md) can be changed by
+[Configuration settings](/configuration/configuration-settings) can be changed by
 adding the `entrypoint`. You first need to add `/usr/lib/memgraph/memgraph` and
 then the configuration setting you'd like to change. In the above example, you
 can see how to set `--log-level` to `TRACE`. Since this image doesn't have the
