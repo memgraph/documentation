@@ -25,16 +25,16 @@ To follow this tutorial, you will need to have the following:
 ## Data schema
 
 One of the first steps to consider is how to migrate your data. If you have your
-data in the form of [Cypher queries](/import-data/files/cypherl.md) or
-[CSV](/import-data/files/load-csv-clause.md) or
-[JSON](/import-data/files/load-json.md) format, you can import these formats
-into Memgraph. Keep in mind that for importing larger datasets it is recommended
-to use CSV format or pure Cypher queries (Memgraph's CYPHERL format), since they
-can be imported into Memgraph natively, faster than JSON format.
+data in the form of [Cypher queries](/data-migration/cypherl) or
+[CSV](/data-migration/csv) or [JSON](/data-migration/json) format, you can
+import these formats into Memgraph. Keep in mind that for importing larger
+datasets it is recommended to use CSV format or pure Cypher queries (Memgraph's
+CYPHERL format), since they can be imported into Memgraph natively, faster than
+JSON format.
 
 This tutorial will go through exporting data from Neo4j into CSV files and
-importing it into Memgraph using [LOAD CSV](/import-data/files/load-csv-clause.md)
-query and Memgraph's user visual interface [Memgraph Lab](/memgraph-lab).
+importing it into Memgraph using [LOAD CSV](/data-migration/csv)
+query and Memgraph's user visual interface [Memgraph Lab](/data-visualization).
 
 The sample dataset consists of 3 different kinds of nodes (Employee, Order and
 Product) connected with 3 types of relationships as described by the graph
@@ -81,14 +81,14 @@ MERGE (employee)-[:REPORTS_TO]->(manager);
 
 If you are going to use different dataset to migrate, be aware of the
 differences between Neo4j and [Memgraph data
-types](/reference-guide/data-types.md) (for example, Memgraph doesn't support
+types](/fundamentals/data-types) (for example, Memgraph doesn't support
 `DateTime()` as there is no temporal type in Memgraph that supports timezones yet, 
 but you can modify data to use `localDateTime()`).
 
 ## Exporting data from Neo4j
 
 Download the CSV file
-[shipping.csv](https://public-assets.memgraph.com/import-data/load-csv-cypher/shipping.csv)
+[shipping.csv](https://public-assets.memgraph.com/data-migration/sv-cypher/shipping.csv)
 containing the data above if you don't want to go through the exporting process. 
 
 To get your data out of Neo4j instance, use the Neo4j APOC export functionality.
@@ -123,7 +123,7 @@ more accessible.
 
 ### 1. Starting Memgraph with Docker
 
-When working with Docker, the file need to be transferred from your local
+When working with Docker, the file needs to be transferred from your local
 directory into the Docker container where Memgraph can access it.
 
 This can be done by copying the file into your running instance. 
@@ -175,7 +175,7 @@ Although the dataset imported in this tutorial is quite small, one day you might
 want to import really big datasets with billions of nodes and relationships and
 you will require all the extra speed you can get. 
 
-To gain speed you can [create indexes](/reference-guide/indexing.md) on the
+To gain speed you can [create indexes](/fundamentals/indexes) on the
 properties used to connect nodes with relationships which are the values in the
 `_id` column in the CSV files, and in Memgraph they will be named `nodeID`.
 
@@ -187,7 +187,7 @@ CREATE INDEX ON :Order(nodeID);
 CREATE INDEX ON :Product(nodeID);
 ```
 
-You can also change the [storage mode](/reference-guide/storage-modes.md) from
+You can also change the [storage mode](/fundamentals/storage-memory-usage) from
 `IN_MEMORY_TRANSACTIONAL` to `IN_MEMORY_ANALYTICAL`. This will disable the
 creation of durability files (snapshots and WAL files) and you will no longer
 have any ACID guarantees. Other transactions will be able to see the changes of
@@ -381,7 +381,7 @@ changes:
 ![](/pages/data-migration/migrate-from-neo4j/GSS.png)
 
 Visual appearance of the graph can be changed in many different ways, so be sure
-to check the [GSS documentation](/memgraph-lab/graph-style-script-language). 
+to check the [GSS documentation](/data-visualization/graph-style-script). 
 
 ### 5. Importing relationships
 
@@ -496,10 +496,9 @@ To check the switch was successful, run:
 SHOW STORAGE INFO;
 ```
 
-You can query the database using the [**Cypher query
-language**](/cypher-manual), use various graph algorithms and modules from our
-open-source repository [**MAGE**](/mage) to solve graph analytics problems,
-create awesome customized visual displays of your nodes and relationships with
-[**Graph Style Script**](/memgraph-lab/graph-style-script-language), find out
-how to connect any [**streams of data**](/memgraph/import-data/kafka) you might
-have with Memgraph and above all - enjoy your new graph database!
+You can query the database using the [Cypher query language](/querying), use
+various [graph algorithms and modules](/advanced-algorithms) from our
+open-source repository MAGE to solve graph analytics problems, create awesome
+customized visual displays of your nodes and relationships with [Graph Style
+Script](/data-visualization/graph-style-script) and above all - enjoy your new
+graph database!
