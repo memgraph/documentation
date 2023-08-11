@@ -116,7 +116,7 @@ RETURN p;
 This query will show all of the capital cities on the map that are up to two
 hops away from Madrid. You don't have to worry about exact semantics of this
 query for now, but if you want to find out more, check out the [learning
-materials](/cypher-manual/) for Cypher. Click **Run query** to run the above
+materials](/querying) for Cypher. Click **Run query** to run the above
 query and see the result in the **Graph results** tab.
 
 ![](/pages/getting-started/first-steps/memgraph-lab-cypher-editor.png)
@@ -281,14 +281,14 @@ In this tutorial, you've learned how to install Memgraph Platform, use Memgraph 
 import a dataset, run queries and style your graph. Not bad for a start, right?
 
 You don't want to bother with installation? Done! [Memgraph
-Cloud](/memgraph-cloud) at your service - register and run an instance in few
-easy steps.
+Cloud](/getting-started/install-memgraph/memgraph-cloud) at your service -
+register and run an instance in few easy steps.
 
 We have promised along the way some more resources, so here they are:
 
-* [Cypher manual](/cypher-manual/)
-* [Guide to Style Script script](/docs/memgraph-lab/graph-style-script-language)
-* [How to work with Docker](/how-to-guides/work-with-docker.md)
+* [Cypher manual](/querying)
+* [Guide to Style Script script](/data-visualization/graph-style-script)
+* [How to work with Docker](/getting-started/install-memgraph/docker)
 
 We hope that you had fun going through this tutorial! You can check out
 [some of the tutorials](/memgraph/tutorials/) that we have prepared for you, or you can
