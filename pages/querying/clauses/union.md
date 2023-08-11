@@ -8,7 +8,7 @@ The `UNION` clause is used to combine the result of multiple queries.
 ## Dataset
 
 The following examples are executed with this dataset. You can create this dataset
-locally by executing the queries at the end of the page: [Dataset queries](#data-set-queries).
+locally by executing the queries at the end of the page: [Dataset queries](#dataset-queries).
 
 ![Data set](/pages/querying/clauses/data_set.png)
 
