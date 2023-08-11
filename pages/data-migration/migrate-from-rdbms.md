@@ -20,12 +20,11 @@ to go.
 To follow along, you will need:
 
 - An installation of **Memgraph Platform**, a streaming graph application
-  platform that includes **MemgraphDB**, a visual user interface **Memgraph
-  Lab**, command-line interface **mgconsole** and **MAGE**, a graph algorithms
-  and modules library.<br/>
-  To install Memgraph Platform and set it up, please follow the Docker
-  installation instructions on the [Installation
-  guide](/installation/overview.mdx).
+  platform that includes **Memgraph**, a visual user interface **Memgraph Lab**,
+  command-line interface **mgconsole** and **MAGE**, a graph algorithms and
+  modules library.<br/>
+  To install Memgraph Platform and set it up, please follow the [Docker
+  installation instructions](/getting-started).
 - (optional) A running relational database either with your own schema and data
   or you can use the schema we used and populate the tables
 
@@ -146,7 +145,7 @@ container so Memgraph can access them.
 1. Start your Memgraph instance by writing the following command in a terminal:
 
 ```
-docker run -it -p 7687:7687 -p 7444:7444 -p 3000:3000 -v mg_lib:/var/lib/memgraph memgraph/memgraph-platform
+docker run -it -p 7687:7687 -p 7444:7444 -p 3000:3000 -v memgraph/memgraph-platform
 ```
 
 2. Open a new terminal and find the CONTAINER ID of the Memgraph Docker
@@ -178,21 +177,21 @@ file paths in both the source and destination with each new file. This is an
 example of copying the `customer.csv` file:
 
 ```terminal
-docker cp customer.csv bbbc43620e5c:/customer.csv
+docker cp customer.csv bbbc:/customer.csv
 ```
 
 To check if the files have indeed been copied run the following command but be
 sure to replace the CONTAINER ID:
 
 ```terminal
-docker exec -it bbbc43620e5c bash
+docker exec -it bbbc bash
 ```
 
 And then use the `ls` command to list all the files and directories in
 the container's root. You should be able to see the CSV files we just copied to
 the container.
 
-```terminal
+```terminal copy=false
 root@bbbc43620e5c:/# ls
 bin   customer.csv          dev  home  lib    lib64  media  opt   product.csv          purchase.csv  run   srv              supervisord.pid  tmp  var
 boot  customerpurchase.csv  etc  lab   lib32  mage   mnt    proc  productpurchase.csv  root          sbin  supervisord.log  sys              usr
@@ -204,8 +203,8 @@ If you installed Memgraph Platform correctly, you should be able to access
 Memgraph Lab in your browser by visiting
 [`http://localhost:3000/`](http://localhost:3000) and connect to the database.
 
-Place yourself in the **Query** tab where we will write queries in the **Query
-editor** to import data into Memgraph.
+Place yourself in the **Query** section where we will write queries in
+the **Query Editor** to import data into Memgraph.
 
 ![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_lab_query.png)
 
@@ -232,7 +231,7 @@ CREATE (n:nodeName {property1_memgraph_name: row.property1_relational_name, prop
 So first we need to define the source file path and set the `HEADER` option to
 `WITH` because our CSV file has headers. The clause will parse each `row` and
 create nodes with properties. This is the clause to create `customer` nodes.
-Copy it and paste it in the **Query editor** in **Memgraph Lab**, then click
+Copy it and paste it in the **Query Editor** in **Memgraph Lab**, then click
 **Run query**:
 
 ```cypher
@@ -354,9 +353,10 @@ RETURN c,m,p,o,pr;
 ## Where to next?
 
 Congratulations! You now have a graph database. You can query it using the
-[**Cypher query language**](/cypher-manual), use various graph algorithms and
-modules from our open-source repository [**MAGE**](/mage) to solve graph
-analytics problems, create awesome customized visual displays of your nodes and
-relationships with [**Graph Style Script**](/memgraph-lab/graph-style-script-language),
-find out how to connect any [**streams of data**](/memgraph/import-data/kafka)
-you might have with Memgraph and above all - enjoy your graph database!
+[Cypher query language](/querying), use various [graph
+algorithms](/advanced-algorithms) and modules from our open-source repository
+MAGE to solve graph analytics problems, create awesome customized visual
+displays of your nodes and relationships with [Graph Style
+Script](/data-visualization/graph-style-script), find out how to connect any
+[streams of data](/data-streams) you might have with Memgraph and above all
+- enjoy your graph database!
