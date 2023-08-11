@@ -19,4 +19,4 @@ EXPLAIN MATCH (n) RETURN n;
 +----------------+
 ```
 
-For more information, check the [reference guide on inspecting queries](/memgraph/reference-guide/inspecting-queries). 
+For more information, check the [reference guide on inspecting queries](/query-data/performance-optimization). 

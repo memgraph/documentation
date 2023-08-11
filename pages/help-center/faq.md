@@ -181,7 +181,7 @@ Currently, the fastest way to import data is from a CSV file with a [LOAD CSV
 clause](/data-migration/csv). LOAD CSV clause imports between
 100K and 350K nodes per second and between 60K and 80K edges per second. To
 achieve this import speed, indexes have to be [set up
-appropriately](/fundamentals/indexing).
+appropriately](/fundamentals/indexes).
 
 [Other import methods](/data-migration) include importing data from JSON
 and CYPHERL files, or
@@ -231,7 +231,7 @@ consume them correctly.
 ### Is data automatically indexed during import?
 
 No, data is not automatically indexed during import. You need to [create a label
-or label-property indexes](/fundamentals/indexing) manually once the
+or label-property indexes](/fundamentals/indexes) manually once the
 import is finished. 
 
 ### What languages can be used to communicate with the database?

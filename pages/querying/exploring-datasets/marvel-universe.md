@@ -77,7 +77,7 @@ and continue with the tutorial.
 
 ## Example queries using Cypher
 
-In the queries below, we are, as usual, using [Cypher](/cypher-manual) to query
+In the queries below, we are, as usual, using [Cypher](/querying) to query
 Memgraph via the console.
 
 Here are some queries you might find interesting:
@@ -185,7 +185,7 @@ use of it.
 
 However, the query engine doesn't support PageRank out-of-the-box, so we have to
 come up with a way to plug in PageRank to our database. That's precisely the
-purpose of [query modules](/reference-guide/query-modules/overview.md)!
+purpose of [query modules](/advanced-algorithms)!
 
 Long story short, the query module system enables us to write C or Python
 modules that can access the data stored in our graph database, do some

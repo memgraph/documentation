@@ -8,7 +8,7 @@ The `REMOVE` clause is used to remove labels and properties from nodes and relat
 ## Dataset
 
 The following examples are executed with this dataset. You can create this dataset
-locally by executing the queries at the end of the page: [Dataset queries](#data-set-queries).
+locally by executing the queries at the end of the page: [Dataset queries](#dataset-queries).
 
 ![Data set](/pages/querying/clauses/data_set.png)
 

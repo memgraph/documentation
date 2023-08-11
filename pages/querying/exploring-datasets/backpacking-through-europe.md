@@ -128,7 +128,7 @@ Here we used the _weight lambda_ to specify the cost of expanding to the
 specified vertex using the given edge (`v.cost_per_night_USD`), and the _total
 cost_ symbol to calculate the cost of the trip. This can be done using an edge
 property like in the [Exploring the European Road
-Network](exploring-the-european-road-network.md) tutorial. Here we use
+Network](/querying/exploring-datasets/exploring-the-european-road-network) tutorial. Here we use
 `cost_per_night` property of the city vertex `v` as our weight. Finally, we use
 the _filter lambda_ to only consider paths with no EU border crossings. The
 `extract` function is used to only show the city names. To get the full city

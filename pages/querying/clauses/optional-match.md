@@ -10,7 +10,7 @@ missing parts of the pattern will be filled with null values.
 ## Dataset
 
 The following examples are executed with this dataset. You can create this dataset
-locally by executing the queries at the end of the page: [Dataset queries](#data-set-queries).
+locally by executing the queries at the end of the page: [Dataset queries](#dataset-queries).
 
 ![Data set](/pages/querying/clauses/data_set.png)
 

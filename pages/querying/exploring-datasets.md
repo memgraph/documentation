@@ -29,20 +29,20 @@ sidebar to choose the preferred dataset.
 
 So far we have covered the following topics with basic tutorials:
 
-- **[Analyzing TED Talks](analyzing-ted-talks.md)** - [Try it on
+- **[Analyzing TED Talks](/querying/exploring-datasets/analyzing-ted-talks)** - [Try it on
   Playground!](https://playground.memgraph.com/sandbox/ted-talks)
-- **[Backpacking Through Europe](backpacking-through-europe.md)** - [Try it on
+- **[Backpacking Through Europe](/querying/exploring-datasets/backpacking-through-europe)** - [Try it on
   Playground!](https://playground.memgraph.com/sandbox/europe-backpacking)
 - **[Exploring the European Road
-  Network](exploring-the-european-road-network.md)** - [Try it on
+  Network](/querying/exploring-datasets/exploring-the-european-road-network)** - [Try it on
   Playground!](https://playground.memgraph.com/sandbox/europe-roads)
-- **[Football Transfers](football-transfers.md)** - [Try it on
+- **[Football Transfers](/querying/exploring-datasets/football-transfers)** - [Try it on
   Playground!](https://playground.memgraph.com/sandbox/football-transfers)
-- **[Game of Thrones deaths](got-deaths.md)** - [Try it on
+- **[Game of Thrones deaths](/querying/exploring-datasets/got-deaths)** - [Try it on
   Playground!](https://playground.memgraph.com/sandbox/game-of-thrones-deaths)
-- **[Graphing the Premier League](graphing-the-premier-league.md)** - [Try it on
+- **[Graphing the Premier League](/querying/exploring-datasets/graphing-the-premier-league)** - [Try it on
   Playground!](https://playground.memgraph.com/sandbox/football-premier-league)
-- **[Marvel Comic Universe Social Network](marvel-universe.md)** - [Try it on
+- **[Marvel Comic Universe Social Network](/querying/exploring-datasets/marvel-universe)** - [Try it on
   Playground!](https://playground.memgraph.com/sandbox/marvel-comics)
-- **[Movie Recommendation System](movie-recommendation.md)** - [Try it on
+- **[Movie Recommendation System](/querying/exploring-datasets/movie-recommendation)** - [Try it on
   Playground!](https://playground.memgraph.com/sandbox/movielens)
