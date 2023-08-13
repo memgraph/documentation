@@ -7,7 +7,7 @@ aims to give everyone the tools they need to tackle the most interesting and
 challenging **graph analytics** problems.
 
 [**Query
-module**](https://memgraph.com/docs/memgraph/database-functionalities/query-modules/built-in-query-modules)
+module**](/advanced-algorithms/available-algorithms/available-algorithms)
 is a concept introduced by Memgraph and it refers to user-defined procedures,
 grouped into modules that extend the **Cypher query language**. Procedures are
 implementations of various algorithms in multiple programming languages and they
@@ -24,21 +24,21 @@ If you are using Memgraph Platform and starting Memgraph with the
 step 2 or 3.
 
 Install MAGE using a prepared image from the [Docker
-Hub](/installation/docker-hub.md) or by [building a Docker
-image](/installation/docker-build.md) from the [official MAGE GitHub
+Hub](/advanced-algorithms/install-mage) or by [building a Docker
+image](/advanced-algorithms/install-mage) from the [official MAGE GitHub
 repository](https://github.com/memgraph/mage). On Linux, you can also [install
-MAGE from source](/installation/source.md) but be aware you will also need to
+MAGE from source](/advanced-algorithms/install-mage) but be aware you will also need to
 install additional
 dependencies.
 
 ### 2. Load query modules
 
-To use certain procedures, first, you need to [load the query modules](/usage/loading-modules.md) to the
+To use certain procedures, first, you need to [load the query modules](/custom-query-modules/manage-query-modules) to the
 appropriate directory. 
 
 ### 3. Call procedures
 
-You are ready to [call procedures](/usage/calling-procedures.md) within queries and tackle that graph analytics
+You are ready to [call procedures](/advanced-algorithms/run-algorithms) within queries and tackle that graph analytics
 problem that's been keeping you awake. 
 
 ## What to do next?
@@ -46,27 +46,27 @@ problem that's been keeping you awake.
 ### Browse the spellbook of query modules
 
 The spellbook has been written to help you utilize all the [currently
-available query modules](/mage/query-modules/available-queries).
+available query modules](/advanced-algorithms/available-algorithms).
 
 ### Create query modules
 
 If you need some assistance in creating and running your own Python and C++
-query modules [How-to guides](/how-to-guides/create-a-new-module-cpp.md) are here for you. 
+query modules [How-to guides](/custom-query-modules/cpp) are here for you. 
 
 ### Learn about algorithms and their usage
 
 There are so many
-[algorithms](/algorithms/traditional-graph-analytics/betweenness-centrality-algorithm.md)
+[algorithms](/advanced-algorithms/available-algorithms/betweenness_centrality)
 to benefit from. Browse through them and see how they can be applied in [use
 cases](/use-cases/bioinformatics.md) from various fields, such as bioinformatics or
 transportation. 
 
 ### Contribute
 
-Make MAGE even better by [contributing](/contributing.md) your own algorithm implementations and ideas or reporting pesky bugs. 
+Make MAGE even better by [contributing](/custom-query-modules/contributing) your own algorithm implementations and ideas or reporting pesky bugs. 
 
 ### Browse through the Changelog
 
-Want to know what's new in MAGE? Take a look at [Changelog](/changelog.md)
+Want to know what's new in MAGE? Take a look at [Changelog](/release-notes)
 to see a list of new features.
 
