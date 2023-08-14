@@ -42,7 +42,7 @@ graphical results.
 Here is where you write and run your Cypher queries. A keyword suggestion tool
 can help you with clause completion and give information about signatures and
 parameters. If you need help writing Cypher queries, check out the [Cypher
-manual](/cypher-manual).
+manual](/querying).
 
 ![](/pages/data-visualization/lab-user-manual/intelisense.png)
 
@@ -70,8 +70,8 @@ When saving a style, the graph results of an executed query will be used as a
 preview picture of the style. Custom styles can be defined as a default style
 applied to all following query runs. 
 
-Be sure to check the [GSS reference guide](/style-script/overview.md) and a
-[tutorial](/memgraph/tutorials/style-your-graphs-in-memgraph-lab) on how to
+Be sure to check the [GSS reference guide](/data-visualization/graph-style-script/graph-style-script) and a
+[tutorial](/data-visualization/style-your-graphs-in-memgraph-lab) on how to
 style your graphs. 
 
 ### Data results 
@@ -169,19 +169,19 @@ Query collections can also be imported and exported to JSON file format.
 
 ## Query Modules 
 
-[Query modules](/memgraph/reference-guide/query-modules) are
+[Query modules](/advanced-algorithms) are
 collections of procedures written in **C**, **C++**, **Python**, and **Rust**
 (either `*.so` or `*.py` files) to extend the query language. Transformation
 procedures necessary to ingest data from data streams are also written as query
 modules. 
 
 Some query modules are built-in, and others, like those that can help you solve
-complex graph issues, are available as part of the [MAGE](/mage)
+complex graph issues, are available as part of the [MAGE](/advanced-algorithms)
 library you can add to your Memgraph installation. The library is already
 included if you are using [Memgraph
-Platform](/memgraph/installation) or [Memgraph
-MAGE](/mage/installation) Docker images to run Memgraph, or you are
-connecting to a [Cloud](/memgraph-cloud) instance. 
+Platform](/getting-started/install-memgraph) or [Memgraph
+MAGE](/advanced-algorithms/install-mage) Docker images to run Memgraph, or you are
+connecting to a [Cloud](/getting-started/install-memgraph/memgraph-cloud) instance. 
 
 All the query modules and procedures are listed in the **Query Modules**
 section. By expanding the information about each query module, you can see the
@@ -198,8 +198,8 @@ you can then call from queries.
 ![](/pages/data-visualization/lab-user-manual/custom-query-modules.png)
 
 If you need help writing custom query modules, check out the [reference
-guide](/memgraph/reference-guide/query-modules/implement-custom-query-modules/overview),
-or a [tutorial](/memgraph/tutorials/implement-custom-query-module-in-python)
+guide](/custom-query-modules/python-api/python-example),
+or a [tutorial](/custom-query-modules/python/implement-custom-query-module-in-python)
 on query modules. 
 
 ## Streams
@@ -220,11 +220,9 @@ well as managing the connection - starting, pausing or deleting it.
 
 ![](/pages/data-visualization/lab-user-manual/streams.png)
 
-Check out the [reference guide on
-streams](/memgraph/reference-guide/streams), and check [a how-to
-guide on connecting to data
-streams](/memgraph/import-data/data-streams/manage-streams-lab) from Memgraph
-Lab.
+Check out the [reference guide on streams](/data-streams), and check [a how-to
+guide on connecting to data streams](/data-streams/manage-streams-query) from
+Memgraph Lab.
 
 ## Graph Schema
 
@@ -252,17 +250,17 @@ as reading the explanations of all the entities and their properties.
 ![](/pages/data-visualization/lab-user-manual/dataset.png)
 
 There are several
-[tutorials](/memgraph/tutorials/exploring-datasets) you can use to
+[tutorials](/querying/exploring-datasets/exploring-datasets) you can use to
 explore the datasets available in Memgraph Lab.
 
 ## Import & Export
 
 In this section, you can import and export data in [CYPHERL
-format](/memgraph/import-data/cypherl), which represents data in the form of
+format](/data-migration/cypherl), which represents data in the form of
 Cypher queries.
 
 To import data from other sources, check the [guides on
-importing](/memgraph/import-data).
+importing](/data-migration).
 
 ![](/pages/data-visualization/lab-user-manual/import-export.png)
 
@@ -275,9 +273,9 @@ when starting Memgraph with Docker.
 ![](/pages/data-visualization/lab-user-manual/logs.png)
 
 Check the [reference guide on
-configuration](/memgraph/reference-guide/configuration#other) regarding logs
+configuration](/configuration/configuration-settings#other) regarding logs
 to check how to modify logging, and the [how-to guide on how to access
-logs](/memgraph/how-to-guides/config-logs) if you are not using Docker.
+logs](/configuration/configuration-settings) if you are not using Docker.
 
 You can set the number of visible logs in the **Settings** section. 
 
@@ -306,7 +304,7 @@ You can also combine the horizontal and vertical split.
 
 ## Memgraph Lab demo video
 
-As a part of the [Memgraph Cloud](/memgraph-cloud) release, we've showcased different
+As a part of the [Memgraph Cloud](/getting-started/install-memgraph/memgraph-cloud) release, we've showcased different
 features of Memgraph Lab, and we invite you to check it out!
 
 [![Get started with Memgraph Lab](/pages/data-visualizationvideo.png)](https://youtu.be/Tt5KPKylU8k?t=1390)
