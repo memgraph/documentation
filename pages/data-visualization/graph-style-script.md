@@ -3,7 +3,7 @@
 This guide will show you how to easily get started with the Graph Style Script
 language. GSS is a language for customizing the visual display of graphs. For a
 complete list of available features consult the [Style script
-reference guide](./reference-guide.md).
+reference guide](/data-visualization/graph-style-script/graph-style-script).
 
 ## Graph example
 
@@ -32,7 +32,7 @@ The first one selects countries and the second one selects cities.
 }
 ```
 
-In the case of the [`Format`](gss-functions.md#formatformatstring-val1-val2)
+In the case of the [`Format`](/data-visualization/graph-style-script/built-in-elements#formatformatstring-value)
 function, content inside the curly braces is ignored but can be helpful for
 clarity.
 
@@ -433,7 +433,7 @@ nodes or to no nodes.
 ```
 
 Take a look at the [GSS @NodeStyle directive
-properties](/docs/memgraph-lab/style-script/gss-nodestyle-directive) page to see
+properties](/data-visualization/graph-style-script/directive-properties) page to see
 all node styling possibilities.
 
 #### `@EdgeStyle`
@@ -444,7 +444,7 @@ exception: the directive will bind the name `edge` to the relationship for which
 the directive is being evaluated (`@NodeStyle` binds the name `node`).
 
 Take a look at the [GSS @EdgeStyle directive
-properties](/docs/memgraph-lab/style-script/gss-edgestyle-directive) page to see
+properties](/data-visualization/graph-style-script/directive-properties) page to see
 all relationship styling possibilities.
 
 #### `@ViewStyle`
@@ -502,7 +502,7 @@ properties will be:
 ```
 
 Take a look at the [GSS @ViewStyle directive
-properties](/docs/memgraph-lab/style-script/gss-viewstyle-directive) page to see
+properties](/data-visualization/graph-style-script/directive-properties) page to see
 all styling possibilities.
 
 #### `@ViewStyle.Map`
@@ -564,7 +564,7 @@ properties will be:
 ```
 
 Take a look at the [GSS @ViewStyle.Map directive
-properties](/docs/memgraph-lab/style-script/gss-viewstyle-map-directive) page to see
+properties](/data-visualization/graph-style-script/directive-properties) page to see
 all styling possibilities.
 
 ### Built-in functions
@@ -577,13 +577,13 @@ built-in functions](/docs/memgraph-lab/style-script/gss-functions).
 
 Graph Style Script comes with built-in colors that you can use the color's name.
 Take a look at the [list of built-in
-colors](/docs/memgraph-lab/style-script/gss-colors).
+colors](/data-visualization/graph-style-script/built-in-elements).
 
 ### Built-in variables
 
 Graph Style Script has a few built-in variables that you can use: `node`,
 `edge`, and `graph`. Read more about it in the [list of built-in
-variables](/docs/memgraph-lab/style-script/gss-variables).
+variables](/data-visualization/graph-style-script/built-in-elements).
 
 ### File Structure
 
