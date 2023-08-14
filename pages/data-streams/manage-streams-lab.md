@@ -2,7 +2,7 @@
 
 If you prefer to use GUI, you can connect to data streams by using a wizard in
 the **Stream** section of Memgraph Lab. If you prefere writing commands, you can
-[manage streams with queries](/how-to-guides/streams/manage-streams.md). 
+[manage streams with queries](/data-streams/manage-streams-query). 
 
 If you need a Kafka stream to play around with, we've provided some at [Awesome
 Data Stream](https://awesomedata.stream/)! 
@@ -29,8 +29,8 @@ module and attach it to the stream.
 ## How to add a transformation module?
 
 A transformation module is a set of user-defined transformation procedures
-written in [C](/reference-guide/streams/transformation-modules/api/c-api.md) or
-[Python](/reference-guide/streams/transformation-modules/api/python-api.md) that
+written in [C](/data-streams/transformation-modules/c-api) or
+[Python](/data-streams/transformation-modules/python-api) that
 act on data received from a streaming source. Transformation procedures instruct
 Memgraph on how to transform the incoming messages to consume them correctly.
 
@@ -53,7 +53,7 @@ You can also develop transformation modules in Python beforehand, in the section
 recognize transformation procedures once you define them.
 
 If you developed a procedure in C, you have to [load it into
-Memgraph](manage-streams.md#how-to-create-and-load-a-transformation-module-into-memgraph)
+Memgraph](/data-streams/manage-streams-query#how-to-create-and-load-a-transformation-module-into-memgraph)
 first, and then you will be able to see it in the **Query Modules** section and
 attach it to a stream. 
 

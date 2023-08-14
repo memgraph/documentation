@@ -198,7 +198,7 @@ you can then call from queries.
 ![](/pages/data-visualization/lab-user-manual/custom-query-modules.png)
 
 If you need help writing custom query modules, check out the [reference
-guide](/custom-query-modules/python-api/python-example),
+guide](/custom-query-modules/python/python-example),
 or a [tutorial](/custom-query-modules/python/implement-custom-query-module-in-python)
 on query modules. 
 
