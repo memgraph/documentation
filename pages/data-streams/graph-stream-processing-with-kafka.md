@@ -22,7 +22,7 @@ Cypher query language.
 
 To follow this tutorial, you will need:
 
-- [Memgraph Platform](/installation/overview.mdx) or [Memgraph Cloud](https://cloud.memgraph.com)
+- [Memgraph Platform](/getting-started/install-memgraph) or [Memgraph Cloud](https://cloud.memgraph.com)
 
 You can use Memgraph Cloud for a 2-week trial period, or you can install
 Memgraph Platform locally. 
@@ -61,10 +61,10 @@ Memgraph Lab in a new browser tab. Enter your project password and **Connect Now
 The prerequisite of connecting Memgraph to a stream is to have a transformation
 module with procedures that can produce Cypher queries based on the received
 messages. Procedures can be written in
-[Python](/reference-guide/streams/transformation-modules/api/python-api.md) or
-[C](/reference-guide/streams/transformation-modules/api/c-api.md) languages. If you
+[Python](/data-streams/transformation-modules/python-api) or
+[C](/data-streams/transformation-modules/c-api) languages. If you
 need more information about what transformation modules are, please read our [reference
-guide on transformation modules](/reference-guide/streams/transformation-modules/overview.md).
+guide on transformation modules](/data-streams/transformation-modules/python-api).
 
 Memgraph Lab allows you to develop Python transformation modules in-app:
 
@@ -97,7 +97,7 @@ Python API also defines `@mgp.read_proc` and `@mgp.write_proc` decorators.
 `@mgp.read_proc` decorator handles read-only procedures, the `@mgp.write_proc`
 decorator handles procedures that also write to the database and they are used
 in [writing custom query
-modules](/tutorials/implement-custom-query-module-in-python.md). 
+modules](/custom-query-modules/python/implement-custom-query-module-in-python). 
 
 ```python
 import mgp
@@ -294,11 +294,11 @@ of insight that data can provide. [Let the querying
 begin](https://memgraph.com/blog/how-to-analyze-a-streaming-dataset-of-movie-ratings-using-custom-query-modules)!
 
 If you are new to Cypher, check [**Cypher query language
-manual**](/cypher-manual). You can also try using various graph algorithms and
-modules from our open-source repository [**MAGE**](/mage) to solve graph
+manual**](/querying). You can also try using various graph algorithms and
+modules from our open-source repository [**MAGE**](/advanced-algorithms) to solve graph
 analytics problems, create awesome customized visual displays of your nodes and
 relationships with [**Graph Style
-Script**](/memgraph-lab/graph-style-script-language).
+Script**](/data-visualization/graph-style-script).
 
 You can also explore other data streams from the [Awesome Data
 Stream](https://awesomedata.stream/) site! Feel free to play around with the
