@@ -8,13 +8,13 @@ procedures. Procedures can be written in Python or C languages. Our MAGE library
 has various modules dealing with complex graph algorithms, but you can implement
 your own procedures gathered in query modules to optimize your queries. If you
 need more information about what query modules are, please read our [reference
-guide on query modules](/reference-guide/query-modules/overview.md).
+guide on query modules](/advanced-algorithms).
 
 ## Prerequisites
 
 In order to start developing a custom query you will need:
 
-- [Memgraph Platform](/installation/overview.mdx) or [Memgraph Cloud](https://cloud.memgraph.com)
+- [Memgraph Platform](/getting-started/install-memgraph) or [Memgraph Cloud](https://cloud.memgraph.com)
 
 ## Data model
 
@@ -360,7 +360,7 @@ can be viewed in the log file.
 
 If you started your Memgraph Platform image by exposing the `7444` port, you can
 check the logs from Memgraph Lab. Otherwise, you need to [access the logs in the
-Docker container](../how-to-guides/config-logs.md#accessing-logs).
+Docker container](/configuration/configuration-settings#accessing-logs).
 
 But the rest of the errors in the code will result in the procedure not being
 detected. That means that if you go to the **Query Modules** menu item and check
