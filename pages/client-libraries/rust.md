@@ -8,7 +8,7 @@ queries.
 To follow this guide, you will need:
 
 - A **running Memgraph instance**. If you need to set up Memgraph, take a look
-  at the [Installation guide](/installation/overview.mdx).
+  at the [Installation guide](/getting-started/install-memgraph).
 - A locally installed [**rsmgclient
   driver**](https://github.com/memgraph/rsmgclient).
 
