@@ -3,7 +3,7 @@
 The mock Python query module API enables you to develop and test query modules
 for Memgraph without having to run a Memgraph instance by simulating its
 behavior. As the mock API is compatible with the
-[Python API](/reference-guide/query-modules/implement-custom-query-modules/api/python-api.md),
+[Python API](/custom-query-modules/python/python-api),
 you can add modules developed with it to Memgraph as-is, without modifying the
 code.
 
@@ -16,7 +16,7 @@ inside `/usr/include/memgraph`.
 
 Because the mock API’s classes and functions are compatible with the corresponding
 Python API classes and functions, the
-[Python API reference](/reference-guide/query-modules/implement-custom-query-modules/api/python-api.md)
+[Python API reference](/custom-query-modules/python/python-api)
 applies, with the following exceptions:
 
 * Query procedure returns (`Record` class) are printable.
@@ -84,4 +84,4 @@ module developed with the mock API to Memgraph is a simple task.
 
 1. Replace the `mgp_mock` import with `import mgp`
    * This includes refactoring the usages of `mgp_mock` (or alias) to `mgp`.
-2. [Load the query module.](/reference-guide/query-modules/load-call-query-modules.md)
+2. [Load the query module.](/custom-query-modules/manage-query-modules)
