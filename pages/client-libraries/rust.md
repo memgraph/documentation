@@ -98,6 +98,6 @@ Columns: n, r, m
 ## Where to next?
 
 For real-world examples of how to use Memgraph, we suggest you take a look at
-the **[Tutorials](/tutorials/overview.md)** page. You can also browse through
-the **[How-to guides](/how-to-guides/overview.md)**
+the **[Tutorials](/)** page. You can also browse through
+the **[How-to guides](/)**
 section to get an overview of all the functionalities Memgraph offers.

@@ -2,17 +2,17 @@
 
 Memgraph supports the following languages: 
 
-- **[C#](/connect-to-memgraph/drivers/c-sharp.md)**
+- **[C#](/client-libraries/c-sharp)**
 - **[C/C++](https://github.com/memgraph/mgclient)**
-- **[Go](/connect-to-memgraph/drivers/go.md)**
+- **[Go](/client-libraries/go)**
 - **[Haskell](https://github.com/zmactep/hasbolt)**
-- **[Java](/connect-to-memgraph/drivers/java.md)**
-- **[JavaScript](/connect-to-memgraph/drivers/javascript.md)**
-- **[Node.js](/connect-to-memgraph/drivers/nodejs.md)**
-- **[PHP](/connect-to-memgraph/drivers/php.md)**
-- **[Python](/connect-to-memgraph/drivers/python.md)**
+- **[Java](/client-libraries/java)**
+- **[JavaScript](/client-libraries/javascript)**
+- **[Node.js](/client-libraries/nodejs)**
+- **[PHP](/client-libraries/php)**
+- **[Python](/client-libraries/python)**
 - **[Ruby](https://github.com/neo4jrb/neo4j)**
-- **[Rust](/connect-to-memgraph/drivers/rust.md)**
+- **[Rust](/client-libraries/rust)**
 
 To query Memgraph programmatically use the [Bolt protocol](https://7687.org/).
 The Bolt protocol was designed for efficient communication with graph databases
