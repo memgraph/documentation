@@ -2,7 +2,7 @@
 
 The following page instructs how to manage streams using queries. Streams can
 also be [managed through the **Stream** section in the Memgraph
-Lab](/how-to-guides/streams/manage-streams-lab.md). 
+Lab](/data-streams/manage-streams-query). 
 
 If you need a Kafka stream to play around with, we've provided some at [Awesome
 Data Stream](https://awesomedata.stream/)! 
