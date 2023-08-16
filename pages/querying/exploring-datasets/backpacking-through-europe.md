@@ -5,7 +5,7 @@ real-world data and, by doing so, retrieve some interesting and useful
 information.
 
 We highly recommend checking out the other articles from this series which are
-listed in our [tutorial overview section](/tutorials/overview.md), where you
+listed in our [tutorial overview section](/), where you
 can also find instructions on how to start with the tutorial.
 
 ## Introduction
