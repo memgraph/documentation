@@ -142,4 +142,8 @@ assert module.authenticate("CHUCK", "NORRIS") == {"authenticated": True, "role":
 With every Memgraph Enterprise installation we provide our own module that
 supports authentication and authorization using LDAP. For more information
 about how the module should be set-up see the
+<<<<<<< HEAD
 [reference guide](/configuration/ldap-security.
+=======
+[reference guide](/configuration/ldap-security).
+>>>>>>> 6fcfe6c (Update links)

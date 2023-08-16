@@ -9,8 +9,8 @@ After successfully entering the license key, Memgraph needs to be restarted in o
 
 ## Configuring the HTTP endpoint
 
-The default address and port for the metrics server is `0.0.0.0:9091`, and can be configured using [configuration flags](/reference-guide/configuration.md)
-`--metrics-address` and `--metrics-port`. If you need help changing the configuration follow [the how-to guide](/how-to-guides/config-logs.md).
+The default address and port for the metrics server is `0.0.0.0:9091`, and can be configured using [configuration flags](/configuration/configuration-settings)
+`--metrics-address` and `--metrics-port`. If you need help changing the configuration follow [the how-to guide](/configuration/configuration-settings).
 
 ## System metrics
 
@@ -27,7 +27,7 @@ All system metrics measuring different parts of the system can be divided into t
  | edge_count     | Gauge (uint64_t) | Number of relationships stored in the system.               |
  | average_degree | Gauge (double)   | Average number of relationships of a single node.           |
  | memory_usage   | Gauge (uint64_t) | Amount of RAM used reported by the OS (in bytes).           |
- | disk_usage     | Gauge (uint64_t) | Amount of disk space used by the [data directory](/reference-guide/backup.md) (in bytes). |
+ | disk_usage     | Gauge (uint64_t) | Amount of disk space used by the [data directory](/configuration/data-durability-and-backup) (in bytes). |
 
 ### Index metrics
 
@@ -41,7 +41,7 @@ All system metrics measuring different parts of the system can be divided into t
 Before a Cypher query is executed, it is converted into an internal form suitable for execution, known as a query plan.
 A query plan is a tree-like data structure describing a pipeline of operations that will be performed on the database in order to
 yield the results for a given query. Every node within a plan is known as
-[a logical operator](/memgraph/reference-guide/inspecting-queries#operators) and describes a particular operation.
+[a logical operator](/querying/performance-optimization#operators) and describes a particular operation.
 
  | Name                                | Type    | Description                                                    |
  | ----------------------------------- | ------- | -------------------------------------------------------------- |
