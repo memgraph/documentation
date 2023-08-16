@@ -54,8 +54,7 @@ cluster.
 
 Once demoted to REPLICA instances, they will no longer accept write queries. In
 order to start the replication, each REPLICA instance needs to be registered
-from the MAIN instance by setting [a replication
-mode](/configuration/replication#replication-modes) (SYNC or ASYNC) and
+from the MAIN instance by setting a replication mode (SYNC or ASYNC) and
 specifying the REPLICA instance's socket address.
 
 The replication mode defines the terms by which the MAIN instance can commit the
@@ -97,9 +96,11 @@ When running multiple instances, each on its own machine, run Memgraph as you
 usually would.
 
 If you are exploring replication and running multiple instances on one machine,
-you can run Memgraph with Docker. Check [Docker run options for Memgraph
-images](/getting-started/install-memgraph/docker#run-a-memgraph-docker-image) to
-set up ports and volumes properly, if necessary.
+you can run Memgraph with Docker, but if you are using volumes, they need to be
+called differently and each instance needs to be exposed via a different port.  
+
+Check the exampe of creating [a replication
+cluster](#set-up-a-replication-cluster).
 
 ## Assigning roles
 
@@ -232,8 +233,8 @@ DROP REPLICA <name>;
 
 By comparing timestamps, the MAIN instance knows when a REPLICA instance is not
 synchronized and is missing some earlier transactions. The REPLICA instance is
-then set into a RECOVERY state, where it remains until it is [fully synchronized
-with the MAIN instance](/configuration/replication#synchronizing-instances).
+then set into a RECOVERY state, where it remains until it is fully synchronized
+with the MAIN instance#synchronizing-instances.
 
 The missing data changes can be sent as snapshots or WAL files. Snapshot files
 represent an image of the current state of the database and are much larger than
@@ -266,37 +267,30 @@ replication modes, we will create:
 - REPLICA instance 1 - replication in the SYNC mode
 - REPLICA instance 2 - replication in the ASYNC mode
 
-### How to run multiple instances?
+### Run multiple instances
 
 If you are running multiple instances, each on its own machine, run Memgraph as
 you usually would.
 
-If you are exploring replication and running multiple instances on one machine, run Memgraph Platform with Docker.
-
-Memgraph 2.9 introduced a new configuration flag
-`--replication-restore-state-on-startup` which is `false` by default.
-
-If you want instances to remember their role and configuration in a replication
-cluster upon restart, the `--replication-restore-state-on-startup` needs to be
-set to `true` when first initializing the instances and remain `true` throughout
-the instances' lifetime. 
+If you are exploring replication and running multiple instances on one machine,
+you need expose different ports for each instance. 
 
 The MAIN instance:
 
 ```
-docker run -it -p 3000:3000 memgraph/memgraph-platform
+docker run -it -p 7687:7687 -p 3000:3000 memgraph/memgraph-platform
 ```
 
 REPLICA instance 1:
 
 ```
-docker run -it -p 3001:3000 memgraph/memgraph-platform
+docker run -it -p 7688:7687 -p 3001:3000 memgraph/memgraph-platform
 ```
 
 REPLICA instance 2:
 
 ```
-docker run -it -p 3002:3000 memgraph/memgraph-platform
+docker run -it -p 7689:7687 -p 3002:3000 memgraph/memgraph-platform
 ```
 
 You can connect to each instance with the [Memgraph Lab](/memgraph-lab)
@@ -306,9 +300,16 @@ in-browser application at:
 - REPLICA instance 1 - `localhost:3001`
 - REPLICA instance 2 - `localhost:3002`
 
-If you need to define additional ports or volumes, check [Docker run options for Memgraph images](/getting-started/install-memgraph/docker#run-a-memgraph-docker-image). 
+You can connect to each instance using the Memgraph Lab desktop appliation, or any
+other external application by changing the port: 
 
-### How to demote an instance to a REPLICA role?
+- the MAIN instance - `localhost:6787`
+- REPLICA instance 1 - `localhost:6788`
+- REPLICA instance 2 - `localhost:6789`
+
+If you need to define volumes, each volume needs to be called differently.
+
+### Demote an instance to a REPLICA role
 
 Run the following query in both REPLICA instances to demote them to the
 REPLICA role:
@@ -323,7 +324,7 @@ register replicas later on because the query for registering replicas uses port
 
 Otherwise, you can use any unassigned port between 1000 and 10000.
 
-### How to register REPLICA instances?
+### Register REPLICA instances
 
 To register a REPLICA instance, you need to find out the IP address of each
 instance.
@@ -335,7 +336,7 @@ The IP addresses will probably be:
 - REPLICA instance 2 - `172.17.0.4`
 
 If they are not, please change the IP addresses in the following queries to
-match the [IP addresses on your cluster](/getting-started/install-memgraph/docker#retrieve-a-docker-container-ip-address).
+match the [IP addresses on your cluster](/getting-started/install-memgraph/docker#how-to-retrieve-a-docker-container-ip-address).
 
 Then, run the following queries from the MAIN instance to register REPLICA
 instances:
@@ -372,7 +373,7 @@ instances:
    If you used any port other than `10000` while demoting a REPLICA instance,
    you will need to specify it like this: "172.17.0.4:5000"
 
-### How to check info about registered REPLICA instances?
+### Check info about registered REPLICA instances
 
 Check REPLICA instances by running the following query from the MAIN
 instance:
@@ -381,24 +382,7 @@ instance:
 SHOW REPLICAS;
 ```
 
-### How to drop a REPLICA instance?
-
-To drop a replica, run the following query:
-
-```plaintext
-DROP REPLICA <name>;
-```
-
-### How to promote a REPLICA instance to MAIN?
-
-To promote a REPLICA instance to MAIN, run the following query:
-
-```plaintext
-SET REPLICATION ROLE TO MAIN;
-```
-
-
-## Look under the hood of Memgraph's replication
+## Underlying implementation
 
 Uninterrupted data and operational availability in production systems are
 critical and can be achieved in many ways. In Memgraph we opted for replication.
@@ -481,19 +465,17 @@ received or a timeout is reached.
 The following diagrams express the behavior of the MAIN instance in cases when
 SYNC REPLICA doesn't answer within the expected timeout.
 
-##### SYNC REPLICA going down when creating index, uniqueness constraint or existence constraint
+**SYNC REPLICA going down when creating index, uniqueness constraint or existence constraint**
 
-![sync-replicas-down-when-creating-index-or-constraints](/pages/deployment/replication/workflow_diagram_data_definition_creation.drawio.png)
+![](/pages/deployment/replication/workflow_diagram_data_definition_creation.drawio.png)
 
+**SYNC REPLICA going down when dropping index, uniqueness constraint or existence constraint**
 
-##### SYNC REPLICA going down when dropping index, uniqueness constraint or existence constraint
+![](/pages/deployment/replication/workflow_diagram_data_definition_dropping.drawio.png)
 
-![sync-replicas-down-when-dropping-index-or-constraints](/pages/deployment/replication/workflow_diagram_data_definition_dropping.drawio.png)
+**SYNC REPLICA going down adding/updating/deleting data**
 
-
-##### SYNC REPLICA going down adding/updating/deleting data
-
-![sync-replicas-down-when-modifying-data](/pages/deployment/replication/workflow_diagram_data_manipulation.drawio.png)
+![](/pages/deployment/replication/workflow_diagram_data_manipulation.drawio.png)
 
 #### ASYN replication mode
 
