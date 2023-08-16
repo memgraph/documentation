@@ -236,7 +236,7 @@ respectively.
 ## Profiling queries
 
 Along with inspecting a query's plan as described in the [Inspecting
-queries](/query-data/performance-optimization) guide, it is also possible to profile the
+queries](/querying/performance-optimization) guide, it is also possible to profile the
 execution of a query and get a detailed report on how the query's plan behaved.
 For every logical operator the following info is provided:
 

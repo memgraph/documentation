@@ -1,8 +1,4 @@
----
-id: overview
-title: Exploring datasets with graph analytics
-slug: /tutorials/exploring-datasets
----
+# Exploring datasets with graph analytics
 
 The tutorials that focus on exploring datasets want to showcase how to use
 Memgraph on that particular dataset using Cypher queries. We encourage all

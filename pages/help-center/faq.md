@@ -146,9 +146,9 @@ for tags.
 It is not necessary to define any data schema to import data. Data will be
 imported into the database regardless of the number of properties and their
 types. You can enforce property
-[uniqueness](https://memgraph.com/docs/memgraph/how-to-guides/constraints/uniqueness-constraint)
+[uniqueness](/fundamentals/constraints)
 and
-[existence](https://memgraph.com/docs/memgraph/how-to-guides/constraints/existence-constraint).
+[existence](/fundamentals/constraints).
 
 ### Are there any educational materials available?
 
