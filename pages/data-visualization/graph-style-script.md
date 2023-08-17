@@ -3,7 +3,7 @@
 This guide will show you how to easily get started with the Graph Style Script
 language. GSS is a language for customizing the visual display of graphs. For a
 complete list of available features consult the [Style script
-reference guide](/data-visualization/graph-style-script/graph-style-script).
+reference guide](/data-visualization/graph-style-script).
 
 ## Graph example
 
