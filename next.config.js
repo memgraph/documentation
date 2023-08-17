@@ -904,7 +904,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/docs/configuration/security',
+        source: '/docs/memgraph-lab/user-manual',
         destination: '/data-visualization/user-manual',
         permanent: true
       },
@@ -1417,7 +1417,104 @@ module.exports = withNextra({
         source: '/docs/memgraph/changelog',
         destination: '/release-notes',
         permanent: true
+      },
+      //START Redirects that have no content in new structure
+      {
+        source: '/docs/connect-to-memgraph',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/cypher-manual/what-are-graph-databases',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/how-to-guides/run-a-query-module',
+        destination: '/advanced-algorithms/run-algorithms',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/use-cases/bioinformatics',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/use-cases/computer-security',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/use-cases/drug-discovery',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/use-cases/finance',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/use-cases/knowledge-graph',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/use-cases/power-grids',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/use-cases/process-engineering',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/use-cases/retail',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/use-cases/social-media',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/use-cases/telecommunication',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/use-cases/transportation',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/connect-to-memgraph',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides/use-init-flags',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/tutorials',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/under-the-hood',
+        destination: '/',
+        permanent: true
       }
+      //END Redirects that have no content in new structure
     ];
   },
 });
