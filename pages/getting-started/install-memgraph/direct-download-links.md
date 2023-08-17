@@ -1,8 +1,8 @@
 # Memgraph direct download links
 
-You can download all of the MemgraphDB packages from the [Memgraph download
-hub](https://memgraph.com/download/). If you need direct links for the latest
-version of MemgraphDB, take a look at the list below.
+You can download all of the Memgraph database packages from the [Memgraph
+Download Hub](https://memgraph.com/download/). If you need direct links for the
+latest version of Memgraph database, take a look at the list below.
 
 ## Docker
 
