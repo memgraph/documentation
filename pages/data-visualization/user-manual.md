@@ -272,10 +272,7 @@ when starting Memgraph with Docker.
 
 ![](/pages/data-visualization/lab-user-manual/logs.png)
 
-Check the [reference guide on
-configuration](/configuration/configuration-settings#other) regarding logs
-to check how to modify logging, and the [how-to guide on how to access
-logs](/configuration/configuration-settings) if you are not using Docker.
+Check [how to access logs and modify logging](/configuration/logs).
 
 You can set the number of visible logs in the **Settings** section. 
 
