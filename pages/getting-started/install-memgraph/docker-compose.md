@@ -63,7 +63,7 @@ included in this image, so you can use the available graph algorithms.
 
 The **Memgraph MAGE** image contains:
 
-- **MemgraphDB** - the database that holds your data
+- **Memgraph** - the database that holds your data
 - **MAGE** - graph algorithms and modules library
 
 ```yaml
@@ -103,7 +103,7 @@ in this image, you can use the available graph algorithms.
 
 ## Docker Compose for Memgraph image
 
-The **Memgraph** image contains **MemgraphDB** - the database that holds your
+The **Memgraph** image contains the database that holds your
 data.
 
 ```yaml

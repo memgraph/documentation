@@ -127,10 +127,11 @@ required.
 
 There are three official Docker images for Memgraph:
 
-* `memgraph/memgraph` - the most basic MemgraphDB instance.
-* `memgraph/memgraph-mage` - the image contains a MemgraphDB instance together
-  with all the newest [MAGE](/advanced-algorithms) modules and graph algorithms.
-* `memgraph/memgraph-platform` - the image contains MemgraphDB, Memgraph Lab,
+* `memgraph/memgraph` - the most basic Memgraph database instance.
+* `memgraph/memgraph-mage` - the image contains a Memgraph database instance
+  together with all the newest [MAGE](/advanced-algorithms) modules and graph
+  algorithms.
+* `memgraph/memgraph-platform` - the image contains Memgraph database, Memgraph Lab,
   mgconsole and MAGE. Once started, mgconsole will be opened in the terminal,
   while Memgraph Lab is available at `http://localhost:3000`.
 
@@ -171,7 +172,7 @@ It depends on the scope of the project and the requirements. [Contact
 us](https://webforms.pipedrive.com/f/1sUK9YYKJnygcFEDI0SOpSGB2YBK2nP8xdjAiwnhEVXXohYvodHTPAzB1o4bZ8Tuz)
 for more information. 
 
-## MemgraphDB
+## Memgraph database
 
 ### What is the fastest way to import data into Memgraph?
 
