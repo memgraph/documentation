@@ -1,5 +1,62 @@
 import { Callout } from 'nextra/components'
 
-# Run managed transactions 
+# Run managed transactions
+
+By using simple ExecuteQuery method, driver is taking care of the transaction for the Cypher query you are trying to execute. It is also possible
+to manually manage transactions, which can bring flexibility into how the queries are executed. For example, you can batch multiple cypher queries into 
+the single transaction, which in the case of write queries can bring significant performance improvements.
+
+
+## Session and transaction 
+
+The first thing you need to do is to create a session. Session is a specific connection to the database, that is lightweight and should be closed after the 
+wanted queries has been executed. There is no need to keep the session open for the whole duration of the application. To open a session, use the code snippet below: 
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: "neo4j"})
+defer session.Close(ctx)
+```
+
+Sessions are not thread safe, so you should create a new session for each goroutine.
+
+Sessions have multiple access points that can be used to access the database: 
+
+- `ExecuteQuery` - executes a single query in the transaction.
+- `ExecuteRead` - executes a read query in the transaction.
+- `ExecuteWrite` - executes a write query in the transaction.
+
+
+Now you can run manged transaction like this: 
+
+```go 
+	nodes, err := session.ExecuteRead(ctx,
+		func(tx neo4j.ManagedTransaction) (any, error) {
+			result, err := tx.Run(ctx, `  
+				MATCH (n:Technology) WHERE n.name = "Memgraph"
+				RETURN n;
+				`, map[string]any{
+				"filter": "Memgraph",
+			})
+			if err != nil {
+				return nil, err
+			}
+			records, err := result.Collect(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return records, nil
+		})
+	if err != nil {
+		panic(err)
+	} else {
+		for _, tech := range nodes.([]*neo4j.Record) {
+			fmt.Println(tech.AsMap())
+		}
+	}
+```
+
+Now the `session.ExecuteRead` gets the function as an argument, which is executed in the transaction. The function gets the transaction context as an argument, 
+that is possible to use in the context. 
+
 
 
