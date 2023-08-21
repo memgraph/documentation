@@ -950,7 +950,7 @@ module.exports = withNextra({
       },
       {
         source: '/docs/memgraph/under-the-hood/storage',
-        destination: '/fundamentals/memory-usage',
+        destination: '/fundamentals/storage-memory-usage',
         permanent: true
       },
       {
@@ -1513,8 +1513,975 @@ module.exports = withNextra({
         source: '/docs/memgraph/under-the-hood',
         destination: '/',
         permanent: true
-      }
+      },
       //END Redirects that have no content in new structure
+      //START Old Docusarus redirects
+      {
+        source: '/docs/memgraph/tutorials-overview',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/querying/querying',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/querying',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/connection-methods',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/tutorials/tutorials',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/concepts',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/query-modules',
+        destination: '/advanced-algorithms',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview/use-query-modules-provided-by-memgraph',
+        destination: '/advanced-algorithms/available-algorithms',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/query-modules/built-in-query-modules',
+        destination: '/advanced-algorithms/available-algorithms',
+        permanent: true
+      },
+      {
+        source: '/mage/query-modules/python/distance-calculator',
+        destination: '/advanced-algorithms/available-algorithms/distance_calculator',
+        permanent: true
+      },
+      {
+        source: '/memgraph/reference-overview/graph-algorithms',
+        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        permanent: true
+      },
+      {
+        source: '/memgraph/concepts-overview/graph-algorithms',
+        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        permanent: true
+      },
+      {
+        source: '/memgraph/concepts/graph-algorithms',
+        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        permanent: true
+      },
+      {
+        source: '/memgraph/under-the-hood/graph-algorithms',
+        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        permanent: true
+      },
+      {
+        source: '/memgraph/reference-guide/graph-algorithms',
+        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/tutorials-overview/understanding-music-with-modules',
+        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/tutorials-overview/social-network-analysis',
+        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/networkx',
+        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/networkx/graph-analyzer',
+        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/networkx/wcc',
+        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/networkx/nxalg',
+        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/networkx',
+        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/networkx/graph-analyzer',
+        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/networkx/nxalg',
+        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/networkx',
+        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview/query-memgraph-programmatically',
+        destination: '/client-libraries',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/connecting-applications',
+        destination: '/client-libraries',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/connect-to-memgraph/methods/drivers',
+        destination: '/client-libraries',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/connecting-applications/c-sharp',
+        destination: '/client-libraries/c-sharp',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/connect-to-memgraph/methods/building-applications/c-sharp',
+        destination: '/client-libraries/c-sharp',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/connecting-applications/go',
+        destination: '/client-libraries/go',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/connect-to-memgraph/methods/building-applications/go',
+        destination: '/client-libraries/go',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/connecting-applications/java',
+        destination: '/client-libraries/java',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/connect-to-memgraph/methods/building-applications/java',
+        destination: '/client-libraries/java',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/connecting-applications/javascript',
+        destination: '/client-libraries/javascript',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/connect-to-memgraph/methods/building-applications/javascript',
+        destination: '/client-libraries/javascript',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/connect-to-memgraph/methods/building-applications/nodejs',
+        destination: '/client-libraries/nodejs',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/connecting-applications/php',
+        destination: '/client-libraries/php',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/connect-to-memgraph/methods/building-applications/php',
+        destination: '/client-libraries/php',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/connecting-applications/python',
+        destination: '/client-libraries/python',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/connect-to-memgraph/methods/building-applications/python',
+        destination: '/client-libraries/python',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/connecting-applications/rust',
+        destination: '/client-libraries/rust',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/connect-to-memgraph/methods/building-applications/rust',
+        destination: '/client-libraries/rust',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/audit-log',
+        destination: '/configuration/audit-log',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/auth-module',
+        destination: '/configuration/auth-module',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/configuration',
+        destination: '/configuration/configuration-settings',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/backup',
+        destination: '/configuration/data-durability-and-backup',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview/manage-users-using-ldap',
+        destination: '/configuration/ldap-security',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/ldap-security',
+        destination: '/configuration/ldap-security',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/manage-users-using-ldap',
+        destination: '/configuration/ldap-security',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/concepts-overview/replication',
+        destination: '/configuration/replication',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/replication',
+        destination: '/configuration/replication',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/concepts/replication',
+        destination: '/configuration/replication',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview/manage-user-privileges',
+        destination: '/configuration/security',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/security',
+        destination: '/configuration/security',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/manage-user-privileges',
+        destination: '/configuration/security',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/query-modules/c-api',
+        destination: '/custom-query-modules/c/c-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/query-modules/c-api',
+        destination: '/custom-query-modules/c/c-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/query-modules/api/c-api/classes/mgp_date_parameters',
+        destination: '/custom-query-modules/c/c-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/query-modules/api/c-api/classes/mgp_duration_parameters',
+        destination: '/custom-query-modules/c/c-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/query-modules/api/c-api/classes/mgp_edge_id',
+        destination: '/custom-query-modules/c/c-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/query-modules/api/c-api/classes/mgp_edge_type',
+        destination: '/custom-query-modules/c/c-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/query-modules/api/c-api/classes/mgp_label',
+        destination: '/custom-query-modules/c/c-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/query-modules/api/c-api/classes/mgp_local_date_time_parameters',
+        destination: '/custom-query-modules/c/c-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/query-modules/api/c-api/classes/mgp_local_time_parameters',
+        destination: '/custom-query-modules/c/c-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/query-modules/api/c-api/classes/mgp_property',
+        destination: '/custom-query-modules/c/c-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/query-modules/api/c-api/classes/mgp_vertex_id',
+        destination: '/custom-query-modules/c/c-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview/load-query-modules',
+        destination: '/custom-query-modules/manage-query-modules',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview/call-query-module-procedures',
+        destination: '/custom-query-modules/manage-query-modules',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview/implement-query-modules',
+        destination: '/custom-query-modules/manage-query-modules',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview/use-and-implement-query-modules',
+        destination: '/custom-query-modules/manage-query-modules',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/query-modules/load-call-query-modules',
+        destination: '/custom-query-modules/manage-query-modules',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/query-modules',
+        destination: '/custom-query-modules/manage-query-modules',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/query-modules/implement-query-modules',
+        destination: '/custom-query-modules/manage-query-modules',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides/query-modules/implement-query-modules',
+        destination: '/custom-query-modules/manage-query-modules',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/query-modules/python-api',
+        destination: '/custom-query-modules/python/python-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/query-modules/python-api',
+        destination: '/custom-query-modules/python/python-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview/import-data',
+        destination: '/data-migration',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/import-data',
+        destination: '/data-migration',
+        permanent: true
+      },
+      {
+        source: '/memgraph/import-data/csv/overview',
+        destination: '/data-migration',
+        permanent: true
+      },
+      {
+        source: '/memgraph/reference-guide/import-data/overview',
+        destination: '/data-migration',
+        permanent: true
+      },
+      {
+        source: '/memgraph/import-data/csv/csv-import-tool',
+        destination: '/data-migration/csv',
+        permanent: true
+      },
+      {
+        source: '/memgraph/import-data/csv-import-tool',
+        destination: '/data-migration/csv',
+        permanent: true
+      },
+      {
+        source: '/memgraph/reference-guide/import-data/csv-import-tool',
+        destination: '/data-migration/csv',
+        permanent: true
+      },
+      {
+        source: '/memgraph/import-data/csv/load-csv-clause',
+        destination: '/data-migration/csv',
+        permanent: true
+      },
+      {
+        source: '/memgraph/reference-guide/import-data/load-csv-clause',
+        destination: '/data-migration/csv',
+        permanent: true
+      },
+      {
+        source: '/memgraph/import-data/cypherl',
+        destination: '/data-migration/cypherl',
+        permanent: true
+      },
+      {
+        source: '/memgraph/reference-guide/import-data/cypherl',
+        destination: '/data-migration/cypherl',
+        permanent: true
+      },
+      {
+        source: '/memgraph/import-data/load-json',
+        destination: '/data-migration/json',
+        permanent: true
+      },
+      {
+        source: '/memgraph/import-data/json/load-json',
+        destination: '/data-migration/json',
+        permanent: true
+      },
+      {
+        source: '/memgraph/database-functionalities/streams/kafka-streams',
+        destination: '/data-streams',
+        permanent: true
+      },
+      {
+        source: '/memgraph/how-to-guides/streams/kafka/kafka-streams',
+        destination: '/data-streams',
+        permanent: true
+      },
+      {
+        source: '/memgraph/database-functionalities/streams/kafka/kafka-streams',
+        destination: '/data-streams',
+        permanent: true
+      },
+      {
+        source: '/memgraph/how-to-guides/streams/pulsar/pulsar-streams',
+        destination: '/data-streams',
+        permanent: true
+      },
+      {
+        source: '/memgraph/database-functionalities/streams/pulsar/pulsar-streams',
+        destination: '/data-streams',
+        permanent: true
+      },
+      {
+        source: '/memgraph/import-data/kafka',
+        destination: '/data-streams',
+        permanent: true
+      },
+      {
+        source: '/memgraph/import-data/kafka/overview',
+        destination: '/data-streams',
+        permanent: true
+      },
+      {
+        source: '/memgraph/how-to-guides/streams/kafka/connect-to-stream-from-lab',
+        destination: '/data-streams/manage-streams-lab',
+        permanent: true
+      },
+      {
+        source: '/memgraph/how-to-guides/streams/kafka/implement-transformation-module',
+        destination: '/data-streams/transformation-modules',
+        permanent: true
+      },
+      {
+        source: '/memgraph/database-functionalities/streams/kafka/implement-transformation-module',
+        destination: '/data-streams/transformation-modules',
+        permanent: true
+      },
+      {
+        source: '/memgraph/how-to-guides/streams/pulsar/implement-transformation-module',
+        destination: '/data-streams/transformation-modules',
+        permanent: true
+      },
+      {
+        source: '/memgraph/database-functionalities/streams/pulsar/implement-transformation-module',
+        destination: '/data-streams/transformation-modules',
+        permanent: true
+      },
+      {
+        source: '/memgraph/database-functionalities/streams/implement-transformation-module',
+        destination: '/data-streams/transformation-modules',
+        permanent: true
+      },
+      {
+        source: '/memgraph/import-data/kafka/json',
+        destination: '/data-streams/transformation-modules/python-api',
+        permanent: true
+      },
+      {
+        source: '/memgraph/import-data/kafka/avro',
+        destination: '/data-streams/transformation-modules/python-api',
+        permanent: true
+      },
+      {
+        source: '/memgraph/import-data/kafka/protobuf',
+        destination: '/data-streams/transformation-modules/python-api',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph-lab/style_script',
+        destination: '/data-visualization/graph-style-script',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph-lab/style-script/quick-start',
+        destination: '/data-visualization/graph-style-script',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph-lab/how_to_install_memgraph_lab_on_macos',
+        destination: '/data-visualization/install-and-connect',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph-lab/installation/overview',
+        destination: '/data-visualization/install-and-connect',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview/enforce-constraints',
+        destination: '/fundamentals/constraints',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/constraints/existence-constraint',
+        destination: '/fundamentals/constraints',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/constraints/uniqueness-constraint',
+        destination: '/fundamentals/constraints',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/indexing',
+        destination: '/fundamentals/indexes',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/concepts-overview/indexing',
+        destination: '/fundamentals/indexes',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/concepts/indexing',
+        destination: '/fundamentals/indexes',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/concepts-overview/storage',
+        destination: '/fundamentals/storage-memory-usage',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/concepts/storage',
+        destination: '/fundamentals/storage-memory-usage',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/memory-control',
+        destination: '/fundamentals/storage-memory-usage',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides/memory-control',
+        destination: '/fundamentals/storage-memory-usage',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/concepts/telemetry',
+        destination: '/fundamentals/telemetry',
+        permanent: true
+      },
+      {
+        source: '/memgraph/reference-guide/isolation-levels',
+        destination: '/fundamentals/transactions',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/triggers',
+        destination: '/fundamentals/triggers',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides/triggers',
+        destination: '/fundamentals/triggers',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/introduction',
+        destination: '/getting-started',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/overview',
+        destination: '/getting-started',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/quick-start',
+        destination: '/getting-started',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started',
+        destination: '/getting-started',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/connect-to-memgraph/methods/mgconsole',
+        destination: '/getting-started/cli',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-guide/temporal-types',
+        destination: '/getting-started/data-types',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/installation/docker-installation',
+        destination: '/getting-started/install-memgraph',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/installation',
+        destination: '/getting-started/install-memgraph',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/installation/debian-installation',
+        destination: '/getting-started/install-memgraph/debian',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview/work-with-docker',
+        destination: '/getting-started/install-memgraph/docker',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/work-with-docker',
+        destination: '/getting-started/install-memgraph/docker',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-work-with-docker',
+        destination: '/getting-started/install-memgraph/docker',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/installation/rpm-installation',
+        destination: '/getting-started/install-memgraph/rpm-package',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-started/installation/wsl-installation',
+        destination: '/getting-started/install-memgraph/windows-subsystem-for-linux',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-help/getting-help',
+        destination: '/help-center/',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/getting-help',
+        destination: '/help-center/',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/faq',
+        destination: '/help-center/faq',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/getting-help/faq',
+        destination: '/help-center/faq',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/faq',
+        destination: '/help-center/faq',
+        permanent: true
+      },
+      {
+        source: '/docs/help-center/faq',
+        destination: '/help-center/faq',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher',
+        destination: '/querying',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses',
+        destination: '/querying/clauses',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses/create',
+        destination: '/querying/clauses/create',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses/delete',
+        destination: '/querying/clauses/delete',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses/match',
+        destination: '/querying/clauses/match',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses/merge',
+        destination: '/querying/clauses/merge',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses/optional-match',
+        destination: '/querying/clauses/optional-match',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses/remove',
+        destination: '/querying/clauses/remove',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses/return',
+        destination: '/querying/clauses/return',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses/set',
+        destination: '/querying/clauses/set',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses/union',
+        destination: '/querying/clauses/union',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses/unwind',
+        destination: '/querying/clauses/unwind',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses/where',
+        destination: '/querying/clauses/where',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/clauses/with',
+        destination: '/querying/clauses/with',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/writing-new-data',
+        destination: '/querying/create-graph-objects',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/reading-and-writing',
+        destination: '/querying/create-graph-objects',
+        permanent: true
+      },
+      {
+        source: '/docs/cypher-manual/writing-new-data',
+        destination: '/querying/create-graph-objects',
+        permanent: true
+      },
+      {
+        source: '/docs/cypher-manual/reading-and-writing',
+        destination: '/querying/create-graph-objects',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/differences',
+        destination: '/querying/differences-in-cypher-implementations',
+        permanent: true
+      },
+      {
+        source: '/docs/cypher-manual/differences/patterns-in-expressions',
+        destination: '/querying/differences-in-cypher-implementations',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/tutorials-overview/analyzing-ted-talks',
+        destination: '/querying/exploring-datasets/analyzing-ted-talks',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/tutorials-overview/backpacking-through-europe',
+        destination: '/querying/exploring-datasets/backpacking-through-europe',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/tutorials-overview/exploring-the-european-road-network',
+        destination: '/querying/exploring-datasets/exploring-the-european-road-network',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/tutorials-overview/football-transfers',
+        destination: '/querying/exploring-datasets/football-transfers',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/tutorials-overview/graphing-the-premier-league',
+        destination: '/querying/exploring-datasets/graphing-the-premier-league',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/tutorials-overview/marvel-universe',
+        destination: '/querying/exploring-datasets/marvel-universe',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/tutorials-overview/movie-recommendation',
+        destination: '/querying/exploring-datasets/movie-recommendation',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/other-features',
+        destination: '/querying/expressions',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/open-cypher/functions',
+        destination: '/querying/functions',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides-overview/explain-profile',
+        destination: '/querying/performance-optimization',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/inspecting-queries',
+        destination: '/querying/performance-optimization',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/database-functionalities/profiling-queries',
+        destination: '/querying/performance-optimization',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides/inspecting-queries',
+        destination: '/querying/performance-optimization',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/how-to-guides/profiling-queries',
+        destination: '/querying/performance-optimization',
+        permanent: true
+      },
+      {
+        source: '/docs/memgraph/reference-overview/reading-existing-data',
+        destination: '/querying/read-and-modify-data',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/networkx',
+        destination: 'https://github.com/memgraph/gqlalchemy',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/applications/bioinformatics-application',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/applications/computer-security-application',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/applications/drug-discovery-application',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/applications/finance-application',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/applications/knowledge-graph-application',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/applications/power-grids-application',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/applications/process-engineering-application',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/applications/retail-application',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/applications/social-media-application',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/applications/telecommunication-application',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      },
+      {
+        source: '/docs/mage/applications/transportation-application',
+        destination: 'https://memgraph.com/use-cases',
+        permanent: true
+      }      
+      //END Old Docusarus redirects
     ];
   },
 });
