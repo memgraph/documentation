@@ -6,6 +6,7 @@ const withNextra = require('nextra')({
 })
 
 module.exports = withNextra({
+  basePath: '/docs',
   async redirects() {
     return [
       {
@@ -14,7 +15,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/docs/mage/',
+        source: '/docs/mage',
         destination: '/advanced-algorithms',
         permanent: true
       },
