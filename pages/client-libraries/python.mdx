@@ -103,10 +103,10 @@ A good practice is to always provide a database name, to avoid extra request to 
 Since v2.10, Memgraph added the [multi-tenant support](/configuration/multi-tenancy) in the Enterprise Edition to manage multiple isolated databases within a single instance. 
 Make sure you provide the correct database name if you're working with more than one tenant. 
 
-The `execute_query()` procedure automatically creates a transaction in which you can include multiple Cypher statements in a single query. 
+The `execute_query()` procedure automatically creates a transaction in which you can include multiple Cypher statements in a single query.
 
 Bolt protocol specifies additional data that can be sent along with the requested results. Such data is called [metadata](/configuration/metadata) and can be divided into two groups: query statistics and notifications.
-When running a **write query**, query statistics will be available under the `stats` key of the summary. 
+From the query statistics metadata we can get query counters that tell us what changes the query triggered on the server.
 
 ```python
 with GraphDatabase.driver(URI, auth=AUTH) as driver:
@@ -122,30 +122,31 @@ with GraphDatabase.driver(URI, auth=AUTH) as driver:
     for record in records:
         print(record["name"])
     
-    # Print summary and Memgraph write query statistics
-    print(summary.__dict__)
-    print(summary.metadata["stats"])
+    # Print the query counters
+    print(summary.counters)
 ```
 
-**Read queries** can be run in the same way. From their results, you can read the summary, but the query statistics from Memgraph won't be shown, because they refer only to the **changes** done by the query.
+**Read queries** can be run in the same way. From their results, you won't get query counters, because the read queries are not making any change on the server. 
+Still, you can read the other parts of the summary, such as query that was run.
 
 ```python
 with GraphDatabase.driver(URI, auth=AUTH) as driver:
     # Find a user John in the database
-    with GraphDatabase.driver(URI, auth=AUTH) as driver:
-        records, summary, keys = driver.execute_query(
-            "MATCH (u:User {name: $name}) RETURN u.name AS name",
-            name="John",
-            database_="memgraph",
-        )
+    records, summary, keys = driver.execute_query(
+        "MATCH (u:User {name: $name}) RETURN u.name AS name",
+        name="John",
+        database_="memgraph",
+    )
 
     # Get the result
     for record in records:
         print(record["name"])
     
-    # Print summary
-    print(summary.__dict__)
+    # Print the query
+    print(summary.query)
 ```
+
+On update and delete queries it is again useful to get the query counters to be sure how your change affected the database.
 
 <Callout type="warning">
 
@@ -163,7 +164,22 @@ with GraphDatabase.driver(URI, auth=AUTH).session(database="memgraph") as sessio
 
 #### Managed transactions
 
+With the `execute_query()` procedure you don't have a full control over the transaction lifecycle because it creates a transaction which can only be committed or rolled back on failure.
+If you are a more advanced user who wants to have more control over the query execution, then you should use managed transactions to run your queries.
+
+To use managed transactions, you first need to create a session:
+
+```python
+my_session = driver.session(database="memgraph")
+# do something with the session
+my_session.close()
+```
+
+Don't forget to close the session after usage with `session.close()` or use `with` statement in Python which will automatically close a session.
+
 
 ### Implicit transactions
+
+### Concurrent transactions
 
 
