@@ -2,55 +2,79 @@ import { Callout } from 'nextra/components'
 
 # Python quick start
 
-At the end of this guide, you will have created a simple Python **`Hello,
-World!`** program that connects to the Memgraph database and executes simple
-queries.
-
 ## Prerequisites
-
-To follow this guide, you will need:
 
 - A **running Memgraph instance**. If you need to set up Memgraph, take a look
   at the [Installation guide](/getting-started/install-memgraph).
-- The [**GQLAlchemy client**](https://github.com/memgraph/gqlalchemy). A
-  Memgraph OGM (Object Graph Mapper) for the Python programming language.
-- A basic understanding of graph databases and the property graph model.
+- Python version >= 3.7.
 
-## Basic setup
+**Don't forget the connection details** since you'll need them to connect to Memgraph with Python client library. 
+The connection details are URI (e.g. `bolt://localhost:7687`) and, optionally, username and password (if you [created a user](/configuration/security#creating-users)). 
 
-We'll be using a **Python program** to demonstrate how to connect to a running
-Memgraph database instance.<br />
 
-Let's jump in and connect a simple program to Memgraph.
+## Install Python client library
 
-**1.** Create a new directory for your program, for example, `/memgraph_python`
-and position yourself in it.<br /> 
+To connect with Memgraph with Python, first install the [Python client library](https://pypi.org/project/neo4j/) with `pip`:
+ 
+```
+pip install neo4j
+```
 
-**2.** Create a new Python script and name it `program.py` . Add the following
-code to it:
+The Neo4j Python client library connects to Memgraph using the Bolt protocol. 
+ 
+## Connect to the database
+
+To connect to Memgraph, create a driver object with the appropriate URI and AUTH arguments. 
+If you're running Memgraph locally, URI looks something like `bolt://localhost:7687`, and if you are running Memgraph on a remote server, replace `localhost` with the appropriate IP address. 
+If you ran Memgraph on port different than 7687, don't forget to update that in the URI too. By default, you can set username and password in the AUTH argument as empty strings. But, if you [created a user](/configuration/security#creating-users) in Memgraph, make sure to provide the correct connection details.
+
+To verify the connection (credentials and versions) you can run the `verify_connectivity()` procedure on the driver object. Be aware that the connection verification can raise a number of different exceptions.
+
+
+### Connect without authentication
+Here is an example of how to connect to Memgraph, that is running locally on port 7687, with the Python client library **without authentication** and how to get node count from the database: 
 
 ```python
-from gqlalchemy import Memgraph
+from neo4j import GraphDatabase
 
-# Make a connection to the database
-memgraph = Memgraph(host='127.0.0.1', port=7687)
+URI = "bolt://localhost:7687"
+AUTH = ("", "")
 
-# Delete all nodes and relationships
-query = "MATCH (n) DETACH DELETE n"
+with GraphDatabase.driver(URI, auth=AUTH) as driver:
+    driver.verify_connectivity()
 
-# Execute the query
-memgraph.execute(query)
+    # Count the number of nodes in the database
+    records, summary, keys = driver.execute_query(
+        "MATCH (n) RETURN count(n) AS num_of_nodes;"
+    )
 
-# Create a node with the label FirstNode and message property with the value "Hello, World!"
-query = """CREATE (n:FirstNode)
-           SET n.message = '{message}'
-           RETURN 'Node '  + id(n) + ': ' + n.message AS result""".format(message="Hello, World!")
+    # Get the result
+    for record in records:
+        print(record["num_of_nodes"])
+```
 
-# Execute the query
-results = memgraph.execute_and_fetch(query)
+### Connect with authentication
 
-# Print the first member
-print(list(results)[0]['result'])
+If you [created a user](/configuration/security#creating-users) in Memgraph, then you need to provide the correct username and password when defining AUTH argument to connect to the database.
+Let's say you already created a user with username `user` and password `pass`. Here is an example of how to connect to Memgraph, that is run locally on port 7687, with the Python client library **with authentication** and how to get node count from the database: 
+
+```python
+from neo4j import GraphDatabase
+
+URI = "bolt://localhost:7687"
+AUTH = ("user", "pass")
+
+with GraphDatabase.driver(URI, auth=AUTH) as driver:
+    driver.verify_connectivity()
+
+    # Count the number of nodes in the database
+    records, summary, keys = driver.execute_query(
+        "MATCH (n) RETURN count(n) AS num_of_nodes;", database_="memgraph"
+    )
+
+    # Get the result
+    for record in records:
+        print(record["num_of_nodes"])
 ```
 
 <Callout type="info"> 
@@ -70,21 +94,76 @@ docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' CONT
 
 </Callout>
 
-**3.** Now, you can run the application with the following command:
+## Query the database
 
+### Multicommand transactions
+
+To query the database, run the `execute_query()` procedure on the driver object with the Cypher query argument, along with its parameters and database name. 
+A good practice is to always provide a database name, to avoid extra request to the server and in that way, improve performance and to provide parameters to protect your queries from Cypher injections.
+Since v2.10, Memgraph added the [multi-tenant support](/configuration/multi-tenancy) in the Enterprise Edition to manage multiple isolated databases within a single instance. 
+Make sure you provide the correct database name if you're working with more than one tenant. 
+
+The `execute_query()` procedure automatically creates a transaction in which you can include multiple Cypher statements in a single query. 
+
+Bolt protocol specifies additional data that can be sent along with the requested results. Such data is called [metadata](/configuration/metadata) and can be divided into two groups: query statistics and notifications.
+When running a **write query**, query statistics will be available under the `stats` key of the summary. 
+
+```python
+with GraphDatabase.driver(URI, auth=AUTH) as driver:
+    # Create a user in the database
+    records, summary, keys = driver.execute_query(
+        "CREATE (u:User {name: $name, password: $password}) RETURN u.name AS name",
+        name="John",
+        password="pass",
+        database_="memgraph",
+    )
+
+    # Get the result
+    for record in records:
+        print(record["name"])
+    
+    # Print summary and Memgraph write query statistics
+    print(summary.__dict__)
+    print(summary.metadata["stats"])
 ```
-python ./program.py
+
+**Read queries** can be run in the same way. From their results, you can read the summary, but the query statistics from Memgraph won't be shown, because they refer only to the **changes** done by the query.
+
+```python
+with GraphDatabase.driver(URI, auth=AUTH) as driver:
+    # Find a user John in the database
+    with GraphDatabase.driver(URI, auth=AUTH) as driver:
+        records, summary, keys = driver.execute_query(
+            "MATCH (u:User {name: $name}) RETURN u.name AS name",
+            name="John",
+            database_="memgraph",
+        )
+
+    # Get the result
+    for record in records:
+        print(record["name"])
+    
+    # Print summary
+    print(summary.__dict__)
 ```
 
-You should see an output similar to the following:
+<Callout type="warning">
 
+Error with multicommand transactions
+
+`Index manipulation not allowed in multicommand transactions` is a kind of error you might experience. To fix that, use implicit (or auto-commit) transactions instead. 
+That is the simplest way to run a Cypher query because implicit transactions won't be automatically retried as with `execute_query()` procedure or managed transactions. 
+To create a label-property index on `:User(name)`, run the following code:
+```python
+with GraphDatabase.driver(URI, auth=AUTH).session(database="memgraph") as session:
+    session.run("CREATE INDEX ON :User(name);")
 ```
-Node 1: Hello, World!
-```
+</Callout>
 
-## Where to next?
 
-For real-world examples of how to use Memgraph, we suggest you take a look at
-the **[Tutorials](/)** page. You can also browse through
-the **[How-to guides](/)** section to get an overview
-of all the functionalities Memgraph offers.
+#### Managed transactions
+
+
+### Implicit transactions
+
+
