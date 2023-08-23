@@ -910,11 +910,6 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/',
-        destination: '/docs',
-        permanent: true
-      },
-      {
         source: '/cypher-manual/working-with-memgraph',
         destination: '/docs',
         permanent: true
