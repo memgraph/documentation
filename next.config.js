@@ -6,7 +6,9 @@ const withNextra = require('nextra')({
 })
 
 module.exports = withNextra({
-  basePath: '/docs',
+	trailingSlash: false,
+	basePath: '/docs',
+	assetPrefix: '/docs',
   async redirects() {
     return [
       {
@@ -2476,7 +2478,7 @@ module.exports = withNextra({
         source: '/mage/applications/transportation-application',
         destination: 'https://memgraph.com/use-cases',
         permanent: true
-      }      
+      }
       //END Old Docusarus redirects
     ];
   },
