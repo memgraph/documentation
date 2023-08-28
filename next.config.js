@@ -1178,7 +1178,7 @@ module.exports = withNextra({
       },
       {
         source: '/errors/memgraph/ssl',
-        destination: '/help-center/errors/memgraph/ssl',
+        destination: '/help-center/errors/ssl',
         permanent: true
       },
       {
