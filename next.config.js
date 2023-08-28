@@ -822,7 +822,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/memgraph-lab/',
+        source: '/memgraph-lab',
         destination: '/data-visualization/',
         permanent: true
       },
@@ -982,7 +982,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/memgraph/',
+        source: '/memgraph',
         destination: '/getting-started',
         permanent: true
       },
@@ -1077,7 +1077,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/memgraph-cloud/',
+        source: '/memgraph-cloud',
         destination: '/getting-started/install-memgraph/memgraph-cloud',
         permanent: true
       },
@@ -1127,7 +1127,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/errors/',
+        source: '/errors',
         destination: '/help-center/errors',
         permanent: true
       },
@@ -1207,7 +1207,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/cypher-manual/',
+        source: '/cypher-manual',
         destination: '/querying',
         permanent: true
       },
