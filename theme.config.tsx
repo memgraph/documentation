@@ -17,7 +17,21 @@ const config: DocsThemeConfig = {
     <>
       <link rel="icon" href="/favicon.png" />
     </>
-  )
+  ),
+  sidebar: {
+    defaultMenuCollapseLevel: 1,
+    autoCollapse: true, 
+  },
+  navigation: {
+    prev: false,
+    next: false
+  },
+  editLink: {
+    text: null
+  },
+  feedback: {
+    content: null
+  }
 }
 
 export default config
