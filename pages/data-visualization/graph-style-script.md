@@ -3,13 +3,13 @@
 This guide will show you how to easily get started with the Graph Style Script
 language. GSS is a language for customizing the visual display of graphs. For a
 complete list of available features consult the [Style script
-reference guide](/data-visualization/graph-style-script/graph-style-script).
+reference guide](/data-visualization/graph-style-script).
 
 ## Graph example
 
 In this guide, we will use an example graph with European countries and cities.
 The data can be found
-[here](https://memgraph.com/docs/memgraph/tutorials-overview/backpacking-through-europe).
+[here](/querying/exploring-datasets/backpacking-through-europe).
 Countries have the label `Country`, while cities have the label `City`. All
 nodes have the property `name`. Cities have many additional properties,
 including `country` (containing country) and `drinks_USD` (average drink price).

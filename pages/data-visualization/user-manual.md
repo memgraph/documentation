@@ -70,7 +70,7 @@ When saving a style, the graph results of an executed query will be used as a
 preview picture of the style. Custom styles can be defined as a default style
 applied to all following query runs. 
 
-Be sure to check the [GSS reference guide](/data-visualization/graph-style-script/graph-style-script) and a
+Be sure to check the [GSS reference guide](/data-visualization/graph-style-script) and a
 [tutorial](/data-visualization/style-your-graphs-in-memgraph-lab) on how to
 style your graphs. 
 
@@ -250,7 +250,7 @@ as reading the explanations of all the entities and their properties.
 ![](/pages/data-visualization/lab-user-manual/dataset.png)
 
 There are several
-[tutorials](/querying/exploring-datasets/exploring-datasets) you can use to
+[tutorials](/querying/exploring-datasets) you can use to
 explore the datasets available in Memgraph Lab.
 
 ## Import & Export
