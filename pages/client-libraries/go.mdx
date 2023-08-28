@@ -344,11 +344,11 @@ defer driver.Close(ctx)
 
 ### Query the database 
 
-#### Automatic transaction 
-
 After connection your driver to the Memgraph you can start running some queries, the simplest way to run the query is via `ExecuteQuery` function that has an automatic transaction management. 
 
-Now here is the sample create query you can run: 
+#### Run a create query 
+
+Now here is the simple create query you can run: 
 
 ```go 
     node := "CREATE (n:Technology {name:'Memgraph'});"
@@ -368,24 +368,27 @@ ExecuteQuery function takes the following arguments:
 - `config` - configuration of the query, like database name, user, etc.
 
 
+#### Run a read query 
 
-### Run a read query 
+Here is the simple read query:
 
 ```go
-	result, err := neo4j.ExecuteQuery(ctx, driver, "MATCH (n:Technology{name: 'Memgraph'}) RETURN n", nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase(""))
+	result, err := neo4j.ExecuteQuery(ctx, driver, "MATCH (n:Technology{name: 'Memgraph'}) RETURN n", nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase("memgraph"))
 	if err != nil {
 		panic(err)
 	} else {
 		fmt.Println(result)
 	}
 
+	// Print each node as map
 	for _, node := range result.Records {
 		fmt.Println(node.AsMap())
 	}
 ```
 
+#### Running queries with property map
 
-### Running queries with property map
+If you want to pass a map of properties to the query, you can do it like this:
 
 ```go
 	_, err = neo4j.ExecuteQuery(ctx, driver, "CREATE (n:Technology{name: $name, type: $type})", map[string]any{"name": "Memgraph", "type": "graph database"}, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase(""))
@@ -393,23 +396,23 @@ ExecuteQuery function takes the following arguments:
 		panic(err)
     }
 ```
+This way your queries won't contain hard-coded values. 
 
+### Process the returned results from 
 
-#Process the returned results from 
+In order to read results and serve them back to you Go application you need to handle them. Go is statically typed language and proper types need to be handled. 
+Depending on the type of the request you made, you can get different results back. Lets go over a few examples how you can interpret the results. 
 
-In order to read results and server them back to you Go application. Depending on the type of the request you made, you can get different results back. 
-Lets go over a few examples how you can interpret the results. 
+#### Get node 
 
-##Get nodes back
-
+Run the following query:
 ```go
 
-result, err := neo4j.ExecuteQuery(ctx, driver, "MATCH (n:Technology{name: 'Memgraph'}) RETURN n", nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase(""))
+result, err := neo4j.ExecuteQuery(ctx, driver, "MATCH (n:Technology{name: 'Memgraph'}) RETURN n", nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase("memgraph"))
 if err != nil {
     panic(err)
 }
 ```
-
 When using `ExceuteQuery`, the returned results are in the `EagerResults` format, which means you have access to the `Records` field. Records field contains all the records returned by the query. To process the results, you can iterate over the records and access the fields you need. 
 Here is the example: 
 
@@ -422,7 +425,7 @@ for _, node := range result.Records {
 {65 65 [Technology] map[createdAt:{0 63828259200 <nil>} description:Fastest graph DB in the world! id:1 name:Memgraph]}
 ```
 
-Lets break down the result. So for each returned record, it is getting converted to a map, now we can access the `n` field, which is a node returned from a query.
+Lets break down the result. So for each returned record, it is getting converted to a map, now we can access the `n` field, which is a node returned from a query. The returned record and all its properties are of type `any`. This means that you have to cast them to the relevant Go type if you want to use methods/features defined on such types. 
 To access individual properties of the node you have following options: 
 
 ```go
@@ -436,10 +439,13 @@ node.AsMap()["n"].(neo4j.Node).Props["createdAt"].(neo4j.Date).Time() // 2023-08
 
 ```
 
-Note that for each property can be of type `any` so you need to cast it to the proper type.
+As you can see you can access all node properties by casting and accessing the `Props` field. Keep in mind that GetElementId() returns the internal ID of the node, which is not the same as the user defined ID, and it should not 
+be used for any business logic.
 
 
-## Get relationship back 
+#### Get relationship
+
+You can also get a relationship back from the query. Here is the example: 
 
 ```go 
 	//Create a relationship between two nodes, developer and technology
@@ -466,7 +472,12 @@ Note that for each property can be of type `any` so you need to cast it to the p
 	}
 ```
 
-## Get a path instance 
+You can access the relationship properties in the same way as you access the node properties. StartElementId and EndElementId are the internal IDs of the start and end node of the relationship.
+
+#### Get a path  
+
+You can also get a path back from the Memgraph, here is the example: 
+
 ```go
 	query = "MATCH p=(d:Developer)-[r:USES]->(t:Technology) RETURN p"
 	result, err = neo4j.ExecuteQuery(ctx, driver, query, nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase(""))
@@ -481,10 +492,12 @@ Note that for each property can be of type `any` so you need to cast it to the p
 	}
 ```
 
+Path will contain nodes and relationships, that can be accessed in the same way as in the previous examples.
 
-## Mapping types between Cypher and Go driver 
 
- Here is the full table of the mapping between Cypher types and the types used in the Go driver:
+#### Types mapping Cypher and Go 
+
+ Here is the full table of the mapping between Memgraph Cypher types and the types used in the Go driver:
 
 |  Cypher Type | Driver Type        |
 |-------------:|:-------------------|
@@ -503,8 +516,11 @@ Note that for each property can be of type `any` so you need to cast it to the p
 |    LocalTime | neo4j.LocalTime    |
 |LocalDateTime | neo4j.LocalDateTime|
 
+Keep in mind that Memgraph does not support timezones at the moment. 
 
-# Run managed transactions
+### Transaction management
+
+#### Automatic transaction management 
 
 By using simple ExecuteQuery method, driver is taking care of the transaction for the Cypher query you are trying to execute. It is also possible
 to manually manage transactions, which can bring flexibility into how the queries are executed. For example, you can batch multiple cypher queries into 
