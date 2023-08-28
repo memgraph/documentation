@@ -698,7 +698,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/query-modules/api/mock-python-api',
-        destination: '/custom-query-modules/python-api/mock-python-api',
+        destination: '/custom-query-modules/python/mock-python-api',
         permanent: true
       },
       {
@@ -763,12 +763,12 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/import-data/migrate/mysql',
-        destination: '/data-migration/sql',
+        destination: '/data-migration/migrate-from-rdbms',
         permanent: true
       },
       {
         source: '/memgraph/import-data/migrate/postgresql',
-        destination: '/data-migration/sql',
+        destination: '/data-migration/migrate-from-rdbms',
         permanent: true
       },
       {
@@ -993,7 +993,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/data-types',
-        destination: '/getting-started/data-types',
+        destination: '/fundamentals/data-types',
         permanent: true
       },
       {
@@ -2171,7 +2171,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/temporal-types',
-        destination: '/getting-started/data-types',
+        destination: '/fundamentals/data-types',
         permanent: true
       },
       {
