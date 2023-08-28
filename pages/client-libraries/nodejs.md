@@ -12,7 +12,7 @@ To follow this guide, you will need:
 - A basic understanding of graph databases and the property graph model.
 - The newest version of **Node.js** installed. Instructions on how to setup
   Node. JS can be found on the [official
-  website](https://nodejs.org/en/download/).
+  website](https://nodejs.org/en/download).
 
 ## Basic Setup
 
