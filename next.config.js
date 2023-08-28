@@ -2240,11 +2240,6 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/help-center/faq',
-        destination: '/help-center/faq',
-        permanent: true
-      },
-      {
         source: '/memgraph/open-cypher',
         destination: '/querying',
         permanent: true
