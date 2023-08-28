@@ -409,7 +409,7 @@ Sets the given error message.
 ## Graph API
 
 This section covers the interface for working with the Memgraph DB graph using the C++ API.
-A description of data types is available [here](https://memgraph.com/docs/memgraph/reference-guide/data-types).
+A description of data types is available [here](/fundamentals/data-types).
 
 ### Graph
 
@@ -1763,7 +1763,7 @@ std::hash<mgp::MapItem>
 ### Value
 
 Represents a value of any type supported by Memgraph. 
-The data types are described [here](https://memgraph.com/docs/memgraph/reference-guide/data-types).
+The data types are described [here](/fundamentals/data-types).
 
 #### Constructors
 
@@ -2008,7 +2008,7 @@ std::ostream &operator<<(std::ostream &os, const mgp::Value &value)
 ### Type
 
 Enumerates the data types supported by Memgraph and its C++ API.
-The types are listed and described [on this page](https://memgraph.com/docs/memgraph/reference-guide/data-types).
+The types are listed and described [on this page](/fundamentals/data-types).
 
 - `Type::Null`
 - `Type::Any`
