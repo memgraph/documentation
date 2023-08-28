@@ -307,7 +307,7 @@ You can also combine the horizontal and vertical split.
 As a part of the [Memgraph Cloud](/getting-started/install-memgraph/memgraph-cloud) release, we've showcased different
 features of Memgraph Lab, and we invite you to check it out!
 
-[![Get started with Memgraph Lab](/pages/data-visualizationvideo.png)](https://youtu.be/Tt5KPKylU8k?t=1390)
+[![Get started with Memgraph Lab](/pages/data-visualization/lab-user-manual/video.png)](https://youtu.be/Tt5KPKylU8k?t=1390)
 
 If you are interested in a particular topic, below is the breakdown of the video
 by the topics covered in the user manual, but there is a breakdown in the
