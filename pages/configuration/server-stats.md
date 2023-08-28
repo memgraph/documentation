@@ -34,7 +34,7 @@ The result will contain the following fields:
 | global_isolation_level | Current `global` isolation level.<br/>For more info, check out the [isolation levels](/fundamentals/transactions). |
 | session_isolation_level | Current `session` isolation level. |
 | next_session_isolation_level | Current `next` isolation level. |
-| storage_mode | Current storage mode.<br/>For more info, check out the [storage modes](/fundamentals/storage). |
+| storage_mode | Current storage mode.<br/>For more info, check out the [storage modes](/fundamentals/storage-memory-usage). |
 
 ## Build information
 
