@@ -1058,17 +1058,17 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/linux-installation-troubleshooting',
-        destination: '/getting-started/install-memgraph/installation-troubleshooting',
+        destination: '/getting-started/install-memgraph/ubuntu',
         permanent: true
       },
       {
         source: '/memgraph/macos-installation-troubleshooting',
-        destination: '/getting-started/install-memgraph/installation-troubleshooting',
+        destination: '/getting-started/install-memgraph/docker',
         permanent: true
       },
       {
         source: '/memgraph/windows-installation-troubleshooting',
-        destination: '/getting-started/install-memgraph/installation-troubleshooting',
+        destination: '/getting-started/install-memgraph/docker',
         permanent: true
       },
       {
