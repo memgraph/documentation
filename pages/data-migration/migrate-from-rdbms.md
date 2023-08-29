@@ -145,7 +145,7 @@ container so Memgraph can access them.
 1. Start your Memgraph instance by writing the following command in a terminal:
 
 ```
-docker run -it -p 7687:7687 -p 7444:7444 -p 3000:3000 -v memgraph/memgraph-platform
+docker run -p 7687:7687 -p 7444:7444 -p 3000:3000 memgraph/memgraph-platform
 ```
 
 2. Open a new terminal and find the CONTAINER ID of the Memgraph Docker
