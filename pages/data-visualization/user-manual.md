@@ -47,10 +47,10 @@ manual](/querying).
 ![](/pages/data-visualization/lab-user-manual/intelisense.png)
 
 Once you **Run** a query (by clicking a button or pressing **CTRL** +
-**Enter**), you can **Cancel** it, but if the query has already
-reach MemgraphDB, the action won't actually stop the query's execution. In the
-case of running complex algorithms on a large dataset, you need to be a bit
-patient and wait for Memgraph to complete running the query. 
+**Enter**), you can **Cancel** it, but if the query has already reach Memgraph
+database, the action won't actually stop the query's execution. In the case of
+running complex algorithms on a large dataset, you need to be a bit patient and
+wait for Memgraph to complete running the query. 
 
 If the Cypher Editor contains multiple queries, you can execute a single one by
 selecting it and pushing the "Run Selected". 
@@ -272,10 +272,7 @@ when starting Memgraph with Docker.
 
 ![](/pages/data-visualization/lab-user-manual/logs.png)
 
-Check the [reference guide on
-configuration](/configuration/configuration-settings#other) regarding logs
-to check how to modify logging, and the [how-to guide on how to access
-logs](/configuration/configuration-settings) if you are not using Docker.
+Check [how to access logs and modify logging](/configuration/logs).
 
 You can set the number of visible logs in the **Settings** section. 
 
