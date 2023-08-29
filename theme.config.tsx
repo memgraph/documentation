@@ -2,7 +2,13 @@ import React from 'react'
 import { DocsThemeConfig } from 'nextra-theme-docs'
 
 const config: DocsThemeConfig = {
-  logo: <span>Memgraph Documentation</span>,
+  logo: (
+    <>
+      <img src="/docs/memgraph-nav-logo.png" alt="Memgraph Logo" style={{ height: '24px', verticalAlign: 'middle', marginRight: '1em' }} />
+      <span>Memgraph Documentation</span>
+    </>
+  ),
+  logoLink: '/', 
   project: {
     link: 'https://github.com/memgraph/memgraph',
   },
