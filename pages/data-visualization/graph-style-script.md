@@ -3,7 +3,7 @@
 This guide will show you how to easily get started with the Graph Style Script
 language. GSS is a language for customizing the visual display of graphs. For a
 complete list of available features consult the [Style script
-reference guide](/data-visualization/graph-style-script/graph-style-script).
+reference guide](/data-visualization/graph-style-script).
 
 ## Graph example
 
@@ -571,7 +571,7 @@ all styling possibilities.
 
 Graph Style Script has a large number of built-in functions that can help you
 with achieving the right style for your graph. Take a look at the [list of GSS
-built-in functions](/docs/memgraph-lab/style-script/gss-functions).
+built-in functions]/data-visualization/graph-style-script/built-in-elements).
 
 ### Built-in colors
 

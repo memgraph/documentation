@@ -186,8 +186,8 @@ CYPHERL files, or connecting to a data stream.
 
 ### How to import data from MySQL or PostgreSQL?
 
-You can migrate from [MySQL](/data-migration/sql) or
-[PostgreSQL](/data-migration/sql) using [CSV files](/data-migration/csv).
+You can migrate from [MySQL](/data-migration/migrate-from-rdbms) or
+[PostgreSQL](/data-migration/migrate-from-rdbms) using [CSV files](/data-migration/csv).
 
 ### What file formats does Memgraph support for import? 
 

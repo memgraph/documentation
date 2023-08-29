@@ -411,6 +411,7 @@ Sets the given error message.
 This section covers the interface for working with the Memgraph DB graph using the C++ API.
 A description of data types is available [in the reference guide](/fundamentals/data-types).
 
+
 ### Graph
 
 #### Constructors
