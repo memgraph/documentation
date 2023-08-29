@@ -4,7 +4,7 @@ import { DocsThemeConfig } from 'nextra-theme-docs'
 const config: DocsThemeConfig = {
   logo: (
     <>
-      <img src="/docs/memgraph-nav-logo.png" alt="Memgraph Logo" style={{ height: '24px', verticalAlign: 'middle', marginRight: '1em' }} />
+      <img src="/docs/memgraph-logo-navigation.svg" alt="Memgraph Logo" style={{ height: '24px', verticalAlign: 'middle', marginRight: '1em' }} />
       <span>Memgraph Documentation</span>
     </>
   ),
