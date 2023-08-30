@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
 
-function Docsearch({ className }) { 
+function Docsearch({ className = "" }) { 
   const input = useRef(null);
   const { locale } = useRouter();
 
