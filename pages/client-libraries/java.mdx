@@ -11,7 +11,7 @@ This will introduce you to the basics of Memgraph and the Java driver. This guid
 not be supported in older versions of the driver.
 
 <Callout type="info"> 
-Prerequisite for following this guides is to have [Java 17](https://www.oracle.com/java/technologies/downloads/) and [docker](https://docs.docker.com/get-docker/) in your local environment. 
+Prerequisite for following this guides is to have [Java 17](https://www.oracle.com/java/technologies/downloads/) and [Docker](https://docs.docker.com/get-docker/) in your local environment. 
 </Callout>
 
 <Steps>
@@ -21,139 +21,723 @@ Prerequisite for following this guides is to have [Java 17](https://www.oracle.c
 Start by running Memgraph in background. The easiest way to start Memgraph is to use Docker image, and start the container with the following command:
 
 ```bash
-docker run -it -p 7687:7687 -p 7444:7444 -p 3000:3000 memgraph/memgraph-platform
+docker run -it -p 7687:7687 -p 3000:3000 -p 7444:7444 -e MEMGRAPH="--bolt-server-name-for-init=Neo4j/ --log-level=TRACE" memgraph/memgraph-platform
 ```
 
 This will start Memgraph platform, that includes, Memgraph database, Memgraph Lab and Memgraph MAGE. Memgraph uses Bolt protocol to communicate with the Java client, 
 for that you need to expose the port 7687. Memgraph Lab is a web application that you can use to visualize your data, it is available on port 3000, and port 7444 is used for
 logs that are visible in the Memgraph Lab. If the Memgraph Platform is running properly, open a URL http://localhost:3000 in your browser and you should see the Memgraph Lab UI.
 
+Make sure that you have started memgraph with `--bolt-server-name-for-init=Neo4j/`. If you do not pass the init flag, you will not be able to connect to the database, and you will get following error: 
+`Exception in thread "main" org.neo4j.driver.exceptions.UntrustedServerException: Server provides no product identifier`
 
 ### Open a favorite Java IDE
 
-Start a new empty project in your favorite Java IDE, Eclipse, IntelliJ, VScode or any other. This step will depend on what type of aplication you are trying to build, but having a bare-bone project with a single file is enough for this guide.
+Start a new empty project in your favorite Java IDE, Eclipse, IntelliJ, VScode or any other. This step will depend on what type of aplication you are trying to build, but having a bare-bone project with a single `Main.java` file is enough for this guide.
 
 ### Add a dependecies for you project 
 
-In order to use the Java driver you will need to add dependecies. If you are using Maven, add the following dependecies to your pom.xml file:
+In order to use the Java driver you will need to add dependecies. If you are using Maven, add the following dependecies to your `pom.xml` file:
 
 ```xml
 <dependencies>
   <dependency>
     <groupId>org.neo4j.driver</groupId>
     <artifactId>neo4j-java-driver</artifactId>
-    <version>5.11</version>
+    <version>5.11.0</version>
   </dependency>
   </dependencies>
 ```
 
-If you are using Gradle, add the following dependecies to your build.gradle file:
+If you are using Gradle, add the following dependecies to your `build.gradle` file:
 
 ```groovy
 dependencies {
-    implementation 'org.neo4j.driver:neo4j-java-driver:5.11'
+    implementation 'org.neo4j.driver:neo4j-java-driver:5.11.0'
 }
 ```
 
 ### Write minimal working example 
 
-
-
-
-In the next step, initialize a new Go module via the following command:
-
-```bash
-go mod init hello-memgraph
-```
-
-You just used a go tool to create a new module file go.mod that takes care of your dependencies, if you are not familiar with it take a look at 
-the basic guide on [how to write a Go code](https://go.dev/doc/code). 
-
-## Basic Setup
-
-We'll be using Eclipse IDE 2022-12 on MacOS to connect a simple Java
-console application to a running Memgraph instance using **Maven**. If you're
-using a different IDE, the steps might be slightly different, but the code is
-probably the same or very similar.<br />
-
-Let's jump in and connect a simple program to Memgraph.
-
-**1.** Open **Eclipse** and create a new **Maven project**.<br /> **2.** Select
-the **Create a simple project** option.<br /> **3.** For the **Group Id** field
-put `com.memgraph.app` and for **Artifact Id** put `my-app` . Afterwards, click
-the **Finish** button.<br /> **4.** Open the `pom.xml` file and add the
-dependencies inside your project:
+Once you have a proper Neo4j dependency, you can start writing your first Java application. Start by addinf the the following code:
 
 ```java
-<dependencies>
-	<dependency>
-	  <groupId>org.neo4j.driver</groupId>
-	  <artifactId>neo4j-java-driver</artifactId>
-	  <version>5.4.0</version>
-	</dependency>
-  </dependencies>
-```
+package org.example;
+import org.neo4j.driver.*;
+import org.neo4j.driver.Record;
+import org.neo4j.driver.types.Node;
 
-**5.** Create the `HelloWorld.java` program and copy the following code:
+import java.util.Arrays;
+import java.util.List;
 
-```java
-import org.neo4j.driver.AuthTokens;
-import org.neo4j.driver.Driver;
-import org.neo4j.driver.GraphDatabase;
-import org.neo4j.driver.Query;
 
-import static org.neo4j.driver.Values.parameters;
-
-public class HelloWorld implements AutoCloseable
-{
+public class HelloMemgraph implements AutoCloseable {
+    // Driiver instance used across the application
     private final Driver driver;
 
-    public HelloWorld( String uri, String user, String password )
-    {
-        driver = GraphDatabase.driver( uri, AuthTokens.basic( user, password ) );
+    // Create a driver instance, and pass the uri, username and password if required
+    public HelloMemgraph(String uri, String user, String password){
+        driver = GraphDatabase.driver(uri, AuthTokens.basic(user, password));
     }
+    // Creating indexes 
+    public void createIndexes() {
+        List<String> indexes = Arrays.asList(
+                "CREATE INDEX ON :Developer(id);",
+                "CREATE INDEX ON :Technology(id);",
+                "CREATE INDEX ON :Developer(name);",
+                "CREATE INDEX ON :Technology(name);"
+        );
 
-    public void close() throws Exception
-    {
-        driver.close();
-    }
-
-    public void printGreeting( final String message )
-    {
-    	
-    	try (var session = driver.session()) {
-    		var hello = session.executeWrite( transaction -> {
-    		var query = new Query("CREATE (a:Greeting) SET a.message = $message RETURN 'Node ' + id(a) + ': ' + a.message", parameters("message", message));
-    		var result = transaction.run(query);
-    		return result.single().get(0).asString();
-    		});
-    		System.out.println(hello);
-    	}
-    }
-    
-    public static void main( String... args ) throws Exception
-    {
-        try ( HelloWorld greeter = new HelloWorld( "bolt://localhost:7687", "", "" ) )
-        {
-            greeter.printGreeting( "Hello, World!" );
+        try (Session session = driver.session()) {
+            for (String index : indexes) {
+                session.run(index);
+            }
         }
     }
-}
+    //Create nodes and relationships
+    public void createNodesAndRealationships() {
+        List<String> developerNodes = Arrays.asList(
+                "CREATE (n:Developer {id: 1, name:'Andy'});",
+                "CREATE (n:Developer {id: 2, name:'John'});",
+                "CREATE (n:Developer {id: 3, name:'Michael'});"
+        );
+
+        List<String> technologyNodes = Arrays.asList(
+                "CREATE (n:Technology {id: 1, name:'Memgraph', description: 'Fastest graph DB in the world!', createdAt: timestamp()})",
+                "CREATE (n:Technology {id: 2, name:'Java', description: 'Java programming language ', createdAt: timestamp()})",
+                "CREATE (n:Technology {id: 3, name:'Docker', description: 'Docker containerization engine', createdAt: timestamp()})",
+                "CREATE (n:Technology {id: 4, name:'Kubernetes', description: 'Kubernetes container orchestration engine', createdAt: timestamp()})",
+                "CREATE (n:Technology {id: 5, name:'Python', description: 'Python programming language', createdAt: timestamp()})"
+        );
+
+        List<String> relationships = Arrays.asList(
+                "MATCH (a:Developer {id: 1}),(b:Technology {id: 1}) CREATE (a)-[r:LOVES]->(b);",
+                "MATCH (a:Developer {id: 2}),(b:Technology {id: 3}) CREATE (a)-[r:LOVES]->(b);",
+                "MATCH (a:Developer {id: 3}),(b:Technology {id: 1}) CREATE (a)-[r:LOVES]->(b);",
+                "MATCH (a:Developer {id: 1}),(b:Technology {id: 5}) CREATE (a)-[r:LOVES]->(b);",
+                "MATCH (a:Developer {id: 2}),(b:Technology {id: 2}) CREATE (a)-[r:LOVES]->(b);",
+                "MATCH (a:Developer {id: 3}),(b:Technology {id: 4}) CREATE (a)-[r:LOVES]->(b);"
+        );
+
+        try (Session session = driver.session()) {
+            for (String node : developerNodes) {
+                session.run(node);
+            }
+
+            for (String node : technologyNodes) {
+                session.run(node);
+            }
+
+            for (String relationship : relationships) {
+                session.run(relationship);
+            }
+        }
+    } 
+    // Read nodes and return as Record list 
+    public List<Record> readNodes() {
+        String query = "MATCH (n:Technology{name: 'Memgraph'}) RETURN n;";
+        try (Session session = driver.session()) {
+            Result result = session.run(query);
+            return result.list();
+        }
+
+    }
+
+
+    public static void main(String[] args) {
+
+        try (var helloMemgraph = new HelloMemgraph("bolt://localhost:7687", "", "")){
+            // Create indexes
+            helloMemgraph.createIndexes();
+            // Create nodes and relationships
+            helloMemgraph.createNodesAndRealationships();
+            // Read nodes
+            var result = helloMemgraph.readNodes();
+            // Process results
+            for (Record node : result) {
+                Node n = node.get("n").asNode();
+                System.out.println(n); // Node type
+                System.out.println(n.asMap()); // Node properties
+                System.out.println(n.id()); // Node internal ID
+                System.out.println(n.labels()); // Node labels
+                System.out.println(n.get("id").asLong()); // Node user defined id property
+                System.out.println(n.get("name").asString()); // Node user defined name property
+                System.out.println(n.get("description").asString()); // Node user defined description property
+                //System.out.println(n.get("createdAt").asLocalDateTime()); // Node user defined createdAt property
+            }
+        }
+    }
+```
+This is code snippet is a minimal working example that will create a connection to the Memgraph database via Java driver, create indexes, create nodes and relationships, and read the data back. Take a look at the code in details, 
+all the comments are there to help you understand what is happening. More details about code snippet will be explained in the [Java client API usage and examples](#java-client-api-usage-and-examples) section.
+
+
+### Run the application
+
+Once code is in place, you should be able to run the application. If you are using an IDE, you can run the application from there. If everything is working properly, you should see the following output:
+
+```text
+node<76>
+{name=Memgraph, createdAt=1693389566657284, description=Fastest graph DB in the world!, id=1}
+76
+[Technology]
+1
+Memgraph
+Fastest graph DB in the world!
 ```
 
-Once you run the program, you should see an output similar to the following:
+### Visualize the data 
+If you want to visualize what you created in the database with the code snippet from above, head over to localhost:3000 and run `MATCH path=(n)-[p]-(m) RETURN path` at the Query Execution tab. 
+That query will visualize the created nodes and relationships and by clicking on it you can explore node and relationship properties.
 
-```
-Node 1: Hello, World!
-```
+![java-quick-start](/pages/client-libraries/java/java-quick-start.png)
+
+### Next steps 
+
+This makes a good starting point for your Java application. You can now start building your application on top of this example. For more information on how to use the Java driver, 
+continue reading the guide under [Java client API usage and examples](#Java-client-api-usage-and-examples), by the section that interest you the most. 
+
+
+</Steps>
+
 
 <Callout type="info">
 Memgraph created [Bolt Java Driver](https://github.com/memgraph/bolt-java-driver) which can be used to connect to a running Memgraph instance. We still recommend you use the above mentioned driver.
 </Callout>
 
-## Where to next?
 
-For real-world examples of how to use Memgraph, we suggest you take a look at
-the **[Tutorials](/)** page. You can also browse through
-the **[How-to guides](/)** section to get an overview
-of all the functionalities Memgraph offers.
+## Java client API usage and examples
+
+## Database connection 
+
+Once the database is running, and you have proper code that uses driver, you will be able to connect and query Memgraph. For Java, Memgraph currently depends on the (Neo4j Java driver)[https://github.com/neo4j/neo4j-java-driver]. Memgraph and Neo4j both support Bolt protocol and Cypher queries, 
+which means that you can use the same driver to connect to both databases. This is very convenient if you want to switch between the two databases. 
+
+#### Connect without authentication (default)
+
+By default, the Memgraph database is running without authentication, which means that you can connect to the database without providing any credentials. 
+To connect to Memgraph, create a driver object with the appropriate URI and AUTH arguments. If you're running Memgraph locally, URI looks something like `bolt://localhost:7687`, and if you are running Memgraph on a remote server, 
+replace `localhost` with the appropriate IP address. 
+If you ran Memgraph on port different than 7687, don't forget to update that in the URI too. 
+By default, you can set username and password in the AUTH argument as empty strings. But, if you [created a user](/configuration/security/#creating-user) in Memgraph, make sure to provide the correct connection details.
+
+To connect a Java driver to the Memgraph database, you can use the following snippet: 
+
+```java
+import org.neo4j.driver.AuthTokens;
+import org.neo4j.driver.Driver;
+import org.neo4j.driver.GraphDatabase;
+
+public class HelloMemgraph implements AutoCloseable {
+    private final Driver driver;
+
+    public HelloMemgraph(String uri, String user, String password) {
+        driver = GraphDatabase.driver(uri, AuthTokens.basic(user, password));
+    }
+
+    @Override
+    public void close() throws RuntimeException {
+        driver.close();
+    }
+
+    public static void main(String[] args) {
+        try (var helloMemgraph = new HelloMemgraph("bolt://localhost:7687", "", "")) {
+            // Use the driver
+        }
+    }
+}
+```
+Notice that `AuthTokens.basic` takes two arguments, the first is `username` and the second is `password`. 
+For both username and password, you can pass an empty string, this means that you are connecting without authentication.
+
+
+#### Connect with authentication
+
+If you have enabled authentication in Memgraph by setting a proper username and password, like this: 
+
+```Cypher
+CREATE USER `memgraph` IDENTIFIED BY 'memgraph';
+```
+
+Then, you can connect to the database with the following snippet:
+
+```java
+
+import org.neo4j.driver.AuthTokens;
+import org.neo4j.driver.Driver;
+import org.neo4j.driver.GraphDatabase;
+
+public class HelloMemgraph implements AutoCloseable {
+    private final Driver driver;
+
+    public HelloMemgraph(String uri, String user, String password) {
+        driver = GraphDatabase.driver(uri, AuthTokens.basic(user, password));
+    }
+
+    @Override
+    public void close() throws RuntimeException {
+        driver.close();
+    }
+
+    public static void main(String[] args) {
+      String uri = "bolt://localhost:7687";
+      String username = "memgraph";
+      String password = "memgraph";
+      try (var helloMemgraph = new HelloMemgraph(uri, username, password)) {
+          // Use the driver
+      }
+    }
+}
+```
+
+If you get and error like this: 
+```Exception in thread "main" org.neo4j.driver.exceptions.SecurityException: Authentication failure```
+
+Then you have probably enabled authentication in Memgraph, but you are trying to connect without authentication.
+
+#### Java client connection lifecycle management 
+
+It is sufficient to open a single client connection to Memgraph and use it for all your queries. Once client connection is open, we can use 
+Java AutoCloseable interface to manage the lifecycle of the client. The lifecycle of the client is tied to your application lifecycle.
+
+So the following code implementation of AutoCloseable, will make sure to close the client connection once the application is finished: 
+
+```java
+@Override
+public void close() throws RuntimeException {
+    driver.close();
+}
+```
+
+Driver is thread safe, and can be reused between different threads if needed.
+
+
+### Query the database 
+
+After connection your driver to the Memgraph you can start running some queries, the simplest way to run the query is via `ExecuteQuery` method that has an automatic transaction management. 
+
+#### Run a create query 
+
+Now here is the simple create query you can run: 
+
+```java
+public void createNode() {
+    try (Session session = driver.session(SessionConfig.forDatabase("memgraph"))) {
+        session.writeTransaction(tx -> {
+            tx.run("CREATE (n:Technology {name:'Memgraph'})");
+            return null;
+        });
+    }
+}
+```
+
+The session object takes a SessionConfig object as its argument. The SessionConfig object is used to specify the database name, and other session configuration options. Session API supports writeTransaction and readTransaction methods.
+TODO EXPLAIN BETTER: The writeTransaction method of a Neo4j Session object takes a TransactionWork functional interface as its argument. The TransactionWork interface has a single method execute, which takes a Transaction object as its argument and returns a value of type T. 
+
+#### Run a read query 
+```
+public void readNode() {
+    try (Session session = driver.session(SessionConfig.forDatabase("memgraph"))) {
+        List<Record> result = session.readTransaction(tx -> {
+            Result queryResult = tx.run("MATCH (n:Technology{name: 'Memgraph'}) RETURN n");
+            List<Record> records = queryResult.list();
+            return records;
+        });
+        System.out.println(result);
+
+        // Print each node as map
+        for (Record record : result) {
+            System.out.println(record.get("n").asMap());
+        }
+    }
+}
+```
+
+#### Run a query with parameters 
+
+If you want to pass a map of properties to the query, you can do it like this:
+
+```
+    public void createNodeWithProperties() {
+        try (Session session = driver.session(SessionConfig.forDatabase("memgraph"))) {
+            Map<String, Object> properties = new HashMap<>();
+            properties.put("name", "Memgraph");
+            properties.put("type", "graph database");
+
+            session.writeTransaction(tx -> {
+                tx.run("CREATE (n:Technology {name: $name, type: $type})", properties);
+                return null;
+            });
+        }
+    }
+```
+
+This way your queries won't contain hard-coded values. 
+
+### Process the returned results from 
+
+In order to read results and serve them back to you Java application you need to handle them. Java is statically typed language and proper types need to be handled. 
+Depending on the type of the request you made, you can get different results back. Lets go over a few examples how you can interpret the results. 
+
+#### Processing Node results 
+
+Run the following query:
+
+```java
+public List<Record> readNodes() {
+    String query = "MATCH (n:Technology {name: 'Memgraph'}) RETURN n;";
+    try (Session session = driver.session()) {
+        Result result = session.run(query);
+        return result.list();
+    }
+
+}
+```
+
+Records field contains all the records returned by the query. To process the results, you can iterate over the records and access the fields you need. 
+Here is the example: 
+
+```java
+for (Record record : result) {
+    System.out.println(record.get("n").asMap());
+}
+```
+```text
+{name=Memgraph, createdAt=1693389566657284, description=Fastest graph DB in the world!, id=1}
+```
+
+
+Lets break down the result. So for each returned record, it is getting converted to a map, now we can access the `n` field, which is a node returned from a query. The returned record and all its properties are of type `any`. This means that you have to cast them to the relevant Go type if you want to use methods/features defined on such types. 
+To access individual properties of the node you have following options: 
+
+```java
+Node n = node.get("n").asNode();
+System.out.println(n); // node<65>
+System.out.println(n.asMap()); // {name=Memgraph, createdAt=1693400712958077, description=Fastest graph DB in the world!, id=1}
+System.out.println(n.id()); // 65
+System.out.println(n.labels()); [Technology]
+System.out.println(n.get("id").asLong()); // 1
+System.out.println(n.get("name").asString()); // Memgraph
+System.out.println(n.get("description").asString()); // Fastest graph DB in the world!
+//System.out.println(n.get("createdAt").asLocalDateTime()); // Node user defined createdAt property
+```
+TODO fix the createdAt property, it is not working properly.
+
+### Processing Relationship results
+
+You can also get a relationship back from the query. Here is the example: 
+
+```java
+public void createRelationship() {
+    String query = "CREATE (d:Developer {name: 'John Doe'})-[:LOVES {id:99}]->(t:Technology {id: 1, name:'Memgraph', description: 'Fastest graph DB in the world!', createdAt: date()})";
+    try (Session session = driver.session(SessionConfig.forDatabase("memgraph"))) {
+        session.writeTransaction(tx -> {
+            tx.run(query);
+            return null;
+        });
+    }
+}
+
+public List<Record> readRelationship() {
+    String query = "MATCH (d:Developer)-[r:LOVES]->(t:Technology) RETURN r";
+    try (Session session = driver.session(SessionConfig.forDatabase("memgraph"))) {
+        List<Record> result = session.readTransaction(tx -> {
+            Result queryResult = tx.run(query);
+            List<Record> records = queryResult.list();
+            return records;
+        });
+        return result;
+    }
+}
+
+
+```java 
+    for (Record rel : records) {
+        Relationship relationship = rel.get("r").asRelationship();
+        System.out.println(relationship);
+        System.out.println(relationship.asMap());
+        System.out.println(relationship.id());
+        System.out.println(relationship.type());
+        System.out.println(relationship.startNodeId());
+        System.out.println(relationship.endNodeId());
+        System.out.println(relationship.get("id").asLong());
+    }
+```
+You can access the relationship properties in the same way as you access the node properties. startNodeId and endNodeId are the internal IDs of the start and end node of the relationship.
+
+
+### Processing Path results 
+
+
+You can also get a path back from the query. Here is the example: 
+
+```java
+public List<Record> readPath() {
+    String query = "MATCH path=(d:Developer)-[r:LOVES]->(t:Technology) RETURN path";
+    try (Session session = driver.session(SessionConfig.forDatabase("memgraph"))) {
+        List<Record> result = session.readTransaction(tx -> {
+            Result queryResult = tx.run(query);
+            List<Record> records = queryResult.list();
+            return records;
+        });
+        return result;
+    }
+}
+```
+
+```java
+  for (Record path : path_records) {
+      Path p = path.get("path").asPath();
+      System.out.println(p);
+      System.out.println(p.start());
+      System.out.println(p.end());
+      System.out.println(p.length());
+      System.out.println(p.nodes());
+      System.out.println(p.relationships());
+  }
+```
+
+
+Path will contain nodes and relationships, that can be accessed in the same way as in the previous examples.
+
+#### Types mapping Cypher and Go 
+
+ Here is the full table of the mapping between Memgraph Cypher types and the types used in the Go driver:
+
+|  Cypher Type | Driver Type        |
+|-------------:|:-------------------|
+|          Null| nil                |
+|       String | string             |
+|      Boolean | bool               |
+|      Integer | int64              |
+|        Float | float              |
+|         List | []any              |
+|          Map | map[string]any     |
+|         Node | neo4j.Node         |
+| Relationship | neo4j.Relationship |
+|         Path | neo4j.Path         |
+|     Duration | neo4j.Duration     |
+|         Date | neo4j.Date         |
+|    LocalTime | neo4j.LocalTime    |
+|LocalDateTime | neo4j.LocalDateTime|
+
+Keep in mind that Memgraph does not support timezones at the moment. 
+
+### Transaction management
+
+#### Automatic transaction management 
+
+By using simple `ExecuteQuery()` method, driver is taking care of the transaction for the Cypher query you are trying to execute. The `ExceuteQuery()` should be used in most case, you can also use multiple queries inside the `ExecuteQuery()`. In some cases, you will lack an possibility to have business logic between transactions. 
+It is also possible to manually manage transactions, which can bring flexibility into how the queries are executed. 
+
+<Callout type="warning">
+
+Error with multicommand transactions
+
+`Index manipulation not allowed in multicommand transactions` is a kind of error you might experience. To fix that, use [implicit (or auto-commit) transactions](#implicit-transactions) instead.
+That is the simplest way to run a Cypher query because implicit transactions won't be automatically retried as with `execute_query()` procedure or managed transactions.
+To create a label-property index on `:User(name)`, run the following code:
+
+</Callout>
+
+
+
+#### Manual transaction management
+
+##### Session management
+
+Before doing any manual transaction management, you need to do is to create a session. Session is a specific connection to the database, that is lightweight and should be closed after the 
+wanted queries has been executed. There is no need to keep the session open for the whole duration of the application. To open a session, use the code snippet below: 
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: "neo4j"})
+defer session.Close(ctx)
+```
+
+Sessions are not thread safe, so you should create a new session for each Go routine. 
+
+With sessions, you can run:
+
+- [Manged transactions](#managed-transactions) - to run multiple queries with automatic retries without the possibility to roll back a query within a transaction.
+- [Explicit transactions](#explicit-transactions) - to get full control over transactions by explicitly controlling the end of transaction that won't be automatically retried.
+- [Implicit transactions](#implicit-transactions) - the simplest way to run a Cypher query that won't be automatically retried.
+
+
+[Session](https://pkg.go.dev/github.com/neo4j/neo4j-go-driver/v5/neo4j#SessionWithContext) have multiple access points that can be used to access the database: 
+
+- `ExecuteRead` - executes a defined transaction workload in read access mode with retry logic. (managed transaction)
+- `ExecuteWrite` - executes a defined transaction workload in write access mode with retry logic. (managed transaction)
+- `BeginTransaction` - starts a new explicit transaction. (explicit transaction)
+- `Run` - executes a auto-commit statement and returns result. (implicit transaction)
+
+##### Managed Transactions
+
+
+Let's take a look into the basic example if you want to read data from the database.
+Now you can run manged transaction like this: 
+
+```go 
+	nodes, err := session.ExecuteRead(ctx,
+		func(tx neo4j.ManagedTransaction) (any, error) {
+			result, err := tx.Run(ctx, `  
+				MATCH (n:Technology) WHERE n.name = "Memgraph"
+				RETURN n;
+				`, map[string]any{
+				"filter": "Memgraph",
+			})
+			records, err := result.Collect(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return records, nil
+		})
+	if err != nil {
+		panic(err)
+	} else {
+		for _, tech := range nodes.([]*neo4j.Record) {
+			fmt.Println(tech.AsMap())
+		}
+	}
+```
+
+Now the `session.ExecuteRead` gets the function as an argument, which is executed in the transaction, and the result is returned. But you could then do some processing on the result, run a second query inside the same transaction and return the result you want. The basic example would be this: 
+
+```go 
+nodes, err := session.ExecuteRead(ctx,
+		func(tx neo4j.ManagedTransaction) (any, error) {
+			result, err := tx.Run(ctx, `  
+				MATCH (n:Technology) WHERE n.name = $filter
+				RETURN n;
+				`, map[string]any{
+				"filter": "Memgraph",
+			})
+			if err != nil {
+				return nil, err
+			}
+			records, _ := result.Collect(ctx)
+
+			second_results, err := tx.Run(ctx, `
+				MATCH (n:Technology) WHERE n.name = $filter
+				RETURN n;
+				`, map[string]any{
+				"filter": "Go",
+			})
+			if err != nil {
+				return nil, err
+			}
+			second_records, _ := second_results.Collect(ctx)
+
+			records = append(records, second_records...)
+
+			// Do some custom processing here
+
+
+			return records, nil
+		})
+	if err != nil {
+		panic(err)
+	} else {
+		for _, tech := range nodes.([]*neo4j.Record) {
+			fmt.Println(tech.AsMap())
+		}
+	}
+```
+
+
+##### Explicit Transactions
+
+Explicit transactions are the most flexible way to run a Cypher query. With explicit transactions, you have full control over the transaction, and you can explicitly control the end of the transaction.
+
+Here is the basic example: 
+
+```go
+tx, err := session.BeginTransaction(ctx)
+tx.Run(ctx, "CREATE (n:Technology {name:'Memgraph'});", nil)
+tx.Commit(ctx) // or tx.Rollback(ctx)
+```
+
+
+Here is the full working example based on the explicit transaction: 
+
+```go
+
+func getTechNodesByName(ctx context.Context, tx neo4j.ExplicitTransaction, name string) (any, error) {
+	result, err := tx.Run(ctx, `
+		MATCH (n:Technology) WHERE n.name = $filter
+		RETURN n;
+		`, map[string]any{
+		"filter": name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	records, _ := result.Collect(ctx)
+	return records, nil
+}
+
+func getDevNodesByName(ctx context.Context, tx neo4j.ExplicitTransaction, name string) (any, error) {
+	result, err := tx.Run(ctx, `
+		MATCH (n:Developer) WHERE n.name = $filter
+		RETURN n;
+		`, map[string]any{
+		"filter": name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	records, _ := result.Collect(ctx)
+	return records, nil
+}
+
+
+	// Rest of the main missing for brevity
+
+	tx, err := session.BeginTransaction(ctx)
+
+	memgraph, err := getTechNodesByName(ctx, tx, "Memgraph")
+	if err != nil {
+		panic(err)
+	}
+	for _, node := range memgraph.([]*neo4j.Record) {
+		fmt.Println(node.AsMap()["n"].(neo4j.Node))
+	}
+
+	goLang, err := getTechNodesByName(ctx, tx, "Go")
+	if err != nil {
+		panic(err)
+	}
+	for _, node := range goLang.([]*neo4j.Record) {
+		fmt.Println(node.AsMap()["n"].(neo4j.Node))
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		fmt.Println("Error committing transaction")
+		fmt.Println("Transaction rolled back because of error" + err.Error())
+	}
+	// Rest of the main missing for brevity
+
+```
+
+
+##### Implicit transaction 
+
+Implicit or auto-commit transactions are the simplest way to run a Cypher query since they won't be automatically retried as with execute_query() procedure or managed transactions.
+With implicit transactions, you don't have the same control of transaction as with explicit transactions. 
+
+```go
+	session := driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: "memgraph"})
+	defer session.Close(ctx)
+
+	session.Run(ctx, "CREATE INDEX ON :Developer(id);", nil)
+
+```
+
+Since both automatic and explicit transaction are multi-statement transactions, creating an index, constraints, auth config queries are not possible in multi-line transactions. Hence, you need to use implicit transactions for those queries.
+
+
+
+
+
+
+
