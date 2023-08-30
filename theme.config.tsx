@@ -1,5 +1,6 @@
-import React from 'react'
-import { DocsThemeConfig } from 'nextra-theme-docs'
+import React from 'react';
+import { DocsThemeConfig } from 'nextra-theme-docs';
+import Docsearch from './components/docsearch';
 
 const config: DocsThemeConfig = {
   logo: (
@@ -8,7 +9,7 @@ const config: DocsThemeConfig = {
       <span>Memgraph Documentation</span>
     </>
   ),
-  logoLink: '/', 
+  logoLink: '/',
   project: {
     link: 'https://github.com/memgraph/memgraph',
   },
@@ -26,18 +27,25 @@ const config: DocsThemeConfig = {
   ),
   sidebar: {
     defaultMenuCollapseLevel: 1,
-    autoCollapse: true, 
+    autoCollapse: true,
   },
   navigation: {
     prev: false,
-    next: false
+    next: false,
   },
   editLink: {
-    text: null
+    text: null,
   },
   feedback: {
-    content: null
-  }
-}
+    content: null,
+  },
+  search: {
+    component: <Docsearch />,
+    placeholder: 'Search...',
+    emptyResult: 'No results found.',
+    loading: 'Searching...',
+    error: 'An error occurred while searching.',
+  },
+};
 
-export default config
+export default config;
