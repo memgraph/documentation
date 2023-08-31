@@ -500,243 +500,159 @@ public List<Record> readPath() {
 
 Path will contain nodes and relationships, that can be accessed in the same way as in the previous examples.
 
-#### Types mapping Cypher and Go 
+#### Types mapping Cypher and Java 
 
- Here is the full table of the mapping between Memgraph Cypher types and the types used in the Go driver:
+ Here is the full table of the mapping between Memgraph Cypher types and the types used in the Java driver:
 
 |  Cypher Type | Driver Type        |
 |-------------:|:-------------------|
-|          Null| nil                |
-|       String | string             |
-|      Boolean | bool               |
-|      Integer | int64              |
-|        Float | float              |
-|         List | []any              |
-|          Map | map[string]any     |
-|         Node | neo4j.Node         |
-| Relationship | neo4j.Relationship |
-|         Path | neo4j.Path         |
-|     Duration | neo4j.Duration     |
-|         Date | neo4j.Date         |
-|    LocalTime | neo4j.LocalTime    |
-|LocalDateTime | neo4j.LocalDateTime|
+|          Null| null               |
+|       String | String             |
+|      Boolean | boolean            |
+|      Integer | long               |
+|        Float | double             |
+|         List | List<Object>       |
+|          Map | Map<String, Object>|
+|         Node | Node               |
+| Relationship | Relationship       |
+|         Path | Path               |
+|     Duration | IsoDuration        |
+|         Date | LocalDate          |
+|    LocalTime | LocalTime          |
+|LocalDateTime | LocalDateTime      |
 
-Keep in mind that Memgraph does not support timezones at the moment. 
+
+Keep in mind that Memgraph does not support Timezones, ByteArray and Point at the moment. 
 
 ### Transaction management
 
-#### Automatic transaction management 
+#### Simple transaction management  
 
-By using simple `ExecuteQuery()` method, driver is taking care of the transaction for the Cypher query you are trying to execute. The `ExceuteQuery()` should be used in most case, you can also use multiple queries inside the `ExecuteQuery()`. In some cases, you will lack an possibility to have business logic between transactions. 
-It is also possible to manually manage transactions, which can bring flexibility into how the queries are executed. 
+Simple transaction managment provide a standard blocking style API for Cypher execution. Simple transaction managment provides the easiest programming style to work with since API calls are executed in a strictly sequential fashion.
+
+##### Session management
+
+Before doing any transaction mangment, you need to do is to create a session. Session is a specific connection to the database, that is lightweight and should be closed after the 
+wanted queries has been executed. There is no need to keep the session open for the whole duration of the application. To open a session, use the code snippet below: 
+
+```java
+try (Session session = driver.session(...)) {
+    // transactions go here
+}
+```
+
+ This Java try-with-resources statement will automatically close the session once the code block is finished. Sessions are not thread safe, so you should create a new session for each thread.
+
+With sessions, you can use the following transaction management methods:
+
+ - `writeTransaction` - executes a managed transaction workload in write access mode with retry logic.
+ - `readTransaction` - executes a managed transaction workload in read access mode with retry logic.
+ - `run` - executes a implicit auto-commit transaction and returns result.
+
 
 <Callout type="warning">
 
 Error with multicommand transactions
 
-`Index manipulation not allowed in multicommand transactions` is a kind of error you might experience. To fix that, use [implicit (or auto-commit) transactions](#implicit-transactions) instead.
-That is the simplest way to run a Cypher query because implicit transactions won't be automatically retried as with `execute_query()` procedure or managed transactions.
-To create a label-property index on `:User(name)`, run the following code:
+`Index manipulation not allowed in multicommand transactions` is a kind of error you might experience. To fix that, use `run` method, for [implicit (or auto-commit) transactions](#implicit-transactions) instead.
 
 </Callout>
 
+##### Managed transactions
+
+Let's take a look into the basic example if you want to read data from the database.
+Now you can run simple transaction via `writeTransaction` like this: 
+
+```java
+public void createNode() {
+    try (Session session = driver.session(SessionConfig.forDatabase("memgraph"))) {
+        session.writeTransaction(tx -> {
+            tx.run("CREATE (n:Technology {name:'Memgraph'})");
+            tx.run("CREATE (n:Technology {name:'Java'})");
+            //Some other queries 
+            return null;
+        });
+    }
+}
+```
+As you can see previus examples from guide has used the simple transaction management, so take a look the examples of `readTransactions` above.
 
 
-#### Manual transaction management
+##### Implicit transactions 
+
+Implicit auto commit queries are the simplest way to run a Cypher query since they won't be automatically retried as with writeTransaction and readTransaction. 
+With implicit auto commit transactions, you don't have the same control of transaction as with explicit transactions. 
+
+Here is the example of implicit transaction:
+```java
+public void createNode() {
+    try (Session session = driver.session(SessionConfig.forDatabase("memgraph"))) {
+        session.run("CREATE (n:Technology {name:'Memgraph'})");
+    }
+}
+```
+
+As you can see in this case you can run a simple query without any transaction management. This simplifys the experience but you lose some flexibility when running the queries. 
+
+#### Asynchronous transaction managment
 
 ##### Session management
 
-Before doing any manual transaction management, you need to do is to create a session. Session is a specific connection to the database, that is lightweight and should be closed after the 
-wanted queries has been executed. There is no need to keep the session open for the whole duration of the application. To open a session, use the code snippet below: 
+TODO Check why this is not working properly 
 
-```go
-session := driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: "neo4j"})
-defer session.Close(ctx)
+Asynchronous sessions provide a API to work with futures. This allows client applications to work within asynchronous code bases. Asynchronous sessions are not thread safe, so you should create a new session for each thread.
+Session lifetime begins with session construction, session is typicaly closed automatically when all results are consumed. 
+
+The session is opened with the following code snippet: 
+
+```java
+ var session = driver.session(AsyncSession.class);
 ```
 
-Sessions are not thread safe, so you should create a new session for each Go routine. 
+Via async session API you can use following transaction management methods:
 
-With sessions, you can run:
-
-- [Manged transactions](#managed-transactions) - to run multiple queries with automatic retries without the possibility to roll back a query within a transaction.
-- [Explicit transactions](#explicit-transactions) - to get full control over transactions by explicitly controlling the end of transaction that won't be automatically retried.
-- [Implicit transactions](#implicit-transactions) - the simplest way to run a Cypher query that won't be automatically retried.
+ - `writeTransactionAsync` - executes a manged transaction workload in write access mode with retry logic.
+ - `readTransactionAsync` - executes a managed transaction workload in read access mode with retry logic.
+ - `runAsync` - executes a implicit auto-commit transaction and returns result.
 
 
-[Session](https://pkg.go.dev/github.com/neo4j/neo4j-go-driver/v5/neo4j#SessionWithContext) have multiple access points that can be used to access the database: 
-
-- `ExecuteRead` - executes a defined transaction workload in read access mode with retry logic. (managed transaction)
-- `ExecuteWrite` - executes a defined transaction workload in write access mode with retry logic. (managed transaction)
-- `BeginTransaction` - starts a new explicit transaction. (explicit transaction)
-- `Run` - executes a auto-commit statement and returns result. (implicit transaction)
-
-##### Managed Transactions
+##### Managed transactions 
 
 
-Let's take a look into the basic example if you want to read data from the database.
-Now you can run manged transaction like this: 
+Let's take a look into the basic example if you want to read data from the database via Async session API:
 
-```go 
-	nodes, err := session.ExecuteRead(ctx,
-		func(tx neo4j.ManagedTransaction) (any, error) {
-			result, err := tx.Run(ctx, `  
-				MATCH (n:Technology) WHERE n.name = "Memgraph"
-				RETURN n;
-				`, map[string]any{
-				"filter": "Memgraph",
-			})
-			records, err := result.Collect(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return records, nil
-		})
-	if err != nil {
-		panic(err)
-	} else {
-		for _, tech := range nodes.([]*neo4j.Record) {
-			fmt.Println(tech.AsMap())
-		}
-	}
-```
+```java
+public CompletionStage<ResultSummary> readNodesAsync() {
+    String query = "MATCH (n:Technology {name: 'Memgraph'}) RETURN n;";
+    var session = driver.session(AsyncSession.class);
 
-Now the `session.ExecuteRead` gets the function as an argument, which is executed in the transaction, and the result is returned. But you could then do some processing on the result, run a second query inside the same transaction and return the result you want. The basic example would be this: 
+    return session.executeReadAsync(tx -> tx.runAsync(query)
+            .thenCompose(cursor -> cursor.forEachAsync(record ->
+                    // asynchronously print every record
+                    System.out.println(record.get(0).asString()))));
 
-```go 
-nodes, err := session.ExecuteRead(ctx,
-		func(tx neo4j.ManagedTransaction) (any, error) {
-			result, err := tx.Run(ctx, `  
-				MATCH (n:Technology) WHERE n.name = $filter
-				RETURN n;
-				`, map[string]any{
-				"filter": "Memgraph",
-			})
-			if err != nil {
-				return nil, err
-			}
-			records, _ := result.Collect(ctx)
-
-			second_results, err := tx.Run(ctx, `
-				MATCH (n:Technology) WHERE n.name = $filter
-				RETURN n;
-				`, map[string]any{
-				"filter": "Go",
-			})
-			if err != nil {
-				return nil, err
-			}
-			second_records, _ := second_results.Collect(ctx)
-
-			records = append(records, second_records...)
-
-			// Do some custom processing here
-
-
-			return records, nil
-		})
-	if err != nil {
-		panic(err)
-	} else {
-		for _, tech := range nodes.([]*neo4j.Record) {
-			fmt.Println(tech.AsMap())
-		}
-	}
-```
-
-
-##### Explicit Transactions
-
-Explicit transactions are the most flexible way to run a Cypher query. With explicit transactions, you have full control over the transaction, and you can explicitly control the end of the transaction.
-
-Here is the basic example: 
-
-```go
-tx, err := session.BeginTransaction(ctx)
-tx.Run(ctx, "CREATE (n:Technology {name:'Memgraph'});", nil)
-tx.Commit(ctx) // or tx.Rollback(ctx)
-```
-
-
-Here is the full working example based on the explicit transaction: 
-
-```go
-
-func getTechNodesByName(ctx context.Context, tx neo4j.ExplicitTransaction, name string) (any, error) {
-	result, err := tx.Run(ctx, `
-		MATCH (n:Technology) WHERE n.name = $filter
-		RETURN n;
-		`, map[string]any{
-		"filter": name,
-	})
-	if err != nil {
-		return nil, err
-	}
-	records, _ := result.Collect(ctx)
-	return records, nil
 }
+```
 
-func getDevNodesByName(ctx context.Context, tx neo4j.ExplicitTransaction, name string) (any, error) {
-	result, err := tx.Run(ctx, `
-		MATCH (n:Developer) WHERE n.name = $filter
-		RETURN n;
-		`, map[string]any{
-		"filter": name,
-	})
-	if err != nil {
-		return nil, err
-	}
-	records, _ := result.Collect(ctx)
-	return records, nil
+TODO: Write example for writeTransactionAsync
+
+
+##### Implicit auto-commit asynchronous transactions
+
+Implicit auto commit queries are the simplest way to run a Cypher query since they won't be automatically retried as with writeTransactionAsync and readTransactionAsync.
+
+Here is the example of implicit transaction:
+
+```java
+public CompletionStage<ResultSummary> createNodeAsync() {
+    String query = "CREATE (n:Technology {name:'Memgraph'})";
+    var session = driver.session(AsyncSession.class);
+
+    return session.runAsync(query)
+            .thenCompose(ResultCursor::consumeAsync)
+            .whenComplete((resultSummary, error) -> session.closeAsync());
 }
-
-
-	// Rest of the main missing for brevity
-
-	tx, err := session.BeginTransaction(ctx)
-
-	memgraph, err := getTechNodesByName(ctx, tx, "Memgraph")
-	if err != nil {
-		panic(err)
-	}
-	for _, node := range memgraph.([]*neo4j.Record) {
-		fmt.Println(node.AsMap()["n"].(neo4j.Node))
-	}
-
-	goLang, err := getTechNodesByName(ctx, tx, "Go")
-	if err != nil {
-		panic(err)
-	}
-	for _, node := range goLang.([]*neo4j.Record) {
-		fmt.Println(node.AsMap()["n"].(neo4j.Node))
-	}
-
-	err = tx.Commit(ctx)
-	if err != nil {
-		fmt.Println("Error committing transaction")
-		fmt.Println("Transaction rolled back because of error" + err.Error())
-	}
-	// Rest of the main missing for brevity
-
 ```
-
-
-##### Implicit transaction 
-
-Implicit or auto-commit transactions are the simplest way to run a Cypher query since they won't be automatically retried as with execute_query() procedure or managed transactions.
-With implicit transactions, you don't have the same control of transaction as with explicit transactions. 
-
-```go
-	session := driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: "memgraph"})
-	defer session.Close(ctx)
-
-	session.Run(ctx, "CREATE INDEX ON :Developer(id);", nil)
-
-```
-
-Since both automatic and explicit transaction are multi-statement transactions, creating an index, constraints, auth config queries are not possible in multi-line transactions. Hence, you need to use implicit transactions for those queries.
-
-
-
 
 
 
