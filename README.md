@@ -1,14 +1,8 @@
 <h1 align="center"><a href="https://memgraph.com/docs/">Memgraph Documentation</a></h1>
 
 <p align="center">
-  <a href="https://github.com/memgraph/docs">
-    <img src="https://img.shields.io/github/actions/workflow/status/memgraph/docs/deploy.yml" alt="build" title="build"/>
-  </a>
-  <a href="https://memgraph.com/docs/" alt="Documentation">
+  <a href="https://memgraph.com/documentation/" alt="Documentation">
     <img src="https://img.shields.io/badge/documentation-Memgraph-orange" />
-  </a>
-  <a href="https://github.com/memgraph/docs/blob/master/CONTRIBUTING.md" alt="PRs Welcome">
-    <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" />
   </a>
 </p>
 
@@ -42,32 +36,32 @@ To run the documentation website locally, you will need to install:
   can be checked by running `node -v`). You can use
   [nvm](https://github.com/nvm-sh/nvm) for managing multiple Node versions on a
   single machine installed.
+- [pnpm](https://pnpm.io/installation) 
 
 ### Run the development server
 
 To preview your changes as you edit the files, you can run a local development
 server that will serve your website and reflect the latest changes.
 
-Install pnpm:
+First instal `node` and `pnpm`. After that clone this repository:
 
 ```
-npm install -g pnpm
+git clone https://github.com/memgraph/documentation.git
 ```
 
-Install the dependencies:
+Change the working directory to the one of the cloned repotitory and install the dependencies:
 
 ```bash
 pnpm i
 ```
 
-Start the server:
+Now you can start the server:
 
 ```bash
 pnpm dev
 ```
 
-By default, a browser window will open at
-[http://localhost:3000](http://localhost:3000).
+Open the URL [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## :construction: Build
 
@@ -97,7 +91,7 @@ We are grateful for any community contributions to the documentation, as they ar
 the best way of improving the overall user experience. If at any point you
 believe that something is misleading, could be worded better, or is missing
 additional information, then please feel free to make a pull request or report
-an [issue](https://github.com/memgraph/docs/issues).
+an [issue](https://github.com/memgraph/documentation/issues).
 
 ### Contributing guide
 
