@@ -19,4 +19,5 @@ EXPLAIN MATCH (n) RETURN n;
 +----------------+
 ```
 
-For more information, check the [reference guide on inspecting queries](/querying/performance-optimization). 
+For more information, check the [reference guide on inspecting
+queries](/querying/performance-optimization). 

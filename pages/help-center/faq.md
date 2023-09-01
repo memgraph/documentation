@@ -4,8 +4,8 @@
 
 ### What is Memgraph?
 
-Memgraph is an **open-source in-memory graph database** built for teams that expect
-highly performant, advanced analytical insights - as compatible with your
+Memgraph is an **open-source in-memory graph database** built for teams that
+expect highly performant, advanced analytical insights - as compatible with your
 current infrastructure as Neo4j (but up to 120x faster). Memgraph is powered by
 a query engine built in C/C++ to handle real-time use cases at an enterprise
 scale. Memgraph supports **strongly-consistent ACID transactions** and uses the
@@ -64,8 +64,8 @@ Although Memgraph is an in-memory database, the data is persistent and durable.
 This means data will not be lost upon reboot. 
 
 Memgraph uses two mechanisms to ensure the
-[durability](/configuration/data-durability-and-backup) of
-stored data and make disaster recovery possible:
+[durability](/configuration/data-durability-and-backup) of stored data and make
+disaster recovery possible:
 
 * write-ahead logging (WAL)
 * periodic snapshot creation
@@ -86,10 +86,10 @@ persistence](/getting-started/install-memgraph/docker).
 ### How does Memgraph ensure high availability?
 
 Memgraph ensures high availability by using
-[replication](/configuration/replication). Replication involves
-replicating data from one MAIN instance to one or several REPLICA instances. If
-a MAIN instance fails, another REPLICA instance can be upgraded and serve as the
-MAIN instance, thus ensuring continuous data availability. 
+[replication](/configuration/replication). Replication involves replicating data
+from one MAIN instance to one or several REPLICA instances. If a MAIN instance
+fails, another REPLICA instance can be upgraded and serve as the MAIN instance,
+thus ensuring continuous data availability. 
 
 ### How many cores does Memgraph utilizes?
 
@@ -127,10 +127,11 @@ required.
 
 There are three official Docker images for Memgraph:
 
-* `memgraph/memgraph` - the most basic MemgraphDB instance.
-* `memgraph/memgraph-mage` - the image contains a MemgraphDB instance together
-  with all the newest [MAGE](/advanced-algorithms) modules and graph algorithms.
-* `memgraph/memgraph-platform` - the image contains MemgraphDB, Memgraph Lab,
+* `memgraph/memgraph` - the most basic Memgraph database instance.
+* `memgraph/memgraph-mage` - the image contains a Memgraph database instance
+  together with all the newest [MAGE](/advanced-algorithms) modules and graph
+  algorithms.
+* `memgraph/memgraph-platform` - the image contains Memgraph database, Memgraph Lab,
   mgconsole and MAGE. Once started, mgconsole will be opened in the terminal,
   while Memgraph Lab is available at `http://localhost:3000`.
 
@@ -145,18 +146,16 @@ for tags.
 
 It is not necessary to define any data schema to import data. Data will be
 imported into the database regardless of the number of properties and their
-types. You can enforce property
-[uniqueness](/fundamentals/constraints)
-and
+types. You can enforce property [uniqueness](/fundamentals/constraints) and
 [existence](/fundamentals/constraints).
 
 ### Are there any educational materials available?
 
 You can try running queries on preloaded datasets in [Memgraph
 Playground](https://playground.memgraph.com/). If you need help with Cypher
-queries, check out [the Cypher manual](/querying). We also offer data modeling and Cypher
-[e-mail courses](https://memgraph.com/email-courses) or watch one of our
-webinars. You can even deep dive into code with Memgraph's CTO -> [Code with
+queries, check out [the Cypher manual](/querying). We also offer data modeling
+and Cypher [e-mail courses](https://memgraph.com/email-courses) or watch one of
+our webinars. You can even deep dive into code with Memgraph's CTO -> [Code with
 Buda](https://www.youtube.com/playlist?list=PL7Eotag2rRhaYDrSNcltkbtj0S3yC7h-u).
 For all the other questions and help, fell free to join our
 [community](https://memgraph.com/community).  
@@ -173,38 +172,36 @@ It depends on the scope of the project and the requirements. [Contact
 us](https://webforms.pipedrive.com/f/1sUK9YYKJnygcFEDI0SOpSGB2YBK2nP8xdjAiwnhEVXXohYvodHTPAzB1o4bZ8Tuz)
 for more information. 
 
-## MemgraphDB
+## Memgraph database
 
 ### What is the fastest way to import data into Memgraph?
 
 Currently, the fastest way to import data is from a CSV file with a [LOAD CSV
-clause](/data-migration/csv). LOAD CSV clause imports between
-100K and 350K nodes per second and between 60K and 80K edges per second. To
-achieve this import speed, indexes have to be [set up
-appropriately](/fundamentals/indexes).
+clause](/data-migration/csv). LOAD CSV clause imports between 100K and 350K
+nodes per second and between 60K and 80K edges per second. To achieve this
+import speed, indexes have to be [set up appropriately](/fundamentals/indexes).
 
-[Other import methods](/data-migration) include importing data from JSON
-and CYPHERL files, or
-connecting to a data stream.
+[Other import methods](/data-migration) include importing data from JSON and
+CYPHERL files, or connecting to a data stream.
 
 ### How to import data from MySQL or PostgreSQL?
 
-You can migrate from [MySQL](/data-migration/sql) or
-[PostgreSQL](/data-migration/sql) using [CSV files](/data-migration/csv).
+You can migrate from [MySQL](/data-migration/migrate-from-rdbms) or
+[PostgreSQL](/data-migration/migrate-from-rdbms) using [CSV files](/data-migration/csv).
 
 ### What file formats does Memgraph support for import? 
 
 You can import data from [CSV](/data-migration/csv),
-[JSON](/data-migration/json) or
-[CYPHERL](/data-migration/cypherl) files. 
+[JSON](/data-migration/json) or [CYPHERL](/data-migration/cypherl) files. 
 
 CSV files can be imported in on-premise instances using the [LOAD CSV
 clause](/data-migration/csv).
 
 Local JSON files and files on a remote address can be imported in on-premise
-instances using a [json_util](/advanced-algorithms/available-algorithms/json_util) module
-from the MAGE library. On a Cloud instance, data from JSON files can be imported
-only from a remote address. 
+instances using a
+[json_util](/advanced-algorithms/available-algorithms/json_util) module from the
+MAGE library. On a Cloud instance, data from JSON files can be imported only
+from a remote address. 
 
 CYPHERL file contains Cypher queries necessary for creating nodes and
 relationships. 
@@ -215,39 +212,41 @@ You can export data to JSON or CYPHERL files. Query results can be exported to a
 CSV file. 
 
 Data can be exported to a JSON file from on-premise instances using a
-[export_util](/advanced-algorithms/available-algorithms/export_util) module from the MAGE
-library. The same module can be used to export query results to a CSV file. 
+[export_util](/advanced-algorithms/available-algorithms/export_util) module from
+the MAGE library. The same module can be used to export query results to a CSV
+file. 
 
 CYPHERL file contains Cypher queries necessary for creating nodes and
 relationships and you can export files via Memgraph Lab.
 
 ### Can Memgraph database ingest streaming data?
 
-Yes, you can [connect your instance](/data-streams) to Kafka, Redpanda or
-Pulsar streams and ingest data. You will need to write a transformation module
-that will instruct Memgraph on how to transform the incoming messages and
-consume them correctly.
+Yes, you can [connect your instance](/data-streams) to Kafka, Redpanda or Pulsar
+streams and ingest data. You will need to write a transformation module that
+will instruct Memgraph on how to transform the incoming messages and consume
+them correctly.
 
 ### Is data automatically indexed during import?
 
 No, data is not automatically indexed during import. You need to [create a label
-or label-property indexes](/fundamentals/indexes) manually once the
-import is finished. 
+or label-property indexes](/fundamentals/indexes) manually once the import is
+finished. 
 
 ### What languages can be used to communicate with the database?
 
-At the moment, you can [connect to a Memgraph
-instance](/client-libraries) using the Bolt protocol and
-query the database using C#, C/C++, Go, Haskell, Java, JavaScript, Node.js, PHP,
-Python, Ruby, and Rust.
+At the moment, you can [connect to a Memgraph instance](/client-libraries) using
+the Bolt protocol and query the database using C#, C/C++, Go, Haskell, Java,
+JavaScript, Node.js, PHP, Python, Ruby, and Rust.
 
 ### Can I create logically separated graphs within the same database instance?
 
-You can create logically separated graphs within the same instance by [using different labels](/querying/read-and-modify-data). Each node can have multiple
-labels and [the cost of labels is 8B per label](/fundamentals/storage-memory-usage) (but
-the memory is allocated dynamically, so 3 labels take up as much memory as 4,
-and 5-7 labels take as much space as 8, etc.) You can use the same technique to
-save multilayer networks. 
+You can create logically separated graphs within the same instance by [using
+different labels](/querying/read-and-modify-data). Each node can have multiple
+labels and [the cost of labels is 8B per
+label](/fundamentals/storage-memory-usage) (but the memory is allocated
+dynamically, so 3 labels take up as much memory as 4, and 5-7 labels take as
+much space as 8, etc.) You can use the same technique to save multilayer
+networks. 
 
 ### Can I run MAGE modules and algorithms on just a part of the graph/subgraph?
 
@@ -273,29 +272,31 @@ instance.
 
 ### How can I check storage information?
 
-You can check storage information by running the [SHOW STORAGE INFO;](/configuration/server-stats) that will
-provide information about the number of stored nodes and relationships and
-memory usage. 
+You can check storage information by running the [SHOW STORAGE
+INFO;](/configuration/server-stats) that will provide information about the
+number of stored nodes and relationships and memory usage. 
 
 ### Where does Memgraph save or preview logs?
 
 By default, Memgraph saves the log at `/var/log/memgraph/memgraph.log`.
-Accessing logs depends on how you've started Memgraph, so check the [how-to guide about accessing logs](/configuration/configuration-settings).
+Accessing logs depends on how you've started Memgraph, so check the [how-to
+guide about accessing logs](/configuration/configuration-settings).
 
 You can check the logs using Memgraph Lab (the visual interface). Memgraph Lab
 listens to logs on the 7444 port. You can also use this web socket port 7444 and
 listen to the logs from your custom system.
 
-Log level and location can be modified using [configuration flags](/configuration/configuration-settings).
+Log level and location can be modified using [configuration
+flags](/configuration/configuration-settings).
 
 ### Do I need to know Cypher to query the database?
 
 You don't need to know Cypher to query the database. You can use
-[GQLAlchemy](https://github.com/memgraph/gqlalchemy), an Object Graph Mapper (OGM). OGM provides a
-developer-friendly workflow for writing object-oriented notation to communicate
-to a graph database. Instead of writing Cypher queries, you can write Python
-code, which the OGM will automatically translate into Cypher queries. It
-supports both Memgraph and Neo4j.
+[GQLAlchemy](https://github.com/memgraph/gqlalchemy), an Object Graph Mapper
+(OGM). OGM provides a developer-friendly workflow for writing object-oriented
+notation to communicate to a graph database. Instead of writing Cypher queries,
+you can write Python code, which the OGM will automatically translate into
+Cypher queries. It supports both Memgraph and Neo4j.
 
 ## Cypher
 
@@ -303,7 +304,8 @@ supports both Memgraph and Neo4j.
 
 Although we tried to implement openCypher query language as closely to the
 language reference as possible, we made some changes that can enhance the user
-experience. You can find the differences listed in the [Cypher manual](/querying/differences-in-cypher-implementations).
+experience. You can find the differences listed in the [Cypher
+manual](/querying/differences-in-cypher-implementations).
 
 ### Can I expand Cypher query language with custom procedures?
 
@@ -316,19 +318,37 @@ modules](/advanced-algorithms).
 
 ### What is MAGE?
 
-[**Memgraph Advanced Graph Extensions (MAGE)**](/advanced-algorithms) is an open-source repository that contains graph algorithms and utility modules. It encourages developers to share innovative and useful [query modules](/advanced-algorithms/available-algorithms) (custom Cypher procedures) the whole community can benefit from. It corresponds to APOC in Neo4j, except it's free and open source. 
+[**Memgraph Advanced Graph Extensions (MAGE)**](/advanced-algorithms) is an
+open-source repository that contains graph algorithms and utility modules. It
+encourages developers to share innovative and useful [query
+modules](/advanced-algorithms/available-algorithms) (custom Cypher procedures)
+the whole community can benefit from. It corresponds to APOC in Neo4j, except
+it's free and open source. 
 
-The MAGE library also includes dynamic algorithms specially designed for analyzing real-time data, NetworkX and igraph integrations, Elasticsearch synchronization module and NVIDIA GPU-powered algorithms. Check [the full list of modules](/advanced-algorithms/available-algorithms), and if there is a specific procedure you can't find in the MAGE library which you would like to use, please [let us know](/help-center).
+The MAGE library also includes dynamic algorithms specially designed for
+analyzing real-time data, NetworkX and igraph integrations, Elasticsearch
+synchronization module and NVIDIA GPU-powered algorithms. Check [the full list
+of modules](/advanced-algorithms/available-algorithms), and if there is a
+specific procedure you can't find in the MAGE library which you would like to
+use, please [let us know](/help-center).
 
 ### What are query modules?
 
-[Query modules](/advanced-algorithms/) are collections of custom Cypher procedures that extend the basic functionalities of the Cypher query language. Each query module consists of procedures connected by a common theme (for example, community detection). [MAGE graph library](/advanced-algorithms/) gathers a number of implemented graph algorithms and utility modules. Still, if you need a specific procedure unavailable in MAGE, you can [implement it using Python or C/C++ API](/custom-query-modules) and [contribute to the library](/custom-query-modules/contributing) or [contact us](/help-center). 
+[Query modules](/advanced-algorithms/) are collections of custom Cypher
+procedures that extend the basic functionalities of the Cypher query language.
+Each query module consists of procedures connected by a common theme (for
+example, community detection). [MAGE graph library](/advanced-algorithms/)
+gathers a number of implemented graph algorithms and utility modules. Still, if
+you need a specific procedure unavailable in MAGE, you can [implement it using
+Python or C/C++ API](/custom-query-modules) and [contribute to the
+library](/custom-query-modules/contributing) or [contact us](/help-center). 
 
 ## Memgraph Lab visual user interface
 
 ### What is Memgraph Lab?
 
-[Memgraph Lab](/data-visualization) is a lightweight and intuitive visual user interface that enables you to:
+[Memgraph Lab](/data-visualization) is a lightweight and intuitive visual user
+interface that enables you to:
 - write and execute Cypher queries and algorithms
 - visualize graph data using [the Orb library](https://github.com/memgraph/orb)
 - import and export data
@@ -343,7 +363,12 @@ No, Memgraph Lab can connect only to a running Memgraph instance.
 
 ### Can I customize the visual appearance of my graph results?
 
-Yes, you can customize the visual appearance of your graph results by using [the Graph Style Script language](/data-visualization/graph-style-script). You can add images to nodes, change their shape, size and color. Change the line appearance of relationships and their thickness. For a complete list of available features, consult [the GSS reference guide](/data-visualization/graph-style-script).
+Yes, you can customize the visual appearance of your graph results by using [the
+Graph Style Script language](/data-visualization/graph-style-script). You can
+add images to nodes, change their shape, size and color. Change the line
+appearance of relationships and their thickness. For a complete list of
+available features, consult [the GSS reference
+guide](/data-visualization/graph-style-script).
 
 ## Memgraph Cloud
 
@@ -355,12 +380,13 @@ Calculator](https://cloud.memgraph.com/pricing), or you can check them out at
 [Project rates](/getting-started/install-memgraph/memgraph-cloud).
 
 ### How can I redeem a coupon that I got for Memgraph Cloud?
-First, you need to [add a credit card](/getting-started/install-memgraph/memgraph-cloud) to your account. Then you can [redeem](/getting-started/install-memgraph/memgraph-cloud) the
-coupon.
+First, you need to [add a credit
+card](/getting-started/install-memgraph/memgraph-cloud) to your account. Then
+you can [redeem](/getting-started/install-memgraph/memgraph-cloud) the coupon.
 
 ### What will happen to my instance after the free trial?
-Instance will be stopped for next 7 days. If you wish to continue, [add a payment
-method](/getting-started/install-memgraph/memgraph-cloud).
+Instance will be stopped for next 7 days. If you wish to continue, [add a
+payment method](/getting-started/install-memgraph/memgraph-cloud).
 
 ### Why can't I create more than 3 projects and 5 snapshots? 
 That is the initial limit for new users. If you want to create more projects,
@@ -410,5 +436,3 @@ Yes, Memgraph cloud is running at AWS.
 
 ### Is GCP available?
 No, at the moment, Memgraph cloud is not available on the Google Cloud Platform.
-
-

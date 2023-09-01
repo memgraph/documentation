@@ -211,7 +211,8 @@ Output:
 
 ## 11. Returning aggregated results
 
-The `RETURN` statement can be used with [`Aggregation`](https://memgraph.com/docs/cypher-manual/functions#aggregation-functions) functions:
+The `RETURN` statement can be used with
+[`Aggregation`](/querying/functions#aggregation-functions) functions:
 
 ```cypher
 MATCH (c:Country)
