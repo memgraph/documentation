@@ -101,18 +101,20 @@ an [issue](https://github.com/memgraph/docs/issues).
 
 ### Contributing guide
 
-If you want to contribute to the documentation, please take a look at
-[CONTRIBUTING](./CONTRIBUTING.md) guide. It contains a detailed overview of the
-documentation structure and instructions on making changes to
-the content.
+If you want to change the documentation, create a new branch and make
+the appropriate changes. Then, create a pull request to merge these changes into the
+`main` branch.
 
-For more information about the writing style and the main ideas behind the
-documentation structure, take a look at the [WRITING STYLE](./WRITING_STYLE.md)
-guide.
+The pull request should describe the changes it's proposing and all checks must be completed. 
+
+Add an appropriate label to the PR, either `status: draft` if you are still working on the PR, or `status: ready` if the PR is ready for review. 
+
+When the PR is reviewed and approved, the label will be changed to `status: ship it` and merged into the main by the repo admins.
+
+If the PR requires changes, the label will be changed to `status: change`. Address the comments and change the documentation appropriately, then re-request a review and change the label to `status: ready` again. 
 
 
-
-// do we need this
+// do we need this?
 
 ## Quick Start
 
