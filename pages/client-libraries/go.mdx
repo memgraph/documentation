@@ -545,8 +545,7 @@ Keep in mind that Memgraph does not support timezones at the moment.
 
 #### Automatic transaction management 
 
-By using simple `ExecuteQuery()` method, driver is taking care of the transaction for the Cypher query you are trying to execute. The `ExceuteQuery()` should be used in most case, you can also use multiple queries inside the `ExecuteQuery()`. In some cases, you will lack an possibility to have business logic between transactions. 
-It is also possible to manually manage transactions, which can bring flexibility into how the queries are executed. 
+By using simple `ExecuteQuery()` method, driver is taking care of the transaction for the Cypher query you are trying to execute. The `ExceuteQuery()` should be used in most case where you do not need transaction control, you can also pass multiple queries inside the `ExecuteQuery()`. 
 
 <Callout type="warning">
 
@@ -558,13 +557,13 @@ To create a label-property index on `:User(name)`, run the following code:
 
 </Callout>
 
-
+The automatic transaction managment has been used in the [Quickstart](#quickstart) section, so you can take a look at the code samples there, to see how it works.
 
 #### Manual transaction management
 
 ##### Session management
 
-Before doing any manual transaction management, you need to do is to create a session. Session is a specific connection to the database, that is lightweight and should be closed after the 
+Before doing any manual transaction management, you need to do is to create a session. Session is a specific connection to the database, that can live for certian time span. Session connection is lightweight and should be closed after the 
 wanted queries has been executed. There is no need to keep the session open for the whole duration of the application. To open a session, use the code snippet below: 
 
 ```go
@@ -590,11 +589,10 @@ With sessions, you can run:
 
 ##### Managed Transactions
 
+In some cases when using automatic transactions via `ExecuteQuery`, you will lack an possibility to have business logic between transactions. For that reasone it is also possible to manually manage transactions, which can bring flexibility into how the queries are executed. 
+Let's take a look into the basic example if you want to read data from the database, here is the example of the managed transaction:
 
-Let's take a look into the basic example if you want to read data from the database.
-Now you can run manged transaction like this: 
-
-```go 
+```go {1-14}
 	nodes, err := session.ExecuteRead(ctx,
 		func(tx neo4j.ManagedTransaction) (any, error) {
 			result, err := tx.Run(ctx, `  
@@ -618,9 +616,12 @@ Now you can run manged transaction like this:
 	}
 ```
 
-Now the `session.ExecuteRead` gets the function as an argument, which is executed in the transaction, and the result is returned. But you could then do some processing on the result, run a second query inside the same transaction and return the result you want. The basic example would be this: 
+Now the `session.ExecuteRead` gets the function as an argument, which is executed in the transaction, and the result is returned. 
 
-```go 
+But you could then do some custom processing on the result, run a second query inside the same transaction and return the result you want. 
+The basic example would be this: 
+
+```go {12-30}
 nodes, err := session.ExecuteRead(ctx,
 		func(tx neo4j.ManagedTransaction) (any, error) {
 			result, err := tx.Run(ctx, `  
@@ -649,7 +650,6 @@ nodes, err := session.ExecuteRead(ctx,
 
 			// Do some custom processing here
 
-
 			return records, nil
 		})
 	if err != nil {
@@ -661,10 +661,12 @@ nodes, err := session.ExecuteRead(ctx,
 	}
 ```
 
+In the higlighted code you can see that we are running two queries inside the same transaction, and we are appending the results of the second query to the first one, you could chain this different queries as much as you want. This gives you felxibility to run different queries inside the same transaction, and do some custom processing on the results.
 
 ##### Explicit Transactions
 
-Explicit transactions are the most flexible way to run a Cypher query. With explicit transactions, you have full control over the transaction, and you can explicitly control the end of the transaction.
+Manged transaction cannot be `rolled back` or `commited` in some specific scenarios, for that Explicit transactions are used. Explicit transactions are the most flexible way to run a Cypher query. 
+With explicit transactions, you have full control over the transaction, and you can explicitly control the end of the transaction.
 
 Here is the basic example: 
 
@@ -677,7 +679,7 @@ tx.Commit(ctx) // or tx.Rollback(ctx)
 
 Here is the full working example based on the explicit transaction: 
 
-```go
+```go {52, 53}
 
 func getTechNodesByName(ctx context.Context, tx neo4j.ExplicitTransaction, name string) (any, error) {
 	result, err := tx.Run(ctx, `
@@ -707,7 +709,6 @@ func getDevNodesByName(ctx context.Context, tx neo4j.ExplicitTransaction, name s
 	return records, nil
 }
 
-
 	// Rest of the main missing for brevity
 
 	tx, err := session.BeginTransaction(ctx)
@@ -728,8 +729,12 @@ func getDevNodesByName(ctx context.Context, tx neo4j.ExplicitTransaction, name s
 		fmt.Println(node.AsMap()["n"].(neo4j.Node))
 	}
 
-	err = tx.Commit(ctx)
+	//custom processing 
+
+	err = tx.Commit(ctx) 
+	// or tx.Rollback(ctx)
 	if err != nil {
+
 		fmt.Println("Error committing transaction")
 		fmt.Println("Transaction rolled back because of error" + err.Error())
 	}
@@ -740,8 +745,9 @@ func getDevNodesByName(ctx context.Context, tx neo4j.ExplicitTransaction, name s
 
 ##### Implicit transaction 
 
-Implicit or auto-commit transactions are the simplest way to run a Cypher query since they won't be automatically retried as with execute_query() procedure or managed transactions.
-With implicit transactions, you don't have the same control of transaction as with explicit transactions. 
+Implicit or auto-commit transactions are the simplest way to run a Cypher query since they won't be automatically retried as with `executeQuery()` procedure or managed transactions.
+With implicit transactions, you don't have the same control of transaction as with managed transactions. This is the most primitive way of runing transactions, here is the example: 
+
 
 ```go
 	session := driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: "memgraph"})
@@ -750,13 +756,14 @@ With implicit transactions, you don't have the same control of transaction as wi
 	session.Run(ctx, "CREATE INDEX ON :Developer(id);", nil)
 
 ```
+The code above does not retry and does not have special checks, it just run the query and returns the result. if there is any. 
 
 Since both automatic and explicit transaction are multi-statement transactions, creating an index, constraints, auth config queries are not possible in multi-line transactions. Hence, you need to use implicit transactions for those queries.
 
 
-
 ### Concurency
-
+TBD
 
 ### Full code example
+TBD
 
