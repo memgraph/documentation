@@ -37,6 +37,11 @@ const config: DocsThemeConfig = {
   },
   feedback: {
     content: null
+  },
+  useNextSeoProps() {
+    return {
+      titleTemplate: '%s'
+    }
   }
 }
 
