@@ -106,16 +106,3 @@ Add an appropriate label to the PR, either `status: draft` if you are still work
 When the PR is reviewed and approved, the label will be changed to `status: ship it` and merged into the main by the repo admins.
 
 If the PR requires changes, the label will be changed to `status: change`. Address the comments and change the documentation appropriately, then re-request a review and change the label to `status: ready` again. 
-
-
-// do we need this?
-
-## Quick Start
-
-Click the button to clone this repository and deploy it on Vercel:
-
-[![](https://vercel.com/button)](https://vercel.com/new/clone?s=https%3A%2F%2Fgithub.com%2Fshuding%2Fnextra-docs-template&showOptionalTeamCreation=false)
-
-## License
-
-This project is licensed under the MIT License.
