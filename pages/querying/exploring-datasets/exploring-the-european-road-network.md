@@ -1,3 +1,8 @@
+---
+title: Exploring the European road network
+description: 
+---
+
 # Exploring the European road network
 
 This article is a part of a series intended to show users how to use Memgraph on

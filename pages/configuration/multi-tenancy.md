@@ -1,3 +1,8 @@
+---
+title: Multi-tenancy
+description: 
+---
+
 # Multi-tenancy
 
 Multi-tenant support in Memgraph enables users to manage multiple isolated

@@ -1,3 +1,8 @@
+---
+title: Graph stream processing with Kafka and Memgraph
+description: 
+---
+
 # Graph stream processing with Kafka and Memgraph
 
 In this tutorial, you will learn how to connect Memgraph to an existing Kafka

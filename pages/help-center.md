@@ -1,3 +1,8 @@
+---
+title: Help Center
+description: 
+---
+
 # Help Center
 
 Are you stuck? Don't worry, here at Memgraph we are all eager to help - we'll

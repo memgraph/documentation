@@ -1,3 +1,8 @@
+---
+title: EXPLAIN clause
+description: 
+---
+
 # EXPLAIN clause
 
 The EXPLAIN clause can be used to inspect a particular Cypher query in order to see its

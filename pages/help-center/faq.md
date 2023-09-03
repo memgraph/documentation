@@ -1,3 +1,8 @@
+---
+title: Frequently asked questions
+description: 
+---
+
 # Frequently asked questions
 
 ## Memgraph 101

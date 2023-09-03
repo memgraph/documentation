@@ -1,3 +1,8 @@
+---
+title: Audit log (Enterprise)
+description: 
+---
+
 # Audit log (Enterprise)
 
 Memgraph supports all query audit logging. When enabled, the audit log contains

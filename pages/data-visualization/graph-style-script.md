@@ -1,3 +1,8 @@
+---
+title: Graph Style Script language
+description: 
+---
+
 # Graph Style Script language
 
 This guide will show you how to easily get started with the Graph Style Script

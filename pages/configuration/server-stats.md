@@ -1,3 +1,8 @@
+---
+title: Server stats
+description: 
+---
+
 # Server stats
 
 Memgraph supports multiple queries to get information about the instance that is

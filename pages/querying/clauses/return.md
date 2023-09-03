@@ -1,3 +1,8 @@
+---
+title: RETURN clause
+description: 
+---
+
 # RETURN clause
 
 The `RETURN` clause defines which data should be included in the resulting set.

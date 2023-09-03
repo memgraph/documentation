@@ -1,3 +1,8 @@
+---
+title: Marvel Comic Universe social network
+description: 
+---
+
 # Marvel Comic Universe social network
 
 This article is a part of a series intended to show how to use Memgraph on

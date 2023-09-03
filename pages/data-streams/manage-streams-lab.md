@@ -1,3 +1,8 @@
+---
+title: Manage data streams from Memgraph Lab
+description: 
+---
+
 # Manage data streams from Memgraph Lab
 
 If you prefer to use GUI, you can connect to data streams by using a wizard in

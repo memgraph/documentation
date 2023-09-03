@@ -1,3 +1,8 @@
+---
+title: REMOVE clause
+description: 
+---
+
 # REMOVE clause
 
 The `REMOVE` clause is used to remove labels and properties from nodes and relationships.

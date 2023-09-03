@@ -1,3 +1,8 @@
+---
+title: Graphing the Premier League
+description: 
+---
+
 # Graphing the Premier League
 
 This article is a part of a series intended to show users how to use Memgraph on

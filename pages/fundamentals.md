@@ -1,3 +1,8 @@
+---
+title: Fundamentals
+description: 
+---
+
 #  Fundamentals
 
 Fundamentals are like the building blocks that lay the foundation for you to

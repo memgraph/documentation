@@ -1,3 +1,8 @@
+---
+title: Analyzing TED Talks
+description: 
+---
+
 # Analyzing TED Talks
 
 This article is a part of a series intended to show how to use Memgraph on

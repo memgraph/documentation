@@ -1,3 +1,8 @@
+---
+title: Backpacking through Europe
+description: 
+---
+
 # Backpacking through Europe
 
 This article is a part of a series intended to show users how to use Memgraph on

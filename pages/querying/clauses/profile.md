@@ -1,3 +1,8 @@
+---
+title: PROFILE clause
+description: 
+---
+
 # PROFILE clause
 
 The PROFILE clause can be used to profile the execution of a query and get a detailed

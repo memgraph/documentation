@@ -1,3 +1,8 @@
+---
+title: Node.js quick start
+description: 
+---
+
 # Node.js quick start
 
 At the end of this guide, you will have created a simple Node.js **`Hello, World!`** program that connects to the Memgraph database and executes simple

@@ -1,3 +1,8 @@
+---
+title: Manage data streams with queries
+description: 
+---
+
 # Manage data streams with queries
 
 The following page instructs how to manage streams using queries. Streams can

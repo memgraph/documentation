@@ -1,3 +1,8 @@
+---
+title: Implement a custom query module in Python
+description: 
+---
+
 # Implement a custom query module in Python
 
 This tutorial will give you a basic idea of how to develop a custom query module

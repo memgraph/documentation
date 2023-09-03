@@ -1,3 +1,8 @@
+---
+title: Available advanced algorithms
+description: 
+---
+
 # Available advanced algorithms
 
 If you require procedures designed to solve specific graph problems, there is a

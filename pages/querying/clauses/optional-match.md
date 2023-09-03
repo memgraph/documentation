@@ -1,3 +1,8 @@
+---
+title: OPTIONAL MATCH clause
+description: 
+---
+
 # OPTIONAL MATCH clause
 
 The `MATCH` clause can be modified by prepending the `OPTIONAL` keyword.

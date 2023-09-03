@@ -1,3 +1,8 @@
+---
+title: Game of Thrones deaths
+description: 
+---
+
 # Game of Thrones deaths
 
 This article is part of a series intended to show how to use Memgraph on

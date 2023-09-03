@@ -1,3 +1,8 @@
+---
+title: Auth module (Enterprise)
+description: 
+---
+
 # Auth module (Enterprise)
 
 Memgraph supports authentication and (optional) authorization using a custom

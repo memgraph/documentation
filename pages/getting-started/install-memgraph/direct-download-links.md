@@ -1,3 +1,8 @@
+---
+title: Memgraph direct download links
+description: 
+---
+
 # Memgraph direct download links
 
 You can download all of the Memgraph database packages from the [Memgraph

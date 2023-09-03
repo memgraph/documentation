@@ -1,3 +1,8 @@
+---
+title: WHERE clause
+description: 
+---
+
 # WHERE clause
 
 `WHERE` isn't usually considered a standalone clause but rather a part of the

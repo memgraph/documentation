@@ -1,3 +1,8 @@
+---
+title: UNION clause
+description: 
+---
+
 # UNION clause
 
 The `UNION` clause is used to combine the result of multiple queries.

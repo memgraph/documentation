@@ -1,3 +1,8 @@
+---
+title: Query modules C++ API
+description: 
+---
+
 # Query modules C++ API
 
 This is the API documentation for `mgp.hpp`, which contains declarations of all

@@ -1,3 +1,8 @@
+---
+title: Movie recommendation system
+description: 
+---
+
 # Movie recommendation system
 
 This article is a part of a series intended to show users how to use Memgraph on

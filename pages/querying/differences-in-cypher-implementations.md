@@ -1,3 +1,8 @@
+---
+title: Differences in Cypher implementations
+description: 
+---
+
 # Differences in Cypher implementations
 
 Although we try to implement the [openCypher](https://www.opencypher.org/) query
