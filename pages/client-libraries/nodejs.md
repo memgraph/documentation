@@ -1,6 +1,6 @@
 ---
 title: Node.js quick start
-description: 
+description: Learn to operate Memgraph with Node.js seamlessly. Our documentation instructs to ensure optimized performance of your graph project.
 ---
 
 # Node.js quick start

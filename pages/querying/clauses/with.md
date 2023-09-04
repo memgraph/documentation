@@ -1,6 +1,6 @@
 ---
 title: WITH clause
-description: 
+description: Enhance your queries with Memgraph's WITH clause. Learn how to create intermediate results and break down complex queries into smaller, easily manageable steps.
 ---
 
 # WITH clause

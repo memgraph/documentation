@@ -1,6 +1,6 @@
 ---
 title: Graph modeling
-description: 
+description: Learn to model graphs effectively with Memgraph. A documentation detailing the vital steps for proficient graph modeling. 
 ---
 
 # Graph modeling

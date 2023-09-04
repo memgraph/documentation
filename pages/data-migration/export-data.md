@@ -1,6 +1,6 @@
 ---
 title: Export data
-description: 
+description: Understand the specifics of data export from Memgraph. Detailed documentation to help you manage and manipulate data efficiently.
 ---
 
 #  Export data

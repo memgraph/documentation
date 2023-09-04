@@ -1,6 +1,6 @@
 ---
 title: Migrate from RDBMS to Memgraph
-description: 
+description: Easily transition from RDBMS to Memgraph. Our detailed documentation makes the migration process straightforward for competent graph computing.
 ---
 
 #  Migrate from RDBMS to Memgraph

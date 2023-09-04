@@ -1,6 +1,6 @@
 ---
 title: SET clause
-description: 
+description: Dive into the intricacies of the SET clause in Memgraph. Detailed documentation paving the way to proficient graph computing.
 ---
 
 # SET clause

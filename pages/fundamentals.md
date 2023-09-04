@@ -1,6 +1,6 @@
 ---
 title: Fundamentals
-description: 
+description: Learn the basics of Memgraph's graph database solution. Our detailed guide helps build a strong foundation for advanced functionalities. 
 ---
 
 #  Fundamentals

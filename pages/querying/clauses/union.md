@@ -1,6 +1,6 @@
 ---
 title: UNION clause
-description: 
+description: Combine query results with the UNION operator in Memgraph. Get started on merging data from multiple queries with tutorials and documentation.
 ---
 
 # UNION clause

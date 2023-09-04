@@ -1,6 +1,6 @@
 ---
 title: Differences in Cypher implementations
-description: 
+description: Compare and contrast different Cypher implementations in Memgraph. Comprehensive documentation to level up your graph computing expertise.
 ---
 
 # Differences in Cypher implementations

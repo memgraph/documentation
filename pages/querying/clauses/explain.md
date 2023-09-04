@@ -1,6 +1,6 @@
 ---
 title: EXPLAIN clause
-description: 
+description: Learn to effectively use the DELETE clause in Memgraph. Our comprehensive documentation ensures competent data management for graph computing.
 ---
 
 # EXPLAIN clause

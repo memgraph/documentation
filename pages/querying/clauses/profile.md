@@ -1,6 +1,6 @@
 ---
 title: PROFILE clause
-description: 
+description: Leverage the PROFILE clause in Memgraph. Detailed guide categorizes information for proficient graph computing.
 ---
 
 # PROFILE clause

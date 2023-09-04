@@ -1,6 +1,6 @@
 ---
 title: Football transfers
-description: 
+description: Optimize your football transfer analysis with Memgraph's graph computing capabilities. From data exploration to analysis, discover comprehensive tutorials and how-to documentation.
 ---
 
 # Football transfers

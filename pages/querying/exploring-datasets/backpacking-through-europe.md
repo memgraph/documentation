@@ -1,6 +1,6 @@
 ---
 title: Backpacking through Europe
-description: 
+description: Organize your European backpacking trip with Memgraph's graph analysis. Tutorials with detailed documentation visualize computing routes based on tailored queries.
 ---
 
 # Backpacking through Europe

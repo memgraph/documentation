@@ -1,6 +1,6 @@
 ---
 title: Movie recommendation system
-description: 
+description: Get started on movie recommendation with Memgraph's graph computing visualization capabilities. Leverage detailed tutorials and documentation with tailored graph computing queries.
 ---
 
 # Movie recommendation system

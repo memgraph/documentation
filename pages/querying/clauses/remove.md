@@ -1,6 +1,6 @@
 ---
 title: REMOVE clause
-description: 
+description: Navigate the REMOVE clause in Memgraph effectively. With our comprehensive docs, enhance your skills for successful graph project completion. 
 ---
 
 # REMOVE clause

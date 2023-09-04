@@ -1,6 +1,6 @@
 ---
 title: RETURN clause
-description: 
+description: Gain insights into the RETURN clause in Memgraph. A documentation, designed to simplify complexities for smooth graph computing and better develope experience. 
 ---
 
 # RETURN clause

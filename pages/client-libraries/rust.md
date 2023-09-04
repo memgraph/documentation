@@ -1,6 +1,6 @@
 ---
 title: Rust quick start
-description: 
+description: Discover the utilization of Rust with Memgraph. Our documentation explores Rust integration for streamlined graph computing. 
 ---
 
 # Rust quick start

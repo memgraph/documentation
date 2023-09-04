@@ -1,6 +1,6 @@
 ---
 title: Graphing the Premier League
-description: 
+description: Graph computing for the Premier League with Memgraph. Tutorialize the visualization of data with in-depth documentation and tutorials detailing the graph analysis of relevant queries.
 ---
 
 # Graphing the Premier League

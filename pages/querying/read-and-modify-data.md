@@ -1,6 +1,6 @@
 ---
 title: Read and modify data
-description: 
+description: Understand the effective ways of reading and modifying data in Memgraph. The perfect resource for efficient graph computing.
 ---
 
 # Read and modify data

@@ -1,6 +1,6 @@
 ---
 title: OPTIONAL MATCH clause
-description: 
+description: Understand the use of OPTIONAL MATCH in Memgraph. Detailed docs breaking down complex concepts into understandable fragments.
 ---
 
 # OPTIONAL MATCH clause
