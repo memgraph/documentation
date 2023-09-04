@@ -1,6 +1,6 @@
 ---
 title: Server stats
-description: 
+description: Monitor the performance and health of your Memgraph server with confidence. Head over to Memgraph's documentation page to gain more insights into server stats.
 ---
 
 # Server stats

@@ -1,6 +1,6 @@
 ---
 title: Exposing system metrics (Enterprise)
-description: 
+description: Unlock the full potential of your Memgraph graph computing solution by exposing system metrics. Dive into the documentation page for Memgraph and learn how to optimize performance, scalability, and system management with enhanced visibility.
 ---
 
 # Exposing system metrics (Enterprise)

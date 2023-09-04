@@ -1,6 +1,6 @@
 ---
 title: Manage data streams from Memgraph Lab
-description: 
+description: Simplify stream management with an intuitive user interface in Memgraph. Give Lab based stream management a shot for enhanced productivity. More in our docs. 
 ---
 
 # Manage data streams from Memgraph Lab

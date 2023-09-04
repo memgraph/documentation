@@ -1,6 +1,6 @@
 ---
 title: Help Center
-description: 
+description: Visit our Help Center to find answers to common questions and troubleshoot issues effectively. Access a wealth of resources to enhance your journey at Memgraph. 
 ---
 
 # Help Center

@@ -1,6 +1,6 @@
 ---
 title: Graph stream processing with Kafka and Memgraph
-description: 
+description: Leverage Kafka for efficient graph stream processing in Memgraph's graph computing solution. Learn how to integrate Kafka to process real-time graph data effectively.
 ---
 
 # Graph stream processing with Kafka and Memgraph

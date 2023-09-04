@@ -1,6 +1,6 @@
 ---
 title: Directive properties
-description: 
+description: Discover the properties of directives in Memgraph through our comprehensive documentation. More specifically, you will learn how to utilize directive properties for fine-tuning your graph computing tasks and achieving accurate results.
 ---
 
 # Directive properties

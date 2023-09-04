@@ -1,6 +1,6 @@
 ---
 title: Audit log (Enterprise)
-description: 
+description: Enhance the security and integrity of your graph data with Memgraph's audit log feature. Our documentation page provides guidance on how to enable and use the audit log for comprehensive tracking and monitoring.
 ---
 
 # Audit log (Enterprise)

@@ -1,6 +1,6 @@
 ---
 title: Manage data streams with queries
-description: 
+description: Learn how you can manage streams efficiently with queries in Memgraph as well as leverage queries for actionable insights by visiting our documentation page.
 ---
 
 # Manage data streams with queries
