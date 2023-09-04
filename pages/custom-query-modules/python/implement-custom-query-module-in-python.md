@@ -1,6 +1,6 @@
 ---
 title: Implement a custom query module in Python
-description: 
+description: Unlock advanced graph computing capabilities with Memgraph's custom query module integration in Python. Learn how to use it on dataset in our documentation page. 
 ---
 
 # Implement a custom query module in Python
