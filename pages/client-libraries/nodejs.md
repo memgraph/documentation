@@ -1,3 +1,8 @@
+---
+title: Node.js quick start
+description: Learn to operate Memgraph with Node.js seamlessly. Our documentation instructs to ensure optimized performance of your graph project.
+---
+
 # Node.js quick start
 
 At the end of this guide, you will have created a simple Node.js **`Hello, World!`** program that connects to the Memgraph database and executes simple
@@ -12,7 +17,7 @@ To follow this guide, you will need:
 - A basic understanding of graph databases and the property graph model.
 - The newest version of **Node.js** installed. Instructions on how to setup
   Node. JS can be found on the [official
-  website](https://nodejs.org/en/download/).
+  website](https://nodejs.org/en/download).
 
 ## Basic Setup
 
@@ -91,10 +96,3 @@ You should see an output similar to the following:
 ```
 Node 1: Hello, World!
 ```
-
-## Where to next?
-
-For real-world examples of how to use Memgraph, we suggest you take a look at
-the **[Tutorials](/)** page. You can also browse through
-the **[How-to guides](/)**
-section to get an overview of all the functionalities Memgraph offers.

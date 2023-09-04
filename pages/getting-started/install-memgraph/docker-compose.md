@@ -1,21 +1,27 @@
+---
+title: Docker Compose
+description: Experience Memgraph's integration with Docker Compose. Our dedicated documentation walks you through maximizing your graph computing capabilities.
+---
+
 # Docker Compose
 
 If you define an application with **Docker Compose**, you can use that
 definition to run the application in CI, staging, or production environments.
-Here you can find `docker-compose.yml` files necessary to run [**Memgraph
-Platform**](#docker-compose-for-memgraph-platform-image), [**Memgraph
-MAGE**](#docker-compose-for-memgraph-mage-image) and
-[**Memgraph**](#docker-compose-for-memgraph-image) images.
+Here you can find `docker-compose.yml` files necessary to run
+[`memgraph-platform`](#docker-compose-for-memgraph-platform-image),
+[`memgraph-mage`](#docker-compose-for-memgraph-mage-image) and
+[`memgraph`](#docker-compose-for-memgraph-image) images.
 
 ## Docker Compose for Memgraph Platform image
 
-The **Memgraph Platform** image contains:
+The `memgraph-platform` Docker image contains:
 
-- **MemgraphDB** - the database that holds your data
-- **Memgraph Lab** - visual user interface for running queries and visualizing
-  graph data
-- **mgconsole** - command-line interface for running queries
-- **MAGE** - graph algorithms and modules library
+- **Memgraph database** - the database that holds your data
+- **[Memgraph Lab](/data-visualization)** - visual user interface for running
+  queries and visualizing graph data
+- **[mgconsole](/getting-started/cli)** - command-line interface for running
+  queries
+- **[MAGE](/advanced-algorithms)** - graph algorithms and modules library
 
 ```yaml
 version: "3"
@@ -40,9 +46,9 @@ volumes:
 ```
 
 The port `7687` is used for communication with Memgraph via Bolt protocol. The
-port `3000` is exposed because Memgraph Lab will be running on `localhost:3000`,
-while the port `7444` is there so that you can see logs from Memgraph inside
-Memgraph Lab. We specified three useful volumes:
+port `3000` is exposed because Memgraph Lab will be running as a web application
+on  `localhost:3000`, while the port `7444` is there so that you can see logs
+from Memgraph inside Memgraph Lab. We specified three useful volumes:
 
 - `mg_lib` - directory containing data that enables data persistency
 - `mg_log` - directory containing log files
@@ -62,7 +68,7 @@ included in this image, so you can use the available graph algorithms.
 
 The **Memgraph MAGE** image contains:
 
-- **MemgraphDB** - the database that holds your data
+- **Memgraph** - the database that holds your data
 - **MAGE** - graph algorithms and modules library
 
 ```yaml
@@ -102,7 +108,7 @@ in this image, you can use the available graph algorithms.
 
 ## Docker Compose for Memgraph image
 
-The **Memgraph** image contains **MemgraphDB** - the database that holds your
+The **Memgraph** image contains the database that holds your
 data.
 
 ```yaml

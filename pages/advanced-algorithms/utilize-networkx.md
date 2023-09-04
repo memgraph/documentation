@@ -1,3 +1,8 @@
+---
+title: Utilize the NetworkX library with Memgraph
+description: Utilize NetworkX with Memgraph for powerful and efficient graph analysis and computing. Explore instructions and documentation to learn how to utilize NetworkX in your daily graph data tasks.
+---
+
 # Utilize the NetworkX library with Memgraph
 
 NetworkX is a Python package for the creation, manipulation, and study of the
@@ -34,7 +39,7 @@ both the MAGE library and Memgraph Lab. To run the image, open a command-line
 interpreter and run the following Docker command:
 
 ```
-docker run -it -p 7687:7687 -p 7444:7444 -p 3000:3000 memgraph/memgraph-platform:latest
+docker run -p 7687:7687 -p 7444:7444 -p 3000:3000 memgraph/memgraph-platform:latest
 ```
 
 Connect to Memgraph via [Memgraph Lab](/data-visualization) which is running at `localhost:3000`. 
@@ -97,7 +102,7 @@ both the MAGE library and Memgraph Lab. To run the image, open a command-line
 interpreter and run the following Docker command:
 
 ```
-docker run -it -p 7687:7687 -p 7444:7444 -p 3000:3000 memgraph/memgraph-platform:latest
+docker run -p 7687:7687 -p 7444:7444 -p 3000:3000 memgraph/memgraph-platform:latest
 ```
 
 Connect to Memgraph via [Memgraph Lab](/data-visualization) which is running at

@@ -1,3 +1,8 @@
+---
+title: OPTIONAL MATCH clause
+description: Understand the use of OPTIONAL MATCH in Memgraph. Detailed docs breaking down complex concepts into understandable fragments.
+---
+
 # OPTIONAL MATCH clause
 
 The `MATCH` clause can be modified by prepending the `OPTIONAL` keyword.

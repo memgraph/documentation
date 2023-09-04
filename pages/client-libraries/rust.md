@@ -1,3 +1,8 @@
+---
+title: Rust quick start
+description: Discover the utilization of Rust with Memgraph. Our documentation explores Rust integration for streamlined graph computing. 
+---
+
 # Rust quick start
 
 At the end of this guide, you will have created a Rust program that connects to the Memgraph database and executes simple
@@ -93,11 +98,4 @@ You should see an output similar to the following:
 Columns: n, r, m
 (:Person {'name': 'Alice'})-[:Likes {}]-(:Software {'name': 'Memgraph'})
 (:Person {'name': 'John'})-[:Likes {}]-(:Software {'name': 'Memgraph'})
-```
-
-## Where to next?
-
-For real-world examples of how to use Memgraph, we suggest you take a look at
-the **[Tutorials](/)** page. You can also browse through
-the **[How-to guides](/)**
-section to get an overview of all the functionalities Memgraph offers.
+``````
