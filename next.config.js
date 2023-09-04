@@ -2477,7 +2477,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/gqlalchemy/',
+        source: '/gqlalchemy',
         destination: 'https://memgraph.github.io/gqlalchemy/',
         permanent: true
       },
