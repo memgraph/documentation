@@ -1,3 +1,8 @@
+---
+title: Rust quick start
+description: Discover the utilization of Rust with Memgraph. Our documentation explores Rust integration for streamlined graph computing. 
+---
+
 # Rust quick start
 
 At the end of this guide, you will have created a Rust program that connects to the Memgraph database and executes simple

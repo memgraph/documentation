@@ -1,3 +1,8 @@
+---
+title: Frequently asked questions
+description: Explore the documentation page for Memgraph and access the FAQ section to find solutions to common queries and concerns. Discover essential information and insights now. 
+---
+
 # Frequently asked questions
 
 ## Memgraph 101

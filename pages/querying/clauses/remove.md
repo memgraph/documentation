@@ -1,3 +1,8 @@
+---
+title: REMOVE clause
+description: Navigate the REMOVE clause in Memgraph effectively. With our comprehensive docs, enhance your skills for successful graph project completion. 
+---
+
 # REMOVE clause
 
 The `REMOVE` clause is used to remove labels and properties from nodes and relationships.

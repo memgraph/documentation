@@ -1,3 +1,8 @@
+---
+title: WHERE clause
+description: In Memgraph, easily transform lists into individual rows with the UNWIND operator. Get started with our extensive documentation and other resources available.
+---
+
 # WHERE clause
 
 `WHERE` isn't usually considered a standalone clause but rather a part of the

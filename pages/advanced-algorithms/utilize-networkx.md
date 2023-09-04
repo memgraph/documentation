@@ -1,3 +1,8 @@
+---
+title: Utilize the NetworkX library with Memgraph
+description: Utilize NetworkX with Memgraph for powerful and efficient graph analysis and computing. Explore instructions and documentation to learn how to utilize NetworkX in your daily graph data tasks.
+---
+
 # Utilize the NetworkX library with Memgraph
 
 NetworkX is a Python package for the creation, manipulation, and study of the
