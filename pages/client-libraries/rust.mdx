@@ -351,22 +351,22 @@ After connecting your driver to Memgraph. you can start running queries.
 The folowing example will create a node in the database: 
 
 ```rust
-    let _create_node = "CREATE (n:Technology {name: 'Memgraph'}) RETURN n";
-    let _columns = connection.execute(_create_node, None);
-    while let Ok(result) =  connection.fetchall() {
-        for record in result {
-            for value in record.values {
-                match value {
-                    Value::Node(node) => println!("Node: {}", node),
-                    value => println!("Value: {}", value),
-                }
+let _create_node = "CREATE (n:Technology {name: 'Memgraph'}) RETURN n";
+let _columns = connection.execute(_create_node, None);
+while let Ok(result) =  connection.fetchall() {
+    for record in result {
+        for value in record.values {
+            match value {
+                Value::Node(node) => println!("Node: {}", node),
+                value => println!("Value: {}", value),
             }
         }
     }
-    
-    if let Err(e) = connection.commit() {
-        println!("Error: {}", e);
-    }
+}
+
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
 ```
 
 Method executed takes the following arguments:
@@ -391,21 +391,21 @@ if let Err(e) = connection.commit() {
 The following query will read data from the database: 
 
 ```rust
-    let _read_node = "MATCH (n:Technology {name: 'Memgraph'}) RETURN n";
-    let _columns = connection.execute(_read_node, None);
-    while let Ok(result) =  connection.fetchall() {
-        for record in result {
-            for value in record.values {
-                match value {
-                    Value::Node(node) => println!("Node: {}", node),
-                    value => println!("Value: {}", value),
-                }
+let _read_node = "MATCH (n:Technology {name: 'Memgraph'}) RETURN n";
+let _columns = connection.execute(_read_node, None);
+while let Ok(result) =  connection.fetchall() {
+    for record in result {
+        for value in record.values {
+            match value {
+                Value::Node(node) => println!("Node: {}", node),
+                value => println!("Value: {}", value),
             }
         }
     }
-    if let Err(e) = connection.commit() {
-        println!("Error: {}", e);
-    }
+}
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
 ```
 
 In this example, the match statement is used to distinguish between different types of values that can be returned from the database. In this case the query will return a node, so the rest of logic could be based on that information. 
@@ -416,28 +416,218 @@ In this example, the match statement is used to distinguish between different ty
 If you want to pass a property map to the query, you can do it like this:
 
 ```rust
-    let _create_node = "CREATE (n:Technology {name: $name, description: $description}) RETURN n";
-    let mut params = HashMap::new();
-    params.insert("name".to_string(), QueryParam::String("Memgraph".to_string()));
-    params.insert("description".to_string(), QueryParam::String("Fastest graph DB in the world!".to_string()));
-    let _columns = connection.execute(_create_node, Some(&params));
-    while let Ok(result) =  connection.fetchall() {
-        for record in result {
-            for value in record.values {
-                match value {
-                    Value::Node(node) => println!("Node: {}", node),
-                    value => println!("Value: {}", value),
-                }
+let _create_node = "CREATE (n:Technology {name: $name, description: $description}) RETURN n";
+let mut params = HashMap::new();
+params.insert("name".to_string(), QueryParam::String("Memgraph".to_string()));
+params.insert("description".to_string(), QueryParam::String("Fastest graph DB in the world!".to_string()));
+let _columns = connection.execute(_create_node, Some(&params));
+while let Ok(result) =  connection.fetchall() {
+    for record in result {
+        for value in record.values {
+            match value {
+                Value::Node(node) => println!("Node: {}", node),
+                value => println!("Value: {}", value),
             }
         }
     }
-    if let Err(e) = connection.commit() {
-        println!("Error: {}", e);
-    }
+}
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
 ```
 
 Using this approach, the queries will not contain hard-coded values, they can be more dynamic.
 
 
 ### Process the results
+
+In order to read results and serve them back to you Rust application you need to handle them. Rust is statically typed language and proper types need to be handled. 
+Depending on the type of the request you made, you can get different results back. Lets go over a few basic examples on how to handle different types and access properties of the returned results.
+
+#### Process the node results
+
+In order to process the result you need to read them first, you can do that by running the following query:
+
+```rust
+let _read_node = "MATCH (n:Technology {name: 'Memgraph'}) RETURN n";
+let _columns = connection.execute(_read_node, None);
+while let Ok(result) =  connection.fetchall() {
+    for record in result {
+        for value in record.values {
+            match value {
+                Value::Node(node) => println!("Node: {}", node),
+                value => println!("Value: {}", value),
+            }
+        }
+    }
+}
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+```
+
+Since value can be Node, Relationship, Path, or any other type, we need to match the value to the appropriate type that we expect. In this case, the value is a node, so we can access the properties of the node, if node comes along. 
+
+```text
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Fastest graph DB in the world!', 'id': 1, 'name': 'Memgraph'})
+```
+
+Due to the Rust match design, it is necessary to handle all possible types that can be returned from the database, hence we need to match for all possible types.
+via the `value => println!("Value: {}", value),` statement.
+
+To access individual properties of the `Node`, you have the following options: 
+```rust
+// Rest of the code omitted for brevity.
+        match value {
+            Value::Node(node) =>
+            {
+                println!("Node: {}", node);
+                println!("Node id: {}", node.id);
+                println!("Node labels: {:?}", node.labels);
+                println!("Node properties: {:?}", node.properties);
+                println!("Node properties: {:?}", node.properties.get("id"));
+                println!("Node properties: {:?}", node.properties.get("name"));
+                println!("Node properties: {:?}", node.properties.get("description"));
+                println!("Node properties: {:?}", node.properties.get("createdAt"));
+            }
+            value => println!("Value: {}", value),
+        }
+// Rest of the code omitted for brevity.
+```
+The full output of the code above is:
+
+```text
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Fastest graph DB in the world!', 'id': 1, 'name': 'Memgraph'})
+Node id: 179
+Node labels: ["Technology"]
+Node properties: {"id": Int(1), "description": String("Fastest graph DB in the world!"), "createdAt": Date(2023-09-05), "name": String("Memgraph")}
+Node properties: Some(Int(1))
+Node properties: Some(String("Memgraph"))
+Node properties: Some(String("Fastest graph DB in the world!"))
+Node properties: Some(Date(2023-09-05))
+```
+
+You can access all `Node` properties by accessing the `properties` field. Keep in mind that the `id`  returns the internal ID of the node, which is not the same as the user-defined ID, and it should not 
+be used for any application-level logic.
+
+
+#### Process the Relationship results
+
+You can also receive a relationship from the query. For example: 
+
+```rust
+
+let _create_relationship = "CREATE (d:Developer {name: 'John Doe'})-[:LOVES {id:99}]->(t:Technology {id: 0, name:'Memgraph'})";
+let _columns = connection.execute_without_results(_create_relationship);
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+
+let _read_relationship = "MATCH (d:Developer)-[r:LOVES]->(t:Technology) RETURN r";
+let _columns = connection.execute(_read_relationship, None);
+while let Ok(result) =  connection.fetchall() {
+    for record in result {
+        for value in record.values {
+            match value {
+                Value::Relationship(edge) =>
+                {
+                    println!("Edge: {}", edge);
+                    println!("Edge id: {}", edge.id);
+                    println!("Edge start_node_id: {}", edge.start_id);
+                    println!("Edge end_node_id: {}", edge.end_id);
+                    println!("Edge type: {}", edge.type_);
+                    println!("Edge properties: {:?}", edge.properties);
+                    println!("Edge properties: {:?}", edge.properties.get("id"));
+
+                }
+                _ => continue
+            }
+        }
+    }
+}
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+```
+
+The output of the code above is:
+```text
+Edge: [:LOVES {'id': 99}]
+Edge id: 455
+Edge start_node_id: 237
+Edge end_node_id: 238
+Edge type: LOVES
+Edge properties: {"id": Int(99)}
+Edge properties: Some(Int(99))
+```
+
+You can access the `Relationship` properties in the same way as you access the [Node](#process-the-node-result) properties. The only difference is that the `Relationship` has `start_id` and `end_id` properties, which represent the start and end node of the relationship.
+
+
+#### Process the Path results
+
+You can receive path from the database, using the following construct:
+
+```rust
+let _read_path = "MATCH p=(d:Developer)-[r:LOVES]->(t:Technology) RETURN p";
+let _columns = connection.execute(_read_path, None);
+while let Ok(result) =  connection.fetchall() {
+    for record in result {
+        for value in record.values {
+            match value {
+                Value::Path(path) =>
+                {
+                    println!("Path nodes: {:?}", path.nodes);
+                    println!("Path relationships: {:?}", path.relationships);
+                }
+                _ => continue
+            }
+        }
+    }
+}
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+```
+
+Path will contain [Nodes](#process-the-node-result) and [Relationships[#process-the-relationship-result], that can be accessed in the same way as in the previous examples, by casting them to the relevant type.
+
+#### Types mapping and casting
+
+ Here is the full table of the mapping between Memgraph Cypher types and the types used in the Rust driver:
+
+|  Cypher Type | Driver Type        |
+|-------------:|:-------------------|
+|          Null| Null               |
+|       String | String             |
+|      Boolean | bool               |
+|      Integer | i64                |
+|        Float | f64                |
+|         List | Vec< Value >       |
+|          Map | HashMap< String, Value >|
+|         Node | Node               |
+| Relationship | Relationship       |
+|         Path | Path               |
+| UnboundRelationship | UnboundRelationship |
+|     Duration | Duration           |
+|         Date | NaiveDate          |
+|    LocalTime | NaiveTime          |
+|LocalDateTime | NaiveDateTime      |
+
+Keep in mind that Memgraph does not support timezones at the moment. 
+
+### Transaction management
+
+Transaction is a unit of work that is executed on the database, it could be some basic read, write or complex set of steps in form of series of queries. There can be multiple ways to mange transaction, but usually, they are managed automatically by the driver or manually by the explicit code steps. 
+Transaction management defines how to handle the transaction, when to commit, rollback, or terminate it.
+
+
+#### Automatic transaction management
+
+#### Manual transaction management
+
+
+#### Implicit transaction management
+
+
 
