@@ -1,3 +1,8 @@
+---
+title: Graph Style Script language
+description: Style your graphs in Memgraph with ease. Visit the documentation for detailed instructions on how to use graph style scripts to customize the appearance of your graphs and enhance visualizations.
+---
+
 # Graph Style Script language
 
 This guide will show you how to easily get started with the Graph Style Script
@@ -571,7 +576,7 @@ all styling possibilities.
 
 Graph Style Script has a large number of built-in functions that can help you
 with achieving the right style for your graph. Take a look at the [list of GSS
-built-in functions](/docs/memgraph-lab/style-script/gss-functions).
+built-in functions]/data-visualization/graph-style-script/built-in-elements).
 
 ### Built-in colors
 

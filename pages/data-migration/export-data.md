@@ -1,3 +1,8 @@
+---
+title: Export data
+description: Understand the specifics of data export from Memgraph. Detailed documentation to help you manage and manipulate data efficiently.
+---
+
 #  Export data
 
 Memgraph allows you to export all the data from the database, or results from an executed query.
@@ -28,8 +33,3 @@ available formats (CSV, TSV and JSON).
 Results can also be exported to a CSV file using the [`export_util.csv_query()`
 procedure](/advanced-algorithms/available-algorithms/export_util#csv_queryquery-file_path-stream)
 from MAGE - graph algorithms and modules library.
-
-## Where to next?
-
-Now that you exported data, [import](/data-migration) it back into a new
-Memgraph instance.

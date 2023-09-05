@@ -1,3 +1,8 @@
+---
+title: Marvel Comic Universe social network
+description: Visualize and optimize Marvel Universe data with Memgraph's graph analysis capabilities. Start learning with tutorials and documentation detailing tailored graph computing queries.
+---
+
 # Marvel Comic Universe social network
 
 This article is a part of a series intended to show how to use Memgraph on

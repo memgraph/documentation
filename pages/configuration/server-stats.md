@@ -1,3 +1,8 @@
+---
+title: Server stats
+description: Monitor the performance and health of your Memgraph server with confidence. Head over to Memgraph's documentation page to gain more insights into server stats.
+---
+
 # Server stats
 
 Memgraph supports multiple queries to get information about the instance that is
@@ -34,7 +39,7 @@ The result will contain the following fields:
 | global_isolation_level | Current `global` isolation level.<br/>For more info, check out the [isolation levels](/fundamentals/transactions). |
 | session_isolation_level | Current `session` isolation level. |
 | next_session_isolation_level | Current `next` isolation level. |
-| storage_mode | Current storage mode.<br/>For more info, check out the [storage modes](/fundamentals/storage). |
+| storage_mode | Current storage mode.<br/>For more info, check out the [storage modes](/fundamentals/storage-memory-usage). |
 
 ## Build information
 
