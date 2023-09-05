@@ -1,3 +1,8 @@
+---
+title: Multi-tenancy
+description: Discover the benefits of multi-tenancy for scalability, resource utilization, and performance. Also learn how to manage few isolated databases within a single instance in our detailed documentation. 
+---
+
 # Multi-tenancy
 
 Multi-tenant support in Memgraph enables users to manage multiple isolated

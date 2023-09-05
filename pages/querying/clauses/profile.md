@@ -1,3 +1,8 @@
+---
+title: PROFILE clause
+description: Leverage the PROFILE clause in Memgraph. Detailed guide categorizes information for proficient graph computing.
+---
+
 # PROFILE clause
 
 The PROFILE clause can be used to profile the execution of a query and get a detailed

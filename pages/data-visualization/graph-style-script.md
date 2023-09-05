@@ -1,3 +1,8 @@
+---
+title: Graph Style Script language
+description: Style your graphs in Memgraph with ease. Visit the documentation for detailed instructions on how to use graph style scripts to customize the appearance of your graphs and enhance visualizations.
+---
+
 # Graph Style Script language
 
 This guide will show you how to easily get started with the Graph Style Script

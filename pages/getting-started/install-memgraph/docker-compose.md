@@ -1,3 +1,8 @@
+---
+title: Docker Compose
+description: Experience Memgraph's integration with Docker Compose. Our dedicated documentation walks you through maximizing your graph computing capabilities.
+---
+
 # Docker Compose
 
 If you define an application with **Docker Compose**, you can use that

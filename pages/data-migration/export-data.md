@@ -1,3 +1,8 @@
+---
+title: Export data
+description: Understand the specifics of data export from Memgraph. Detailed documentation to help you manage and manipulate data efficiently.
+---
+
 #  Export data
 
 Memgraph allows you to export all the data from the database, or results from an executed query.

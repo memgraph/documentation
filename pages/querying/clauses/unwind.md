@@ -1,3 +1,8 @@
+---
+title: UNWIND clause
+description: Find out how to use the UNWIND operator in Memgraph to transform a list into individual rows, and much more. 
+---
+
 # UNWIND clause
 
 The `UNWIND` clause is used to unwind a list of values as individual rows.
