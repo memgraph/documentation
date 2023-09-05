@@ -185,6 +185,7 @@ fn main() {
     connection.close();
 
 }
+```
 
 ### Build the project 
 
@@ -241,3 +242,202 @@ This makes a good starting point for Rust application. For more information on h
 continue reading the guide under [Rust client API usage and examples](#rust-client-api-usage-and-examples). 
 
 </Steps>
+
+## Rust client API usage and examples
+
+After a brief [Quickstart guide](#quickstart), this section will go into more detail on how to use the Rust driver API, explain code snippets, and provide more examples. Feel free to skip to the section that interests you the most.
+
+### Database connection 
+
+Once the database is running, and driver is installed or available in Rust, you should be able to connect to the database with one of two ways:
+
+- [Connect without authentication (default)](#connect-without-authentication-default)
+- [Connect with authentication](#connect-with-authentication)
+
+#### Connect without authentication (default)
+
+By default, the Memgraph database is running without authentication, which means that you can connect to the database without providing any credentials (username and password).
+To connect to Memgraph, create a driver object with the appropriate host, port and credentials arguments. If you're running Memgraph locally, the host should be `localhost`, and port `7687` by default. If you are running Memgraph on a remote server, 
+replace `localhost` with the appropriate IP address, or if you ran Memgraph on port different than 7687, do not forget to update change the port. 
+
+
+To connect the Rust driver to the Memgraph database, use the following code snippet: 
+
+```rust
+
+use rsmgclient::{ConnectParams, Connection, Value, SSLMode, ConnectionStatus};
+ 
+fn main() {
+
+    // Connect to Memgraph 
+    let connect_params = ConnectParams {
+        host: Some(String::from("localhost")),
+        port: 7687,
+        sslmode: SSLMode::Disable,
+        ..Default::default()
+    };
+    let mut connection = Connection::connect(&connect_params).unwrap();
+
+    // Check if connection is established.
+    let status = connection.status();
+    
+    if status != ConnectionStatus::Ready {
+        println!("Connection failed with status: {:?}", status);
+        return;
+    } else {
+        println!("Connection established with status: {:?}", status);
+    }
+
+``` 
+
+All default connection parameters can be seen in the [rsmgclient repository](https://github.com/memgraph/rsmgclient/blob/master/src/connection/mod.rs#L84). The default values for the username and password are `None`, which means that you can connect to the database without providing any credentials.
+
+
+#### Connect with authentification
+
+In order to set up authentication in Memgraph, you need to set up a user that has `username` and `password`. In Memgraph you can set a username and password by executing the following query: 
+
+```Cypher
+CREATE USER `memgraph` IDENTIFIED BY 'memgraph';
+```
+
+Then, you can connect to the database with the following snippet:
+
+```rust {9-10}
+use rsmgclient::{ConnectParams, Connection, Value, SSLMode, ConnectionStatus};
+ 
+fn main() {
+
+    // Connect to Memgraph 
+    let connect_params = ConnectParams {
+        host: Some(String::from("localhost")),
+        port: 7687,
+        username: Some(String::from("memgraph")),
+        password: Some(String::from("memgraph")),
+        sslmode: SSLMode::Disable,
+        ..Default::default()
+    };
+    let mut connection = Connection::connect(&connect_params).unwrap();
+
+    // Check if connection is established.
+    let status = connection.status();
+
+    if status != ConnectionStatus::Ready {
+        println!("Connection failed with status: {:?}", status);
+        return;
+    } else {
+        println!("Connection established with status: {:?}", status);
+    }
+```
+If you receive the following error: 
+
+```
+thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: MgError { message: "Authentication failure" }'
+```
+
+The error indicates that you have probably enabled authentication in Memgraph, but are trying to connect without authentication. For more details on how to set authentication further, visit the [Memgraph authentication guide](/configuration/security/#creating-user).
+
+#### Rust client connection lifecycle managment 
+
+Each connection object is a separate session with the database. The connection object is responsible for executing queries and fetching results. Memgraph will automatically close the connection if the client does not use it for a certain period of time.
+Make sure that you close the connection when you are done with it, and open a new connection when you need to execute a new query. 
+
+### Query the database 
+
+After connecting your driver to Memgraph. you can start running queries. 
+
+#### Run a create query
+
+The folowing example will create a node in the database: 
+
+```rust
+    let _create_node = "CREATE (n:Technology {name: 'Memgraph'}) RETURN n";
+    let _columns = connection.execute(_create_node, None);
+    while let Ok(result) =  connection.fetchall() {
+        for record in result {
+            for value in record.values {
+                match value {
+                    Value::Node(node) => println!("Node: {}", node),
+                    value => println!("Value: {}", value),
+                }
+            }
+        }
+    }
+    
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+```
+
+Method executed takes the following arguments:
+
+- `query` - The query that will be executed.
+- `params` - The parameters that will be passed to the query.
+
+
+If you do not need to fetch the results, you can use the `execute_without_results` method, then the code becomes simpler:
+ 
+```rust
+let _create_node = "CREATE (n:Technology {name: 'Memgraph'}) RETURN n";
+connection.execute_without_results(_create_node).unwrap();
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+```
+`execute_without_results` method takes just the query as an argument.
+
+#### Run a read query   
+
+The following query will read data from the database: 
+
+```rust
+    let _read_node = "MATCH (n:Technology {name: 'Memgraph'}) RETURN n";
+    let _columns = connection.execute(_read_node, None);
+    while let Ok(result) =  connection.fetchall() {
+        for record in result {
+            for value in record.values {
+                match value {
+                    Value::Node(node) => println!("Node: {}", node),
+                    value => println!("Value: {}", value),
+                }
+            }
+        }
+    }
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+```
+
+In this example, the match statement is used to distinguish between different types of values that can be returned from the database. In this case the query will return a node, so the rest of logic could be based on that information. 
+
+
+#### Running a queries with property map 
+
+If you want to pass a property map to the query, you can do it like this:
+
+```rust
+    let _create_node = "CREATE (n:Technology {name: $name, description: $description}) RETURN n";
+    let mut params = HashMap::new();
+    params.insert("name".to_string(), QueryParam::String("Memgraph".to_string()));
+    params.insert("description".to_string(), QueryParam::String("Fastest graph DB in the world!".to_string()));
+    let _columns = connection.execute(_create_node, Some(&params));
+    while let Ok(result) =  connection.fetchall() {
+        for record in result {
+            for value in record.values {
+                match value {
+                    Value::Node(node) => println!("Node: {}", node),
+                    value => println!("Value: {}", value),
+                }
+            }
+        }
+    }
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+```
+
+Using this approach, the queries will not contain hard-coded values, they can be more dynamic.
+
+
+### Process the results
+
