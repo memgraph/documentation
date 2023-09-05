@@ -4,35 +4,43 @@ import { Steps } from 'nextra/components'
 
 # Rust client guide 
 
-## Quickstart 
+Learn how to create a Rust application that connects to the Memgraph database and executes simple queries.
 
-Learn how to create a Rust application that connects to the Memgraph database and executes simple queries. 
-This will introduce you to the basics of Memgraph and the Rust driver. 
 This guide is based on the Memgraph Rust driver [rsmgclient](https://github.com/memgraph/rsmgclient).
 
+<Callout type="info">
 Keep in mind that if you are already using [neo4rs](https://github.com/neo4j-labs/neo4rs), you can use Neo4j driver with Memgraph, since Memgraph is compatible with Neo4j drivers.
-
-<Callout type="info"> 
-Prerequisite for following this guides is installed [Rust programming language](https://www.rust-lang.org/tools/install) and [Docker](https://docs.docker.com/get-docker/) in your local environment. 
 </Callout>
 
+## Quickstart 
 
+The following guide will demonstrate how to start Memgraph, connect to Memgraph, seed the database with data, run simple read and write queries. 
+
+Prerequisite that are necessary and sould be installed in your local enviroment are following: 
+
+ - [Rust programming language](https://www.rust-lang.org/tools/install)
+ - [Docker](https://docs.docker.com/get-docker/) 
+
+This won't be covered in this guide, but you can find more information on how to install them in the links above.
 
 <Steps>
 ### Run Memgraph 
 
-You can by running Memgraph in background. The easiest way is to use Docker image, start the container with the following command:
+Start by running Memgraph in the background. The easiest way to install and run Memgraph is by using Docker. Start the container with the following command:
+
 
 ```bash
-docker run -it -p 7687:7687 -p 7444:7444 -p 3000:3000 memgraph/memgraph-platform
+docker run -it -p 7687:7687 -p 7444:7444 -p 3000:3000 --name memgraph memgraph/memgraph-platform
 ```
-This will start Memgraph platform, that includes, Memgraph database, Memgraph Lab and Memgraph MAGE. Memgraph uses Bolt protocol to communicate with the client, 
-for that you need to expose the port 7687. Memgraph Lab is a web application that you can use to visualize your data, it is available on port 3000, and port 7444 is used for
-logs that are visible in the Memgraph Lab.
 
-### Create a directory for your project 
+This command above will start [Memgraph Platform](/getting-started/install-memgraph/docker#install-memgraph-platform), which includes,[Memgraph database](/getting-started/install-memgraph/docker#other-available-docker-images), [Memgraph Lab](/data-visualization#quick-start) and [Memgraph MAGE](/advanced-algorithms#quick-start). Memgraph uses Bolt protocol to communicate with the client using the exposed 7687 port. 
+Memgraph Lab is a web application that can be used to visualize your data, it is available on port 3000, and port 7444 is used for the logs that are visible in the Memgraph Lab, so both port 3000 for LAB and 7444 for logs need to be open. If the Memgraph Platform is running properly, open a URL http://localhost:3000 in your browser and you should see the Memgraph Lab UI. 
 
-Start by creating a new project directory and positioning yourself in it:
+For more information visit the getting started guide on [how to run Memgraph with Docker](/getting-started/install-memgraph/docker).
+
+### Create a directory 
+
+Next, create a directory for your project and positioning yourself in it:
 
 ```bash
 mkdir hello-memgraph
@@ -64,109 +72,172 @@ To use the rsmgclient driver, you need to add it to the `Cargo.toml` file under 
 rsmgclient = "2.0.1"
 ```
 
-### Create a Rust program
+### Write a minimal working example 
 
-
-
-
-</Steps>
-
-# Rust quick start
-
-At the end of this guide, you will have created a Rust program that connects to the Memgraph database and executes simple
-queries.
-
-## Prerequisites
-
-To follow this guide, you will need:
-
-- A **running Memgraph instance**. If you need to set up Memgraph, take a look
-  at the [Installation guide](/getting-started/install-memgraph).
-- A locally installed [**rsmgclient
-  driver**](https://github.com/memgraph/rsmgclient).
-
-
-## Basic setup
-
-Let's jump in and connect a simple program to connect to Memgraph.
-
-**1.** Create a new Rust project with the name **memgraph_rust** by running the
-following command:
-
-```
-cargo new memgraph_rust --bin
-```
-
-**2.** Add the following line to the `Cargo.toml` file under the line
-`[dependencies]` :
-
-```
-rsmgclient = "2.0.0"
-```
-
-**3.** To create the actual program, add the following code to the `src/main.rs`
-file:
+Now, let's write a minimal working example that will connect to Memgraph and execute a simple queries:
 
 ```rust
-use rsmgclient::{ConnectParams, Connection, MgError, Value, SSLMode};
+use rsmgclient::{ConnectParams, Connection, Value, SSLMode, ConnectionStatus};
+ 
+fn main() {
 
-fn execute_query() -> Result<(), MgError> {
-    // Connect to Memgraph.
+    // Connect to Memgraph 
     let connect_params = ConnectParams {
         host: Some(String::from("localhost")),
         port: 7687,
         sslmode: SSLMode::Disable,
         ..Default::default()
     };
-    let mut connection = Connection::connect(&connect_params)?;
+    let mut connection = Connection::connect(&connect_params).unwrap();
 
+    // Check if connection is established.
+    let status = connection.status();
+    
+    if status != ConnectionStatus::Ready {
+        println!("Connection failed with status: {:?}", status);
+        return;
+    } else {
+        println!("Connection established with status: {:?}", status);
+    }
+       
+    // Clear the graph.
+    connection.execute_without_results("MATCH (n) DETACH DELETE n;").unwrap();
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+    
+    let indexes = vec![
+        "CREATE INDEX ON :Developer(id);",
+        "CREATE INDEX ON :Technology(id);",
+        "CREATE INDEX ON :Developer(name);",
+        "CREATE INDEX ON :Technology(name);",
+    ];
 
+    let developer_nodes = vec![
+        "CREATE (n:Developer {id: 1, name:'Andy'});",
+        "CREATE (n:Developer {id: 2, name:'John'});",
+        "CREATE (n:Developer {id: 3, name:'Michael'});",
+    ];
 
-    // Create simple graph.
-    connection.execute_without_results(
-        "CREATE (p1:Person {name: 'Alice'})-[l1:Likes]->(m:Software {name: 'Memgraph'}) \
-         CREATE (p2:Person {name: 'John'})-[l2:Likes]->(m);",
-    )?;
+    let technology_nodes = vec![
+        "CREATE (n:Technology {id: 1, name:'Memgraph', description: 'Fastest graph DB in the world!', createdAt: Date()})",
+        "CREATE (n:Technology {id: 2, name:'Rust', description: 'Rust programming language ', createdAt: Date()})",
+        "CREATE (n:Technology {id: 3, name:'Docker', description: 'Docker containerization engine', createdAt: Date()})",
+        "CREATE (n:Technology {id: 4, name:'Kubernetes', description: 'Kubernetes container orchestration engine', createdAt: Date()})",
+        "CREATE (n:Technology {id: 5, name:'Python', description: 'Python programming language', createdAt: Date()})",
+    ];
+
+    let relationships = vec![
+        "MATCH (a:Developer {id: 1}),(b:Technology {id: 1}) CREATE (a)-[r:LOVES]->(b);",
+        "MATCH (a:Developer {id: 2}),(b:Technology {id: 3}) CREATE (a)-[r:LOVES]->(b);",
+        "MATCH (a:Developer {id: 3}),(b:Technology {id: 1}) CREATE (a)-[r:LOVES]->(b);",
+        "MATCH (a:Developer {id: 1}),(b:Technology {id: 5}) CREATE (a)-[r:LOVES]->(b);",
+        "MATCH (a:Developer {id: 2}),(b:Technology {id: 2}) CREATE (a)-[r:LOVES]->(b);",
+        "MATCH (a:Developer {id: 3}),(b:Technology {id: 4}) CREATE (a)-[r:LOVES]->(b);",
+    ];
+
+    for index in indexes {
+        connection.execute_without_results(index).unwrap();
+    }
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+
+    for developer_node in developer_nodes {
+        connection.execute_without_results(developer_node).unwrap();
+    }
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+
+    for technology_node in technology_nodes {
+        connection.execute_without_results(technology_node).unwrap();
+    }
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+
+    for relationship in relationships {
+        connection.execute_without_results(relationship).unwrap();
+    }
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
 
     // Fetch the graph.
-    let columns = connection.execute("MATCH (n)-[r]->(m) RETURN n, r, m;", None)?;
-    println!("Columns: {}", columns.join(", "));
-    for record in connection.fetchall()? {
-        for value in record.values {
-            match value {
-                Value::Node(node) => print!("{}", node),
-                Value::Relationship(edge) => print!("-{}-", edge),
-                value => print!("{}", value),
+    let columns = connection.execute("MATCH (n)-[r]->(m) RETURN n, r, m;", None);
+    println!("Columns: {}", columns.unwrap().join(", "));
+    
+    while let Ok(result) = connection.fetchall() {
+        for record in result {
+            for value in record.values {
+                match value {
+                    Value::Node(node) => println!("Node: {}", node),
+                    Value::Relationship(edge) => println!("Edge: {}", edge),
+                    value => println!("Value: {}", value),
+                }
             }
         }
+     
         println!();
     }
-    connection.commit()?;
+    // Close the connection.
+    connection.close();
 
-    Ok(())
 }
 
-fn main() {
-    
-    if let Err(error) = execute_query() {
-        panic!("{}", error)
-    }
-}
-```
+### Build the project 
 
-**4.** Open a terminal, position yourself in the project root directory `/memgraph_rust` and run:
-``` 
+To build the project, run the following command within the project directory:
+
+```bash
 cargo build
 ```
-and after that:
-```
+
+### Run the project
+
+To run the project, run the following command within the project directory:
+
+```bash
 cargo run
 ```
 
-You should see an output similar to the following:
+If everything is working properly, you should see the following output:
 
-```
+```text
+Connection established with status: Ready
 Columns: n, r, m
-(:Person {'name': 'Alice'})-[:Likes {}]-(:Software {'name': 'Memgraph'})
-(:Person {'name': 'John'})-[:Likes {}]-(:Software {'name': 'Memgraph'})
-``````
+Node: (:Developer {'id': 1, 'name': 'Andy'})
+Edge: [:LOVES {}]
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Fastest graph DB in the world!', 'id': 1, 'name': 'Memgraph'})
+Node: (:Developer {'id': 3, 'name': 'Michael'})
+Edge: [:LOVES {}]
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Fastest graph DB in the world!', 'id': 1, 'name': 'Memgraph'})
+Node: (:Developer {'id': 2, 'name': 'John'})
+Edge: [:LOVES {}]
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Rust programming language ', 'id': 2, 'name': 'Rust'})
+Node: (:Developer {'id': 2, 'name': 'John'})
+Edge: [:LOVES {}]
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Docker containerization engine', 'id': 3, 'name': 'Docker'})
+Node: (:Developer {'id': 3, 'name': 'Michael'})
+Edge: [:LOVES {}]
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Kubernetes container orchestration engine', 'id': 4, 'name': 'Kubernetes'})
+Node: (:Developer {'id': 1, 'name': 'Andy'})
+Edge: [:LOVES {}]
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Python programming language', 'id': 5, 'name': 'Python'})
+```
+
+### Visualize the data 
+
+To visualize objects created in the database with the `main.rs` script, head over to [http://localhost:3000/](http://localhost:3000/) and run `MATCH path=(n)-[p]-(m) RETURN path` in the *Query Execution* tab. 
+That query will visualize the created nodes and relationships. By clicking on a node or relationship, you can explore different properties.
+
+![rust-quick-start](/pages/client-libraries/rust/rust-quick-start.png)
+
+
+### Next steps 
+
+This makes a good starting point for Rust application. For more information on how to use the Rust driver, 
+continue reading the guide under [Rust client API usage and examples](#rust-client-api-usage-and-examples). 
+
+</Steps>
