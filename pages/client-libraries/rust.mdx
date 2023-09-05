@@ -621,13 +621,88 @@ Keep in mind that Memgraph does not support timezones at the moment.
 Transaction is a unit of work that is executed on the database, it could be some basic read, write or complex set of steps in form of series of queries. There can be multiple ways to mange transaction, but usually, they are managed automatically by the driver or manually by the explicit code steps. 
 Transaction management defines how to handle the transaction, when to commit, rollback, or terminate it.
 
+Currenty, there are two ways to manage transactions in the Rust driver:
 
-#### Automatic transaction management
+- [Manual transaction management](#manual-transaction-management)
+- [Implicit transaction management](#implicit-transaction-management)
+
 
 #### Manual transaction management
+
+Once the connection is established, you can run queries via the following methods:
+
+- `execute` - Starts the transaction for executing a query, returns the result.
+- `execute_without_results` - Executes the query without returning the result.
+
+Only the execute will be manually managed by the user, and the user will need to commit or rollback the transaction. This means the transacition is started inside the `execute` method via `BEGIN`, and it will be finished with the `COMMIT` or `ROLLBACK`, depending on the logic. 
+Here is the example:
+
+```rust
+    //Manual transaction management
+    let _create_node = "CREATE (n:Technology {name: 'Memgraph'}) RETURN n";
+    let _columns = connection.execute(_create_node, None);
+    
+    //Process the results
+    while let Ok(result) =  connection.fetchall() {
+        for record in result {
+            match record {
+                _ => println!("Running custom processing logic")
+            }
+        }
+    }
+    
+    // Run second query in same transaction
+    let _create_node = "CREATE (n:Technology {name: 'Rust'}) RETURN n";
+    let _columns = connection.execute(_create_node, None);
+   
+    //Process the results
+    while let Ok(result) =  connection.fetchall() {
+        for record in result {
+            match record {
+                _ => println!("Running custom processing logic")
+            }
+        }
+    }
+    //Maybe a rollback? 
+    // if let Err(e) = connection.rollback() {
+    //     println!("Error: {}", e);
+    // }
+    // Or maybe a commit?
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+
+    // Close the connection.
+    connection.close();
+    
+```
+Memgraph log will show the following output:
+
+```text
+[2023-09-05 21:28:33.721] [memgraph_log] [debug] [Run - memgraph] 'BEGIN'
+[2023-09-05 21:28:33.722] [memgraph_log] [debug] [Run - memgraph] 'CREATE (n:Technology {name: 'Memgraph'}) RETURN n'
+[2023-09-05 21:28:33.723] [memgraph_log] [debug] [Run - memgraph] 'CREATE (n:Technology {name: 'Rust'}) RETURN n'
+[2023-09-05 21:28:33.724] [memgraph_log] [debug] [Run - memgraph] 'COMMIT'
+```
 
 
 #### Implicit transaction management
 
+When the the connection configuration is set to `autocommit`, the driver will automatically commit the transaction after each query. This means that the transaction won't be started via `BEGIN`, and you will not be able to rollback or commit the transaction manually.
 
+In order to set the connection to `autocommit`, you need to set the `autocommit` field to `true` in the `ConnectParams` struct:
+
+```rust {8}
+  // Connect to Memgraph 
+    let connect_params = ConnectParams {
+        host: Some(String::from("localhost")),
+        port: 7687,
+        username: None,
+        password: None
+        sslmode: SSLMode::Disable,
+        autocommit: true,
+        ..Default::default()
+    };
+```
+Now each query via `execute` will be automatically committed. By default using the `execute_without_results` method will automatically commit the transaction, even if the `autocommit` is set to `false`.
 
