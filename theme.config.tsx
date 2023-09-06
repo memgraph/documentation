@@ -21,7 +21,7 @@ const config: DocsThemeConfig = {
   },
   head: (
     <>
-      <link rel="icon" href="/favicon.png" />
+      <link rel="icon" href="/docs/favicon.png" type="image/png" />
     </>
   ),
   sidebar: {
