@@ -698,7 +698,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/query-modules/api/mock-python-api',
-        destination: '/custom-query-modules/python-api/mock-python-api',
+        destination: '/custom-query-modules/python/mock-python-api',
         permanent: true
       },
       {
@@ -763,12 +763,12 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/import-data/migrate/mysql',
-        destination: '/data-migration/sql',
+        destination: '/data-migration/migrate-from-rdbms',
         permanent: true
       },
       {
         source: '/memgraph/import-data/migrate/postgresql',
-        destination: '/data-migration/sql',
+        destination: '/data-migration/migrate-from-rdbms',
         permanent: true
       },
       {
@@ -822,7 +822,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/memgraph-lab/',
+        source: '/memgraph-lab',
         destination: '/data-visualization/',
         permanent: true
       },
@@ -982,7 +982,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/memgraph/',
+        source: '/memgraph',
         destination: '/getting-started',
         permanent: true
       },
@@ -993,7 +993,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/data-types',
-        destination: '/getting-started/data-types',
+        destination: '/fundamentals/data-types',
         permanent: true
       },
       {
@@ -1058,17 +1058,17 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/linux-installation-troubleshooting',
-        destination: '/getting-started/install-memgraph/installation-troubleshooting',
+        destination: '/getting-started/install-memgraph/ubuntu',
         permanent: true
       },
       {
         source: '/memgraph/macos-installation-troubleshooting',
-        destination: '/getting-started/install-memgraph/installation-troubleshooting',
+        destination: '/getting-started/install-memgraph/docker',
         permanent: true
       },
       {
         source: '/memgraph/windows-installation-troubleshooting',
-        destination: '/getting-started/install-memgraph/installation-troubleshooting',
+        destination: '/getting-started/install-memgraph/docker',
         permanent: true
       },
       {
@@ -1077,7 +1077,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/memgraph-cloud/',
+        source: '/memgraph-cloud',
         destination: '/getting-started/install-memgraph/memgraph-cloud',
         permanent: true
       },
@@ -1127,7 +1127,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/errors/',
+        source: '/errors',
         destination: '/help-center/errors',
         permanent: true
       },
@@ -1178,7 +1178,7 @@ module.exports = withNextra({
       },
       {
         source: '/errors/memgraph/ssl',
-        destination: '/help-center/errors/memgraph/ssl',
+        destination: '/help-center/errors/ssl',
         permanent: true
       },
       {
@@ -1207,7 +1207,7 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/cypher-manual/',
+        source: '/cypher-manual',
         destination: '/querying',
         permanent: true
       },
@@ -2171,7 +2171,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/temporal-types',
-        destination: '/getting-started/data-types',
+        destination: '/fundamentals/data-types',
         permanent: true
       },
       {
@@ -2236,11 +2236,6 @@ module.exports = withNextra({
       },
       {
         source: '/mage/faq',
-        destination: '/help-center/faq',
-        permanent: true
-      },
-      {
-        source: '/help-center/faq',
         destination: '/help-center/faq',
         permanent: true
       },
@@ -2420,11 +2415,6 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/gqlalchemy/how-to-guides/networkx',
-        destination: 'https://github.com/memgraph/gqlalchemy',
-        permanent: true
-      },
-      {
         source: '/mage/applications/bioinformatics-application',
         destination: 'https://memgraph.com/use-cases',
         permanent: true
@@ -2478,8 +2468,235 @@ module.exports = withNextra({
         source: '/mage/applications/transportation-application',
         destination: 'https://memgraph.com/use-cases',
         permanent: true
-      }
+      },
       //END Old Docusarus redirects
+      //START GQLAlchemy redirects
+      {
+        source: '/gqlalchemy/how-to-guides/networkx',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/translators/import-python-graphs/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy',
+        destination: 'https://memgraph.github.io/gqlalchemy/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/changelog',
+        destination: 'https://memgraph.github.io/gqlalchemy/changelog/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/overview/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/custom-file-system-importer',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/loaders/make-a-custom-file-system-importer/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/export-python-graphs',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/translators/export-python-graphs/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/import-python-graphs',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/translators/import-python-graphs/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/memgraph-binary-instance',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/instance-runner/memgraph-binary-instance/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/memgraph-docker-instance',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/instance-runner/memgraph-docker-instance/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/ogm',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/ogm/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/on-disk-storage',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/on-disk-storage/on-disk-storage/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/query-builder',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/query-builder/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/query-builder/graph-projection',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/query-builder/graph-projection/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/streams/manage-kafka-streams',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/streams/kafka-streams/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/streams/manage-pulsar-streams',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/streams/pulsar-streams/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/table-to-graph-importer',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/loaders/import-table-data-to-graph-database/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/triggers',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/triggers/triggers/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/import-data',
+        destination: 'https://memgraph.github.io/gqlalchemy/import-data/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/installation',
+        destination: 'https://memgraph.github.io/gqlalchemy/installation/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/overview/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/connection',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/connection/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/disk_storage',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/disk_storage/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/exceptions',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/exceptions/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/graph_algorithms/integrated_algorithms',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/graph_algorithms/integrated_algorithms/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/graph_algorithms/query_builder',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/graph_algorithms/query_builder/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/graph_algorithms/query_modules',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/graph_algorithms/query_modules/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/instance_runner',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/instance_runner/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/models',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/models/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/query_builders/declarative_base',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/query_builders/declarative_base/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/query_builders/memgraph_query_builder',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/query_builders/memgraph_query_builder/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/export/graph_transporter',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/export/graph_transporter/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/export/transporter',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/export/transporter/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/importing/graph_importer',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/importing/graph_importer/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/importing/loaders',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/importing/loaders/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/translators/dgl_translator',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/translators/dgl_translator/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/translators/nx_translator',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/translators/nx_translator/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/translators/pyg_translator',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/translators/pyg_translator/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/translators/translator',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/translators/translator/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/utilities',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/utilities/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/vendors/database_client',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/vendors/database_client/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/vendors/memgraph',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/vendors/memgraph/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/vendors/neo4j',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/vendors/neo4j/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/under-the-hood',
+        destination: 'https://memgraph.github.io/gqlalchemy/under-the-hood/overview/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/under-the-hood/python-graph-translators',
+        destination: 'https://memgraph.github.io/gqlalchemy/under-the-hood/python-graph-translators/',
+        permanent: true
+      }
+      //END GQLAlchemy redirects      
     ];
   },
 });

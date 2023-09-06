@@ -1,3 +1,8 @@
+---
+title: Graph modeling
+description: Learn to model graphs effectively with Memgraph. A documentation detailing the vital steps for proficient graph modeling. 
+---
+
 # Graph modeling
 
 In this tutorial, you will learn the basic terminology and practices related to
@@ -337,10 +342,3 @@ different graphs:
   relationships.
 - **MultiDiGraph** - A directed graph with self-loops and parallel
   relationships.
-
-## Where to next?
-
-In this tutorial, you've learned basic terminology related to graphs and how to
-model them. We hope that you had fun going through this tutorial. You can
-[download and install **Memgraph Platform**](/getting-started/install-memgraph) on
-your computer and try to model some of your own graphs!

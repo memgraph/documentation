@@ -1,3 +1,8 @@
+---
+title: Help Center
+description: Visit our Help Center to find answers to common questions and troubleshoot issues effectively. Access a wealth of resources to enhance your journey at Memgraph. 
+---
+
 # Help Center
 
 Are you stuck? Don't worry, here at Memgraph we are all eager to help - we'll
@@ -8,7 +13,9 @@ answer to your inquiry.
 
 🙋 Post a question on
 [**StackOverflow**](https://stackoverflow.com/questions/tagged/memgraphdb) with
-the tag **memgraphdb**. You can also ask your question on our
+the tag **memgraphdb**. 
+
+You can also ask your question on our
 [**Discord server**](https://discord.gg/memgraph). There is always someone from Memgraph
 or graph community there to help!
 
@@ -27,7 +34,7 @@ If you want to be a part of Memgraph's fast-growing community, join us on our
 path by following us, participating in discussions, and asking questions. We are
 available at the following platforms:
 
-- :purple_heart: [**Discord**](https://discord.gg/memgraph)
-- :open_file_folder: [**Memgraph GitHub**](https://github.com/memgraph)
-- :bird: [**Twitter**](https://twitter.com/memgraphdb)
-- :movie_camera: [**YouTube**](https://www.youtube.com/channel/UCZ3HOJvHGxtQ_JHxOselBYg)
+- [**Discord**](https://discord.gg/memgraph)
+- [**Memgraph GitHub**](https://github.com/memgraph)
+- [**Twitter**](https://twitter.com/memgraphdb)
+- [**YouTube**](https://www.youtube.com/channel/UCZ3HOJvHGxtQ_JHxOselBYg)

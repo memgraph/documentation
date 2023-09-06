@@ -1,3 +1,8 @@
+---
+title: Differences in Cypher implementations
+description: Compare and contrast different Cypher implementations in Memgraph. Comprehensive documentation to level up your graph computing expertise.
+---
+
 # Differences in Cypher implementations
 
 Although we try to implement the [openCypher](https://www.opencypher.org/) query

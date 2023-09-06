@@ -1,3 +1,8 @@
+---
+title: Configuration features
+description: Configure Memgraph to suit your graph project needs by accessing our comprehensive documentation. These features will ensure seamless configuration and monitoring of your instances. 
+---
+
 # Configuration features
 
 The following features enable you smooth configuration and monitoring of your
