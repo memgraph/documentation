@@ -1,130 +1,769 @@
+---
+title: Go quick start
+description: Navigate the use of Go in Memgraph's graph computing process. Learn the essentials and beyond all in one place. 
+---
+
 import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
 
-# Go quick start
 
-At the end of this guide, you will have created a simple Go **`Hello, World!`**
-program that connects to the Memgraph database and executes simple queries.
+# GO client guide 
 
-<Callout type="info"> 
+Learn how to create a Go application that connects to the Memgraph database and executes simple queries. 
 
-Go driver
+Memgraph currently depends on the [Neo4j Golang driver](https://pkg.go.dev/github.com/neo4j/neo4j-go-driver/v5/neo4j#pkg-types) for Go. 
+Memgraph and Neo4j both support Bolt protocol and Cypher queries, which means that same driver can be used to connect to both databases. 
+This is very convenient if switching between the two databases is needed. This guide is based on the driver version v5 and above. Some examples may 
+not be supported in older versions of the driver.
 
-You can find the official Go driver on
-[GitHub](https://github.com/neo4j/neo4j-go-driver).
+## Quickstart 
 
-</Callout>
+The following guide will demonstrate how to start Memgraph, connect to Memgraph, seed the database with data, and run simple read and write queries. 
 
-<Callout type="info"> 
+Necessary prerequisites that should be installed in your local environment are: 
 
-Go Object Modeled Graph (OMG)
+ - [Go programming language](https://go.dev/dl/) 
+ - [Docker](https://docs.docker.com/get-docker/)
 
-If you are looking for something similar to the Object Graph Mapper for Go, check out [`gograph`](https://github.com/prahaladd/gograph). This project aims to provide a mechanism to interact with any graph database using a unified and minimalistic API layer for the core operations on a graph database. It is an open-source project not maintained by the Memgraph team.
 
-</Callout>
 
-## Prerequisites
+<Steps>
 
-To follow this guide, you will need:
+### Run Memgraph 
 
-- A **running Memgraph instance**. If you need to set up Memgraph, take a look
-  at the [Installation guide](/getting-started/install-memgraph).
-- A basic understanding of graph databases and the property graph model.
-- The newest version of **Go** [installed](https://golang.org/doc/install).
+Start by running Memgraph in the background. The easiest way to install and run Memgraph is by using Docker. Start the container with the following command:
 
-## Basic Setup
+```bash
+docker run -p 7687:7687 -p 7444:7444 -p 3000:3000 --name memgraph memgraph/memgraph-platform
+```
 
-We'll be using a simple Go application to demonstrate how to connect to a
-running Memgraph instance.
+The command above will start [Memgraph Platform](/getting-started/install-memgraph/docker#install-memgraph-platform), which includes [Memgraph database](/getting-started/install-memgraph/docker#other-available-docker-images), [Memgraph Lab](/data-visualization#quick-start) and [Memgraph MAGE](/advanced-algorithms#quick-start). Memgraph uses Bolt protocol to communicate with the client using the exposed 7687 port. 
+Memgraph Lab is a web application you can use to visualize the data. It's accessible at [http://localhost:3000](http://localhost:3000) if Memgraph Platform is running correctly. The 7444 port enables Memgraph Lab to access and preview the logs, which is why both of these ports need to be exposed. 
 
-Let's jump in and create our application.
+For more information visit the getting started guide on [how to run Memgraph with Docker](/getting-started/install-memgraph/docker).
 
-**1.** Create a new directory for your app, for example `/MyApp` and position
-yourself in it.<br /> **2.** Create a `program.go` file and add the following
-code:
+### Create a directory 
+
+Next, create a directory for your project and positioning yourself in it:
+
+```bash
+mkdir hello-memgraph
+cd hello-memgraph
+```
+
+### Initialize Go module 
+
+Now, initialize a new Go module using the following command:
+
+```bash
+go mod init hello-memgraph
+```
+
+The command above uses a Go tool to create a new module file `go.mod` that takes care of dependencies in Go projects, if you are not familiar with it take a look at 
+the basic guide on [how to write a Go code](https://go.dev/doc/code). 
+
+### Write a minimal working example 
+
+Now you can create a new file `main.go` and add the following code snippet: 
 
 ```go
 package main
 
 import (
-    "fmt"
-    "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"context"
+	"fmt"
+
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
 func main() {
-    dbUri := "bolt://localhost:7687"
-    driver, err := neo4j.NewDriver(dbUri, neo4j.BasicAuth("", "", ""))
-    if err != nil {
-        panic(err)
-    }
-    // Handle driver lifetime based on your application lifetime requirements  driver's lifetime is usually
-    // bound by the application lifetime, which usually implies one driver instance per application
-    defer driver.Close()
-    item, err := insertItem(driver)
-    if err != nil {
-        panic(err)
-    }
-    fmt.Printf("%v\n", item.Message)
+
+	dbUser := ""
+	dbPassword := ""
+	dbUri := "bolt://localhost:7687" // scheme://host(:port) (default port is 7687)
+	driver, err := neo4j.NewDriverWithContext(dbUri, neo4j.BasicAuth(dbUser, dbPassword, ""))
+	ctx := context.Background()
+	defer driver.Close(ctx)
+
+	err = driver.VerifyConnectivity(ctx)
+	if err != nil {
+		panic(err)
+	} else {
+		fmt.Println("Viola! Connected to Memgraph!")
+	}
+
+	//Create indexes on developer and technology nodes
+	indexes := []string{
+		"CREATE INDEX ON :Developer(id);",
+		"CREATE INDEX ON :Technology(id);",
+		"CREATE INDEX ON :Developer(name);",
+		"CREATE INDEX ON :Technology(name);",
+	}
+
+	//Create developer nodes
+	developer_nodes := []string{
+		"CREATE (n:Developer {id: 1, name:'Andy'});",
+		"CREATE (n:Developer {id: 2, name:'John'});",
+		"CREATE (n:Developer {id: 3, name:'Michael'});",
+	}
+
+	//Create technology nodes
+	technology_nodes := []string{
+		"CREATE (n:Technology {id: 1, name:'Memgraph', description: 'Fastest graph DB in the world!', createdAt: Date()})",
+		"CREATE (n:Technology {id: 2, name:'Go', description: 'Go programming language ', createdAt: Date()})",
+		"CREATE (n:Technology {id: 3, name:'Docker', description: 'Docker containerization engine', createdAt: Date()})",
+		"CREATE (n:Technology {id: 4, name:'Kubernetes', description: 'Kubernetes container orchestration engine', createdAt: Date()})",
+		"CREATE (n:Technology {id: 5, name:'Python', description: 'Python programming language', createdAt: Date()})",
+	}
+
+	//Create relationships between developers and technologies
+	relationships := []string{
+		"MATCH (a:Developer {id: 1}),(b:Technology {id: 1}) CREATE (a)-[r:LOVES]->(b);",
+		"MATCH (a:Developer {id: 2}),(b:Technology {id: 3}) CREATE (a)-[r:LOVES]->(b);",
+		"MATCH (a:Developer {id: 3}),(b:Technology {id: 1}) CREATE (a)-[r:LOVES]->(b);",
+		"MATCH (a:Developer {id: 1}),(b:Technology {id: 5}) CREATE (a)-[r:LOVES]->(b);",
+		"MATCH (a:Developer {id: 2}),(b:Technology {id: 2}) CREATE (a)-[r:LOVES]->(b);",
+		"MATCH (a:Developer {id: 3}),(b:Technology {id: 4}) CREATE (a)-[r:LOVES]->(b);",
+	}
+
+	//Create a simple session
+	session := driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: ""})
+	defer session.Close(ctx)
+
+	// Run index queries via implicit auto-commit transaction
+	for _, index := range indexes {
+		_, err = session.Run(ctx, index, nil)
+		if err != nil {
+			panic(err)
+		}
+	}
+	fmt.Println("****** Indexes created *******")
+
+	// Run developer node queries
+	for _, node := range developer_nodes {
+		_, err = neo4j.ExecuteQuery(ctx, driver, node, nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase(""))
+		if err != nil {
+			panic(err)
+		}
+	}
+	fmt.Println("****** Developer nodes created *******")
+
+	// Run technology node queries
+	for _, node := range technology_nodes {
+		_, err = neo4j.ExecuteQuery(ctx, driver, node, nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase(""))
+		if err != nil {
+			panic(err)
+		}
+	}
+	fmt.Println("****** Technology nodes created *******")
+
+	// Run relationship queries
+	for _, rel := range relationships {
+		_, err = neo4j.ExecuteQuery(ctx, driver, rel, nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase(""))
+		if err != nil {
+			panic(err)
+		}
+	}
+	fmt.Println("****** Relationships created *******")
+
+	// Read a node
+	query := "MATCH (n:Technology{name: 'Memgraph'}) RETURN n;"
+	result, err := neo4j.ExecuteQuery(ctx, driver, query, nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase(""))
+	if err != nil {
+		panic(err)
+	}
+
+	
+	// Print the node results
+	for _, node := range result.Records {
+		fmt.Println(node.AsMap()["n"].(neo4j.Node))												// Node type
+		fmt.Println(node.AsMap()["n"].(neo4j.Node).GetProperties())								// Node properties
+		fmt.Println(node.AsMap()["n"].(neo4j.Node).GetElementId())								// Node internal ID
+		fmt.Println(node.AsMap()["n"].(neo4j.Node).Labels)										// Node labels
+		fmt.Println(node.AsMap()["n"].(neo4j.Node).Props["id"].(int64))							// Node user defined id property 
+		fmt.Println(node.AsMap()["n"].(neo4j.Node).Props["name"].(string))						// Node user defined name property
+		fmt.Println(node.AsMap()["n"].(neo4j.Node).Props["description"].(string))				// Node user defined description property
+		fmt.Println(node.AsMap()["n"].(neo4j.Node).Props["createdAt"].(neo4j.Date).Time())		// Node user defined createdAt property
+
+	}
+	fmt.Println("****** End *******")
+```
+
+This code snippet is a minimal working example that will create a connection to the Memgraph database via Go driver, create indexes, create nodes and relationships, and read the data back. Take a look at the code in detail as
+it includes comments to help you understand it. The [Go client API usage and examples](#go-client-api-usage-and-examples) section will explain the code snippet in more details.
+
+### Install dependencies
+
+Once you've created the file, run the following command to install all the Go dependencies present in the Go modules section. 
+
+```bash
+go mod tidy
+```
+At this point, there should be only one dependency left to install, the Neo4j Go driver. 
+
+### Project hierarchy
+
+The project hierarchy should look like this: 
+
+```text
+hello-memgraph
+├── go.mod
+├── main.go
+├── go.sum
+
+```
+Don't modify the `go.sum` file as it is used by the Go tool to keep track of the dependencies checksums, and to verify that the dependencies have not changed.
+
+### Run the application
+
+Now, you can run the application with the following command:
+
+```bash
+go run ./main.go
+```
+
+If everything was set up correctly, you should see the following output in the terminal: 
+
+```text
+Viola! Connected to Memgraph!
+****** Indexes created *******
+****** Developer nodes created *******
+****** Technology nodes created *******
+****** Relationships created *******
+****** Node values: *******
+{52 52 [Technology] map[createdAt:{0 63828777600 <nil>} description:Fastest graph DB in the world! id:1 name:Memgraph]}
+map[createdAt:{0 63828777600 <nil>} description:Fastest graph DB in the world! id:1 name:Memgraph]
+52
+[Technology]
+1
+Memgraph
+Fastest graph DB in the world!
+2023-08-28 00:00:00 +0000 UTC
+****** End *******
+```
+
+### Visualize the data 
+
+To visualize objects created in the database with the `main.go` script, head over to [http://localhost:3000/](http://localhost:3000/) and run `MATCH path=(n)-[p]-(m) RETURN path` in the *Query Execution* tab. 
+That query will visualize the created nodes and relationships. By clicking on a node or relationship, you can explore different properties.
+
+![go-quick-start](/pages/client-libraries/go/go-quick-start.png)
+
+### Next steps 
+
+This makes a good starting point for Go application. For more information on how to use the Go driver, 
+continue reading the guide under [Go client API usage and examples](#go-client-api-usage-and-examples). 
+
+</Steps>
+
+## Go client API usage and examples 
+
+After a brief [Quickstart guide](#quickstart), this section will go into more detail on how to use the Go driver API, explain code snippets, and provide more examples. Feel free to skip to the section that interests you the most.
+
+### Database connection 
+
+Once the database is running and the driver is installed or available in GO, you should be able to connect to the database in one of two ways:
+
+- [Connect without authentication (default)](#connect-without-authentication-default)
+- [Connect with authentication](#connect-with-authentication)
+
+#### Connect without authentication (default)
+
+By default, the Memgraph database is running without authentication, which means that you can connect to the database without providing any credentials (username and password).
+To connect to Memgraph, create a driver object with the appropriate URI and credentials arguments. If you're running Memgraph locally, the URI should be similar to `bolt://localhost:7687`, and if you are running Memgraph on a remote server, 
+replace `localhost` with the appropriate IP address. 
+If you ran Memgraph on a port different than 7687, do not forget to update that in the URI too. 
+
+By default, you can set username and password in the `neo4j.BasicAuth("","","")` argument as empty strings. This means that you are connecting without authentication.
+
+To connect a Go driver to the Memgraph database without authentication, you can use the following snippet: 
+
+```go {12-13}
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+)
+
+func main() {
+
+    dbUri := "bolt://localhost:7687" // (Default Memgraph Bolt port is 7687)
+	driver, err := neo4j.NewDriverWithContext(dbUri, neo4j.BasicAuth("", "", ""))
+
+	ctx := context.Background()
+	defer driver.Close(ctx)
+
+	err = driver.VerifyConnectivity(ctx)
+	if err != nil {
+		panic(err)
+	} else {
+		fmt.Println("Viola! Connected to Memgraph!")
+	}
+
 }
 
-func insertItem(driver neo4j.Driver) (*Item, error) {
-    // Sessions are short-lived, cheap to create and NOT thread safe. Typically create one or more sessions
-    // per request in your web application. Make sure to call Close on the session when done.
-    // For multi-database support, set sessionConfig.DatabaseName to requested database
-    // Session config will default to write mode, if only reads are to be used configure session for
-    // read mode.
-    session := driver.NewSession(neo4j.SessionConfig{})
-    defer session.Close()
-    result, err := session.WriteTransaction(createItemFn)
-    if err != nil {
-        return nil, err
-    }
-    return result.(*Item), nil
+``` 
+
+Notice that BasicAuth takes three arguments, the first two are `username` and `password`, and the third one is the `realm`.   Realm is an optional argument that can be used to specify the authentication realm. If no realm is specified, an empty string can be used.
+For both `username` and `password`, the empty string is passed, which means that you are connecting without authentication.
+
+#### Connect with authentication
+
+In order to set up authentication in Memgraph, you need to create a user with a `username` and `password`. In Memgraph you can set a username and password by executing the following query: 
+
+```Cypher
+CREATE USER `memgraph` IDENTIFIED BY 'memgraph';
+```
+
+Then, you can connect to the database with the following snippet:
+
+```go {12-15}
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+)
+
+func main() {
+
+	dbUser := "memgraph"
+	dbPassword := "memgraph"
+	dbUri := "bolt://localhost:7687" // (Default Memgraph Bolt port is 7687)
+	driver, err := neo4j.NewDriverWithContext(dbUri, neo4j.BasicAuth(dbUser, dbPassword, ""))
+
+	ctx := context.Background()
+	defer driver.Close(ctx)
+
+	err = driver.VerifyConnectivity(ctx)
+	if err != nil {
+		panic(err)
+	} else {
+		fmt.Println("Viola! Connected to Memgraph!")
+	}
+
 }
 
-func createItemFn(tx neo4j.Transaction) (interface{}, error) {
-    records, err := tx.Run(
-        "CREATE (a:Greeting) SET a.message = $message RETURN 'Node ' + id(a) + ': ' + a.message",
-        map[string]interface{}{"message": "Hello, World!"})
-    // In face of driver native errors, make sure to return them directly.
-    // Depending on the error, the driver may try to execute the function again.
-    if err != nil {
-        return nil, err
-    }
-    record, err := records.Single()
-    if err != nil {
-        return nil, err
-    }
-    // You can also retrieve values by name, with e.g. `id, found := record.Get("n.id")`
-    return &Item{
-        Message: record.Values[0].(string),
-    }, nil
+``` 
+
+You may receive this error: 
+
+```panic: Neo4jError: Memgraph.ClientError.Security.Unauthenticated (Authentication failure)```
+    
+The error indicates that you have probably enabled authentication in Memgraph, but are trying to connect without authentication. For more details on how to set authentication further, visit the [Memgraph authentication guide](/configuration/security/#creating-user).
+
+#### Go client connection lifecycle management 
+
+Once the driver connection to Memgraph is established, it doesn't need to be closed. It's sufficient to open a single client connection to Memgraph and use it for all queries.
+In the examples above, Go [context](https://pkg.go.dev/context) has been used to manage the client's lifecycle. In this case, the client's lifetime is tied to the application's lifecycle.
+
+The following code snippet will make sure to close the client connection once the application is finished: 
+
+```go
+ctx := context.Background()
+defer driver.Close(ctx)
+```
+
+Keep in mind that driver object is thread safe, and can be reused between different threads. 
+
+### Query the database 
+
+After connecting your driver to Memgraph, you can start running queries. The simplest way to run queries is by using the `ExecuteQuery()` method which has an automatic transaction management. 
+
+#### Run a create query 
+
+The following query will create a node inside the database: 
+
+```go 
+node := "CREATE (n:Technology {name:'Memgraph'});"
+_, err = neo4j.ExecuteQuery(ctx, driver, node, nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase("memgraph"))
+if err != nil {
+	panic(err)
+}
+```
+
+The `ExecuteQuery()` method takes the following arguments:
+
+- `ctx` - context of the application.
+- `driver` - driver object connected to the Memgraph database.
+- `query` - Cypher query that need to be executed.
+- `params` - parameters passed to the query.
+- `resultTransformer` - the result transformer that will transform the result into the desired format.
+- `config` - query configuration, like database name, user, etc.
+
+Due to the nature of the `ExecuteQuery()` method, transactions are handled automatically. 
+
+#### Run a read query 
+
+The following query will read data from the database: 
+
+```go
+result, err := neo4j.ExecuteQuery(ctx, driver, "MATCH (n:Technology{name: 'Memgraph'}) RETURN n", nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase("memgraph"))
+if err != nil {
+	panic(err)
+} else {
+	fmt.Println(result)
 }
 
-type Item struct {
-    Message string
+// Print each node as map
+for _, node := range result.Records {
+	fmt.Println(node.AsMap())
+}
+```
+In this query, each record contains a node accessible by the `AsMap()` method.
+
+#### Running queries with property map
+
+If you want to pass a property map to the query, you can do it in the following way
+
+```go
+_, err = neo4j.ExecuteQuery(ctx, driver, "CREATE (n:Technology{name: $name, type: $type})", map[string]any{"name": "Memgraph", "type": "graph database"}, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase(""))
+if err != nil {
+	panic(err)
+}
+```
+Using this approach, the queries will not contain hard-coded values, they can be more dynamic.
+
+### Process the results
+
+Processing results from the database is important since we do not want to lose any data during conversions. To properly read results and serve them back to the Go application, they need to be cast into proper types. 
+
+Depending on the type of request made, you can receive different results, `Nodes`, `Relationships`, `Paths` etc. Let's go over a few basic examples of how to handle different types and access properties of the returned results.
+
+#### Process the Node result
+
+In order to process the result you need to read them first, you can do that by running the following query:
+```go
+result, err := neo4j.ExecuteQuery(ctx, driver, "MATCH (n:Technology{name: 'Memgraph'}) RETURN n", nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase("memgraph"))
+if err != nil {
+    panic(err)
+}
+```
+The `ExceuteQuery` method returns results in the `EagerResults` format, giving you access to the `Records` field. The records field contains all the records returned by the query. To process the results, you can iterate over the records and access the fields you need. 
+
+For example: 
+
+```go
+for _, node := range result.Records {
+    fmt.Println(node.AsMap()["n"].(neo4j.Node))
+}
+```
+```text
+{65 65 [Technology] map[createdAt:{0 63828259200 <nil>} description:Fastest graph DB in the world! id:1 name:Memgraph]}
+```
+In the example above, each returned record is converted into a map. From the map, you can access the `n` field, which is a `Node` returned from a query. The returned record and all its properties are of type `any`. This means you have to cast them to the relevant Go type if you want to use methods or features defined on such types. 
+
+You can access individual properties of the `Node` using one of the following options: 
+
+```go
+node.AsMap()["n"].(neo4j.Node).GetProperties() // map[createdAt:{0 63828259200 <nil>} description:Fastest graph DB in the world! id:1 name:Memgraph]
+node.AsMap()["n"].(neo4j.Node).GetElementId() // 65
+node.AsMap()["n"].(neo4j.Node).Labels // [Technology]
+node.AsMap()["n"].(neo4j.Node).Props["id"].(int64) // 1
+node.AsMap()["n"].(neo4j.Node).Props["name"].(string) // Memgraph
+node.AsMap()["n"].(neo4j.Node).Props["description"].(string) // Fastest graph DB in the world!
+node.AsMap()["n"].(neo4j.Node).Props["createdAt"].(neo4j.Date).Time() // 2023-08-22 00:00:00 +0000 UTC
+
+```
+
+You can access all `Node` properties by casting and accessing the `Props` field. Keep in mind that the `GetElementId()` method returns the internal ID of the node, which is not the same as the user-defined ID, and it should not 
+be used for any application-level logic.
+
+
+#### Process the Relationship result
+
+You can also receive a relationship from a query. For example: 
+
+```go {14-22}
+//Create a relationship between two nodes, developer and technology
+query = "CREATE (d:Developer {name: 'John Doe'})-[:USES {id:99}]->(t:Technology {id: 1, name:'Memgraph', description: 'Fastest graph DB in the world!', createdAt: Date()});"
+_, err = neo4j.ExecuteQuery(ctx, driver, query, nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase(""))
+if err != nil {
+	panic(err)
+}
+
+//Read a relationship between two nodes, developer and technology
+query = "MATCH (d:Developer)-[r:USES]->(t:Technology) RETURN r"
+result, err = neo4j.ExecuteQuery(ctx, driver, query, nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase(""))
+if err != nil {
+	panic(err)
+}
+// Process results 
+for _, rel := range result.Records {
+	fmt.Println(rel.AsMap()["r"].(neo4j.Relationship))
+	fmt.Println(rel.AsMap()["r"].(neo4j.Relationship).GetProperties())
+	fmt.Println(rel.AsMap()["r"].(neo4j.Relationship).GetElementId())
+	fmt.Println(rel.AsMap()["r"].(neo4j.Relationship).Type)
+	fmt.Println(rel.AsMap()["r"].(neo4j.Relationship).StartElementId)
+	fmt.Println(rel.AsMap()["r"].(neo4j.Relationship).EndElementId)
+	fmt.Println(rel.AsMap()["r"].(neo4j.Relationship).Props["id"].(int64))
+}
+```
+You can access the `Relationship` properties just like the [Node](#process-the-node-result) properties. `StartElementId` and `EndElementId` are the internal IDs of the start and end nodes of the relationship.
+
+#### Process the Path result
+
+You can receive path from the database, using the following construct:
+
+```go
+query = "MATCH p=(d:Developer)-[r:USES]->(t:Technology) RETURN p"
+result, err = neo4j.ExecuteQuery(ctx, driver, query, nil, neo4j.EagerResultTransformer, neo4j.ExecuteQueryWithDatabase(""))
+if err != nil {
+	panic(err)
+}
+
+for _, path := range result.Records {
+	fmt.Println(path.AsMap()["p"].(neo4j.Path))
+	fmt.Println(path.AsMap()["p"].(neo4j.Path).Nodes)
+	fmt.Println(path.AsMap()["p"].(neo4j.Path).Relationships)
 }
 ```
 
-**3.** Create a `go.mod` file by running:
+Path will contain [Nodes](#process-the-node-result) and [Relationships[#process-the-relationship-result], that can be accessed in the same way as in the previous examples, by casting them to the relevant type.
+
+#### Types mapping and casting
+
+ Here is the full table of the mapping between Memgraph Cypher types and the types used in the Go driver:
+
+|  Cypher Type | Driver Type        |
+|-------------:|:-------------------|
+|          Null| nil                |
+|       String | string             |
+|      Boolean | bool               |
+|      Integer | int64              |
+|        Float | float              |
+|         List | []any              |
+|          Map | map[string]any     |
+|         Node | neo4j.Node         |
+| Relationship | neo4j.Relationship |
+|         Path | neo4j.Path         |
+|     Duration | neo4j.Duration     |
+|         Date | neo4j.Date         |
+|    LocalTime | neo4j.LocalTime    |
+|LocalDateTime | neo4j.LocalDateTime|
+
+Keep in mind that Memgraph does not support timezones at the moment. 
+
+### Transaction management
+
+Transaction is a unit of work that is executed on the database, it could be some basic read, write or complex set of steps in form of series of queries. There can be multiple ways to mange transaction, but usually, they are managed automatically by the driver or manually by the explicit code steps. Transaction management defines how to handle the transaction, when to commit, rollback, or terminate it.
+
+#### Automatic transaction management 
+
+Using the `ExecuteQuery()` method, the driver takes care of the transaction for the Cypher query you are trying to execute. The `ExceuteQuery()` method should be used when transaction control is unnecessary. Multiple queries can be passed inside the `ExecuteQuery()` method.
+
+<Callout type="warning">
+
+Error with multicommand transactions
+
+***Index manipulation not allowed in multicommand transactions*** is a kind of error you might experience. To fix that, use [implicit (or auto-commit) transactions](#implicit-transactions) instead.
+
+</Callout>
+
+The automatic transaction management has been used in the [Quickstart](#quickstart) section, so you can take a look at the code samples there to see how it works.
+
+#### Manual transaction management
+
+Manaual transaction management provieds more control and fexibility to the code running transaction, which can help with optimisation and correctness. It is based on chunking multiple queries, rolling back, terminating, and commiting transactions based on bussines logic and requirements.
+This usually comes with a cost of more code and more complexity.
+
+##### Session management
+
+Before you manage manual transactions, you'll need to create a session. A session is a specific connection to the database that can live for a certain period. The session connection is lightweight and should be closed after the 
+wanted queries have been executed. You don't need to keep the session open for the whole duration of the application. To open a session, use the code snippet below: 
+
+```go
+session := driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: "neo4j"})
+defer session.Close(ctx)
+```
+
+Sessions are not thread safe, so you should create a new session for each Go routine. 
+
+With sessions, you can:
+
+- [Manged transactions](#managed-transactions) - run multiple queries with automatic retries without the possibility to roll back a query within a transaction.
+- [Explicit transactions](#explicit-transactions) - get full control over transactions by explicitly controlling the end of transaction that won't be automatically retried.
+- [Implicit transactions](#implicit-transactions) - run a Cypher query that won't be automatically retried.
+
+
+[Session](https://pkg.go.dev/github.com/neo4j/neo4j-go-driver/v5/neo4j#SessionWithContext) have multiple access points that can be used to access the database: 
+
+- `ExecuteRead` - executes a defined transaction workload in read access mode with retry logic. (managed transaction)
+- `ExecuteWrite` - executes a defined transaction workload in write access mode with retry logic. (managed transaction)
+- `BeginTransaction` - starts a new explicit transaction. (explicit transaction)
+- `Run` - executes a auto-commit statement and returns result. (implicit transaction)
+
+##### Managed Transactions
+
+In some cases, when using automatic transactions via `ExecuteQuery()`, you cannot have business logic between transactions. For that reason, manually managing transactions is also possible, which can bring flexibility to how the queries are executed. 
+If you want to read data from the database, here is an example of a managed transaction:
+```go {1-14}
+	nodes, err := session.ExecuteRead(ctx,
+		func(tx neo4j.ManagedTransaction) (any, error) {
+			result, err := tx.Run(ctx, `  
+				MATCH (n:Technology) WHERE n.name = "Memgraph"
+				RETURN n;
+				`, map[string]any{
+				"filter": "Memgraph",
+			})
+			records, err := result.Collect(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return records, nil
+		})
+	if err != nil {
+		panic(err)
+	} else {
+		for _, tech := range nodes.([]*neo4j.Record) {
+			fmt.Println(tech.AsMap())
+		}
+	}
+```
+
+In the example above the `session.ExecuteRead` gets the function as an argument, the function is executed as a single transaction unit, and the result are returned from the function to the `session.ExecuteRead` method call. 
+
+Additional custom processing can be done on the result, such as running a second query inside the same transaction to return the wanted results. 
+For example: 
+
+```go {12-30}
+nodes, err := session.ExecuteRead(ctx,
+		func(tx neo4j.ManagedTransaction) (any, error) {
+			result, err := tx.Run(ctx, `  
+				MATCH (n:Technology) WHERE n.name = $filter
+				RETURN n;
+				`, map[string]any{
+				"filter": "Memgraph",
+			})
+			if err != nil {
+				return nil, err
+			}
+			records, _ := result.Collect(ctx)
+
+			second_results, err := tx.Run(ctx, `
+				MATCH (n:Technology) WHERE n.name = $filter
+				RETURN n;
+				`, map[string]any{
+				"filter": "Go",
+			})
+			if err != nil {
+				return nil, err
+			}
+			second_records, _ := second_results.Collect(ctx)
+
+			records = append(records, second_records...)
+
+			// Do some custom processing here
+
+			return records, nil
+		})
+	if err != nil {
+		panic(err)
+	} else {
+		for _, tech := range nodes.([]*neo4j.Record) {
+			fmt.Println(tech.AsMap())
+		}
+	}
+```
+
+The highlighted code contains two queries inside the same transaction, and the results of the second query are appended to the results of the first one. Chaining different queries in this manner gives you the flexibility to run custom processing on the results.
+
+##### Explicit Transactions
+
+In some scenarios, managed transactions cannot be `rolled back` or `commited`. In that case, explicit transactions must be used. Explicit transactions are the most flexible way to run Cypher queries, as they provide full control over transactions and explicit control of the transaction's end.
+
+For example: 
+
+```go
+tx, err := session.BeginTransaction(ctx)
+tx.Run(ctx, "CREATE (n:Technology {name:'Memgraph'});", nil)
+tx.Commit(ctx) // or tx.Rollback(ctx)
+```
+
+
+Here is the full working example based on the explicit transaction: 
+
+```go {52, 53}
+
+func getTechNodesByName(ctx context.Context, tx neo4j.ExplicitTransaction, name string) (any, error) {
+	result, err := tx.Run(ctx, `
+		MATCH (n:Technology) WHERE n.name = $filter
+		RETURN n;
+		`, map[string]any{
+		"filter": name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	records, _ := result.Collect(ctx)
+	return records, nil
+}
+
+func getDevNodesByName(ctx context.Context, tx neo4j.ExplicitTransaction, name string) (any, error) {
+	result, err := tx.Run(ctx, `
+		MATCH (n:Developer) WHERE n.name = $filter
+		RETURN n;
+		`, map[string]any{
+		"filter": name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	records, _ := result.Collect(ctx)
+	return records, nil
+}
+
+	// Rest of the main missing for brevity
+
+	tx, err := session.BeginTransaction(ctx)
+
+	memgraph, err := getTechNodesByName(ctx, tx, "Memgraph")
+	if err != nil {
+		panic(err)
+	}
+	for _, node := range memgraph.([]*neo4j.Record) {
+		fmt.Println(node.AsMap()["n"].(neo4j.Node))
+	}
+
+	goLang, err := getTechNodesByName(ctx, tx, "Go")
+	if err != nil {
+		panic(err)
+	}
+	for _, node := range goLang.([]*neo4j.Record) {
+		fmt.Println(node.AsMap()["n"].(neo4j.Node))
+	}
+
+	//custom processing 
+
+	err = tx.Commit(ctx) 
+	// or tx.Rollback(ctx)
+	if err != nil {
+
+		fmt.Println("Error committing transaction")
+		fmt.Println("Transaction rolled back because of error" + err.Error())
+	}
+	// Rest of the main missing for brevity
 
 ```
-go mod init example.com/hello
-```
 
-**4.** Add the **Bolt driver** with the command:
+##### Implicit transaction 
 
-```
-go get github.com/neo4j/neo4j-go-driver/v5
-```
+Implicit or auto-commit transactions won't be automatically retried as with `ExecuteQuery()` method or managed transactions.
+With implicit transactions, you don't have the same control over transactions as with managed transactions. This is the most primitive way of running transactions: 
 
-**5.** Run the app with the following command:
 
-```
-go run ./program.go
-```
+```go
+	session := driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: "memgraph"})
+	defer session.Close(ctx)
 
-You should see an output similar to the following:
+	session.Run(ctx, "CREATE INDEX ON :Developer(id);", nil)
 
 ```
-Node 0: Hello, World!
-```
+ 
+The code above does not retry or have special checks, it just runs the query and returns the result, if there is any. 
+

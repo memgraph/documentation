@@ -1,3 +1,8 @@
+---
+title: Node.js quick start
+description: Learn to operate Memgraph with Node.js seamlessly. Our documentation instructs to ensure optimized performance of your graph project.
+---
+
 # Node.js quick start
 
 At the end of this guide, you will have created a simple Node.js **`Hello, World!`** program that connects to the Memgraph database and executes simple

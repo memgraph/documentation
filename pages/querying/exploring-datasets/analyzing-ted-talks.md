@@ -1,3 +1,8 @@
+---
+title: Analyzing TED Talks
+description: Analyze TED talks with Memgraph and transform them into a visualization. Learn more about tutorializing the graph analysis of the TED talks dataset with Memgraph.
+---
+
 # Analyzing TED Talks
 
 This article is a part of a series intended to show how to use Memgraph on

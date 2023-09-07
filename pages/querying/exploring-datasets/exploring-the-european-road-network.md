@@ -1,3 +1,8 @@
+---
+title: Exploring the European road network
+description: Visualize the complex European road network with Memgraph. Leverage tutorials and extensive documentation on the graph analysis function to gain insight into tailored route optimization.
+---
+
 # Exploring the European road network
 
 This article is a part of a series intended to show users how to use Memgraph on

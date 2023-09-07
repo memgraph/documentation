@@ -1,3 +1,8 @@
+---
+title: Game of Thrones deaths
+description: Bring Game of Thrones data to life with Memgraph's graph computing visualization. Learn how with detailed tutorials and documentation on the processing capabilities with GoT data.
+---
+
 # Game of Thrones deaths
 
 This article is part of a series intended to show how to use Memgraph on

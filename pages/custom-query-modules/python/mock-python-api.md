@@ -1,3 +1,8 @@
+---
+title: Mock Python query module API
+description: Push the boundaries of graph data analysis with Memgraph's mock Python API integration. You can learn more about how to leverage the mock Python API in our documentation. 
+---
+
 #  Mock Python query module API
 
 The mock Python query module API enables you to develop and test query modules

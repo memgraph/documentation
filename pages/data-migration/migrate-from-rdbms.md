@@ -1,3 +1,8 @@
+---
+title: Migrate from RDBMS to Memgraph
+description: Easily transition from RDBMS to Memgraph. Our detailed documentation makes the migration process straightforward for competent graph computing.
+---
+
 #  Migrate from RDBMS to Memgraph
 
 This tutorial will help you import your data from a MySQL database into Memgraph

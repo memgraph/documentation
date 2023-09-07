@@ -10,18 +10,18 @@ const config: DocsThemeConfig = {
   ),
   logoLink: '/', 
   project: {
-    link: 'https://github.com/memgraph/memgraph',
+    link: 'https://github.com/memgraph/documentation',
   },
   chat: {
     link: 'https://discord.gg/memgraph',
   },
-  docsRepositoryBase: 'https://github.com/memgraph/memgraph',
+  docsRepositoryBase: 'https://github.com/memgraph/documentation/tree/main/',
   footer: {
     text: 'Memgraph',
   },
   head: (
     <>
-      <link rel="icon" href="/favicon.png" />
+      <link rel="icon" href="/docs/favicon.png" type="image/png" />
     </>
   ),
   sidebar: {
@@ -32,11 +32,10 @@ const config: DocsThemeConfig = {
     prev: false,
     next: false
   },
-  editLink: {
-    text: null
-  },
-  feedback: {
-    content: null
+  useNextSeoProps() {
+    return {
+      titleTemplate: '%s'
+    }
   }
 }
 

@@ -1,3 +1,8 @@
+---
+title: Available advanced algorithms
+description: Learn how Memgraph's available algorithms revolutionize graph analysis. Get started with optimized algorithms for tailored queries and access detailed documentation with a snap.
+---
+
 # Available advanced algorithms
 
 If you require procedures designed to solve specific graph problems, there is a

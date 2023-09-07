@@ -1,3 +1,8 @@
+---
+title: RETURN clause
+description: Gain insights into the RETURN clause in Memgraph. A documentation, designed to simplify complexities for smooth graph computing and better develope experience. 
+---
+
 # RETURN clause
 
 The `RETURN` clause defines which data should be included in the resulting set.
