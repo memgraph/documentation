@@ -1,3 +1,8 @@
+---
+title: SET clause
+description: Dive into the intricacies of the SET clause in Memgraph. Detailed documentation paving the way to proficient graph computing.
+---
+
 # SET clause
 
 The `SET` clause is used to update labels on nodes and properties on nodes and relationships.

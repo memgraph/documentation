@@ -1,3 +1,8 @@
+---
+title: Query modules C++ API
+description: Get your hands on the API documentation for mgp.hpp, covering declarations of every function in the C++ API for implementing query modules. 
+---
+
 # Query modules C++ API
 
 This is the API documentation for `mgp.hpp`, which contains declarations of all
@@ -409,7 +414,8 @@ Sets the given error message.
 ## Graph API
 
 This section covers the interface for working with the Memgraph DB graph using the C++ API.
-A description of data types is available [here](https://memgraph.com/docs/memgraph/reference-guide/data-types).
+A description of data types is available [in the reference guide](/fundamentals/data-types).
+
 
 ### Graph
 
@@ -757,8 +763,9 @@ Relationship(Relationship &&other) noexcept
 | `Id`               | Returns the relationship’s ID.                                              |
 | `Type`             | Returns the relationship’s type.                                            |
 | `Properties`       | Returns an iterable & indexable structure of the relationship’s properties. |
-| `SetProperty`      | Set value of relationship's property                                        |
-| `GetProperty`      | Get value of relationship's property                                        |
+| `SetProperty`      | Set value of relationship's property.                                       |
+| `RemoveProperty`   | Removes the relationship's property.                                        |
+| `GetProperty`      | Get value of relationship's property.                                       |
 | `From`             | Returns the relationship’s source node.                                     |
 | `To`               | Returns the relationship’s destination node.                                |
 
@@ -799,6 +806,14 @@ Sets value of the relationship's property.
 
 ```cpp
 void SetProperty(std::string key, std::string value) const
+```
+
+##### RemoveProperty
+
+Removes the relationship's property.
+
+```cpp
+void RemoveProperty(std::string property)
 ```
 
 ##### From
@@ -1763,7 +1778,7 @@ std::hash<mgp::MapItem>
 ### Value
 
 Represents a value of any type supported by Memgraph. 
-The data types are described [here](https://memgraph.com/docs/memgraph/reference-guide/data-types).
+The data types are described [in the reference guide](/fundamentals/data-types).
 
 #### Constructors
 
@@ -2008,7 +2023,7 @@ std::ostream &operator<<(std::ostream &os, const mgp::Value &value)
 ### Type
 
 Enumerates the data types supported by Memgraph and its C++ API.
-The types are listed and described [on this page](https://memgraph.com/docs/memgraph/reference-guide/data-types).
+The types are listed and described [in the reference guide](/fundamentals/data-types).
 
 - `Type::Null`
 - `Type::Any`

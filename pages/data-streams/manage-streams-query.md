@@ -1,3 +1,8 @@
+---
+title: Manage data streams with queries
+description: Learn how you can manage streams efficiently with queries in Memgraph as well as leverage queries for actionable insights by visiting our documentation page.
+---
+
 # Manage data streams with queries
 
 The following page instructs how to manage streams using queries. Streams can
@@ -9,13 +14,12 @@ Data Stream](https://awesomedata.stream/)!
 
 ## How to create and load a transformation module into Memgraph?
 
-A [transformation
-module](/data-streams/transformation-modules/transformation-modules) is a set of
+A [transformation module](/data-streams/transformation-modules) is a set of
 user-defined transformation procedures written in
 [C](/data-streams/transformation-modules/c-api) or
-[Python](/data-streams/transformation-modules/python-api) that
-act on data received from a streaming engine. Transformation procedures instruct
-Memgraph on how to transform the incoming messages to consume them correctly. 
+[Python](/data-streams/transformation-modules/python-api) that act on data
+received from a streaming engine. Transformation procedures instruct Memgraph on
+how to transform the incoming messages to consume them correctly. 
 
 To create a transformation module, you need to:
 

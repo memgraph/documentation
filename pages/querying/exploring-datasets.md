@@ -1,3 +1,8 @@
+---
+title: Exploring datasets with graph analytics
+description: Traverse larger datasets with ease with Memgraph's data exploration capabilities. Detailing tutorials and documentation, get started with your Memgraph exploration now.
+---
+
 # Exploring datasets with graph analytics
 
 The tutorials that focus on exploring datasets want to showcase how to use
@@ -18,7 +23,7 @@ sidebar. From there, choose the dataset that seems interesting to you and
 continue with the tutorial. 
 
 You can also run an instance in [Memgraph
-Cloud](https://memgraph.com/docs/memgraph-cloud/). Once you [sing
+Cloud](/getting-started/install-memgraph/memgraph-cloud/). Once you [sign
 up](https://cloud.memgraph.com/), create a new project. From the project you can
 connect to Memgraph Lab web application and navigate to the `Datasets` in the
 sidebar to choose the preferred dataset.

@@ -1,3 +1,8 @@
+---
+title: RETURN clause
+description: Gain insights into the RETURN clause in Memgraph. A documentation, designed to simplify complexities for smooth graph computing and better develope experience. 
+---
+
 # RETURN clause
 
 The `RETURN` clause defines which data should be included in the resulting set.
@@ -211,7 +216,8 @@ Output:
 
 ## 11. Returning aggregated results
 
-The `RETURN` statement can be used with [`Aggregation`](https://memgraph.com/docs/cypher-manual/functions#aggregation-functions) functions:
+The `RETURN` statement can be used with
+[`Aggregation`](/querying/functions#aggregation-functions) functions:
 
 ```cypher
 MATCH (c:Country)
