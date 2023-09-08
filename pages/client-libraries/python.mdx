@@ -248,7 +248,119 @@ driver.execute_query(node)
 
 Due to the nature of the `execute_query()` method, transactions are handled automatically. 
 
-#### Automatic transaction
+#### Run a read query 
+
+The following query will read the previously created node from the database: 
+
+```python
+node = "MATCH (n:Technology) RETURN n;"
+result = driver.execute_query(node)
+
+for record in records:
+    node = record["n"] 
+    print(node)   
+
+```
+
+In this query, each record contains a node object behind the variable `n`.
+
+
+#### Running queries with property map
+
+```python
+query = "CREATE (n:Technology {id:$id, name: $name, description: $description});"
+driver.execute_query(query, 
+    id=1, 
+    name="MemgraphDB", 
+    description="Fastest graph database")
+```
+
+Using this approach, the queries will not contain hard-coded values, they can be more dynamic.
+
+### Proces the results 
+
+Processing results from the database is important since we do not want to lose any data during conversions and properly read results and serve them back to the Python application. Python is dynamically typed language, which means that the type of the variable is determined at runtime, which is why we need to be careful when processing results.
+
+#### Process the Node result
+
+In order to process the result you need to read them first, you can do that by running the following query:
+
+```python
+query = "MATCH (n:Technology) RETURN n;"
+records, summary, keys = driver.execute_query(query)
+```
+The `execute_query()` method returns a tuple of three elements: `records`, `summary` and `keys`. The records field contains all the records returned by the query. To process the results, you can iterate over the records and access the fields you need. 
+
+For example: 
+    
+```python
+for record in records:
+    node = record["n"]
+    print(node)
+```
+```text
+<Node element_id='48' labels=frozenset({'Technology'}) properties={'description': 'Fastest graph database', 'id': 1, 'name': 'MemgraphDB'}>
+```
+
+In the example above, each returned record, you can access the `n` field, which is a `Node` returned from a query.
+
+You can access individual properties of the `Node` using one of the following options: 
+
+```python
+print(node)             # <Node element_id='47' labels=frozenset({'Technology'}) properties={'description': 'Fastest graph database', 'id': 1, 'name': 'MemgraphDB'}>
+print(node.labels)      # frozenset({'Technology'})
+print(node.element_id)  # 48
+print(node["id"])       # 1
+print(node["name"])     # MemgraphDB
+```
+
+Keep in mind that the `element_id` property returns the internal ID of the node, which is not the same as the user-defined ID, and it should not 
+be used for any application-level logic.
+
+#### Process the Relationship result
+
+You can also receive a relationship from a query. For example: 
+
+```python
+    query = "CREATE (u:User {name: 'John'})-[r:LOVES {id:99}]->(t:Technology {name: 'Memgraph'})"
+    driver.execute_query(query)
+
+    query = "MATCH (u:User)-[r:LOVES]->(t:Technology) RETURN r"
+    records, summary, keys = driver.execute_query(query)
+    for record in records:
+        relationship = record["r"]
+        print(relationship)
+        print(relationship.element_id)
+        print(relationship["id"])
+        print(relationship.type)
+        print(relationship.nodes)
+
+```
+You can access the `Relationship` properties just like the [Node](#process-the-node-result) properties. Keep in mind that `element_id` is the internal ID of the relationship, which is not the same as the user-defined ID, and it should not be used for any application-level logic.
+
+#### Process the Path result
+
+You can receive path from the database, using the following construct:
+
+```python
+query = "MATCH p=(d:User)-[r:LOVES]->(t:Technology) RETURN p"
+records, summary, keys = driver.execute_query(query)
+for record in records:
+    path = record["p"]
+    print(path)
+    print(path.nodes)
+    print(path.relationships)  
+    print(path.start_node)
+    print(path.end_node)
+```
+
+Path will contain [Nodes](#process-the-node-result) and [Relationships[#process-the-relationship-result], that can be accessed in the same way as in the previous examples.
+
+### Transaction management
+
+Transaction is a unit of work that is executed on the database, it could be some basic read, write or complex set of steps in form of series of queries. There can be multiple ways to mange transaction, but usually, they are managed automatically by the driver or manually by the explicit code steps. Transaction management defines how to handle the transaction, when to commit, rollback, or terminate it.
+
+#### Automatic transaction management 
 
 To query the database, run the `execute_query()` procedure on the driver object with the Cypher query argument, along with its parameters and database name.
 A good practice is to always provide a database name, to avoid extra request to the server and in that way, improve performance and to provide parameters to protect your queries from Cypher injections.
