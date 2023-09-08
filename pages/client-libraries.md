@@ -16,3 +16,4 @@ Memgraph supports the following languages:
 
 To query Memgraph programmatically use the [Bolt protocol](https://7687.org/).
 The Bolt protocol was designed for efficient communication with graph databases
+and **Memgraph supports versions 1, 4 adn 5.2** of the protocol. 
