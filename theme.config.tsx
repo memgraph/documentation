@@ -1,5 +1,7 @@
-import React from 'react'
-import { DocsThemeConfig } from 'nextra-theme-docs'
+import React from 'react';
+import { DocsThemeConfig } from 'nextra-theme-docs';
+import Footer from './components/Footer';
+import Copyright from './components/Copyright';
 
 const config: DocsThemeConfig = {
   logo: (
@@ -9,7 +11,7 @@ const config: DocsThemeConfig = {
     </>
   ),
   darkMode: false,
-  logoLink: '/', 
+  logoLink: '/',
   project: {
     link: 'https://github.com/memgraph/memgraph',
   },
@@ -18,7 +20,12 @@ const config: DocsThemeConfig = {
   },
   docsRepositoryBase: 'https://github.com/memgraph/documentation/tree/main/',
   footer: {
-    text: 'Memgraph',
+    component: (
+      <>
+        <Footer />
+        <Copyright />
+      </>
+    ),
   },
   head: (
     <>
@@ -40,4 +47,4 @@ const config: DocsThemeConfig = {
   }
 }
 
-export default config
+export default config;
