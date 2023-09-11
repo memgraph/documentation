@@ -9,7 +9,7 @@ const ExternalLink = ({ href, children }) => (
 );
 
 const Footer = () => (
-  <footer className="footer-container">
+  <footer>
         <div>
           <img src="/docs/memgraph-logo-footer.svg" alt="Memgraph Logo" width="162" height="55" />
         </div>

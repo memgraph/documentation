@@ -1,6 +1,7 @@
 import React from 'react';
 import { DocsThemeConfig } from 'nextra-theme-docs';
 import Footer from './components/Footer';
+import Copyright from './components/Copyright';
 
 const config: DocsThemeConfig = {
   logo: (
@@ -19,8 +20,13 @@ const config: DocsThemeConfig = {
   },
   docsRepositoryBase: 'https://github.com/memgraph/documentation/tree/main/',
   footer: {
-    component: Footer
-  }, 
+    component: (
+      <>
+        <Footer />
+        <Copyright />
+      </>
+    ),
+  },
   head: (
     <>
       <link rel="icon" href="/docs/favicon.png" type="image/png" />
