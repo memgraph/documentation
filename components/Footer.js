@@ -9,11 +9,11 @@ const ExternalLink = ({ href, children }) => (
 );
 
 const Footer = () => (
-  <footer>
-        <div>
+  <footer className="footer-container">
+        <div className="footer-logo">
           <img src="/docs/memgraph-logo-footer.svg" alt="Memgraph Logo" width="162" height="55" />
         </div>
-        <div>
+        <div className="footer-column">
             <ul className="column-text">
                 <li><span className="column-title">Documentation</span ></li>
                 <li><a href="/docs/getting-started">Get started</a></li>
@@ -24,7 +24,7 @@ const Footer = () => (
                 <li><a href="/docs/advanced-algorithms">Use advanced algorithms</a></li>
             </ul>
         </div>
-        <div>
+        <div className="footer-column">
             <ul className="column-text">
                 <li><span className="column-title">Community</span ></li>
                 <li><ExternalLink href="https://discord.gg/memgraph">Discord</ExternalLink></li>
@@ -32,7 +32,7 @@ const Footer = () => (
                 <li><ExternalLink href="https://twitter.com/memgraphdb">Twitter</ExternalLink></li>
             </ul>
         </div>
-        <div>
+        <div className="footer-column">
             <ul className="column-text">
                 <li><span className="column-title">More</span ></li>
                 <li><ExternalLink href="https://cloud.memgraph.com/login">Memgraph Cloud</ExternalLink></li>
