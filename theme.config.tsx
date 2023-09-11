@@ -13,7 +13,7 @@ const config: DocsThemeConfig = {
   darkMode: false,
   logoLink: '/',
   project: {
-    link: 'https://github.com/memgraph/documentation',
+    link: 'https://github.com/memgraph/memgraph',
   },
   chat: {
     link: 'https://discord.gg/memgraph',
