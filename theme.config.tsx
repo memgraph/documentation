@@ -1,29 +1,32 @@
-import React from 'react';
-import { DocsThemeConfig } from 'nextra-theme-docs';
-import Footer from './components/Footer';
-import Copyright from './components/Copyright';
+import React from "react";
+import { DocsThemeConfig } from "nextra-theme-docs";
+import Footer from "./components/Footer";
+import Copyright from "./components/Copyright";
 
 const config: DocsThemeConfig = {
   logo: (
     <>
-      <img src="/docs/memgraph-logo-navigation.svg" alt="Memgraph Logo" style={{ height: '24px', verticalAlign: 'middle', marginRight: '1em' }} />
+      <img
+        src="/docs/memgraph-logo-navigation.svg"
+        alt="Memgraph Logo"
+        style={{ height: "24px", verticalAlign: "middle", marginRight: "1em" }}
+      />
       <span>Memgraph Documentation</span>
     </>
   ),
-  darkMode: true,
-  logoLink: '/',
+  darkMode: false,
+  logoLink: "/",
   project: {
-    link: 'https://github.com/memgraph/memgraph',
+    link: "https://github.com/memgraph/memgraph",
   },
   chat: {
-    link: 'https://discord.gg/memgraph',
+    link: "https://discord.gg/memgraph",
   },
-  docsRepositoryBase: 'https://github.com/memgraph/documentation/tree/main/',
+  docsRepositoryBase: "https://github.com/memgraph/documentation/tree/main/",
   footer: {
     component: (
       <div className="whole-footer-wrapper">
         <Footer />
-        <Copyright />
       </div>
     ),
   },
@@ -34,17 +37,17 @@ const config: DocsThemeConfig = {
   ),
   sidebar: {
     defaultMenuCollapseLevel: 1,
-    autoCollapse: true, 
+    autoCollapse: true,
   },
   navigation: {
     prev: false,
-    next: false
+    next: false,
   },
   useNextSeoProps() {
     return {
-      titleTemplate: '%s'
-    }
-  }
-}
+      titleTemplate: "%s",
+    };
+  },
+};
 
 export default config;
