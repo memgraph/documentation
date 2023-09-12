@@ -14,7 +14,7 @@ const config: DocsThemeConfig = {
       <span>Memgraph Documentation</span>
     </>
   ),
-  darkMode: false,
+  darkMode: true,
   logoLink: "/",
   project: {
     link: "https://github.com/memgraph/memgraph",
