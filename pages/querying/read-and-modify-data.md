@@ -1,3 +1,8 @@
+---
+title: Read and modify data
+description: Understand the effective ways of reading and modifying data in Memgraph. The perfect resource for efficient graph computing.
+---
+
 # Read and modify data
 
 The simplest usage of the language is to find data stored in the database. For

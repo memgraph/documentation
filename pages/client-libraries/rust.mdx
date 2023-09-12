@@ -1,0 +1,702 @@
+---
+title: Rust quick start
+description: Discover the utilization of Rust with Memgraph. Our documentation explores Rust integration for streamlined graph computing. 
+---
+
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+
+
+# Rust client guide 
+
+Learn how to create a Rust application that connects to the Memgraph database and executes simple queries.
+
+This guide is based on the Memgraph Rust driver [rsmgclient](https://github.com/memgraph/rsmgclient).
+
+<Callout type="info">
+Keep in mind that if you are already using [neo4rs](https://github.com/neo4j-labs/neo4rs), you can use Neo4j driver with Memgraph, since Memgraph is compatible with Neo4j drivers.
+</Callout>
+
+## Quickstart 
+
+The following guide will demonstrate how to start Memgraph, connect to Memgraph, seed the database with data, and run simple read and write queries. 
+
+Necessary prerequisites that should be installed in your local environment are: 
+
+ - [Rust programming language](https://www.rust-lang.org/tools/install)
+ - [Docker](https://docs.docker.com/get-docker/) 
+
+<Steps>
+### Run Memgraph 
+
+Start by running Memgraph in the background. The easiest way to install and run Memgraph is by using Docker. Start the container with the following command:
+
+```bash
+docker run -it -p 7687:7687 -p 7444:7444 -p 3000:3000 --name memgraph memgraph/memgraph-platform
+```
+
+The command above will start [Memgraph Platform](/getting-started/install-memgraph/docker#install-memgraph-platform), which includes [Memgraph database](/getting-started/install-memgraph/docker#other-available-docker-images), [Memgraph Lab](/data-visualization#quick-start) and [Memgraph MAGE](/advanced-algorithms#quick-start). Memgraph uses Bolt protocol to communicate with the client using the exposed 7687 port. 
+Memgraph Lab is a web application you can use to visualize the data. It's accessible at [http://localhost:3000](http://localhost:3000) if Memgraph Platform is running correctly. The 7444 port enables Memgraph Lab to access and preview the logs, which is why both of these ports need to be exposed.
+
+For more information visit the getting started guide on [how to run Memgraph with Docker](/getting-started/install-memgraph/docker).
+
+### Create a directory 
+
+Next, create a directory for your project and positioning yourself in it:
+
+```bash
+mkdir hello-memgraph
+cd hello-memgraph
+```
+
+### Create a new Rust project
+
+If Rust is properly installed, you can create a new Rust project with the following command:
+
+```bash
+cargo new hello-memgraph
+```
+
+It will create a new directory called `hello-memgraph` with the following structure:
+
+```bash
+hello-memgraph
+├── Cargo.toml
+└── src
+    └── main.rs
+```
+
+### Add rsmgclient dependency
+
+To use the rsmgclient driver, you need to add it to the `Cargo.toml` file under the line `[dependencies]`:
+
+```toml
+rsmgclient = "2.0.1"
+```
+
+### Write a minimal working example 
+
+Now, let's write a minimal working example that will connect a Rust driver to Memgraph and execute simple queries:
+
+```rust
+use rsmgclient::{ConnectParams, Connection, Value, SSLMode, ConnectionStatus};
+ 
+fn main() {
+
+    // Connect to Memgraph 
+    let connect_params = ConnectParams {
+        host: Some(String::from("localhost")),
+        port: 7687,
+        sslmode: SSLMode::Disable,
+        ..Default::default()
+    };
+    let mut connection = Connection::connect(&connect_params).unwrap();
+
+    // Check if connection is established.
+    let status = connection.status();
+    
+    if status != ConnectionStatus::Ready {
+        println!("Connection failed with status: {:?}", status);
+        return;
+    } else {
+        println!("Connection established with status: {:?}", status);
+    }
+       
+    // Clear the graph.
+    connection.execute_without_results("MATCH (n) DETACH DELETE n;").unwrap();
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+    
+    let indexes = vec![
+        "CREATE INDEX ON :Developer(id);",
+        "CREATE INDEX ON :Technology(id);",
+        "CREATE INDEX ON :Developer(name);",
+        "CREATE INDEX ON :Technology(name);",
+    ];
+
+    let developer_nodes = vec![
+        "CREATE (n:Developer {id: 1, name:'Andy'});",
+        "CREATE (n:Developer {id: 2, name:'John'});",
+        "CREATE (n:Developer {id: 3, name:'Michael'});",
+    ];
+
+    let technology_nodes = vec![
+        "CREATE (n:Technology {id: 1, name:'Memgraph', description: 'Fastest graph DB in the world!', createdAt: Date()})",
+        "CREATE (n:Technology {id: 2, name:'Rust', description: 'Rust programming language ', createdAt: Date()})",
+        "CREATE (n:Technology {id: 3, name:'Docker', description: 'Docker containerization engine', createdAt: Date()})",
+        "CREATE (n:Technology {id: 4, name:'Kubernetes', description: 'Kubernetes container orchestration engine', createdAt: Date()})",
+        "CREATE (n:Technology {id: 5, name:'Python', description: 'Python programming language', createdAt: Date()})",
+    ];
+
+    let relationships = vec![
+        "MATCH (a:Developer {id: 1}),(b:Technology {id: 1}) CREATE (a)-[r:LOVES]->(b);",
+        "MATCH (a:Developer {id: 2}),(b:Technology {id: 3}) CREATE (a)-[r:LOVES]->(b);",
+        "MATCH (a:Developer {id: 3}),(b:Technology {id: 1}) CREATE (a)-[r:LOVES]->(b);",
+        "MATCH (a:Developer {id: 1}),(b:Technology {id: 5}) CREATE (a)-[r:LOVES]->(b);",
+        "MATCH (a:Developer {id: 2}),(b:Technology {id: 2}) CREATE (a)-[r:LOVES]->(b);",
+        "MATCH (a:Developer {id: 3}),(b:Technology {id: 4}) CREATE (a)-[r:LOVES]->(b);",
+    ];
+
+    for index in indexes {
+        connection.execute_without_results(index).unwrap();
+    }
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+
+    for developer_node in developer_nodes {
+        connection.execute_without_results(developer_node).unwrap();
+    }
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+
+    for technology_node in technology_nodes {
+        connection.execute_without_results(technology_node).unwrap();
+    }
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+
+    for relationship in relationships {
+        connection.execute_without_results(relationship).unwrap();
+    }
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+
+    // Fetch the graph.
+    let columns = connection.execute("MATCH (n)-[r]->(m) RETURN n, r, m;", None);
+    println!("Columns: {}", columns.unwrap().join(", "));
+    
+    while let Ok(result) = connection.fetchall() {
+        for record in result {
+            for value in record.values {
+                match value {
+                    Value::Node(node) => println!("Node: {}", node),
+                    Value::Relationship(edge) => println!("Edge: {}", edge),
+                    value => println!("Value: {}", value),
+                }
+            }
+        }
+     
+        println!();
+    }
+    // Close the connection.
+    connection.close();
+
+}
+```
+
+### Build the project 
+
+To build the project, run the following command within the project directory:
+
+```bash
+cargo build
+```
+
+### Run the project
+
+To run the project, run the following command within the project directory:
+
+```bash
+cargo run
+```
+
+If everything is working properly, you should see the following output:
+
+```text
+Connection established with status: Ready
+Columns: n, r, m
+Node: (:Developer {'id': 1, 'name': 'Andy'})
+Edge: [:LOVES {}]
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Fastest graph DB in the world!', 'id': 1, 'name': 'Memgraph'})
+Node: (:Developer {'id': 3, 'name': 'Michael'})
+Edge: [:LOVES {}]
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Fastest graph DB in the world!', 'id': 1, 'name': 'Memgraph'})
+Node: (:Developer {'id': 2, 'name': 'John'})
+Edge: [:LOVES {}]
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Rust programming language ', 'id': 2, 'name': 'Rust'})
+Node: (:Developer {'id': 2, 'name': 'John'})
+Edge: [:LOVES {}]
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Docker containerization engine', 'id': 3, 'name': 'Docker'})
+Node: (:Developer {'id': 3, 'name': 'Michael'})
+Edge: [:LOVES {}]
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Kubernetes container orchestration engine', 'id': 4, 'name': 'Kubernetes'})
+Node: (:Developer {'id': 1, 'name': 'Andy'})
+Edge: [:LOVES {}]
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Python programming language', 'id': 5, 'name': 'Python'})
+```
+
+### Visualize the data 
+
+To visualize objects created in the database using the `main.rs` script, head over to [http://localhost:3000/](http://localhost:3000/) and run `MATCH path=(n)-[p]-(m) RETURN path` in the *Query Execution* tab. 
+That query will visualize the created nodes and relationships. By clicking on a node or a relationship, you can explore different properties.
+
+![rust-quick-start](/pages/client-libraries/rust/rust-quick-start.png)
+
+### Next steps 
+
+You can continue building your Rust applications. For more information on how to use the Rst driver, 
+continue reading about [Rust client API usage and examples](#rust-client-api-usage-and-examples). 
+
+</Steps>
+
+## Rust client API usage and examples
+
+After a brief [Quickstart guide](#quickstart), this section will go into more detail on how to use the Rust driver API, explain code snippets, and provide more examples. Feel free to skip to the section that interests you the most.
+
+### Database connection 
+
+Once the database is running and the driver is installed or available in Rust, you should be able to connect to the database in one of two ways:
+
+- [Connect without authentication (default)](#connect-without-authentication-default)
+- [Connect with authentication](#connect-with-authentication)
+
+#### Connect without authentication (default)
+
+By default, the Memgraph database is running without authentication, which means that you can connect to the database without providing any credentials (username and password).
+To connect to Memgraph, create a driver object with the appropriate host, port and credentials arguments. If you're running Memgraph locally, the host should be `localhost`, and port `7687` by default. If you are running Memgraph on a remote server, 
+replace `localhost` with the appropriate IP address, or if you ran Memgraph on port different than 7687, do not forget to update change the port. 
+
+To connect the Rust driver to the Memgraph database, use the following code snippet: 
+
+```rust
+
+use rsmgclient::{ConnectParams, Connection, Value, SSLMode, ConnectionStatus};
+ 
+fn main() {
+
+    // Connect to Memgraph 
+    let connect_params = ConnectParams {
+        host: Some(String::from("localhost")),
+        port: 7687,
+        sslmode: SSLMode::Disable,
+        ..Default::default()
+    };
+    let mut connection = Connection::connect(&connect_params).unwrap();
+
+    // Check if connection is established.
+    let status = connection.status();
+    
+    if status != ConnectionStatus::Ready {
+        println!("Connection failed with status: {:?}", status);
+        return;
+    } else {
+        println!("Connection established with status: {:?}", status);
+    }
+
+``` 
+
+All default connection parameters are available in the [rsmgclient repository](https://github.com/memgraph/rsmgclient/blob/master/src/connection/mod.rs#L84). The default values for the username and password are `None`, meaning you can connect to the database without providing any credentials.
+
+#### Connect with authentification
+
+In order to set up authentication in Memgraph, you need to create a user with a `username` and `password`. In Memgraph you can set a username and password by executing the following query: 
+
+```Cypher
+CREATE USER `memgraph` IDENTIFIED BY 'memgraph';
+```
+
+Then, you can connect to the database with the following snippet:
+
+```rust {9-10}
+use rsmgclient::{ConnectParams, Connection, Value, SSLMode, ConnectionStatus};
+ 
+fn main() {
+
+    // Connect to Memgraph 
+    let connect_params = ConnectParams {
+        host: Some(String::from("localhost")),
+        port: 7687,
+        username: Some(String::from("memgraph")),
+        password: Some(String::from("memgraph")),
+        sslmode: SSLMode::Disable,
+        ..Default::default()
+    };
+    let mut connection = Connection::connect(&connect_params).unwrap();
+
+    // Check if connection is established.
+    let status = connection.status();
+
+    if status != ConnectionStatus::Ready {
+        println!("Connection failed with status: {:?}", status);
+        return;
+    } else {
+        println!("Connection established with status: {:?}", status);
+    }
+```
+
+You may receive this error: 
+
+```
+thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: MgError { message: "Authentication failure" }'
+```
+
+The error indicates that you have probably enabled authentication in Memgraph, but are trying to connect without authentication. For more details on how to set authentication further, visit the [Memgraph authentication guide](/configuration/security/#creating-user).
+
+#### Rust client connection lifecycle managment 
+
+Each connection object is a separate session with the database. The connection object is responsible for executing queries and fetching results. Memgraph will automatically close the connection if the client doesn't use it for a certain period.
+Make sure that you close the connection when you are done with it, and open a new connection when you need to execute a new query. 
+
+### Query the database 
+
+After connecting your driver to Memgraph. you can start running queries. 
+
+#### Run a create query
+
+The folowing example will create a node in the database: 
+
+```rust
+let _create_node = "CREATE (n:Technology {name: 'Memgraph'}) RETURN n";
+let _columns = connection.execute(_create_node, None);
+while let Ok(result) =  connection.fetchall() {
+    for record in result {
+        for value in record.values {
+            match value {
+                Value::Node(node) => println!("Node: {}", node),
+                value => println!("Value: {}", value),
+            }
+        }
+    }
+}
+
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+```
+
+The executed method takes the following arguments:
+
+- `query` - The query that will be executed.
+- `params` - The parameters that will be passed to the query.
+
+If you do not need to fetch the results, you can use the `execute_without_results` method, which simplifies the code:
+ 
+```rust
+let _create_node = "CREATE (n:Technology {name: 'Memgraph'}) RETURN n";
+connection.execute_without_results(_create_node).unwrap();
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+```
+`execute_without_results` method takes only one argument, the query.
+
+#### Run a read query   
+
+The following query will read data from the database: 
+
+```rust
+let _read_node = "MATCH (n:Technology {name: 'Memgraph'}) RETURN n";
+let _columns = connection.execute(_read_node, None);
+while let Ok(result) =  connection.fetchall() {
+    for record in result {
+        for value in record.values {
+            match value {
+                Value::Node(node) => println!("Node: {}", node),
+                value => println!("Value: {}", value),
+            }
+        }
+    }
+}
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+```
+
+In this example, the match statement is used to distinguish between different types of values that can be returned from the database. In this case the query will return a node, so the rest of logic could be based on that information. 
+
+#### Running a queries with property map 
+
+If you want to pass a property map to the query, you can do it like this:
+
+```rust
+let _create_node = "CREATE (n:Technology {name: $name, description: $description}) RETURN n";
+let mut params = HashMap::new();
+params.insert("name".to_string(), QueryParam::String("Memgraph".to_string()));
+params.insert("description".to_string(), QueryParam::String("Fastest graph DB in the world!".to_string()));
+let _columns = connection.execute(_create_node, Some(&params));
+while let Ok(result) =  connection.fetchall() {
+    for record in result {
+        for value in record.values {
+            match value {
+                Value::Node(node) => println!("Node: {}", node),
+                value => println!("Value: {}", value),
+            }
+        }
+    }
+}
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+```
+
+Using this approach, the queries will not contain hard-coded values, they can be more dynamic.
+
+### Process the results
+
+In order to serve the read results back to the Rust application, their types need to be handled properly because Rust is a statically typed language. 
+Depending on the type of request made, you can receive different results. Let's go over a few basic examples of how to handle different types and access properties of the returned results.
+
+#### Process the node results
+
+To process the results, you need to read them first. You can do that by running the following query:
+
+```rust
+let _read_node = "MATCH (n:Technology {name: 'Memgraph'}) RETURN n";
+let _columns = connection.execute(_read_node, None);
+while let Ok(result) =  connection.fetchall() {
+    for record in result {
+        for value in record.values {
+            match value {
+                Value::Node(node) => println!("Node: {}", node),
+                value => println!("Value: {}", value),
+            }
+        }
+    }
+}
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+```
+
+Since the value of returned results can be `Node`, `Relationship`, `Path`, or some other type, we must `match` the value to the appropriate type. In this case, the value is a `Node` so we can access the `Node` properties. 
+
+```text
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Fastest graph DB in the world!', 'id': 1, 'name': 'Memgraph'})
+```
+
+Due to the Rust `match` design, it is necessary to handle all types that could be returned from the database, i.e., `match` all possible types using the `value => println!("Value: {}", value),` statement.
+
+You can access individual properties of the `Node` using one of the following options: 
+```rust
+// Rest of the code omitted for brevity.
+        match value {
+            Value::Node(node) =>
+            {
+                println!("Node: {}", node);
+                println!("Node id: {}", node.id);
+                println!("Node labels: {:?}", node.labels);
+                println!("Node properties: {:?}", node.properties);
+                println!("Node properties: {:?}", node.properties.get("id"));
+                println!("Node properties: {:?}", node.properties.get("name"));
+                println!("Node properties: {:?}", node.properties.get("description"));
+                println!("Node properties: {:?}", node.properties.get("createdAt"));
+            }
+            value => println!("Value: {}", value),
+        }
+// Rest of the code omitted for brevity.
+```
+The full output of the code above is:
+
+```text
+Node: (:Technology {'createdAt': '2023-09-05', 'description': 'Fastest graph DB in the world!', 'id': 1, 'name': 'Memgraph'})
+Node id: 179
+Node labels: ["Technology"]
+Node properties: {"id": Int(1), "description": String("Fastest graph DB in the world!"), "createdAt": Date(2023-09-05), "name": String("Memgraph")}
+Node properties: Some(Int(1))
+Node properties: Some(String("Memgraph"))
+Node properties: Some(String("Fastest graph DB in the world!"))
+Node properties: Some(Date(2023-09-05))
+```
+
+You can access all `Node` properties by accessing the `properties` field. Keep in mind that the `id` returns the internal ID of the node, which is not the same as the user-defined ID, and it should not 
+be used for any application-level logic.
+
+
+#### Process the Relationship results
+
+You can also receive a relationship from the query. For example: 
+
+```rust
+
+let _create_relationship = "CREATE (d:Developer {name: 'John Doe'})-[:LOVES {id:99}]->(t:Technology {id: 0, name:'Memgraph'})";
+let _columns = connection.execute_without_results(_create_relationship);
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+
+let _read_relationship = "MATCH (d:Developer)-[r:LOVES]->(t:Technology) RETURN r";
+let _columns = connection.execute(_read_relationship, None);
+while let Ok(result) =  connection.fetchall() {
+    for record in result {
+        for value in record.values {
+            match value {
+                Value::Relationship(edge) =>
+                {
+                    println!("Edge: {}", edge);
+                    println!("Edge id: {}", edge.id);
+                    println!("Edge start_node_id: {}", edge.start_id);
+                    println!("Edge end_node_id: {}", edge.end_id);
+                    println!("Edge type: {}", edge.type_);
+                    println!("Edge properties: {:?}", edge.properties);
+                    println!("Edge properties: {:?}", edge.properties.get("id"));
+
+                }
+                _ => continue
+            }
+        }
+    }
+}
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+```
+
+The output of the code above is:
+```text
+Edge: [:LOVES {'id': 99}]
+Edge id: 455
+Edge start_node_id: 237
+Edge end_node_id: 238
+Edge type: LOVES
+Edge properties: {"id": Int(99)}
+Edge properties: Some(Int(99))
+```
+
+You can access the `Relationship` properties in the same way as you access the [Node](#process-the-node-result) properties. The only difference is that the `Relationship` has `start_id` and `end_id` properties, which represent the start and end node of the relationship.
+
+#### Process the Path results
+
+You can receive path from the database, using the following construct:
+
+```rust
+let _read_path = "MATCH p=(d:Developer)-[r:LOVES]->(t:Technology) RETURN p";
+let _columns = connection.execute(_read_path, None);
+while let Ok(result) =  connection.fetchall() {
+    for record in result {
+        for value in record.values {
+            match value {
+                Value::Path(path) =>
+                {
+                    println!("Path nodes: {:?}", path.nodes);
+                    println!("Path relationships: {:?}", path.relationships);
+                }
+                _ => continue
+            }
+        }
+    }
+}
+if let Err(e) = connection.commit() {
+    println!("Error: {}", e);
+}
+```
+
+Path will contain [Nodes](#process-the-node-result) and [Relationships[#process-the-relationship-result], that can be accessed in the same way as in the previous examples, by casting them to the relevant type.
+
+#### Types mapping and casting
+
+ Here is the full table of the mapping between Memgraph Cypher types and the types used in the Rust driver:
+
+|  Cypher Type | Driver Type        |
+|-------------:|:-------------------|
+|          Null| Null               |
+|       String | String             |
+|      Boolean | bool               |
+|      Integer | i64                |
+|        Float | f64                |
+|         List | Vec< Value >       |
+|          Map | HashMap< String, Value >|
+|         Node | Node               |
+| Relationship | Relationship       |
+|         Path | Path               |
+| UnboundRelationship | UnboundRelationship |
+|     Duration | Duration           |
+|         Date | NaiveDate          |
+|    LocalTime | NaiveTime          |
+|LocalDateTime | NaiveDateTime      |
+
+Keep in mind that Memgraph does not support timezones at the moment. 
+
+### Transaction management
+
+Transaction is a unit of work that is executed on the database, it could be some basic read, write or complex set of steps in form of series of queries. There can be multiple ways to mange transaction, but usually, they are managed automatically by the driver or manually by the explicit code steps. Transaction management defines how to handle the transaction, when to commit, rollback, or terminate it.
+
+Currenty, there are two ways to manage transactions in the Rust driver:
+
+- [Manual transaction management](#manual-transaction-management)
+- [Implicit transaction management](#implicit-transaction-management)
+
+
+#### Manual transaction management
+
+Once the connection is established, you can run queries via the following methods:
+
+- `execute` - Starts the transaction for executing a query, returns the result.
+- `execute_without_results` - Executes the query without returning the result.
+
+Only the `execute()` method should be manually managed by the user, meaning you need to commit or roll back the transaction. This means the transaction is started inside the `execute` method when it `BEGIN`, and it will be finished with the `COMMIT` or `ROLLBACK`, depending on the logic. 
+Here is the example:
+
+```rust
+    //Manual transaction management
+    let _create_node = "CREATE (n:Technology {name: 'Memgraph'}) RETURN n";
+    let _columns = connection.execute(_create_node, None);
+    
+    //Process the results
+    while let Ok(result) =  connection.fetchall() {
+        for record in result {
+            match record {
+                _ => println!("Running custom processing logic")
+            }
+        }
+    }
+    
+    // Run second query in same transaction
+    let _create_node = "CREATE (n:Technology {name: 'Rust'}) RETURN n";
+    let _columns = connection.execute(_create_node, None);
+   
+    //Process the results
+    while let Ok(result) =  connection.fetchall() {
+        for record in result {
+            match record {
+                _ => println!("Running custom processing logic")
+            }
+        }
+    }
+    //Maybe a rollback? 
+    // if let Err(e) = connection.rollback() {
+    //     println!("Error: {}", e);
+    // }
+    // Or maybe a commit?
+    if let Err(e) = connection.commit() {
+        println!("Error: {}", e);
+    }
+
+    // Close the connection.
+    connection.close();
+    
+```
+Memgraph log will show the following output:
+
+```text
+[2023-09-05 21:28:33.721] [memgraph_log] [debug] [Run - memgraph] 'BEGIN'
+[2023-09-05 21:28:33.722] [memgraph_log] [debug] [Run - memgraph] 'CREATE (n:Technology {name: 'Memgraph'}) RETURN n'
+[2023-09-05 21:28:33.723] [memgraph_log] [debug] [Run - memgraph] 'CREATE (n:Technology {name: 'Rust'}) RETURN n'
+[2023-09-05 21:28:33.724] [memgraph_log] [debug] [Run - memgraph] 'COMMIT'
+```
+
+
+#### Implicit transaction management
+
+When the connection configuration is set to `autocommit`, the driver will automatically commit the transaction after each query. This means that the transaction won't be started with `BEGIN`, and you will not be able to roll back or commit the transaction manually.
+
+In order to set the connection to `autocommit`, you need to set the `autocommit` field to `true` in the `ConnectParams` struct:
+
+```rust {8}
+  // Connect to Memgraph 
+    let connect_params = ConnectParams {
+        host: Some(String::from("localhost")),
+        port: 7687,
+        username: None,
+        password: None
+        sslmode: SSLMode::Disable,
+        autocommit: true,
+        ..Default::default()
+    };
+```
+Each query in the `execute` method will now be automatically committed. By default, using the `execute_without_results` method will automatically commit the transaction, even if the `autocommit` is set to `false`.

@@ -1,5 +1,7 @@
-import React from 'react'
-import { DocsThemeConfig } from 'nextra-theme-docs'
+import React from 'react';
+import { DocsThemeConfig } from 'nextra-theme-docs';
+import Footer from './components/Footer';
+import Copyright from './components/Copyright';
 
 const config: DocsThemeConfig = {
   logo: (
@@ -8,20 +10,26 @@ const config: DocsThemeConfig = {
       <span>Memgraph Documentation</span>
     </>
   ),
-  logoLink: '/', 
+  darkMode: false,
+  logoLink: '/',
   project: {
     link: 'https://github.com/memgraph/memgraph',
   },
   chat: {
     link: 'https://discord.gg/memgraph',
   },
-  docsRepositoryBase: 'https://github.com/memgraph/memgraph',
+  docsRepositoryBase: 'https://github.com/memgraph/documentation/tree/main/',
   footer: {
-    text: 'Memgraph',
+    component: (
+      <div className="whole-footer-wrapper">
+        <Footer />
+        <Copyright />
+      </div>
+    ),
   },
   head: (
     <>
-      <link rel="icon" href="/favicon.png" />
+      <link rel="icon" href="/docs/favicon.png" type="image/png" />
     </>
   ),
   sidebar: {
@@ -32,12 +40,11 @@ const config: DocsThemeConfig = {
     prev: false,
     next: false
   },
-  editLink: {
-    text: null
-  },
-  feedback: {
-    content: null
+  useNextSeoProps() {
+    return {
+      titleTemplate: '%s'
+    }
   }
 }
 
-export default config
+export default config;

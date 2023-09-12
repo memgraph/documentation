@@ -1,3 +1,8 @@
+---
+title: Performance optimization
+description: Optimize your graph computing performance with Memgraph. Access tips on performance optimization in our tutorials and detailed documentation to maximize efficiency.
+---
+
 # Performance optimization
 
 ## Analyze graph

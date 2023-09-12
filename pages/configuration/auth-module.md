@@ -1,3 +1,8 @@
+---
+title: Auth module (Enterprise)
+description: Manage user authentication and access control in Memgraph using the Auth module. Get improved security and control in your graph computing environment.
+---
+
 # Auth module (Enterprise)
 
 Memgraph supports authentication and (optional) authorization using a custom

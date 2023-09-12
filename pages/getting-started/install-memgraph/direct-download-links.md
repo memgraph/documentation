@@ -1,3 +1,8 @@
+---
+title: Memgraph direct download links
+description: Access Memgraph direct download links all in a single page. Our documentation is committed to ensuring a smooth developer experience. 
+---
+
 # Memgraph direct download links
 
 You can download all of the Memgraph database packages from the [Memgraph

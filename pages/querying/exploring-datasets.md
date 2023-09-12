@@ -1,3 +1,8 @@
+---
+title: Exploring datasets with graph analytics
+description: Traverse larger datasets with ease with Memgraph's data exploration capabilities. Detailing tutorials and documentation, get started with your Memgraph exploration now.
+---
+
 # Exploring datasets with graph analytics
 
 The tutorials that focus on exploring datasets want to showcase how to use
