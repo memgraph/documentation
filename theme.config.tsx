@@ -21,10 +21,10 @@ const config: DocsThemeConfig = {
   docsRepositoryBase: 'https://github.com/memgraph/documentation/tree/main/',
   footer: {
     component: (
-      <>
+      <div className="whole-footer-wrapper">
         <Footer />
         <Copyright />
-      </>
+      </div>
     ),
   },
   head: (
