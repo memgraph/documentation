@@ -20,7 +20,7 @@ const ExternalLink = ({ href, children }) => (
 );
 
 const Footer = () => (
-  <footer className="flex flex-col pt-[56px] lg:pt-[107px] px-[40px] lg:px-[156px] h-full lg:h-[511px] bg-[#F9F9F9]">
+  <footer className="flex flex-col pt-[56px] lg:pt-[107px] px-[40px] lg:px-[156px] h-full lg:h-[511px] bg-[#F9F9F9] items-center">
     <div className="flex flex-col lg:flex-row gap-[40px] lg:gap-[80px] mb-[45px]">
       <div className="flex flex-col mr-[140px] w-[162px] h-[56px]">
         <Image
