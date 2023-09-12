@@ -61,7 +61,7 @@ twttr.conversion.trackPid('o8ess', { tw_sale_amount: 0, tw_order_quantity: 0 });
 !function(w,d){if(!w.rdt){var p=w.rdt=function(){p.sendEvent?p.sendEvent.apply(p,arguments):p.callQueue.push(arguments)};p.callQueue=[];var t=d.createElement("script");t.src="https://www.redditstatic.com/ads/pixel.js",t.async=!0;var s=d.getElementsByTagName("script")[0];s.parentNode.insertBefore(t,s)}}(window,document);rdt('init','t2_lrrq2wp9');rdt('track', 'PageVisit');
 `}</Script>
 
-<ThemeProvider attribute="class" defaultTheme="light">
+<ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
         <main className={inter.className}>
           <Component {...pageProps} />
         </main>
