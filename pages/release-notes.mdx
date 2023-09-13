@@ -7,25 +7,120 @@ import { Callout } from 'nextra/components'
 
 # Release notes
 
+## Memgraph v2.11 - Sep 13, 2023
+
+{<h3> New features and improvements </h3>}
+
+- The import of relationships in [on-disk storage
+  mode](/storage-memory-usage#on-disk-transactional-storage-mode) can be
+  improved by switching to `READ ONLY VERTEX MODE;`. When not in `READ ONLY
+  VERTEX MODE;`, the engine can import around 180 relationships per second. When
+  switching to `READ ONLY VERTEX MODE;` the engine can import around 7500
+  relationships per second.
+  [#1157](https://github.com/memgraph/memgraph/pull/1157).
+- The following [configurational
+  settings](/configuration/configuration-settings) can now be changed during
+  runtime: server name, query execution timeout, log level and the option to log
+  to `stderr`. Use the following queries to set the configuration: 
+  ```
+  SET DATABASE SETTING 'server.name' TO 'new-name';
+  SET DATABASE SETTING 'query.timeout' TO '100';
+  SET DATABASE SETTING 'log.level' TO 'TRACE';
+  SET DATABASE SETTING 'log.to_stderr' TO 'true`;
+  ```
+  [#1183](https://github.com/memgraph/memgraph/pull/1183)
+- The default value of
+  [`--bolt-server-name-for-init`](/configuration/configuration-settings#bolt) is
+  now `Neo4j/v5.11.0 compatible graph database server - Memgraph`.
+  [#1183](https://github.com/memgraph/memgraph/pull/1183)
+- During recovery from a snapshot, the recovery of each graph object or property
+  is no longer logged in the TRACE setting. The log now only indicates the
+  recovery progress. [#1054](https://github.com/memgraph/memgraph/pull/1054)
+- There has been various updates that improved performance: 
+  - Updating indices and constraints has been streamlined, significantly improving
+    execution time for everybody making heavy use of them.
+    [#1159](https://github.com/memgraph/memgraph/pull/1159) [#1142](https://github.com/memgraph/memgraph/pull/1142)
+  - Queries that build maps with multiple same-variable property lookups have been
+    optimized. [#1168](https://github.com/memgraph/memgraph/pull/1168)
+  - The batch update of properties improves performance when setting a large
+    number of properties, as in this example: 
+    ```
+    FOREACH (i in range(0, 1000000) | CREATE (n:Label {id:i}));                              
+
+    CREATE INDEX ON :Label(id);                                                              
+
+    FOREACH (i IN range(0, 1000000, 3) | MERGE (n:Label {id:i}) SET n += {prop2:"a1", prop3:"b2", prop4:"c3", prop5:"d4", prop6:"e5", prop7:"f6", prop8:"g7", prop9:"h8", prop10:"i9", prop11:"j10 q"});
+    ```
+    [#1115](https://github.com/memgraph/memgraph/pull/1115)
+  - Setting properties is also improved by caching mappings of property name to
+    internal property `id`. [#1147](https://github.com/memgraph/memgraph/pull/1147)
+  - Performance has been improved for concurrent operations contending on the same
+    node. [#1187](https://github.com/memgraph/memgraph/pull/1187)
+  - When a query is executing in many iterations over the graph entities, the
+    performance has been improved by 100% due to faster scanning of nodes, for example: 
+    ```
+    UNWIND RANGE (1, 500) AS i CREATE ();
+    MATCH (),(),() RETURN COUNT(*);
+    ```
+    [#1127](https://github.com/memgraph/memgraph/pull/1227)
+  - The query engine is more performant as at all times it is scanning and
+    expanding nodes instead of scanning both source and destination nodes and
+    then expanding to the relationship between them.
+    [#1085](https://github.com/memgraph/memgraph/pull/1085)
+  - The expansion of node is no longer only done from left to right. Depending on
+    the previous executions and how many relationships needed to be check on
+    MERGE, the engine knows the fewest vector necessary to expand.
+    [#1110](https://github.com/memgraph/memgraph/pull/1110)
+  - The performance of `DETACH DELETE` query has been improved.
+  [#1078](https://github.com/memgraph/memgraph/pull/1078)
+- Changes to [the C++ API]():
+  - Users can now call `ToString()` method on `mgp::Value` and Memgraph's data
+    types when writing query modules using [C++
+    API](/reference-guide/query-modules/implement-custom-query-modules/api/cpp-api.md).
+    [#1140](https://github.com/memgraph/memgraph/pull/1140)
+  - Trigger functions can now access deleted vertices from deleted edge when
+    processed. [#1209](https://github.com/memgraph/memgraph/pull/1209)
+  - When developing query modules using C++ API, you can now get the `In` and
+    `Out` degrees of a node in O(1) time complexity. [#1217](https://github.com/memgraph/memgraph/pull/1217)
+  - The C++ API now enables you to change relationship start (from) and end (to)
+    nodes with `mgp::Graph.SetFrom` and `mgp::Graph.SetTo` methods.
+- `SHOW INDEX INFO` now displays index information in alphabetic order for
+  easier orientation. [#1178](https://github.com/memgraph/memgraph/pull/1178)
+- The `PROFILE` query now generates a table with operators in the same order as
+  in the plan constructed with the `EXPLAIN` query.
+  [#1024](https://github.com/memgraph/memgraph/pull/1204)
+
 ## Memgraph v2.10.1 - Aug 22, 2023
 
-### Improvements and bug fixes
+{<h3> New features and improvements </h3>}
 
+- Removing properties from relationships with `RemoveProperty()` function in
+  [C++
+  API](/reference-guide/query-modules/implement-custom-query-modules/api/cpp-api.md).
+  [#1156](https://github.com/memgraph/memgraph/pull/1156)
 - Improved performance on batch update of properties, e.g., `MATCH (n) SET n += {prop1:1, prop2:2, ...};`
   [#1115](https://github.com/memgraph/memgraph/pull/1115)
-- Added a delta cache to improve query performance. This helps in situations of
-  repeated reads of nodes which have many delta changes caused by another
-  transaction while the current transaction is operating with snapshot isolation
-  level and needs to process those deltas. This can be tuned using the
-  [`--delta-chain-cache-threshold` configuration
+- When working at a snapshot isolation level, if a certain graph object is
+  changed multiple times as a part of one of many parallel transactions, the
+  delta chain tracking its changes becomes very long. Other parallel transaction
+  with snapshot insolation that started before the modifications and dependent
+  on that object need to access and process that delta chain to get its correct
+  state, which can be very expensive regarding CPU usage. Now, Memgraph is
+  caching delta chains of 128 or more changes, which eliminates the need of
+  processing the chain and improves performance. If you would benefit from
+  changing at what length the delta chain should be cashed, adjust the value of
+  the [`--delta-chain-cache-threshold` configuration
   flag](/configuration/configuration-settings#other).
-  [#1124](https://github.com/memgraph/memgraph/pull/1124)
-- The same query module can now be executed concurrently by different clients.
-  [#1158](https://github.com/memgraph/memgraph/pull/1158)
+  [#1124](https://github.com/memgraph/memgraph/pull/1124).
+
+{<h3> Bug fixes </h3>}
+
+- The same query module can now be executed concurrently by different clients
+  without issues. [#1158](https://github.com/memgraph/memgraph/pull/1158)
 
 ## MAGE v1.10.0 - Aug 23, 2023
 
-### Features and improvements
+{<h3> Features and improvements </h3>}
 
 - You can use the [`label`
   module](/advanced-algorithms/available-algorithms/label) to check whether a
@@ -37,7 +132,7 @@ import { Callout } from 'nextra/components'
   string concatenation and supports custom delimiters.
   [#287](https://github.com/memgraph/mage/pull/287)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - LLM prompts returned by the [`llm_util`
   module](/advanced-algorithms/available-algorithms/llm_util) now list node and relationship
@@ -46,7 +141,7 @@ import { Callout } from 'nextra/components'
 
 ## Lab v2.8.1 - Aug 22, 2023
 
-### Bug fixes
+{<h3> Bug fixes </h3>}
 
 - Quick connect will now try to connect to Memgraph on `127.0.0.1` instead of
   `localhost` because it is not always clear what `localhost` will be resolved
@@ -60,7 +155,7 @@ import { Callout } from 'nextra/components'
 
 ## Memgraph v2.10.1 - Aug 22, 2023
 
-### Improvements and bug fixes
+{<h3> Improvements and bug fixes </h3>}
 
 - Improved performance on batch update of properties, e.g.:
 
@@ -87,7 +182,7 @@ import { Callout } from 'nextra/components'
 
 ## Lab v2.8.0 - Aug 04, 2023
 
-### New features and improvements
+{<h3> New features and improvements </h3>}
 
 - You can now save and edit connection details so you don't have to type them in
   on every reconnect.
@@ -109,7 +204,7 @@ import { Callout } from 'nextra/components'
   `_` which is pretty handy for defining local variables in `@NodeStyle` and
   `@EdgeStyle` directives. 
 
-### Bug fixes
+{<h3> Bug fixes </h3>}
 
 - Setting up the `z-index` for edges in Graph Style Script now works as expected.
 - Large integer numbers in query table results are now shown correctly, e.g. it
@@ -122,7 +217,7 @@ import { Callout } from 'nextra/components'
 
 ## MAGE v1.9.0 - Aug 03, 2023
 
-### Features and improvements
+{<h3> Features and improvements </h3>}
 
 - With the new [`collections` module](advanced-algorithms/available-algorithms/collections) you can
   filter, sort and modify lists within Cypher queries.
@@ -134,7 +229,7 @@ import { Callout } from 'nextra/components'
 
 ## Memgraph v2.10 - Aug 2, 2023
 
-### New features and improvements
+{<h3> New features and improvements </h3>}
 
 - The new [multi-tenant support](/configuration/multi-tenancy) available in
   the Enterprise Edition of Memgraph enables you to manage multiple isolated
@@ -195,7 +290,7 @@ import { Callout } from 'nextra/components'
   privileges will be ignored until the next login.
   [#1109](https://github.com/memgraph/memgraph/pull/1109)
 
-### Bug fixes
+{<h3> Bug fixes </h3>}
 
 - Connection with Bolt v5.2 now works as expected when returning a path as a
   result. [#1108](https://github.com/memgraph/memgraph/pull/1108) 
@@ -222,7 +317,7 @@ instance, then the REPLICA instances.
 
 </Callout>
 
-### New features and improvements
+{<h3> New features and improvements </h3>}
 
 - The new [`ON_DISK_TRANSACTIONAL` storage
   mode](/fundamentals/storage-memory-usage) allows you to store data on disk
@@ -266,7 +361,7 @@ instance, then the REPLICA instances.
   to MAIN instances so they are not disconnected from the cluster upon restart.
   [#791](https://github.com/memgraph/memgraph/pull/791)
 
-### Bug fixes
+{<h3> Bug fixes </h3>}
 
 - `init-file` and `init-data-file` configuration flags allow the execution of
   queries from a CYPHERL file, prior to or immediately after the Bolt server
@@ -279,7 +374,7 @@ instance, then the REPLICA instances.
 
 ## MAGE v1.8.0 - Jul 21, 2023
 
-### Features and improvements
+{<h3> Features and improvements </h3>}
 
 - With the [`llm_util` module](/advanced-algorithms/available-algorithms/llm_util) you can generate a graph schema in a format best
   suited for large language models (LLMs).
@@ -299,13 +394,13 @@ instance, then the REPLICA instances.
 
 ## Lab v2.7.1 - Jul 05, 2023
 
-### Improvements
+{<h3> Improvements </h3>}
 
 - System Default style has been renamed to System Style. 
 - If you run a query that has errors in the Graph Style Script code, you can
   decide to run it using the System Style. 
 
-### Bug fixes
+{<h3> Bug fixes </h3>}
 
 - Bug that would allow multiple styles to be the default has been fixed. 
 - The System Default Style now has `background-color` set to white.
@@ -318,7 +413,7 @@ instance, then the REPLICA instances.
 
 ## Lab v2.7.0 - Jun 28, 2023
 
-### What's new
+{<h3> What's new </h3>}
 
 - Now you can adjust the following settings:
   - Code completion and automatic graph rendering limits
@@ -364,7 +459,7 @@ instance, then the REPLICA instances.
     `@EdgeStyle` context
 - Memgraph Lab is now packaged as an RPM package and arm64 (M1 chip) for MacOS.
 
-### Bug fixes
+{<h3> Bug fixes </h3>}
 
 - Running a selected part of the Cypher query would just place that selected
   part in the run history. Now, the full query will be saved in the run history,
@@ -383,7 +478,7 @@ instance, then the REPLICA instances.
 
 ## Memgraph v2.8 - May 18, 2023
 
-### New features and improvements
+{<h3> New features and improvements </h3>}
 
 - Data recovery is now up to 6x faster depending on the number of available
   cores, as [snapshot loading is distributed among several
@@ -415,7 +510,7 @@ instance, then the REPLICA instances.
   Memgraph's custom `PoolResource` memory allocator.
   [#898](https://github.com/memgraph/memgraph/pull/898)
 
-### Bug fixes
+{<h3> Bug fixes </h3>}
 
 - Running Python procedures now consume less memory.
   [#932](https://github.com/memgraph/memgraph/pull/932)
@@ -426,7 +521,7 @@ instance, then the REPLICA instances.
 
 ## Lab v2.6.0 - Apr 20, 2023
 
-### What's new
+{<h3> What's new </h3>}
 
 - If you execute multiple Cypher queries, you can now view the result of each
   query instead of viewing just the last result.
@@ -448,7 +543,7 @@ instance, then the REPLICA instances.
   `Lightness`, `HSL`.
   ![gss](/pages/release-notes/lab-260/gss.png)
 
-### Bug fixes
+{<h3> Bug fixes </h3>}
 
 - The initial node count has been removed from the connection initialization so
   connecting to the Memgraph instance containing a huge number of nodes will no
@@ -473,7 +568,7 @@ instance, then the REPLICA instances.
 
 ## Memgraph v2.7 - Apr 5, 2023
 
-### New features and improvements
+{<h3> New features and improvements </h3>}
 
 - You can now choose between [two different storage modes](/fundamentals/storage-memory-usage):
   - Transactional mode - the default database mode that favors
@@ -509,7 +604,7 @@ instance, then the REPLICA instances.
   blocks allocated while processing the `LOAD CSV` query.
   [#825](https://github.com/memgraph/memgraph/pull/825)
 
-### Bug fixes
+{<h3> Bug fixes </h3>}
 
 - The users who have [global visibility on the
   graph](/configuration/security#label-based-access-control) will
@@ -522,7 +617,7 @@ instance, then the REPLICA instances.
 
 ## MAGE v1.7.0 - Apr 5, 2023
 
-### Features and improvements
+{<h3> Features and improvements </h3>}
 
 - The [new conditional execution
 module](/advanced-algorithms/available-algorithms/conditional_execution) lets you define
@@ -531,14 +626,14 @@ module](/advanced-algorithms/available-algorithms/conditional_execution) lets yo
 
 ## MAGE v1.6.1 - Mar 20, 2023
 
-### Features and improvements
+{<h3> Features and improvements </h3>}
 
 - With the `export_util.csv_query()` procedure, you can export query results to a CSV file or as a stream. [#199](https://github.com/memgraph/mage/pull/199)
 - Similarity algorithms (`jaccard`, `overlap` and `cosine`) have been rewritten in C++ to improve performance. [#196](https://github.com/memgraph/mage/pull/196)
 
 ## Lab v2.5.0 - Mar 17, 2023
 
-### What's New
+{<h3> What's New </h3>}
 
 * If there are several Cypher queries in the query editor you can select a single query and run
   it without commenting out all the other queries.
@@ -557,7 +652,7 @@ module](/advanced-algorithms/available-algorithms/conditional_execution) lets yo
   automatically after each query run.
 * Memgraph Lab will now notify you of any product updates and offer various tips and tricks for using the Memgraph ecosystem.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Cypher code suggestions can now handle labels and properties of 250k nodes and 500k relationships, compared to the previous limit of
   100k nodes nad 200k relationships.
@@ -575,7 +670,7 @@ module](/advanced-algorithms/available-algorithms/conditional_execution) lets yo
 
 ## Memgraph v2.6 - Mar 07, 2023
 
-### Major features and improvements
+{<h3> Major features and improvements </h3>}
 
 - Importing speed using the LOAD CSV clause has been improved due to two changes:
   -  Performance improvement in accessing values from large arrays or maps with numerous properties. [#744](https://github.com/memgraph/memgraph/pull/774)
@@ -584,7 +679,7 @@ module](/advanced-algorithms/available-algorithms/conditional_execution) lets yo
 - With the new [Python mock query module API](/custom-query-modules/python/mock-python-api), you can now develop and test Python query modules for Memgraph without having to run a Memgraph instance. The mock API is compatible with the Python API and thus developed modules can be added to Memgraph as-is. [#757](https://github.com/memgraph/memgraph/pull/757)
 - Memgraph now supports Fedora 36 and Ubuntu 22.04 for ARM. [#787](https://github.com/memgraph/memgraph/pull/787) [#810](https://github.com/memgraph/memgraph/pull/810)
 
-### Bug fixes
+{<h3> Bug fixes </h3>}
 
 -  `torch` and `igraph` can no longer be removed from the `svs.modules` cache to avoid issues after reload. [#720](https://github.com/memgraph/memgraph/pull/720)
 -  Newly created nodes now comply with the set label based authorization rules. [#755](https://github.com/memgraph/memgraph/pull/755)
@@ -593,7 +688,7 @@ module](/advanced-algorithms/available-algorithms/conditional_execution) lets yo
 
 ## MAGE v1.6 - Jan 30, 2023
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - The `setup` script now halts if the build fails on C++ or Rust side. [#194](https://github.com/memgraph/mage/pull/194)
 - With the [`meta_util.schema()` procedure](/advanced-algorithms/available-algorithms/meta_util), you can generate a graph schema as a graph result. [#187](https://github.com/memgraph/mage/pull/187)
@@ -603,7 +698,7 @@ module](/advanced-algorithms/available-algorithms/conditional_execution) lets yo
 
 ## Memgraph v2.5.2 - Jan 26, 2023
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Variables can be used inside nested [FOREACH clauses](/querying/clauses). [#725](https://github.com/memgraph/memgraph/pull/725)
 - [FOREACH clause](/querying/clauses) can now use indexes if needed (e.g. in case of MERGE). [#736](https://github.com/memgraph/memgraph/pull/736)
@@ -614,14 +709,14 @@ module](/advanced-algorithms/available-algorithms/conditional_execution) lets yo
 
 ## MAGE v1.5.1 - Jan 20, 2023
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - The version of MemgraphDB that will be used in the Docker image has been updated to 2.5.1.
   [#193](https://github.com/memgraph/mage/pull/193)
 
 ## Memgraph v2.5.1 - Jan 19, 2023
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - The LOAD CSV clause now uses less RAM to load a whole CSV file. Modification
   made to improve the LOAD CSV operation, also influenced high memory usage
@@ -641,7 +736,7 @@ module](/advanced-algorithms/available-algorithms/conditional_execution) lets yo
 
 ## MAGE v1.5 - Dec 20, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Now you can find ancestors (all the nodes from which a path exists ) and descendants (all nodes to which a path exists) starting from a certain node, sort directed acyclic graph in a way that a node which appears before others is first, return a subgraph from nodes using `connect_nodes` method, and create relationships between nodes in a list using the `chain_nodes` method.
   [#180](https://github.com/memgraph/mage/pull/180)
@@ -650,7 +745,7 @@ module](/advanced-algorithms/available-algorithms/conditional_execution) lets yo
 - Graph Coloring no longer outputs strings but vertices and integers. This allows you to use the result of graph coloring directly in Memgraph Lab.
   [#177](https://github.com/memgraph/mage/pull/177)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 - By enabling module reset, you can now train and evaluate the model without shutting down the database.
   Class labels can now start from 0 or negative numbers.
   The low limit of the early stopping flag no longer prematurely stops the training of the model while running the Node classification module.
@@ -658,7 +753,7 @@ module](/advanced-algorithms/available-algorithms/conditional_execution) lets yo
 
 ## Memgraph v2.5.0 - Dec 13, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - `DISTINCT` operator can now be used with aggregation functions. Until now, if
   you wanted to use an aggregation function with distinct values, you had to
@@ -677,7 +772,7 @@ module](/advanced-algorithms/available-algorithms/conditional_execution) lets yo
   CYPHERL file immediately after the Bolt server starts.
   [#696](https://github.com/memgraph/memgraph/pull/696)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Constructors and assignment operators in the C++ query modules API now work as
   expected, and the API type check in the `ValueNumeric` method now correctly
@@ -698,7 +793,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v2.4.0 - Dec 2, 2022
 
-### What's New
+{<h3> What's New </h3>}
 
 * Memgraph Lab now supports manual transaction workflows you can construct using transaction commands `BEGIN`, `COMMIT`, and `ROLLBACK`.
 * Cypher intellisense has been updated to suggest new Cypher features from Memgraph 2.4.0 such as:
@@ -712,7 +807,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 * Graph results view will check for nodes and relationships in arrays and projected graphs. It simplifies
   the visualization of a projected graph or an array of nodes/relationships without using `UNWIND`.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Once the table results view is selected, the results of the following query run will also preview in the table results view, instead of automatically switching to the graph view.
 * Exploring a dataset's query collection now works as expected. It opens up a list of queries that can be used to explore the dataset.
@@ -723,7 +818,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## MAGE v1.4 - Nov 15, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Implemented Link prediction with [DGL](https://www.dgl.ai/).
   [#160](https://github.com/memgraph/mage/pull/160)
@@ -736,13 +831,13 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Added better support for C++ API.
   [#174](https://github.com/memgraph/mage/pull/174)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 - Enable module reset to be able to train and evaluate without shutting down database, enable working with class labels which don't start from 0, and fix potential early stopping due to low limit in the Node classification module.
   [#173](https://github.com/memgraph/mage/pull/173)
 
 ## Memgraph v2.4.2 - Nov 7, 2022
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed a bug when calling `AllShortestPath` with `id` function.
   [#636](https://github.com/memgraph/memgraph/pull/636)
@@ -751,7 +846,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v2.3.1 - Nov 4, 2022
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Writing a single-line comment in the Cypher code no longer results in an error.
 * Having different map tiles (e.g. "light" map tile on one map view, but "dark" map tile on another map view) for multiple graph map views in the rich collection is enabled and works as expected.
@@ -763,7 +858,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v2.3.0 - Oct 24, 2022
 
-### What's New
+{<h3> What's New </h3>}
 
 * Add new updates to the prepared datasets:
   * Add a search bar for searching and filtering datasets.
@@ -785,14 +880,14 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 * Add the ability to enable/disable map background view for nodes with geo information.
 * Add the ability to connect to Neo4j, load datasets, and run Cypher queries.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Fix map view to use latitude and longitude from GSS style instead of `lat` and `lng` node properties.
 * Fix the default GSS to match new the map view configuration by checking `lat` and `lng` node properties.
 
 ## MAGE v1.3.2 - Oct 10, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 - Allowed restricting community detection to subgraphs.
   [#152](https://github.com/memgraph/mage/pull/152)
 - Implemented the degree centrality algorithm.
@@ -800,13 +895,13 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Updated Memgraph version.
   [#171](https://github.com/memgraph/mage/pull/171)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 - Dynamic betweenness centrality bugfix.
   [#147](https://github.com/memgraph/mage/pull/147)
 
 ## Memgraph v2.4.1 - Oct 7, 2022
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed bug when getting EdgeType from Edge object or Label from Vertex object
   in query modules. [#582](https://github.com/memgraph/memgraph/pull/582)
@@ -816,7 +911,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Memgraph v2.4.0 - Sep 15, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Add replica state to `SHOW REPLICAS` query.
   [#379](https://github.com/memgraph/memgraph/pull/379)
@@ -851,7 +946,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
   on a subgraph, by passing the variable of the projected graph as the first
   argument of the query module procedure. [#535](https://github.com/memgraph/memgraph/pull/535)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Added a check to ensure two replicas cannot be registered to an identical
   end-point. [#406](https://github.com/memgraph/memgraph/pull/406)
@@ -873,7 +968,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v2.2.1 - Aug 12, 2022
 
-### What's New
+{<h3> What's New </h3>}
 
 * Add improved and more precise progress when importing built-in datasets.
 * Add an indicator for the total count of error log messages in the sidebar.
@@ -881,7 +976,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 * Add a help section when Lab's connection is reconnecting.
 * Add breadcrumbs for the layout titles.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Fix issues with query collections.
 * Fix vertical layout usability when the help sidebar is opened.
@@ -890,20 +985,20 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v2.2.0 - Jul 15, 2022
 
-### What's New
+{<h3> What's New </h3>}
 
 * Add a new table look and feel across the application: query results, the latest queries, modules, streams.
 * Add a help section with relevant links, guides, and documentation search capability.
 * Add test parameters (batch size, timeout) for testing stream transformation.
 * Add new GSS functions: `Round`, `Floor`, and `Ceil`.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Fix various issues in graph view, streams, and query collections.
 
 ## MAGE v1.3.1 - Jul 14, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 - Updated Memgraph version.
   [#154](https://github.com/memgraph/mage/pull/154)
 - Introduced E2E group testing.
@@ -911,20 +1006,20 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v2.1.2 - Jun 21, 2022
 
-### What's New
+{<h3> What's New </h3>}
 
 * Add a dashboard and overview page for the better onboarding experience.
 * Add environment variables for query, modules, and streams name length validator limits.
 * Add logs connection status messages in the logs view.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Fix several bugs with the stream configuration creation.
 * Fix showing the logs when connected to Memgraph via an encrypted SSL connection.
 
 ## Memgraph v2.3.1 - Jun 23, 2022
 
-### Improvement
+{<h3> Improvement </h3>}
 
 - Updated results return by [`CHECK
   STREAM`](/data-streams#check-stream) query to group
@@ -938,7 +1033,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
   STREAM`](/data-streams#start-a-stream) query that
   returns the raw message received by the transformation. [#392](https://github.com/memgraph/memgraph/pull/392)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fix header on `SHOW REPLICATION ROLE` query and wrong timeout info on `SHOW
   REPLICAS` query. [#376](https://github.com/memgraph/memgraph/pull/376)
@@ -953,17 +1048,17 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v2.1.1 - May 27, 2022
 
-### What's New
+{<h3> What's New </h3>}
 
 * Add tooltips and highlights throughout the application.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Fix several bugs with streams.
 
 ## Lab v2.1.0 - May 25, 2022
 
-### What's New
+{<h3> What's New </h3>}
 
 * Add the ability to view, create, edit, start, stop, test, and remove streams.
 * Add a new connecting screen with the ability to set monitoring (logs) port.
@@ -974,7 +1069,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 * Add new GSS graph functions: `InEdges`, `OutEdges`, `Edges`, `AdjacentNodes`, `StartNode`, `EndNode`, `NodeCount`, `EdgeCount`.
 * Add new GSS array functions: `RandomOf`, `Find`, `Filter`, `Map`, `All`, `Any`, `Uniq`.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Fix the UI for the GSS error messages.
 * Fix the Cypher code suggestion for modules with `.` in the namespace name.
@@ -988,17 +1083,17 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## MAGE v1.3 - May 23, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 - Added integration between cuGraph and Memgraph integration.
   [#99](https://github.com/memgraph/mage/pull/99)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 - Fixed node deletion.
   [#141](https://github.com/memgraph/mage/pull/141)
 
 ## Memgraph v2.3.0 - Apr 27, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added [`FOREACH`](/querying/clauses) clause.
   [#351](https://github.com/memgraph/memgraph/pull/351)
@@ -1008,21 +1103,21 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
   functions](/querying/functions#user-defined-memgraph-magic-functions).
   [#345](https://github.com/memgraph/memgraph/pull/345)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed incorrect loading of C query modules.
   [#387](https://github.com/memgraph/memgraph/pull/387)
 
 ## Lab v2.0.3 - Apr 27, 2022
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Fix the encrypted connection creation towards Memgraph.
 * Fix duplicate keywords in Cypher and Python code suggestion tools.
 
 ## Lab v2.0.2 - Apr 22, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Add guides for empty states throughout the app.
 - Add an ability to close hints for transformations and procedures in module view.
@@ -1030,7 +1125,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Add confirmation step for all delete actions throughout the app.
 - Add the generic Cypher query as a sample query after custom dataset file import.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fix the table view with a better resize functionality throughout the app.
 - Change the color of the node labels and relationship types in the Cypher query editor.
@@ -1041,7 +1136,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## MAGE v1.2 - Apr 20, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Implemented Temporal graph networks.
   [#121](https://github.com/memgraph/mage/pull/121)
@@ -1060,7 +1155,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Bumped the version of Black formatter.
   [#132](https://github.com/memgraph/mage/pull/132)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed IsSubset checking for unordered set.
   [#135](https://github.com/memgraph/mage/pull/135)
@@ -1073,12 +1168,12 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v2.0.1 - Apr 8, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Add context (graph schema, description) to each dataset template.
 - Add an action to download query results.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fix the bug when adding a query to the query collection.
 - Fix several typos and copies.
@@ -1087,7 +1182,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v2.0.0 - Mar 31, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Add horizontal and vertical layouts for custom layout configuration.
 - Add more query information in the latest queries: runtime, status, number of
@@ -1114,7 +1209,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Memgraph v2.2.1 - Mar 17, 2022
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Added CentOS 7 release by fixing the compatibility issue with the older
   version of SSL used on CentOS 7.
@@ -1122,7 +1217,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Memgraph v2.2.0 - Feb 18, 2022
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added support for compilation on ARM architectures (aarch64) and Docker
   support for running Memgraph on Apple M1 machines.
@@ -1150,7 +1245,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - [Added `SHOW VERSION` query](/configuration/server-stats) that returns the version of the Memgraph server
   which is being queried. [#265](https://github.com/memgraph/memgraph/pull/265)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - The reference count is increased when `Py_None` is returned from the `_mgp`
   module. This fixes a nondeterministic fatal Python error.
@@ -1169,7 +1264,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## MAGE v1.1 - Dec 13, 2021
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Updated rsmgp-sys to the new MGP API.
   [#78](https://github.com/memgraph/mage/pull/78)
@@ -1184,7 +1279,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Implemented LabelRankT dynamic community detection algorithm.
   [#66](https://github.com/memgraph/mage/pull/66)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed memory leakage. [#77](https://github.com/memgraph/mage/pull/77)
 - Solved dependency vulnerability.
@@ -1198,7 +1293,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - Loading streams created by versions of Memgraph older than 2.1 is not
   possible. We suggest you extract the necessary information using the older
@@ -1207,7 +1302,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added procedures for retrieving configuration information specific for each
   stream type. `mg.pulsar_stream_info` will return information about a specific
@@ -1216,7 +1311,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - `SHOW STREAMS` now returns default values for batch interval and batch size if
   they weren't specified. [#306](https://github.com/memgraph/memgraph/pull/306)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Query execution stats, returned after a Cypher query was executed, are now
   updated with the changes made in write procedures.
@@ -1226,7 +1321,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v1.3.6 - Dec 3, 2021
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Fix the bug when returning edges: `Cannot read properties of undefined (reading 'push')`.
 
@@ -1234,7 +1329,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - Loading streams created by older versions cause Memgraph to crash. The only
   possible workaround involves **deleting the existing streams**.
@@ -1247,7 +1342,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Now supporting Bolt protocol version 4.3.
   [#226](https://github.com/memgraph/memgraph/pull/226)
@@ -1277,7 +1372,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
   details, check out our [reference pages](/data-streams).
   [#293](https://github.com/memgraph/memgraph/pull/293)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Allow duration values to be used as weights in the [Weighted Shortest
   Path](/advanced-algorithms/built-in-graph-algorithms#weighted-shortest-path)
@@ -1289,31 +1384,31 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v1.3.5 - Nov 17, 2021
 
-### What's New
+{<h3> What's New </h3>}
 
 * Add new Cypher stream keywords from Memgraph 2.1.0 release.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Fix the copy to the clipboard bug to keep new lines.
 
 ## Lab v1.3.4 - Nov 15, 2021
 
-### What's New
+{<h3> What's New </h3>}
 
 * Add quick connect for Memgraph running locally.
 * Add guides on how to install Memgraph locally.
 
 ## Lab v1.3.3 - Oct 22, 2021
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed the action of exporting the database to a `cypherl` file.
 - Added support for the temporal types in query responses.
 
 ## Memgraph v2.0.1 - Oct 12, 2021
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Updated a startup message with a link to the [getting started
   page](/getting-started).
@@ -1325,7 +1420,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
   [v1.1.0](https://github.com/memgraph/mgconsole/releases/tag/v1.1.0).
   [#260](https://github.com/memgraph/memgraph/pull/260)
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Graph updates made in the write procedures are now correctly registered in the
   triggers. [#262](https://github.com/memgraph/memgraph/pull/262)
@@ -1337,7 +1432,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - Changed the `timestamp()` function to return `microseconds` instead of
   `milliseconds`.
@@ -1352,7 +1447,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added support for temporal types, a feature that allows the user to manipulate
   and store time related data in the graph. For more information take a look at
@@ -1366,7 +1461,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
   can modify the graph by creating and deleting vertices and edges, modifying
   the labels of vertices or setting the properties of vertices and edges.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed planning of queries with `MERGE` clause. If a previously defined symbol
   is used as property value inside the `MERGE` clause, the planner will
@@ -1384,30 +1479,30 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v1.3.2 - Oct 5, 2021
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed the copy to clipboard bug with removed spaces.
 - Updated the Cypher IntelliSense with the latest commands.
 
 ## Lab v1.3.1 - Sep 27, 2021
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Signed the Memgraph Lab applications for macOS and Windows.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed the paste overwrite action in the query editor.
 - Fixed the bug `Cannot read property 'class' of null`.
 
 ## Memgraph v1.6.1 - Jul 24, 2021
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added proper privilege checks for queries executed by triggers and stream
   transformations.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed error handling in streams to make restarting streams possible after
   failing. The issue is caused by not rolling back the transaction in which the
@@ -1421,13 +1516,13 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - Changed the `LOCK_PATH` permission to `DURABILITY`.
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added support for consuming Kafka streams. You can connect Memgraph to a Kafka
   cluster and run queries based on the messages received. The transformation
@@ -1458,7 +1553,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
   of 3 minutes proved too small, especially for queries that use `LOAD CSV` with
   a large dataset.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed parsing of certain types in Query Modules using Python API.
 - Fixed a concurrency bug for Query Modules using Python API. Running the same
@@ -1470,7 +1565,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Memgraph v1.5.0 - May 28, 2021
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added database triggers. You can now create, delete, and print out triggers
   that execute Cypher statements. You can create custom actions whenever a node
@@ -1480,7 +1575,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
   directly with Memgraph. You can now install mgconsole directly on Windows and
   macOS.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed parsing of types for Python procedures for types nested in `mgp. List`.
   For example, parsing of `mgp.List[mgp.Map]` works now.
@@ -1494,13 +1589,13 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - Changed `MEMORY LIMIT num (KB|MB)` clause in the procedure calls to `PROCEDURE MEMORY LIMIT num (KB|MB)`. The functionality is still the same.
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added replication to community version.
 - Added support for multiple query modules directories at the same time. You can
@@ -1522,7 +1617,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
   and `TRACE` level all contain additional information that is printed out while
   the recovery is in progress.
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Fixed garbage collector by correctly marking the oldest current timestamp
   after the database was recovered using the durability files.
@@ -1531,7 +1626,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v1.3.0 - Feb 19, 2021
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added option to show predefined datasets with the ability to import them to
   Memgraph.
@@ -1541,7 +1636,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Added default node label in graph view if name property is missing.
 - Added default relationship type label in graph view for smaller graphs.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Fixed sidebar links in the browser Lab.
 - Fixed columns in favorite queries view.
@@ -1567,7 +1662,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - Added extra information in durability files to support replication, making it
   incompatible with the durability files generated by older versions of
@@ -1576,7 +1671,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added support for data replication across a cluster of Memgraph instances.
   Supported instance types are MAIN and REPLICA. Supported replication modes are
@@ -1597,7 +1692,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v1.2.0 - Nov 3, 2020
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added ability to create custom graph styling for nodes and edges in graph view
   with graph style language (similar to CSS).
@@ -1610,13 +1705,13 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Set encrypted connection to be turned off by default on login screen (Memgraph
   v1.2.0 comes with SSL off by default).
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 - Added ability to hide graph view if there are no node/edge data in response.
 
 ## Memgraph v1.1.0 - Jul 1, 2020
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Properties in nodes and edges are now stored encoded and compressed. This
   change significantly reduces memory usage. Depending on the specific dataset,
@@ -1632,7 +1727,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Added support for `ANY` and `NONE` openCypher functions. Previously, only
   `ALL` and `SINGLE` functions were implemented.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Fixed invalid paths returned by variable expansion when the starting node and
   destination node used the same symbol. Example: `MATCH path = (n: Person {name: "John"})-[: KNOWS*]->(n) RETURN path`
@@ -1657,19 +1752,19 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v1.1.3 - Jun 5, 2020
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Disable hardware acceleration.
 
 ## Lab v1.1.2 - Apr 10, 2020
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Fix side menu documentation and support links.
 
 ## Memgraph v1.0.0 - Apr 3, 2020
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - [Enterprise Ed.] Exposed authentication username/rolename regex as a flag (
   `--auth-user-or-role-name-regex`).
@@ -1693,7 +1788,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Implemented a storage locking mechanism that prevents the user from
   concurrently starting two Memgraph instances with the same data directory.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - [Enterprise Ed.] Fixed a bug that crashed the database when granting
   privileges to a user.
@@ -1714,25 +1809,25 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v1.1.1 - Apr 3, 2020
 
-### Bug Fixes
+{<h3> Bug Fixes </h3>}
 
 * Fix bug showing integers in node properties as strings.
 
 ## Lab v1.1.0
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Enable explain and profile view.
 - Memgraph v0.15.0 keywords support.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Fix bug with a new line in parsing multi-command queries.
 - On empty data for graph redirect to data view.
 
 ## Lab v1.0.0
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added unsecure connection option.
 - Improved UX of login screen.
@@ -1745,7 +1840,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v0.1.2
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Fixed app icon on MacOS.
 - Improved error handling on the initial connect screen. Handle availability and
@@ -1753,7 +1848,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Lab v0.1.1
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Added overview view.
 - Added query view (Monaco editor).
@@ -1765,7 +1860,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - [Enterprise Ed.] Remove support for Kafka streams.
 - Snapshot and write-ahead log format changed (not backward compatible).
@@ -1776,7 +1871,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - [Enterprise Ed.] Add support for auth module.
 - [Enterprise Ed.] LDAP support migrated to auth module.
@@ -1791,7 +1886,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Add `DUMP DATABASE` clause to openCypher.
 - Add functions for treating character strings as byte strings.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Fix several memory management bugs.
 - Reduce memory usage in query execution.
@@ -1801,7 +1896,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - Snapshot and write-ahead log format changed (not backward compatible).
 - `indexInfo()` function replaced with `SHOW INDEX INFO` syntax.
@@ -1811,7 +1906,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - [Enterprise Ed.] Add new privilege, `STATS` for accessing storage info.
 - [Enterprise Ed.] LDAP authentication and authorization support.
@@ -1825,7 +1920,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Add `uniformSample` function to openCypher.
 - Add regex matching to openCypher.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Fix bug in query comment parsing.
 - Fix bug in query symbol table.
@@ -1837,7 +1932,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Memgraph v0.14.1 - Jan 22, 2019
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Fix bug in explicit transaction handling.
 - Fix bug in edge filtering by edge type and destination.
@@ -1846,19 +1941,19 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - Write-ahead log format changed (not backward compatible).
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - [Enterprise Ed.] Reduce memory usage in distributed usage.
 - Add `DROP INDEX` feature.
 - Improve SSL error messages.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - [Enterprise Ed.] Fix issues with reading and writing in a distributed query.
 - Correctly handle an edge case with unique constraint checks.
@@ -1869,14 +1964,14 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - Write-ahead log format changed (not backward compatible).
 - Snapshot format changed (not backward compatible).
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - [Enterprise Ed.] Authentication and authorization support.
 - [Enterprise Ed.] Kafka integration.
@@ -1890,7 +1985,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
   `mg_import_csv` tool.
 - Reduce memory usage of `mg_import_csv`.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - [Enterprise Ed.] Fix an edge case in distributed index creation.
 - [Enterprise Ed.] Fix issues with Cartesian in distributed queries.
@@ -1904,13 +1999,13 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - Snapshot format changed (not backward compatible).
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Improved Id Cypher function.
 - Added string functions to openCypher (`lTrim`, `left`, `rTrim`, `replace`,
@@ -1921,7 +2016,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Memgraph v0.11.0 - Jun 20, 2018
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - [Enterprise Ed.] Improve Cartesian support in distributed queries.
 - [Enterprise Ed.] Improve distributed execution of BFS.
@@ -1932,7 +2027,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - SSL support added.
 - `toString` function added.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Document issues with Docker on OS X.
 - Add BFS and Dijkstra's algorithm examples to documentation.
@@ -1941,20 +2036,20 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - Snapshot format changed (not backward compatible).
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - [Enterprise Ed.] Distributed storage and execution.
 - `reduce` and `single` functions added to openCypher.
 - `wShortest` edge expansion added to openCypher.
 - Support packaging RPM on CentOS 7.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Report an error if updating a deleted element.
 - Log an error if reading info on available memory fails.
@@ -1973,25 +2068,25 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 <Callout type="error">
 
-### Breaking Changes
+{<h3> Breaking Changes </h3>}
 
 - Snapshot format changed (not backward compatible).
 - Snapshot configuration flags changed, general durability flags added.
 
 </Callout>
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Write-ahead log added.
 - `nodes` and `relationships` functions added.
 - `UNION` and `UNION ALL` is implemented.
 - Concurrent index creation is now enabled.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 ## Memgraph v0.8.0
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - CASE construct (without aggregations).
 - Named path support added.
@@ -2004,7 +2099,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - `collect` aggregation now supports Map collection.
 - Changed the BFS syntax.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Use \u to specify 4 digit codepoint and \U for 8 digit
 - Keywords appearing in header (named expressions) keep original case.
@@ -2016,7 +2111,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Memgraph v0.7.0
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Variable length path `MATCH`.
 - Explicitly started transactions (multi-query transactions).
@@ -2026,7 +2121,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - `degree` function in openCypher.
 - User specified transaction execution timeout.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Concurrent `BUILD INDEX` deadlock now returns an error to the client.
 - A `MATCH` preceeded by `OPTIONAL MATCH` expansion inconsistencies.
@@ -2036,7 +2131,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Memgraph v0.6.0
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - AST caching.
 - Label + property index support.
@@ -2044,7 +2139,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Memgraph v0.5.0
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - Use label indexes to speed up querying.
 - Generate multiple query plans and use the cost estimator to select the best.
@@ -2052,7 +2147,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Abandon old yaml configuration and migrate to gflags.
 - Query stripping & AST caching support.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Fixed race condition in MVCC. Hints exp+aborted race condition prevented.
 - Fixed conceptual bug in MVCC GC. Evaluate old records w.r.t. the oldest.
@@ -2061,31 +2156,31 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 
 ## Build 837
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - List indexing supported with preceeding IN (for example in query `RETURN 1 IN [[1, 2]][0]`).
 
 ## Build 825
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - RETURN _, count(_), OPTIONAL MATCH, UNWIND, DISTINCT (except DISTINCT in
   aggregate functions), list indexing and slicing, escaped labels, IN LIST
   operator, range function.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - TCP_NODELAY -> import should be faster.
 - Clear hint bits.
 
 ## Build 783
 
-### Major Features and Improvements
+{<h3> Major Features and Improvements </h3>}
 
 - SKIP, LIMIT, ORDER BY.
 - Math functions.
 - Initial support for MERGE clause.
 
-### Bug Fixes and Other Changes
+{<h3> Bug Fixes and Other Changes </h3>}
 
 - Unhandled Lock Timeout Exception.
