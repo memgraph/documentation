@@ -1,6 +1,6 @@
 ---
 title: Storage memory usage
-description: Understand how Memgraph utilizes storage memory. A detailed resource to manage and optimize your graph solution storage. 
+description: Understand how Memgraph utilizes storage memory. A detailed resource to manage and optimize your graph solution storage.
 ---
 
 import { Callout } from 'nextra/components'
@@ -10,7 +10,7 @@ import { Callout } from 'nextra/components'
 Memgraph’s architecture has been built natively for in-memory data analysis and
 storage. Being ACID compliant, it ensures consistency and reliability in its
 core design. However, Memgraph also offers flexibility with it's other storage
-modes. 
+modes.
 
 ## Storage modes
 
@@ -66,7 +66,7 @@ mode.
 An empty instance will always restart using in-memory transactional storage mode.
 Upon restart, a non-empty instance in the on-disk storage mode will not change
 storage mode, but the instance in an in-memory analytical storage mode will revert
-to the default in-memory transactional storage mode. 
+to the default in-memory transactional storage mode.
 
 ### Check storage mode
 
@@ -166,12 +166,12 @@ which allows you to save more data than the capacity of your RAM. This helps
 keep the hardware costs to a minimum, but you should except slower performance
 when compared to the in-memory transactional storage mode. Keep in mind that
 while executing queries, all the graph objects used in the transactions still
-need to be able to fit in the RAM, or Memgraph will throw an exception. 
+need to be able to fit in the RAM, or Memgraph will throw an exception.
 
 Memgraph uses RocksDB as a background storage to serialize nodes and relationships
 into a key-value format. The used architecture is also known as "larger than
 memory" as it enables in-memory databases to save more data than the main memory
-can hold, without the performance overhead caused by the buffer pool. 
+can hold, without the performance overhead caused by the buffer pool.
 
 The imported data is residing on the disk, while the main memory contains two
 caches, one executing operations on main RocksDB instance and the other for
@@ -184,12 +184,12 @@ Concurrent execution of transactions is supported differently for on-disk
 storage than for in-memory. The in-memory storage mode relies on delta objects
 which store the exact versions of data at the specific moment in time.
 Therefore, the in-memory storage mode uses a pessimistic approach and
-immediately checks whether there is a conflict between two transactions. 
+immediately checks whether there is a conflict between two transactions.
 
 In the on-disk storage mode, the cache is used per transaction. This
 significantly simplifies object management since there is no need to question
 certain object's validity, but it also requires the optimistic approach for
-conflict resolution between transactions. 
+conflict resolution between transactions.
 
 In the on-disk storage mode, the conflict is checked at the transaction's commit
 time with the help of RocksDB's transaction support. This also implies that
@@ -222,7 +222,7 @@ In the on-disk storage mode, durability is supported by RocksDB since it keeps
 its own
 [WAL](https://github.com/facebook/rocksdb/wiki/Write-Ahead-Log-%28WAL%29) files.
 Memgraph persists the metadata used in the implementation of the on-disk
-storage. 
+storage.
 
 If the workload is larger than memory, a single transaction must fit into the
 memory. A memory tracker track all allocations happening throughout the
@@ -235,7 +235,7 @@ At the moment, the on-disk storage doesn't support replication.
 
 #### Data formats
 
-Below is the format in which data is serialized to the disk. 
+Below is the format in which data is serialized to the disk.
 
 Vertex format for main disk storage:
 Key - `label1, label2, ... | vertex gid | commit_timestamp`
@@ -262,7 +262,57 @@ Value - `label1_id, label2_id, ... | property1, property2, ...`
 
 Value does not contain `indexing label`.
 
-## Calculate storage memory usage 
+### Edge import mode
+
+Memgraph on-disk storage supports `Edge import mode` to import edges with high throughput.
+In this mode user is allowed to create and modify edges only. Any vertex operations are prohibited and will through exception.
+
+To enable the mode run
+```plaintext
+EDGE IMPORT MODE ACTIVE;
+```
+
+To disable the mode run
+```plaintext
+EDGE IMPORT MODE INACTIVE;
+```
+
+#### Import data using Cypher queries
+
+For file containing Cypher queries (.cypherql), first all vertices should be created, then command `EDGE IMPORT MODE ACTIVE;` specified and then creation of all edges.
+Indices can be specified before or after `EDGE IMPORT MODE ACTIVE;`.
+We recommend to **create label-property index** on nodes for the best import edges performance.
+
+```plaintext
+CREATE (n:User {id: 1});
+CREATE (n:User {id: 2});
+CREATE (n:User {id: 3});
+CREATE (n:User {id: 4});
+EDGE IMPORT MODE ACTIVE;
+CREATE INDEX ON :User;
+CREATE INDEX ON :User(id);
+MATCH (n:User {id: 1}), (m:User {id: 2}) CREATE (n)-[r:FRIENDS {id: 1}]->(m);
+MATCH (n:User {id: 3}), (m:User {id: 4}) CREATE (n)-[r:FRIENDS {id: 2}]->(m);
+EDGE IMPORT MODE INACTIVE;
+```
+
+#### Import data using LOAD CSV command
+
+Users are still be able to import a dataset through just one CSV file but in order to get really good performance when ingesting edges, they should separate loading nodes from edges.
+Currently, for the best import edges performance we recommend to **not create** any index.
+
+```plaintext
+LOAD CSV FROM "/path-to/people_nodes.csv" WITH HEADER AS row
+CREATE (p:Person {id: row.id, name: row.name});
+CREATE INDEX ON :Person(id);
+EDGE IMPORT MODE ACTIVE;
+LOAD CSV FROM "/path-to/people_relationships.csv" WITH HEADER AS row
+MATCH (p1:Person {id: row.id_from}), (p2:Person {id: row.id_to})
+CREATE (p1)-[:IS_FRIENDS_WITH]->(p2);
+EDGE IMPORT MODE INACTIVE;
+```
+
+## Calculate storage memory usage
 
 Estimating Memgraph's storage memory usage is not entirely straightforward
 because it depends on a lot of variables, but it is possible to do so quite
@@ -276,9 +326,9 @@ $\texttt{StorageRAMUsage} = \texttt{NumberOfVertices} \times 260\text{B} + \text
 Let's test this formula on the [Marvel Comic Universe Social Network
 dataset](http://download.memgraph.com/datasets/marvel-cinematic-universe/cypherl/dataset.cypherl.gz),
 which is also available as a dataset inside Memgraph Lab and contains 21,723
-vertices and 682,943 edges. 
+vertices and 682,943 edges.
 
-According to the formula, storage memory usage should be: 
+According to the formula, storage memory usage should be:
 
 $
 \begin{aligned}
@@ -301,11 +351,11 @@ Let's dive deeper into the IN_MEMORY_TRASNACTIONAL storage mode memory usage
 values. Because Memgraph works on the x86 architecture, calculations are based
 on the x86 Linux memory usage.
 
-<Callout> 
+<Callout>
 For the latest and most precise memory layout please clone
 [Memgraph](https://github.com/memgraph/memgraph) and use, e.g.,
 [pahole](https://github.com/PhilArmstrong/pahole-gdb) to discover accurate
-information. 
+information.
 </Callout>
 
 Each `Vertex` and `Edge` object has a pointer to a `Delta` object. The
@@ -326,11 +376,11 @@ Each `Delta` object has a least **104B**.
 Each `Vertex` object has at least **112B** + **104B** for the `Delta` object, in
 total, a minimum of **216B**.
 
-Each additional label takes **8B**. 
+Each additional label takes **8B**.
 
 Keep in mind that three labels take as much space as four labels, and five to
 seven labels take as much space as eight labels, etc., due to the dynamic
-memory allocation.  
+memory allocation.
 
 #### `Edge` memory layout
 
@@ -370,7 +420,7 @@ Objects of both types are placed into the `SkipList`.
 All properties use **1B** for metadata - type, size of property ID and the size
 of payload in the case of `NULL` and `BOOLEAN` values, or size of payload size
 indicator for other types (how big is the stored value, for example, integers
-can be 1B, 2B 4B or 8b depending on their value). 
+can be 1B, 2B 4B or 8b depending on their value).
 
 Then they take up **another byte** for storing property ID, which means each
 property takes up at least 2B. After those 2B, some properties (for example,
@@ -448,7 +498,7 @@ $3 \times 21,723 \times (24\text{B}+16\text{B}) = 65,169 \times 40\text{B} = 2,6
 For label-property index, labeled property needs to be taken into account.
 Property `name` is indexed on `Hero` and `Comic` vertices, while property
 `title` is indexed on `ComicSeries` vertices. We already assumed that the
-`title` property is approximately the same length as the `name` property. 
+`title` property is approximately the same length as the `name` property.
 
 Here is the formula:
 
@@ -468,7 +518,7 @@ the additional data.
 ## Control memory usage
 
 In Memgraph, you can control memory usage by limiting, inspecting and
-deallocating memory. 
+deallocating memory.
 
 You can control the memory usage of:
  - a whole instance by setting the `--memory-limit` within the [configuration
@@ -509,7 +559,7 @@ If you use the `LIMIT` option, you have to specify the amount of memory a query
 can allocate for its execution. You can use this clause in a query only once at
 the end of the query. The limit is applied to the entire query.
 
-Examples: 
+Examples:
 
 ```plaintext
 MATCH (n) RETURN (n) QUERY MEMORY LIMIT 10 KB;
@@ -582,16 +632,16 @@ stats](/configuration/server-stats).
 
 Here are several tips how you can reduce memory usage and increase scalability:
 
-1. Consider removing unused label indexes by executing `DROP INDEX ON :Label;` 
+1. Consider removing unused label indexes by executing `DROP INDEX ON :Label;`
 2. Consider removing unused label-property indexes by executing `DROP INDEX
-   ON :Label(property);` 
+   ON :Label(property);`
 3. If you don't have properties on relationships, disable them in the
    [configuration file](/configuration/configuration-settings#storage) by setting the
    `-storage-properties-on-edges` flag to `false`. This can significantly reduce
    memory usage because effectively `Edge` objects will not be created, and all
    information will be inlined under `Vertex` objects. You can disable
    properties on relationships with a non-empty database, if the relationships
-   are without properties. 
+   are without properties.
 4. [Inspect query plans](/querying/performance-optimization#inspecting-queries)
    and optimize them
 
