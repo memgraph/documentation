@@ -631,7 +631,8 @@ Node(Node &&other) noexcept
 | `OutRelationships` | Returns an iterable structure of the node’s outbound relationships. |
 | `AddLabel`         | Adds a label to the node.                                           |
 | `RemoveLabel`      | Removes a label from the node.                                      |
-| `SetProperty`      | Set value of node's property                                        |
+| `SetProperty`      | Set the value of the node's property.                               |
+| `SetProperties`    | Update the node's properties.                                       |
 | `GetProperty`      | Get value of node's property                                        |
 | `RemoveProperty`   | Removes the node's property                                         |
 
@@ -664,7 +665,7 @@ bool HasLabel(std::string_view label) const
 Returns an iterable & indexable structure of the node’s properties.
 
 ```cpp
-std::map<std::string, mgp::Value> Properties() const
+std::unordered_map<std::string, mgp::Value> Properties() const
 ```
 
 ##### GetProperty
@@ -677,10 +678,18 @@ mgp::value GetProperty(const std::string& property) const
 
 ##### SetProperty
 
-Sets value of node's property.
+Sets the value of the node's property.
 
 ```cpp
-void SetProperty(std::string key, std::string value) const
+void SetProperty(std::string key, std::string value)
+```
+
+##### SetProperties
+
+Updates the node's properties with the given map.
+
+```cpp
+void SetProperties(std::unordered_map<std::string_view, Value> properties)
 ```
 
 ##### RemoveProperty
@@ -763,7 +772,8 @@ Relationship(Relationship &&other) noexcept
 | `Id`               | Returns the relationship’s ID.                                              |
 | `Type`             | Returns the relationship’s type.                                            |
 | `Properties`       | Returns an iterable & indexable structure of the relationship’s properties. |
-| `SetProperty`      | Set value of relationship's property.                                       |
+| `SetProperty`      | Set the value of the relationship's property.                               |
+| `SetProperties`    | Update the relationship's properties.                                       |
 | `RemoveProperty`   | Removes the relationship's property.                                        |
 | `GetProperty`      | Get value of relationship's property.                                       |
 | `From`             | Returns the relationship’s source node.                                     |
@@ -790,7 +800,7 @@ std::string_view Type() const
 Returns an iterable & indexable structure of the relationship’s properties.
 
 ```cpp
-std::map<std::string, mgp::Value> Properties() const
+std::unordered_map<std::string, mgp::Value> Properties() const
 ```
 ##### GetProperty
 
@@ -802,10 +812,18 @@ mgp::value GetProperty(const std::string& property) const
 
 ##### SetProperty
 
-Sets value of the relationship's property.
+Sets the value of the relationship's property.
 
 ```cpp
-void SetProperty(std::string key, std::string value) const
+void SetProperty(std::string key, std::string value)
+```
+
+##### SetProperties
+
+Updates the relationship's properties with the given map.
+
+```cpp
+void SetProperties(std::unordered_map<std::string_view, Value> properties)
 ```
 
 ##### RemoveProperty
