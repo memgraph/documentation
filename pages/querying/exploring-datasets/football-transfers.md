@@ -320,7 +320,7 @@ direct transfer to Sevilla first. In the next `MATCH` we use that information to
 check whether players that were transferred from FC Barcelona, didn't have
 direct transfer to Sevilla FC.
 
-If you are running this in [Memgraph Lab](https://memgraph.com/product/lab) you
+If you are running this in [Memgraph Lab](https://memgraph.com/docs/data-visualization) you
 can change the query a bit in order to get all nodes and edges required for a
 visual graph representation of players transferring through teams.
 
