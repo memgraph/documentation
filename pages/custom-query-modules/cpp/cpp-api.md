@@ -16,10 +16,9 @@ To see how to implement query modules in C++, take a look at
 If you install any C++ modules after running Memgraph, you’ll need to [load
 them into Memgraph](/custom-query-modules/manage-query-modules#loading-query-modules) or restart
 Memgraph in order to use them.
-
 ## Functions and procedures
 
-With this API it’s possible to extend your Cypher queries with **functions** and **procedures** with 
+With this API it’s possible to extend your Cypher queries with **functions** and **procedures** with
 `AddProcedure` and `AddFunction`.
 
 The API needs memory access to add procedures and functions; this can be done with `mgp::memory = memory;`.
@@ -37,7 +36,7 @@ and can be used in Cypher queries.
 
 ```cpp
 void AddProcedure(
-    mgp_proc_cb callback, 
+    mgp_proc_cb callback,
     std::string_view name,
     ProcedureType proc_type,
     std::vector<Parameter> parameters,
@@ -70,14 +69,14 @@ and can be used in Cypher queries.
 
 ```cpp
 void AddBatchProcedure(
-    mgp_proc_cb callback, 
-    mgp_proc_initializer initializer, 
+    mgp_proc_cb callback,
+    mgp_proc_initializer initializer,
     mgp_proc_cleanup cleanup,
-    std::string_view name, 
-    ProcedureType proc_type, 
+    std::string_view name,
+    ProcedureType proc_type,
     std::vector<Parameter> parameters,
-    std::vector<Return> returns, 
-    mgp_module *module, 
+    std::vector<Return> returns,
+    mgp_module *module,
     mgp_memory *memory);
 ```
 
@@ -107,7 +106,7 @@ and can be used in Cypher queries.
 
 ```cpp
 void AddFunction(
-    mgp_func_cb callback, 
+    mgp_func_cb callback,
     std::string_view name,
     std::vector<Parameter> parameters,
     std::vector<Return> returns,
@@ -126,7 +125,7 @@ void AddFunction(
 
 ### Parameter
 
-Represents a procedure/function parameter. Parameters are defined by their name, type, 
+Represents a procedure/function parameter. Parameters are defined by their name, type,
 and (if optional) default value.
 
 #### Constructors
@@ -187,10 +186,10 @@ Represents a procedure/function return value. Values are defined by their name a
 
 Creates a return value with the given `name` and `type`.
 ```cpp
-Return(std::string_view name, Type type) 
+Return(std::string_view name, Type type)
 ```
 
-Creates a return value with the given `name` and `list_type`. 
+Creates a return value with the given `name` and `list_type`.
 The `list_type` parameter is organized as follows: `{Type::List, Type::[ITEM_TYPE]}`.
 ```cpp
 Return(std::string_view name, std::pair<Type, Type> list_type)
@@ -321,7 +320,7 @@ Inserts a value of given type under field `field_name`.
 ```cpp
   void Insert(const char *field_name, const Value &value)
 ```
- 
+
 ### Result
 
 Represents a **result** - the single return value of a Cypher function.
@@ -416,7 +415,6 @@ Sets the given error message.
 This section covers the interface for working with the Memgraph DB graph using the C++ API.
 A description of data types is available [in the reference guide](/fundamentals/data-types).
 
-
 ### Graph
 
 #### Constructors
@@ -442,6 +440,8 @@ explicit Graph(mgp_graph *graph)
 | `DetachDeleteNode`     | Deletes a node and all its incident edges from the graph.                                     |
 | `CreateRelationship`   | Creates a relationship of type `type` between nodes `from` and `to` and adds it to the graph. |
 | `DeleteRelationship`   | Deletes a relationship from the graph.                                                        |
+| `SetFrom`              | Changes the `from` (start) node of the given relationship.                                    |
+| `SetTo`                | Changes the `to` (end) node of the given relationship                                         |
 
 ##### Order
 
@@ -555,6 +555,22 @@ Deletes a relationship from the graph.
 void DeleteRelationship(const Relationship &relationship)
 ```
 
+##### SetFrom
+
+Changes the `from` (start) node of the given relationship.
+
+```cpp
+void SetFrom(Relationship &relationship, const Node &new_from)
+```
+
+##### SetTo
+
+Changes the `to` (end) node of the given relationship.
+
+```cpp
+void SetTo(Relationship &relationship, const Node &set_to)
+```
+
 #### GraphNodes
 
 Auxiliary class providing an iterable view of the nodes contained in the graph.
@@ -634,6 +650,9 @@ Node(Node &&other) noexcept
 | `SetProperty`      | Set value of node's property                                        |
 | `GetProperty`      | Get value of node's property                                        |
 | `RemoveProperty`   | Removes the node's property                                         |
+| `InDegree`         | Get the in degree of the node.                                      |
+| `OutDegree`        | Get the out degree of the node.                                     |
+| `ToString`         | Returns the node's string representation.                           |
 
 ##### Id
 
@@ -723,6 +742,30 @@ Removes a label from a node.
 void RemoveLabel(const std::string_view label)
 ```
 
+##### InDegree
+
+Returns the in degree of a node.
+
+```cpp
+size_t InDegree() const
+```
+
+##### OutDegree
+
+Returns the out degree of a node.
+
+```cpp
+size_t OutDegree() const
+```
+
+##### ToString
+
+Returns the node's string representation, which has this format: "(id: `node_id`, labels: `node_labels`, properties: `node_properties_map`)".
+
+```cpp
+const std::string ToString() const
+```
+
 #### Operators
 
 | Name                                          | Description                                               |
@@ -768,6 +811,7 @@ Relationship(Relationship &&other) noexcept
 | `GetProperty`      | Get value of relationship's property.                                       |
 | `From`             | Returns the relationship’s source node.                                     |
 | `To`               | Returns the relationship’s destination node.                                |
+| `ToString`         | Returns the relationship’s string representation.                           |
 
 ##### Id
 
@@ -830,6 +874,15 @@ Returns the relationship’s source node.
 
 ```cpp
 Node To() const
+```
+
+##### ToString
+
+Returns the relationship's string representation, which has this format: 
+"(`node_from.ToString()`)-(type: `relationship_type`, id: `relationship_id`, properties: `relationship_properties_map`)->(`node_to.ToString()`)".
+
+```cpp
+const std::string ToString() const
 ```
 
 #### Operators
@@ -934,7 +987,7 @@ Represents a view of node labels.
 #### Constructors
 
 ```cpp
-explicit Labels(mgp_vertex *node_ptr) 
+explicit Labels(mgp_vertex *node_ptr)
 ```
 
 Copy and move constructors:
@@ -991,13 +1044,13 @@ explicit Date(mgp_date *ptr)
 explicit Date(const mgp_date *const_ptr)
 ```
 
-Creates a Date object from the given string representing a date in the ISO 8601 format 
+Creates a Date object from the given string representing a date in the ISO 8601 format
 (`YYYY-MM-DD`, `YYYYMMDD`, or `YYYY-MM`).
 ```cpp
 explicit Date(std::string_view string)
 ```
 
-Creates a Date object with the given `year`, `month`, and `day` properties. 
+Creates a Date object with the given `year`, `month`, and `day` properties.
 ```cpp
 Date(int year, int month, int day)
 ```
@@ -1017,6 +1070,7 @@ Date(Date &&other) noexcept
 | `Month`     | Returns the date’s `month` property.                          |
 | `Day`       | Returns the date’s `day` property.                            |
 | `Timestamp` | Returns the date’s timestamp (microseconds since Unix epoch). |
+| `ToString`  | Returns the date’s string representation.                     |
 
 ##### Now
 
@@ -1057,6 +1111,16 @@ Returns the date’s timestamp (microseconds since Unix epoch).
 ```cpp
 int64_t Timestamp() const
 ```
+
+##### ToString
+
+Returns the date's string representation, which has this format: "`year`-`month`-`day`".
+
+
+```cpp
+const std::string ToString() const
+```
+
 
 #### Operators
 
@@ -1099,7 +1163,7 @@ explicit LocalTime(mgp_local_time *ptr)
 explicit LocalTime(const mgp_local_time *const_ptr)
 ```
 
-Creates a LocalTime object from the given string representing a date in the ISO 8601 format 
+Creates a LocalTime object from the given string representing a date in the ISO 8601 format
 (`[T]hh:mm:ss`, `[T]hh:mm`, `[T]hhmmss`, `[T]hhmm`, or `[T]hh`).
 ```cpp
 explicit LocalTime(std::string_view string)
@@ -1127,6 +1191,7 @@ LocalTime(LocalTime &&other) noexcept
 | `Millisecond` | Returns the object’s `millisecond` property.                    |
 | `Microsecond` | Returns the object’s `microsecond` property.                    |
 | `Timestamp`   | Returns the object’s timestamp (microseconds since Unix epoch). |
+| `ToString`    | Returns the object’s string representation.                     |
 
 ##### Now
 
@@ -1183,6 +1248,15 @@ Returns the object’s timestamp (microseconds since Unix epoch).
 ```cpp
 int64_t Timestamp() const
 ```
+##### ToString
+
+Returns the object's string representation, which has this format: "`hour`:`minute`:`second`,`microsecond milisecond`".
+
+
+```cpp
+const std::string ToString() const
+```
+
 
 #### Operators
 
@@ -1223,7 +1297,7 @@ Creates a LocalDateTime object from the given string representing a date in the 
 explicit LocalDateTime(std::string_view string)
 ```
 
-Creates a LocalDateTime object with the given `year`, `month`, `day`, `hour`, `minute`, `second`, `millisecond`, 
+Creates a LocalDateTime object with the given `year`, `month`, `day`, `hour`, `minute`, `second`, `millisecond`,
 and `microsecond` properties.
 ```cpp
 LocalDateTime(int year, int month, int day, int hour, int minute, int second, int millisecond, int microsecond)
@@ -1249,6 +1323,7 @@ LocalDateTime(LocalDateTime &&other) noexcept
 | `Millisecond` | Returns the object’s `millisecond` property.                    |
 | `Microsecond` | Returns the object’s `microsecond` property.                    |
 | `Timestamp`   | Returns the object’s timestamp (microseconds since Unix epoch). |
+| `ToString`    | Returns the object’s string representation.                     |
 
 ##### Now
 
@@ -1330,6 +1405,16 @@ Returns the date’s timestamp (microseconds since Unix epoch).
 int64_t Timestamp() const
 ```
 
+##### ToString
+
+Returns the object's string representation, which has this format: "`year`-`month`-`day`T`hour`:`minute`:`second`,`microsecond milisecond`".
+
+
+```cpp
+const std::string ToString() const
+```
+
+
 #### Operators
 
 | Name                         | Description          |
@@ -1364,7 +1449,7 @@ explicit Duration(const mgp_duration *const_ptr)
 ```
 
 Creates a Duration object from the given string in the following format: `P[nD]T[nH][nM][nS]`, where (1)
-`n` stands for a number, (2) capital letters are used as a separator, (3) each field in `[]` is optional, 
+`n` stands for a number, (2) capital letters are used as a separator, (3) each field in `[]` is optional,
 and (4) only the last field may be a non-integer.
 ```cpp
 explicit Duration(std::string_view string)
@@ -1372,7 +1457,7 @@ explicit Duration(std::string_view string)
 
 Creates a Duration object from the given number of microseconds.
 ```cpp
-explicit Duration(int64_t microseconds) 
+explicit Duration(int64_t microseconds)
 ```
 
 Creates a Duration object with the given `day`, `hour`, `minute`, `second`, `millisecond`, and `microsecond` properties.
@@ -1388,9 +1473,10 @@ Duration(Duration &&other) noexcept
 
 #### Member functions
 
-| Name           | Description                           |
-| -------------- | ------------------------------------- |
-| `Microseconds` | Returns the duration as microseconds. |
+| Name           | Description                                   |
+| -------------- | --------------------------------------------- |
+| `Microseconds` | Returns the duration as microseconds.         |
+| `ToString`     | Returns the duration's string representation. |
 
 ##### Microseconds
 
@@ -1398,6 +1484,14 @@ Returns the duration as microseconds.
 
 ```cpp
 int64_t Microseconds() const
+```
+##### ToString
+
+Returns the duration's string representation, which has this format: "`microseconds` ms".
+
+
+```cpp
+const std::string ToString() const
 ```
 
 #### Operators
@@ -1453,6 +1547,7 @@ Path(Path &&other) noexcept
 | `GetNodeAt`         | Returns the node at the given `index`.  The `index` must be less than or equal to length of the path. |
 | `GetRelationshipAt` | Returns the relationship at the given `index`. The `index` must be less than length of the path.      |
 | `Expand`            | Adds a relationship continuing from the last node on the path.                                        |
+| `ToString`          | Returns the path's string representation.                                                             |
 
 ##### Length
 
@@ -1485,6 +1580,16 @@ Adds a relationship continuing from the last node on the path.
 ```cpp
 void Expand(const Relationship &relationship)
 ```
+
+##### ToString
+
+Returns the path's string representation, which has nearly the same format as `Relationship.ToString()`, the difference being that `Path.ToString()` can have multiple nodes and relationships in its string representation, for example: "`(node)-(relationship)->(node)-(relationship)->(node)`...".
+
+
+```cpp
+const std::string ToString() const
+```
+
 
 #### Operators
 
@@ -1551,6 +1656,7 @@ List(List &&other) noexcept
 | `Append`                                  | Appends the given `value` to the list.                |
 | `AppendExtend`                            | Extends the list and appends the given `value` to it. |
 | `begin`<br/>`end`<br/>`cbegin`<br/>`cend` | Returns the beginning/end of the `List` iterator.     |
+| `ToString`                                | Returns the list's string representation.             |
 
 ##### Size
 
@@ -1576,7 +1682,7 @@ Appends the given `value` to the list. The `value` is copied.
 void Append(const Value &value)
 ```
 
-Appends the given `value` to the list. Takes ownership of `value` by moving it. 
+Appends the given `value` to the list. Takes ownership of `value` by moving it.
 The behavior of accessing `value` after performing this operation is undefined.
 
 ```cpp
@@ -1591,12 +1697,21 @@ Extends the list and appends the given `value` to it. The `value` is copied.
 void AppendExtend(const Value &value)
 ```
 
-Extends the list and appends the given `value` to it. Takes ownership of `value` by moving it. 
+Extends the list and appends the given `value` to it. Takes ownership of `value` by moving it.
 The behavior of accessing `value` after performing this operation is undefined.
 
 ```cpp
 void AppendExtend(Value &&value)
 ```
+
+##### ToString
+
+Returns the list's string representation, which has this format: "[`element.ToString()`, `element.ToString()`...]".
+
+```cpp
+const std::string ToString() const
+```
+
 
 #### Operators
 
@@ -1668,8 +1783,9 @@ Map(Map &&other) noexcept
 | `At`                                      | Returns the value at the given `key`.              |
 | `Insert`                                  | Inserts the given `key`-`value` pair into the map. |
 | `Update`                                  | Inserts or updates the value at the given `key`.   |
-| `Erase`                                   | Erases a mapping by key.                            |
+| `Erase`                                   | Erases a mapping by key.                           |
 | `begin`<br/>`end`<br/>`cbegin`<br/>`cend` | Returns the beginning/end of the `Map` iterator.   |
+| `ToString`                                | Returns the map's string representation.           |
 
 ##### Size
 
@@ -1702,7 +1818,7 @@ Inserts the given `key`-`value` pair into the map. The `value` is copied.
 ```cpp
 void Insert(std::string_view key, const Value &value)
 ```
-Inserts the given `key`-`value` pair into the map. Takes ownership of `value` by moving it. 
+Inserts the given `key`-`value` pair into the map. Takes ownership of `value` by moving it.
 The behavior of accessing `value` after performing this operation is undefined.
 
 ```cpp
@@ -1731,6 +1847,13 @@ Erases the element associated with the key from the map, if it doesn't exist not
 
 ```cpp
 void Erase(std::string_view key);
+```
+##### ToString
+
+Returns the map's string representation, which has this format: "{`key1` : `value1.ToString()`, `key2`: `value2.ToString()`...}".
+
+```cpp
+const std::string ToString() const
 ```
 
 #### Operators
@@ -1845,6 +1968,7 @@ Value(Value &&other) noexcept
 | `Type`        | Returns the type of the value.              |
 | `Value[TYPE]` | Returns a value of given type.              |
 | `Is[TYPE]`    | Returns whether the value is of given type. |
+| `ToString`    | Returns the value's string representation.  |
 
 ##### Type
 
@@ -2002,6 +2126,30 @@ bool IsLocalDateTime() const
 bool IsDuration() const
 ```
 
+##### ToString
+
+Returns the value's string representation. It does this by finding the type of the object wrapped inside the Value object, calling its ToString() function or casting the object to string, depending on it's type. The table below shows the appropriate action for each type.
+
+| Data type       | String method used                                                   |
+| -------------   | -------------------------------------------------------------------- |
+| `Null`          | Returns `""`                                                         | 
+| `Numeric`       | Casts numeric type to string.                                        |
+| `Bool`          | Returns either `"false"` or `"true"`, depending on the bool's value. |
+| `String`        | Returns the string.                                                  |
+| `List`          | Returns `List.ToString()`.                                           |
+| `Map`           | Returns `Map.ToString()`.                                            |
+| `Node`          | Returns `Node.ToString()`.                                           |
+| `Relationship`  | Returns `Relationship.ToString()`.                                   |
+| `Path`          | Returns `Path.ToString()`.                                           |
+| `Date`          | Returns `Date.ToString()`.                                           |
+| `LocalTime`     | Returns `LocalTime.ToString()`.                                      |
+| `LocalDateTime` | Returns `LocalDateTime.ToString()`.                                  |
+| `Duration`      | Returns `Duration.ToString()`.                                       |
+
+```cpp
+const std::string ToString() const
+```
+
 #### Operators
 
 | Name                          | Description          |
@@ -2044,7 +2192,7 @@ The types are listed and described [in the reference guide](/fundamentals/data-t
 Additionally, operator<< is overloaded for Type enum, and usage of this operator will print the type represented by mgp::Type enum.
 
 ```cpp
-std::ostream &operator<<(std::ostream &os, const mgp::Type &type) 
+std::ostream &operator<<(std::ostream &os, const mgp::Type &type)
 ```
 
 ## Exceptions
