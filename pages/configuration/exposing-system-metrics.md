@@ -15,7 +15,7 @@ After successfully entering the license key, Memgraph needs to be restarted in o
 ## Configuring the HTTP endpoint
 
 The default address and port for the metrics server is `0.0.0.0:9091`, and can be configured using [configuration flags](/configuration/configuration-settings)
-`--metrics-address` and `--metrics-port`. If you need help changing the configuration follow [the how-to guide](/configuration/configuration-settings).
+`--metrics-address` and `--metrics-port`. If you need help changing the configuration follow [the documentation](/configuration/configuration-settings).
 
 ## System metrics
 
