@@ -1133,32 +1133,32 @@ module.exports = withNextra({
       },
       {
         source: '/errors/memgraph/auth',
-        destination: '/help-center/errors/memgraph/auth',
+        destination: '/help-center/errors/auth',
         permanent: true
       },
       {
         source: '/errors/memgraph/durability',
-        destination: '/help-center/errors/memgraph/durability',
+        destination: '/help-center/errors/durability',
         permanent: true
       },
       {
         source: '/errors/memgraph/memory',
-        destination: '/help-center/errors/memgraph/memory',
+        destination: '/help-center/errors/memory',
         permanent: true
       },
       {
         source: '/errors/memgraph/modules',
-        destination: '/help-center/errors/memgraph/modules',
+        destination: '/help-center/errors/modules',
         permanent: true
       },
       {
         source: '/errors/memgraph/ports',
-        destination: '/help-center/errors/memgraph/ports',
+        destination: '/help-center/errors/ports',
         permanent: true
       },
       {
         source: '/errors/memgraph/python-modules',
-        destination: '/help-center/errors/memgraph/python-modules',
+        destination: '/help-center/errors/python-modules',
         permanent: true
       },
       {
@@ -1168,12 +1168,12 @@ module.exports = withNextra({
       },
       {
         source: '/errors/memgraph/snapshots',
-        destination: '/help-center/errors/memgraph/snapshots',
+        destination: '/help-center/errors/snapshots',
         permanent: true
       },
       {
         source: '/errors/memgraph/socket',
-        destination: '/help-center/errors/memgraph/socket',
+        destination: '/help-center/errors/socket',
         permanent: true
       },
       {
@@ -1183,7 +1183,7 @@ module.exports = withNextra({
       },
       {
         source: '/errors/memgraph/unknown',
-        destination: '/help-center/errors/memgraph/unknown',
+        destination: '/help-center/errors/unknown',
         permanent: true
       },
       {
