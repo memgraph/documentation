@@ -43,7 +43,7 @@ module.exports = withNextra({
       },
       {
         source: '/mage/algorithms/machine-learning-graph-analytics/graph-classification-algorithm',
-        destination: '/advanced-algorithmss',
+        destination: '/advanced-algorithms',
         permanent: true
       },
       {
@@ -228,7 +228,7 @@ module.exports = withNextra({
       },
       {
         source: '/mage/algorithms/machine-learning-graph-analytics/k-means-clustering-algorithm',
-        destination: '/advanced-algorithms/available-algorithms/k_means_clustering',
+        destination: '/advanced-algorithms/available-algorithms/kmeans_clustering',
         permanent: true
       },
       {
@@ -358,7 +358,7 @@ module.exports = withNextra({
       },
       {
         source: '/mage/algorithms/machine-learning-graph-analytics/temporal-graph-networks',
-        destination: '/advanced-algorithms/available-algorithms/temporal_graph_networks',
+        destination: '/advanced-algorithms/available-algorithms/tgn',
         permanent: true
       },
       {
@@ -913,7 +913,7 @@ module.exports = withNextra({
       },
       {
         source: '/cypher-manual/working-with-memgraph',
-        destination: '/docs',
+        destination: '/',
         permanent: true
       },
       {
@@ -1118,7 +1118,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/tutorials/install-memgraph-windows-10',
-        destination: '/getting-started/install-memgraph/windows-subsystem-for-linux',
+        destination: '/getting-started/install-memgraph/wsl',
         permanent: true
       },
       {
@@ -1128,7 +1128,7 @@ module.exports = withNextra({
       },
       {
         source: '/errors',
-        destination: '/help-center/errors',
+        destination: '/help-center/errors/overview',
         permanent: true
       },
       {
@@ -1163,7 +1163,7 @@ module.exports = withNextra({
       },
       {
         source: '/errors/memgraph/replication',
-        destination: '/help-center/errors/memgraph/replication',
+        destination: '/help-center/errors/replication',
         permanent: true
       },
       {
@@ -2211,7 +2211,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/getting-started/installation/wsl-installation',
-        destination: '/getting-started/install-memgraph/windows-subsystem-for-linux',
+        destination: '/getting-started/install-memgraph/wsl',
         permanent: true
       },
       {
