@@ -8,10 +8,6 @@ description: Analyze TED talks with Memgraph and transform them into a visualiza
 This article is a part of a series intended to show how to use Memgraph on
 real-world data to retrieve some interesting and useful information.
 
-We highly recommend checking out the other articles from this series which are
-listed in our [tutorial overview section](/), where you
-can also find instructions on how to start with the tutorial.
-
 ## Introduction
 
 [TED](https://www.ted.com/) is a nonprofit organization devoted to spreading

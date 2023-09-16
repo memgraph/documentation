@@ -8,10 +8,6 @@ description: Optimize your football transfer analysis with Memgraph's graph comp
 This article is a part of a series intended to show how to use Memgraph on
 real-world data to retrieve some interesting and useful information.
 
-We highly recommend checking out the other articles from this series which are
-listed in our [tutorial overview section](/), where you
-can also find instructions on how to start with the tutorial.
-
 ## Introduction
 
 Football is a word that could mean one of several sports. In this article, we
@@ -324,7 +320,7 @@ direct transfer to Sevilla first. In the next `MATCH` we use that information to
 check whether players that were transferred from FC Barcelona, didn't have
 direct transfer to Sevilla FC.
 
-If you are running this in [Memgraph Lab](https://memgraph.com/product/lab) you
+If you are running this in [Memgraph Lab](https://memgraph.com/docs/data-visualization) you
 can change the query a bit in order to get all nodes and edges required for a
 visual graph representation of players transferring through teams.
 

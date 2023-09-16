@@ -43,7 +43,7 @@ module.exports = withNextra({
       },
       {
         source: '/mage/algorithms/machine-learning-graph-analytics/graph-classification-algorithm',
-        destination: '/advanced-algorithms/available-algorithms/available-algorithms',
+        destination: '/advanced-algorithms',
         permanent: true
       },
       {
@@ -228,7 +228,7 @@ module.exports = withNextra({
       },
       {
         source: '/mage/algorithms/machine-learning-graph-analytics/k-means-clustering-algorithm',
-        destination: '/advanced-algorithms/available-algorithms/k_means_clustering',
+        destination: '/advanced-algorithms/available-algorithms/kmeans_clustering',
         permanent: true
       },
       {
@@ -358,12 +358,12 @@ module.exports = withNextra({
       },
       {
         source: '/mage/algorithms/machine-learning-graph-analytics/temporal-graph-networks',
-        destination: '/advanced-algorithms/available-algorithms/temporal_graph_networks',
+        destination: '/advanced-algorithms/available-algorithms/tgn',
         permanent: true
       },
       {
         source: '/mage/query-modules/python/temporal-graph-networks',
-        destination: '/advanced-algorithms/available-algorithms/temporal_graph_networks',
+        destination: '/advanced-algorithms/available-algorithms/tgn',
         permanent: true
       },
       {
@@ -443,17 +443,17 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-guides/networkx',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/tutorials/social-network-analysis',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/tutorials/understanding-music-with-modules',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
@@ -913,7 +913,7 @@ module.exports = withNextra({
       },
       {
         source: '/cypher-manual/working-with-memgraph',
-        destination: '/docs',
+        destination: '/',
         permanent: true
       },
       {
@@ -953,7 +953,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/storage-modes',
-        destination: '/fundamentals/storage',
+        destination: '/fundamentals/storage-memory-usage',
         permanent: true
       },
       {
@@ -1113,67 +1113,67 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/install-memgraph-on-windows-wsl',
-        destination: '/getting-started/install-memgraph/windows-subsystem-for-linux',
+        destination: '/getting-started/install-memgraph/wsl',
         permanent: true
       },
       {
         source: '/memgraph/tutorials/install-memgraph-windows-10',
-        destination: '/getting-started/install-memgraph/windows-subsystem-for-linux',
+        destination: '/getting-started/install-memgraph/wsl',
         permanent: true
       },
       {
         source: '/memgraph/tutorials/graph-modeling',
-        destination: '/graph-modeling',
+        destination: '/fundamentals/graph-modeling',
         permanent: true
       },
       {
         source: '/errors',
-        destination: '/help-center/errors',
+        destination: '/help-center/errors/overview',
         permanent: true
       },
       {
         source: '/errors/memgraph/auth',
-        destination: '/help-center/errors/memgraph/auth',
+        destination: '/help-center/errors/auth',
         permanent: true
       },
       {
         source: '/errors/memgraph/durability',
-        destination: '/help-center/errors/memgraph/durability',
+        destination: '/help-center/errors/durability',
         permanent: true
       },
       {
         source: '/errors/memgraph/memory',
-        destination: '/help-center/errors/memgraph/memory',
+        destination: '/help-center/errors/memory',
         permanent: true
       },
       {
         source: '/errors/memgraph/modules',
-        destination: '/help-center/errors/memgraph/modules',
+        destination: '/help-center/errors/modules',
         permanent: true
       },
       {
         source: '/errors/memgraph/ports',
-        destination: '/help-center/errors/memgraph/ports',
+        destination: '/help-center/errors/ports',
         permanent: true
       },
       {
         source: '/errors/memgraph/python-modules',
-        destination: '/help-center/errors/memgraph/python-modules',
+        destination: '/help-center/errors/python-modules',
         permanent: true
       },
       {
         source: '/errors/memgraph/replication',
-        destination: '/help-center/errors/memgraph/replication',
+        destination: '/help-center/errors/replication',
         permanent: true
       },
       {
         source: '/errors/memgraph/snapshots',
-        destination: '/help-center/errors/memgraph/snapshots',
+        destination: '/help-center/errors/snapshots',
         permanent: true
       },
       {
         source: '/errors/memgraph/socket',
-        destination: '/help-center/errors/memgraph/socket',
+        destination: '/help-center/errors/socket',
         permanent: true
       },
       {
@@ -1183,7 +1183,7 @@ module.exports = withNextra({
       },
       {
         source: '/errors/memgraph/unknown',
-        destination: '/help-center/errors/memgraph/unknown',
+        destination: '/help-center/errors/unknown',
         permanent: true
       },
       {
@@ -1601,52 +1601,52 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/tutorials-overview/understanding-music-with-modules',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/tutorials-overview/social-network-analysis',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/networkx',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/networkx/graph-analyzer',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/networkx/wcc',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/networkx/nxalg',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/networkx',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/networkx/graph-analyzer',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/networkx/nxalg',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/networkx',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
@@ -2211,7 +2211,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/getting-started/installation/wsl-installation',
-        destination: '/getting-started/install-memgraph/windows-subsystem-for-linux',
+        destination: '/getting-started/install-memgraph/wsl',
         permanent: true
       },
       {
@@ -2623,7 +2623,7 @@ module.exports = withNextra({
       },
       {
         source: '/gqlalchemy/reference/transformations',
-        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/overview/',
         permanent: true
       },
       {

@@ -9,10 +9,6 @@ This article is a part of a series intended to show users how to use Memgraph on
 real-world data and, by doing so, retrieve some interesting and useful
 information.
 
-We highly recommend checking out the other articles from this series which are
-listed in our [tutorial overview section](/), where you
-can also find instructions on how to start with the tutorial.
-
 ## Introduction
 
 [Football](https://en.wikipedia.org/wiki/Association_football) is a team sport

@@ -8,10 +8,6 @@ description: Bring Game of Thrones data to life with Memgraph's graph computing 
 This article is part of a series intended to show how to use Memgraph on
 real-world data to retrieve some interesting and useful information.
 
-We highly recommend checking out the other articles from this series which are
-listed in our [tutorial overview section](/), where you
-can also find instructions on how to start with the tutorial.
-
 ## Introduction
 
 **WARNING** - this tutorial could contain Game of Thrones **_spoilers_**.
