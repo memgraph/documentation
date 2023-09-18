@@ -2699,7 +2699,7 @@ module.exports = withNextra({
       //END GQLAlchemy redirects
       //START 404 links redirects
       {
-        source: '/memgraph/latest/',
+        source: '/memgraph/latest',
         destination: '/',
         permanent: true
       },
