@@ -2857,6 +2857,16 @@ module.exports = withNextra({
         source: '/memgraph/2.6.0/how-to-guides/create-backup',
         destination: '/configuration/data-durability-and-backup',
         permanent: true
+      },
+      {
+        source: '/memgraph/next/tutorials/backpacking-through-europe',
+        destination: '/querying/exploring-datasets/backpacking-through-europe',
+        permanent: true
+      },
+      {
+        source: '/memgraph/1.5.0/getting-started/installation',
+        destination: '/getting-started/install-memgraph',
+        permanent: true
       }
       //END 404 links redirects                  
     ];
