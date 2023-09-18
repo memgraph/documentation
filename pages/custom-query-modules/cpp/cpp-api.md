@@ -1,6 +1,6 @@
 ---
 title: Query modules C++ API
-description: Get your hands on the API documentation for mgp.hpp, covering declarations of every function in the C++ API for implementing query modules. 
+description: Get your hands on the API documentation for mgp.hpp, covering declarations of every function in the C++ API for implementing query modules.
 ---
 
 # Query modules C++ API
@@ -10,7 +10,7 @@ functions in the C++ API for implementing query module procedures and functions.
 The source file can be found in the Memgraph installation directory, under
 `/usr/include/memgraph`.
 
-To see how to implement query modules in C++, take a look at 
+To see how to implement query modules in C++, take a look at
 [the example we provided](/custom-query-modules/python/python-example).
 
 If you install any C++ modules after running Memgraph, you’ll need to [load
@@ -896,7 +896,7 @@ Node To() const
 
 ##### ToString
 
-Returns the relationship's string representation, which has this format: 
+Returns the relationship's string representation, which has this format:
 "(`node_from.ToString()`)-(type: `relationship_type`, id: `relationship_id`, properties: `relationship_properties_map`)->(`node_to.ToString()`)".
 
 ```cpp
@@ -1565,6 +1565,7 @@ Path(Path &&other) noexcept
 | `GetNodeAt`         | Returns the node at the given `index`.  The `index` must be less than or equal to length of the path. |
 | `GetRelationshipAt` | Returns the relationship at the given `index`. The `index` must be less than length of the path.      |
 | `Expand`            | Adds a relationship continuing from the last node on the path.                                        |
+| `Pop`               | Removes the last node and the last relationship from the path.                                        |
 | `ToString`          | Returns the path's string representation.                                                             |
 
 ##### Length
@@ -1597,6 +1598,14 @@ Adds a relationship continuing from the last node on the path.
 
 ```cpp
 void Expand(const Relationship &relationship)
+```
+
+##### Pop
+
+Removes the last node and the last relationship from the path.
+
+```cpp
+void Pop()
 ```
 
 ##### ToString
@@ -1918,7 +1927,7 @@ std::hash<mgp::MapItem>
 
 ### Value
 
-Represents a value of any type supported by Memgraph. 
+Represents a value of any type supported by Memgraph.
 The data types are described [in the reference guide](/fundamentals/data-types).
 
 #### Constructors
@@ -2150,7 +2159,7 @@ Returns the value's string representation. It does this by finding the type of t
 
 | Data type       | String method used                                                   |
 | -------------   | -------------------------------------------------------------------- |
-| `Null`          | Returns `""`                                                         | 
+| `Null`          | Returns `""`                                                         |
 | `Numeric`       | Casts numeric type to string.                                        |
 | `Bool`          | Returns either `"false"` or `"true"`, depending on the bool's value. |
 | `String`        | Returns the string.                                                  |
