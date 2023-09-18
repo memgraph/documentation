@@ -1,6 +1,6 @@
 ---
 title: Query modules C++ API
-description: Get your hands on the API documentation for mgp.hpp, covering declarations of every function in the C++ API for implementing query modules. 
+description: Get your hands on the API documentation for mgp.hpp, covering declarations of every function in the C++ API for implementing query modules.
 ---
 
 # Query modules C++ API
@@ -10,7 +10,7 @@ functions in the C++ API for implementing query module procedures and functions.
 The source file can be found in the Memgraph installation directory, under
 `/usr/include/memgraph`.
 
-To see how to implement query modules in C++, take a look at 
+To see how to implement query modules in C++, take a look at
 [the example we provided](/custom-query-modules/python/python-example).
 
 If you install any C++ modules after running Memgraph, you’ll need to [load
@@ -21,7 +21,7 @@ Memgraph in order to use them.
 With this API it’s possible to extend your Cypher queries with **functions** and **procedures** with
 `AddProcedure` and `AddFunction`.
 
-The API needs memory access to add procedures and functions; this can be done with `mgp::memory = memory;`.
+The API needs memory access to add procedures and functions, this can be done with either `mgp::MemoryDispatcherGuard guard(memory);` or `mgp::memory = memory;`, where the use of the former is advised since `mgp::memory = memory;` is not thread-safe and will be deprecated in the future.
 
 Functions are simple operations that return a single value and can be used in any expression or predicate.
 
@@ -896,7 +896,7 @@ Node To() const
 
 ##### ToString
 
-Returns the relationship's string representation, which has this format: 
+Returns the relationship's string representation, which has this format:
 "(`node_from.ToString()`)-(type: `relationship_type`, id: `relationship_id`, properties: `relationship_properties_map`)->(`node_to.ToString()`)".
 
 ```cpp
@@ -1918,7 +1918,7 @@ std::hash<mgp::MapItem>
 
 ### Value
 
-Represents a value of any type supported by Memgraph. 
+Represents a value of any type supported by Memgraph.
 The data types are described [in the reference guide](/fundamentals/data-types).
 
 #### Constructors
@@ -2150,7 +2150,7 @@ Returns the value's string representation. It does this by finding the type of t
 
 | Data type       | String method used                                                   |
 | -------------   | -------------------------------------------------------------------- |
-| `Null`          | Returns `""`                                                         | 
+| `Null`          | Returns `""`                                                         |
 | `Numeric`       | Casts numeric type to string.                                        |
 | `Bool`          | Returns either `"false"` or `"true"`, depending on the bool's value. |
 | `String`        | Returns the string.                                                  |
