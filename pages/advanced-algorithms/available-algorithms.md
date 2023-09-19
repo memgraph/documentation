@@ -82,7 +82,7 @@ library](/advanced-algorithms/install-mage).
 | [graph_util](/advanced-algorithms/available-algorithms/graph_util)                       | C++    | A module with common graph algorithms and graph manipulation utilities                                        |
 | [import_util](/advanced-algorithms/available-algorithms/import_util)                     | Python | A module for importing data from different formats (JSON).                                                    |
 | [json_util](/advanced-algorithms/available-algorithms/json_util)                         | Python | A module for loading JSON from a local file or remote address.                                                |
-| [labels](/advanced-algorithms/available-algorithms/labels)| C++ | The `label` module provides an array of utilities for working with labels. |
+| [labels](/advanced-algorithms/available-algorithms/label)| C++ | The `label` module provides an array of utilities for working with labels. |
 | [llm_util](/advanced-algorithms/available-algorithms/llm_util)                           | Python | A module that contains procedures describing graphs in a format best suited for large language models (LLMs). |
 | [meta](/advanced-algorithms/available-algorithms/meta)                                                   | C++    | Provides information about graph nodes and relationships.                                                                                                                                                               |
 | [meta_util](/advanced-algorithms/available-algorithms/meta_util)                         | Python | A module that contains procedures describing graphs on a meta-level.                                          |

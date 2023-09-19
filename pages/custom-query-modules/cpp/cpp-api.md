@@ -21,7 +21,7 @@ Memgraph in order to use them.
 With this API it’s possible to extend your Cypher queries with **functions** and **procedures** with
 `AddProcedure` and `AddFunction`.
 
-The API needs memory access to add procedures and functions; this can be done with `mgp::memory = memory;`.
+The API needs memory access to add procedures and functions, this can be done with either `mgp::MemoryDispatcherGuard guard(memory);` or `mgp::memory = memory;`, where the use of the former is advised since `mgp::memory = memory;` is not thread-safe and will be deprecated in the future.
 
 Functions are simple operations that return a single value and can be used in any expression or predicate.
 
