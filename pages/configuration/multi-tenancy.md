@@ -1,6 +1,6 @@
 ---
-title: Multi-tenancy
-description: Discover the benefits of multi-tenancy for scalability, resource utilization, and performance. Also learn how to manage few isolated databases within a single instance in our detailed documentation. 
+title: Multi-tenancy (Enterprise)
+description: Discover the benefits of multi-tenancy for scalability, resource utilization, and performance. Also learn how to manage few isolated databases within a single instance in our detailed documentation.
 ---
 
 # Multi-tenancy
@@ -47,6 +47,7 @@ based on configuration.
 ### Cypher queries for multi-tenancy
 
 Users interact with multi-tenant features through specialized Cypher queries:
+
 1. `CREATE DATABASE name`: Creates a new database.
 2. `DROP DATABASE name`: Deletes a specified database.
 3. `SHOW DATABASES`: Lists all active databases, indicating the currently
@@ -79,6 +80,7 @@ Access to all databases can be granted or revoked using wildcards:
 ### Additional multi-tenant privileges
 
 Administrators manage multi-tenant privileges with:
+
 - `MULTI_DATABASE_USE`: Enables database switching and listing.
 - `MULTI_DATABASE_EDIT`: Permits database creation and deletion.
 
@@ -94,12 +96,14 @@ associated with the dropped database will be deleted.
 ### Using Neo4j Drivers
 
 Neo4j drivers interact with multi-tenant databases in two ways:
+
 1. Through Cypher queries.
 2. By defining the `database` field. The `USE DATABASE` query is disabled when
    the database field is defined. The query consistently runs against the
    specified database.
 
 Example using Neo4j Python driver:
+
 ```python
 import neo4j
 
@@ -116,6 +120,7 @@ with driver.session(database="db2") as session:
 ```
 
 ### Audit Logs
+
 Audit logs now encompass the active database name, positioned immediately after
 the username field.
 
