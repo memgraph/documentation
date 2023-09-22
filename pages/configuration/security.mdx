@@ -144,7 +144,44 @@ Example:
 </Tab>
 </Tabs>
 
-## User roles (Enterprise feature)
+## Owners
+
+The privileges of the owners of [streams](/data-streams) and
+[triggers](/fundamentals/triggers#owners) are propagated to the corresponding
+query executions:
+- in case of streams for the queries returned by the transformations
+- in case of triggers for trigger statements.
+
+This means the execution of the queries will fail if the owner doesn't have the
+required privileges. There are a few important details:
+- If there are no existing users, no privilege check is performed similarly to
+regular queries.
+- If a stream or trigger is created without using a logged-in user
+session, the owner will be `Null`. From the point when the first user is created
+such streams and triggers will fail because the lack of owner is treated as a
+user without any privileges, so no queries are allowed to be executed.
+- Currently, there is no way of changing the owner. The only workaround for this
+is to delete the stream or trigger and then create it again with another user.
+
+The user who executes the `CREATE STREAM` query is going to be the owner of the stream.
+Authentication and authorization are not supported in Memgraph Community, thus
+the owner will always be `Null`, and the privileges are not checked in Memgraph
+Community. In Memgraph Enterprise the privileges of the owner are used when
+executing the queries returned from a transformation, in other words, the
+execution of the queries will fail if the owner doesn't have the required
+privileges.
+
+## Role-based access control (Enterprise feature)
+
+Role-Based Access Control (RBAC) simplifies data security by grouping users into
+roles based on their tasks. Instead of assigning permissions to each user, RBAC
+assigns privileges to roles. Users, when linked to roles, gain the necessary
+access for their responsibilities. For example, in a company, a manager's role
+might have different access levels than an employee's role. Through RBAC,
+organizations efficiently ensure that users only access data relevant to their
+role, enhancing security and minimizing risks.
+
+### User roles 
 
 Each user can be assigned at most one user role. User roles are abstractions
 that capture the privilege levels of a set of users. 
@@ -191,7 +228,7 @@ To show what role a suer has, run the following query:
 SHOW ROLE FOR user_name;
 ```
 
-## Privileges (Enterprise feature)
+### Privileges
 
 At the moment, privileges are confined to users' abilities to perform certain
 `OpenCypher` queries. Namely users can be given permission to execute a subset
@@ -248,7 +285,7 @@ NULL        | NULL        | DENY
 Once the privilages are changed, they take full effect once the user reconnects
 to the database. 
 
-### Grant privileges
+#### Grant privileges
 
 To grant a certain set of privileges to a specific user or user role, use the
 following query:
@@ -263,7 +300,7 @@ For example, to grant `AUTH` and `INDEX` privileges to users with the
 ```cypher
 GRANT AUTH, INDEX TO moderator:
 ```
-### Deny privileges 
+#### Deny privileges 
 
 Similarly, denying privileges is done using the `DENY` keyword instead of
 `GRANT`.
@@ -275,7 +312,7 @@ For example, to deny `AUTH` and `INDEX` privileges to users with the
 DENY AUTH, INDEX TO moderator:
 ```
 
-### Revoke privileges
+#### Revoke privileges
 
 Both denied and granted privileges can be revoked, meaning that their status is
 not defined for that user or role. Revoking is done using the `REVOKE` keyword.
@@ -295,7 +332,7 @@ unable to use indexing features.
 If the user's `INDEX` privilege is revoked, they will be able to do use indexing
 features because his role is granted that privilege.
 
-### Manage all privileges at once
+#### Manage all privileges at once
 
 To grant, deny or revoke all privileges use the `ALL PRIVILEGES` construct:
 
@@ -311,40 +348,13 @@ DENY ALL PRIVILEGES FROM <user>;
 REVOKE ALL PRIVILEGES FROM <user>;
 ```
 
-### Show privileges
+#### Show privileges
 
 To check privilege for a certain user or role, run the following query:
 
 ```cypher
 SHOW PRIVILEGES FOR user_or_role;
 ```
-
-### Owners
-
-The privileges of the owners of [streams](/data-streams) and
-[triggers](/fundamentals/triggers#owners) are propagated to the corresponding
-query executions:
-- in case of streams for the queries returned by the transformations
-- in case of triggers for trigger statements.
-
-This means the execution of the queries will fail if the owner doesn't have the
-required privileges. There are a few important details:
-- If there are no existing users, no privilege check is performed similarly to
-regular queries.
-- If a stream or trigger is created without using a logged-in user
-session, the owner will be `Null`. From the point when the first user is created
-such streams and triggers will fail because the lack of owner is treated as a
-user without any privileges, so no queries are allowed to be executed.
-- Currently, there is no way of changing the owner. The only workaround for this
-is to delete the stream or trigger and then create it again with another user.
-
-The user who executes the `CREATE STREAM` query is going to be the owner of the stream.
-Authentication and authorization are not supported in Memgraph Community, thus
-the owner will always be `Null`, and the privileges are not checked in Memgraph
-Community. In Memgraph Enterprise the privileges of the owner are used when
-executing the queries returned from a transformation, in other words, the
-execution of the queries will fail if the owner doesn't have the required
-privileges.
 
 ## Label-based access control (Enterprise feature)
 
@@ -443,7 +453,39 @@ SHOW PRIVILEGES FOR user_or_role;
 
 and all the values of clause privileges, as well as label-based permissions will be displayed.
 
-## Example of granting read permissions
+## Templates for granting privileges
+
+To grant all privileges to a superuser (admin):
+
+```
+GRANT ALL PRIVILEGES TO admin;
+GRANT CREATE_DELETE ON LABELS * TO admin;
+GRANT CREATE_DELETE ON EDGE_TYPES * TO admin;
+```
+
+To grant all read and write privileges:
+
+```
+DENY ALL PRIVILEGES TO readWrite;
+GRANT CREATE, DELETE, MERGE, SET, REMOVE, INDEX, MATCH, STATS TO readWrite;
+GRANT CREATE_DELETE ON LABELS * TO readWrite;
+GRANT CREATE_DELETE ON EDGE_TYPES * TO readWrite;
+```
+
+To grant read only privileges: 
+
+```
+DENY ALL PRIVILEGES TO readonly;
+GRANT MATCH, STATS TO readonly;
+GRANT READ ON LABELS * TO readonly;
+GRANT READ ON EDGE_TYPES * TO readonly;
+```
+
+## Examples
+
+Below are several examples of using the Enterprise security features. 
+
+### Example of granting read permissions
 
 Bob is a data analyst for the company. He is making sure he can extract any useful insights
 from the data imported into the database. For now, all the data is labeled with the `DataPoint`
@@ -516,38 +558,6 @@ need an explicit grant for every new label that appears in the database. This
 approach is called whitelisting, and is more secure for adding new entities in
 the database since confidential nodes and relationships are not leaked into the
 database before securing them.
-
-## Templates for granting privileges
-
-To grant all privileges to a superuser (admin):
-
-```
-GRANT ALL PRIVILEGES TO admin;
-GRANT CREATE_DELETE ON LABELS * TO admin;
-GRANT CREATE_DELETE ON EDGE_TYPES * TO admin;
-```
-
-To grant all read and write privileges:
-
-```
-DENY ALL PRIVILEGES TO readWrite;
-GRANT CREATE, DELETE, MERGE, SET, REMOVE, INDEX, MATCH, STATS TO readWrite;
-GRANT CREATE_DELETE ON LABELS * TO readWrite;
-GRANT CREATE_DELETE ON EDGE_TYPES * TO readWrite;
-```
-
-To grant read only privileges: 
-
-```
-DENY ALL PRIVILEGES TO readonly;
-GRANT MATCH, STATS TO readonly;
-GRANT READ ON LABELS * TO readonly;
-GRANT READ ON EDGE_TYPES * TO readonly;
-```
-
-## Examples
-
-Below are several examples of using the Enterprise security features. 
 
 ### Granting update permissions
 
@@ -654,4 +664,3 @@ GRANT NOTHING ON LABELS :SecretLabel TO seniorEngineer;
 When granting `NOTHING`, the user is denied both visibility and manipulation of
 the entity. Eve is now able to see all the domain data while the management is
 happy since they have not leaked any confidential data.
-

@@ -558,7 +558,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/exposing-system-metrics',
-        destination: '/configuration/exposing-system-metrics',
+        destination: '/configuration/monitoring-server',
         permanent: true
       },
       {
@@ -2867,8 +2867,13 @@ module.exports = withNextra({
         source: '/memgraph/1.5.0/getting-started/installation',
         destination: '/getting-started/install-memgraph',
         permanent: true
-      }
-      //END 404 links redirects                  
+      },
+      //END 404 links redirects
+      {
+        source: '/configuration/exposing-system-metrics',
+        destination: '/configuration/monitoring-server',
+        permanent: true
+      }                  
     ];
   },
 });
