@@ -49,7 +49,7 @@ Run the following query to calculate the statistics:
 ANALYZE GRAPH;
 ```
 
-The query will iterate over all label and label-property indices in the database
+The query will iterate over all label and label-property indexes in the database
 and calculate the average group size, chi-squared statistic and avg degree for
 each one, then return the following output:
 
@@ -76,7 +76,7 @@ deleted by running:
 ANALYZE GRAPH DELETE STATISTICS;
 ```
 
-The results will contain all label-property indices that were successfully deleted:
+The results will contain all label-property indexes that were successfully deleted:
 
 | label | property |
 | ----- | -------- |

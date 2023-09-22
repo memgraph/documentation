@@ -38,8 +38,8 @@ All system metrics measuring different parts of the system can be divided into t
 
  | Name                       | Type    | Description                                            |
  | -------------------------- | ------- | ------------------------------------------------------ |
- | ActiveLabelIndices         | Counter | Number of active label indices in the system.          |
- | ActiveLabelPropertyIndices | Counter | Number of active label property indices in the system. |
+ | ActiveLabelIndices         | Counter | Number of active label indexes in the system.          |
+ | ActiveLabelPropertyIndices | Counter | Number of active label property indexes in the system. |
 
 ### Operator metrics
 
