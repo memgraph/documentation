@@ -23,67 +23,71 @@ its internal users are automatically disabled. All users are authenticated only
 using the module, existing local users are ignored (unless they can be
 authenticated using the module).
 
-## Authentication
+As this is an Enterprise feature, once the Memgraph Enterprise license expires,
+newly created users will be granted all privileges. The existing users'
+privileges will still apply but you won't be able to manage them.
 
-In this mode Memgraph will only perform authentication (verification of
-username and password) using the external auth module.  All user to role
-mappings and user and role permissions are managed through Memgraph.
+## Authentication mode
 
-When a user that has never logged in to the database passes authentication
+In this mode, Memgraph will only perform authentication (verification of
+username and password) using the external auth module.  All user-to-role
+mappings, as well as user and role permissions are managed through Memgraph.
+
+When a user that has never logged into the database passes authentication
 using the external auth module, a user object is created for that user. The
 user can then be seen using the following query:
+
 ```cypher
 SHOW USERS;
 ```
-This behavior can be changed to disable login to users that don't have an
+
+This behavior can be changed to disable login for users that don't have an
 explicitly created user account.
 
-## Authorization
+## Authorization mode
 
-In this mode Memgraph will perform authentication and authorization using the
-external auth module. The authorization supported is in the form of determining
-the user to role mapping using the module.  User and role permissions are still
-managed through Memgraph.
+In this mode, Memgraph will perform both the authentication and authorization
+using the external auth module. The external module is used to determine
+user-to-role mappings, but user and role permissions are still managed through
+Memgraph.
 
-When a user that has a role that doesn't yet exist in the database logs in to
-the database, a role object is created for that user and assigned to that user.
+When a user with a non-existing role within Memgraph logs into
+the database, that role object is created and assigned to the user.
+
 The role can then be seen using the following query:
+
 ```cypher
 SHOW ROLES;
 ```
+
 This behavior can be changed to disable login to users that don't have an
 explicitly created role.
 
-## Flags
+## Configuration flags
 
-This section contains the list of flags that are used to configure the external
-auth module authentication and authorization mechanisms used by Memgraph.
+Use the following configuration flags to configure the external auth module
+authentication and authorization mechanisms used by Memgraph.
 
  Flag                               | Description
 ------------------------------------|------------
- `--auth-module-executable`         | Path to the executable that should be used for user authentication/authorization.
- `--auth-module-create-user`        | Controls whether users should be implicitly created on first login or they should be explicitly created manually.
- `--auth-module-create-role`        | Controls whether roles should be implicitly created on first appearance or they should be explicitly created manually.
- `--auth-module-manage-roles`       | Specifies whether the module is used only for authentication (value is `false`), or it should be used for both authentication and authorization.
- `--auth-module-timeout`            | Specifies the maximum time that Memgraph will wait for a response from the external auth module.
- `--auth-password-permit-null`      | Can be set to false to disable null passwords.
- `--auth-password-strength-regex`   | The regular expression that should be used to match the entire entered password to ensure its strength.
+ `--auth_module_executable`         | Path to the executable that should be used for user authentication/authorization.
+ `--auth_module-create_user`        | Controls whether users should be implicitly created on first login or they should be explicitly created manually.
+ `--auth_module-create_role`        | Controls whether roles should be implicitly created on first appearance or they should be explicitly created manually.
+ `--auth_module-manage_roles`       | Specifies whether the module is used only for authentication (value is `false`), or it should be used for both authentication and authorization.
+ `--auth_module_timeout`            | Specifies the maximum time that Memgraph will wait for a response from the external auth module.
+ `--auth_password-permit_null`      | Can be set to false to disable null passwords.
+ `--auth_password-strength_regex`   | The regular expression that should be used to match the entire entered password to ensure its strength.
 
 ## Communication
 
-The external auth module can be written in any programming language. Because of
-that, the communication protocol between Memgraph and the module is simple to
-implement.
-
 Memgraph uses inter-process pipes to communicate with the module. The module
 will receive auth requests on file descriptor `1000` and has to return auth
-responses to file descriptor `1001`. You may be wondering why we didn't just
-use `stdin` and `stdout` for communication. The standard streams aren't used
-because external libraries often tend to write something to `stdout` which is
-difficult to turn off. By using separate file descriptors, `stdout` is left
-intact and can be used freely for debugging purposes (along with `stderr`).
+responses to file descriptor `1001`. The standard streams (`stdin` and `stdout`)
+aren't used because external libraries often tend to write something to `stdout`
+which is difficult to disable. By using separate file descriptors, `stdout` is
+left intact and can be used freely for debugging purposes (along with `stderr`).
 
-The protocol that is used between Memgraph and the module is as follows:
+The protocol used between Memgraph and the module is as follows:
  - Each auth request is sent as a JSON encoded object in a single line that is
    terminated by a `\n`.
  - Each auth response must be sent as a JSON encoded object in a single line
@@ -104,7 +108,8 @@ in Memgraph's output (typically in `systemd` logs using `journalctl`).
 
 ## Example
 
-This very simple example auth module is written in Python, but any programming language can be used.
+This very simple example auth module is written in Python, but any programming
+language can be used.
 
 ```python
 #!/usr/bin/python3
@@ -125,10 +130,10 @@ if __name__ == "__main__":
         output_stream.write((json.dumps(ret) + "\n").encode("ascii"))
 ```
 
-In the example you can see exactly how the communication protocol works and you
-can see the function that is used for authentication (and authorization).  When
-writing your own modules you just have to reimplement the `authenticate`
-function according to your needs.
+In the example you can see how the communication protocol works and you can see
+the function that is used for authentication (and authorization). When writing
+your own modules you have to reimplement the `authenticate` function according
+to your needs.
 
 Because the authentication (and authorization) function has a simple signature,
 it is easy (and recommended) to write unit (or integration) tests in separate
@@ -144,7 +149,307 @@ assert module.authenticate("CHUCK", "NORRIS") == {"authenticated": True, "role":
 
 ## LDAP
 
-With every Memgraph Enterprise installation we provide our own module that
-supports authentication and authorization using LDAP. For more information
-about how the module should be set-up see the
-[reference guide](/configuration/ldap-security).
+Memgraph also supports authentication and authorization using LDAP with a
+built-in auth module that is packaged with Memgraph Enterprise.
+
+The module supports two operation modes:
+- authentication only (LDAP bind request)
+- authentication and authorization (LDAP bind and search requests)
+
+### Authentication mode
+
+When using LDAP authentication the module builds the DN used for authentication
+using the user specified username and the following formula:
+
+```plaintext
+DN = prefix + username + suffix
+```
+
+In most common situations the `prefix` will be `cn=` and the `suffix` will be
+`,dc=example,dc=com`. With an example username `alice` that would yield a DN
+equal to `cn=alice,dc=example,dc=com` which will then be used for the LDAP bind
+operation with the user specified password.
+
+### Authorization mode
+
+Authentication is performed in the same way as described above. After the user is
+authenticated, the module searches through the role mapping root DN object that
+contains role mappings. A role mapping object that has the current bound user
+as its `member` attribute is used as the user's role. The role that is mapped
+to the user is the `CN` attribute of the role mapping object.  The attribute
+that contains the user DN in the mapping object, as well as the attribute that
+contains the role name, can be changed in the module configuration file to
+accommodate your LDAP schema.
+
+When searching for a role in directories that have thousands of roles,
+the search process could take some time, causing long login times.
+
+### Module requirements
+
+The module is written in Python 3 and it must be installed on the server. The
+Python version should be at least `3.5`.  Also, you must have the following
+Python 3 libraries installed:
+ - `ldap3` - used to communicate with the LDAP server.
+ - `PyYAML` - used to parse the configuration file.
+
+### Module configuration
+
+The module configuration file is located at
+`/etc/memgraph/auth_module/ldap.yaml`.  An initial example configuration file
+that has all settings documented and explained is located at
+`/etc/memgraph/auth_module/ldap.example.yaml`. For quick setup, you can copy the example
+configuration file into the module configuration file.
+
+### Database configuration
+
+In order to enable the use of the LDAP authentication and authorization module
+you have to set the flag `--auth-module-executable
+/usr/lib/memgraph/auth_module/ldap.py`.
+
+Other [flags](#configuration-flags) that change the behavior of the database to
+module integration can be specified according to your needs.
+
+### Example
+
+Organizations typically use an LDAP server to hold and manage the permissions.
+Because LDAP servers are already set-up in most large organizations, it is
+convenient for the organization to allow all staff members to have access to the
+database using the already available centralized user management system.
+
+For this guide let's assume that we have an LDAP server that is serving the
+following data:
+
+```plaintext
+# Users root entry
+dn: ou=people,dc=memgraph,dc=com
+objectclass: organizationalUnit
+objectclass: top
+ou: people
+
+# User dba
+dn: cn=dba,ou=people,dc=memgraph,dc=com
+cn: dba
+objectclass: person
+objectclass: top
+sn: user
+userpassword: dba
+
+# User alice
+dn: cn=alice,ou=people,dc=memgraph,dc=com
+cn: alice
+objectclass: person
+objectclass: top
+sn: user
+userpassword: alice
+
+# User bob
+dn: cn=bob,ou=people,dc=memgraph,dc=com
+cn: bob
+objectclass: person
+objectclass: top
+sn: user
+userpassword: bob
+
+# User carol
+dn: cn=carol,ou=people,dc=memgraph,dc=com
+cn: carol
+objectclass: person
+objectclass: top
+sn: user
+userpassword: carol
+
+# User dave
+dn: cn=dave,ou=people,dc=memgraph,dc=com
+cn: dave
+objectclass: person
+objectclass: top
+sn: user
+userpassword: dave
+
+# Roles root entry
+dn: ou=roles,dc=memgraph,dc=com
+objectclass: organizationalUnit
+objectclass: top
+ou: roles
+
+# Role moderator
+dn: cn=moderator,ou=roles,dc=memgraph,dc=com
+cn: moderator
+member: cn=alice,ou=people,dc=memgraph,dc=com
+objectclass: groupOfNames
+objectclass: top
+
+# Role admin
+dn: cn=admin,ou=roles,dc=memgraph,dc=com
+cn: admin
+member: cn=carol,ou=people,dc=memgraph,dc=com
+member: cn=dave,ou=people,dc=memgraph,dc=com
+objectclass: groupOfNames
+objectclass: top
+```
+
+To summarize, in this dataset we have the following data:
+- `ou=people,dc=memgraph,dc=com` - entry that holds all users.
+  - `cn=dba,ou=people,dc=memgraph,dc=com` - user `dba` that will be used as the database administrator.
+  - `cn=alice,ou=people,dc=memgraph,dc=com` - regular user `alice`.
+  - `cn=bob,ou=people,dc=memgraph,dc=com` - regular user `bob`.
+  - `cn=carol,ou=people,dc=memgraph,dc=com` - regular user `carol`.
+  - `cn=dave,ou=people,dc=memgraph,dc=com` - regular user `dave`.
+- `ou=roles,dc=memgraph,dc=com` - entry that holds all roles.
+  - `cn=moderator,ou=roles,dc=memgraph,dc=com` - role `moderator` that has `alice` as its member.
+  - `cn=admin,ou=roles,dc=memgraph,dc=com` - role `admin` that has `carol` and `dave` as its members.
+
+### Authentication
+
+Before enabling LDAP authentication, Memgraph should be prepared for the
+integration. Here we assume that you have a running Memgraph instance that
+doesn't have any users in its local authentication storage. For more details on
+how the native authentication storage works in Memgraph check [user
+privileges](/configuration/security).
+
+First you should create the user that should be the database administrator. The
+username you are about to create *must* exist in the LDAP directory. For the
+described LDAP directory we will connect to the database and issue the following
+queries all in the same connection:
+
+```cypher
+CREATE USER dba;
+GRANT ALL PRIVILEGES TO dba;
+```
+
+After the user is created and all privileges are granted, it is safe to
+disconnect from the database and proceed with LDAP integration.
+
+To enable LDAP integration you should specify the following flag:
+```plaintext
+--auth-module-executable=/usr/lib/memgraph/auth_module/ldap.py
+```
+
+You should also have the following LDAP module configuration in
+`/etc/memgraph/auth_module/ldap.yaml`:
+```yaml
+server:
+  host: "<LDAP_SERVER_HOSTNAME>"
+  port: <LDAP_SERVER_PORT>
+  encryption: "disabled"
+  cert_file: ""
+  key_file: ""
+  ca_file: ""
+  validate_cert: false
+
+users:
+  prefix: "cn="
+  suffix: ",ou=people,dc=memgraph,dc=com"
+
+roles:
+  root_dn: ""
+  root_objectclass: ""
+  user_attribute: ""
+  role_attribute: ""
+```
+
+You should adjust the security settings according to your LDAP server security
+settings.
+
+After setting these configuration options you should restart your Memgraph
+instance.
+
+Now you can verify that you can still log in to the database using username
+`dba` and password `dba`.
+
+Issuing `SHOW USERS;` should list that currently only user `dba` exists.  This
+is normal. It means that LDAP authentication is successfully enabled (because
+you were able to log in) and no other users have yet logged in.
+
+You should now be able to log in using username `alice` and password `alice`.
+Because Alice has never before logged in to the database a new user will be
+created for Alice and she won't have any privileges (yet).
+
+Using user `dba` we modify Alice's privileges to include the `MATCH` privilege.
+```cypher
+GRANT MATCH TO alice;
+```
+
+After Alice logs in again into the database (to refresh her privileges) she
+will be able to execute the following query:
+```cypher
+MATCH (n) RETURN n;
+```
+
+Issuing `SHOW USERS;` as `dba` should now yield both `dba` and `alice`.
+
+Users Bob, Carol and Dave will also be able to log in to the database using
+their LDAP password.  As with Alice, their users will be created and won't have
+any privileges.
+
+If automatic user account creation is disabled using the database flag:
+```plaintext
+--auth-ldap-create-user=false
+```
+The database administrator (user `dba`) will first have to explicitly create
+the users that he wishes to allow to connect to the database:
+```cypher
+CREATE USER alice;
+CREATE USER bob;
+```
+
+In this scenario only Alice and Bob will be allowed to log in to the database
+because they already have existing user accounts, but users Carol and Dave
+won't be able to log in.
+
+### Authorization
+
+In the previous example users could only authenticate using LDAP. In this
+example we will explain how to set-up the LDAP auth module to deduce the user's
+role using LDAP search queries.
+
+First, you should enable and verify that user authentication works. To enable
+role mapping for the described LDAP schema, we will modify the LDAP auth module
+configuration file, specifically the section `roles`, to have the following
+content:
+```yaml
+roles:
+  root_dn: "ou=roles,dc=memgraph,dc=com"
+  root_objectclass: "groupOfNames"
+  user_attribute: "member"
+  role_attribute: "cn"
+```
+This configuration tells the LDAP module that all role mapping entries are
+children of the `ou=roles,dc=memgraph,dc=com` entry, that the children have
+user DNs specified in their `member` attribute and that the `cn` attribute
+should be used to determine the role name.
+
+When a user logs in to the database, the LDAP auth module will go through all
+role mapping entries and will try to find out which role mapping entry has the
+user as its member.
+
+So now when Alice logs in, the LDAP auth module will go through the following
+entries: `cn=admin,ou=roles,dc=memgraph,dc=com` and
+`cn=moderator,ou=roles,dc=memgraph,dc=com`.  Because Alice is a member of the
+`moderator` role mapping, the LDAP auth module will assign role moderator to
+Alice.
+
+Now as the user `dba` we can issue `SHOW ROLE FOR alice;` and we will see that
+indeed Alice now has the role `moderator`.
+
+Permissions for users and roles are still managed through Memgraph, they can't
+be managed through the LDAP server.
+
+If automatic role creation is disabled using the flag:
+```plaintext
+--auth-ldap-create-role=false
+```
+The database administrator (user `dba`) will first have to explicitly create
+the role for users that he wishes to allow to connect to the database:
+```cypher
+CREATE ROLE moderator;
+```
+
+In this scenario only Alice and Bob will be allowed to log in. Alice will be
+allowed to log in because her role (moderator) already exists. Bob will be
+allowed to log in because he doesn't have any role. Carol and Dave won't be
+allowed to log in because their role (administrator) doesn't exist.
+
+If both automatic role creation and automatic user creation are disabled, then
+both the user and the role must exist for a user to successfully log in to the
+database.
