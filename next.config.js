@@ -558,17 +558,17 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/exposing-system-metrics',
-        destination: '/configuration/exposing-system-metrics',
+        destination: '/configuration/monitoring-server',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/manage-users-using-ldap',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/ldap-security',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
@@ -1761,17 +1761,17 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-guides-overview/manage-users-using-ldap',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/ldap-security',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/manage-users-using-ldap',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
@@ -2867,8 +2867,18 @@ module.exports = withNextra({
         source: '/memgraph/1.5.0/getting-started/installation',
         destination: '/getting-started/install-memgraph',
         permanent: true
-      }
-      //END 404 links redirects                  
+      },
+      //END 404 links redirects
+      {
+        source: '/configuration/exposing-system-metrics',
+        destination: '/configuration/monitoring-server',
+        permanent: true
+      },       
+      {
+        source: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
+        permanent: true
+      }             
     ];
   },
 });
