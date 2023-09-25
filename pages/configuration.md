@@ -16,7 +16,9 @@ records of all queries executed on the database.
 ## [Auth module](/configuration/auth-module)
 
 Authentication modules play a crucial role in ensuring the security and
-integrity of systems by preventing unauthorized access.
+integrity of systems by preventing unauthorized access. For the purpose of
+supporting LDAP authentication and (optional) authorization, we have built an
+auth module that is packaged with Memgraph Enterprise. 
 
 ## [Configuration settings](/configuration/configuration-settings)
 
@@ -33,12 +35,6 @@ these files.
 
 Check how to enable Memgraph Enterprise to get access to advanced security
 features and multi-tenancy. 
-
-## [LDAP security](/configuration/ldap-security)
-
-For the purpose of supporting LDAP authentication and (optional)
-authorization, we have built an auth module that is packaged with Memgraph
-Enterprise. 
 
 ## [Logs](/configuration/logs)
 
