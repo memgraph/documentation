@@ -24,9 +24,9 @@ close the distribution of property-value group size is to the uniform
 distribution. The index with a distribution closest to the uniform distribution
 is selected.
 
-$$
+$
 \chi^2 = \sum_{i}\frac{(E_i-O_i)^2}{E_i}
-$$
+$
 
 Upon running the `ANALYZE GRAPH` query, Memgraph also check the node degree of
 every indexed nodes and calculates the average degree. By having these values,
