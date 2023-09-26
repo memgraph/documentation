@@ -5,7 +5,6 @@ description: pages/custom-query-modules/cpp/cpp-example.mdx
 
 import { Callout } from 'nextra/components'
 
-
 # Custom query module in C++ 
 
 Query modules can be implemented using the [C++ API
@@ -21,6 +20,224 @@ This will provide you with isolated enviroment for testing and developing your q
 
 - [Docker](https://docs.docker.com/get-docker/)
 
+
+<Steps>
+
+### Run Memgraph
+
+First, you need to run Memgraph instance. You can do this by running the following command:
+
+```bash
+docker run -p 7687:7687 -p 7444:7444 -p 3000:3000 --name memgraph memgraph/memgraph-platform
+```
+
+Keep in mind that you can use image with just MemgraphDB, Mage or Platform. It won't change the way you develop your query module.
+Since all of the header files defining the C++ and C API are included in the image, and you can use any of them.
+
+### Enter into memgraph container shell
+
+After you have started the Memgraph instance, you need to enter the shell. You can do this by running the following command:
+
+```bash
+docker exec -u 0 -it memgraph bash
+```
+
+This will start bash inside the container as root user. Since we need to install and compile stuff, we need to be root user.
+
+### Install the required dependecies 
+
+In order to install the required dependecies, you need to run the following command:
+
+```bash
+ apt update -y
+ apt install -y git cmake gcc g++ vim
+```
+
+Ofcourse if you do not want to use the vim, you can use any other text editor, the same goes for the Cmake. You can use any other build system you want, or call the compiler directly.
+
+### Create a directory for your query module
+
+Now that we have all of the required dependecies installed, we can create a directory for our query module. You can do this by running the following command:
+
+```bash
+mkdir /hello_query_module
+cd hello_query_module
+```
+
+### Develop a sample query module 
+
+Now that we have a directory for our query module, we can create a sample query module. You can do this by running the following command:
+
+```bash
+vim hello_query_module.cpp
+```
+
+This will open vim editor. You can copy the following code into the editor:
+
+```cpp
+#include <memgraph/mgp.hpp>
+#include <memgraph/mg_exceptions.hpp>
+
+const char *kProcedureGet = "get";
+const char *kParameterStart = "start";
+const char *kParameterSteps = "steps";
+const char *kReturnStep = "step";
+const char *kReturnNode = "node";
+ 
+void RandomWalk(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
+  mgp::memory = memory;
+ 
+  const auto arguments = mgp::List(args);
+  const auto record_factory = mgp::RecordFactory(result);
+ 
+  const auto start = arguments[0].ValueNode();
+  const auto n_steps = arguments[1].ValueInt();
+ 
+  srand(time(NULL));
+ 
+  auto current_nodes = mgp::List();
+  current_nodes.AppendExtend(mgp::Value(start));
+ 
+  std::int64_t step = 0;
+  while (step <= n_steps) {
+    auto current_node = current_nodes[current_nodes.Size() - 1].ValueNode();
+ 
+    auto neighbours = mgp::List();
+    for (const auto relationship : current_node.OutRelationships()) {
+      neighbours.AppendExtend(mgp::Value(relationship));
+    }
+ 
+    if (neighbours.Size() == 0) {
+      break;
+    }
+ 
+    const auto next_node = neighbours[rand() % neighbours.Size()].ValueRelationship().To();
+ 
+    current_nodes.AppendExtend(mgp::Value(next_node));
+    step++;
+  }
+ 
+  for (std::int64_t i = 0; i < current_nodes.Size(); i++) {
+    auto record = record_factory.NewRecord();
+    record.Insert(kReturnStep, i);
+    record.Insert(kReturnNode, current_nodes[i].ValueNode());
+  }
+}
+
+extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
+  mgp::memory = memory;
+ 
+  std::int64_t default_steps = 10;
+  try {
+    mgp::AddProcedure(RandomWalk, 
+                      kProcedureGet, 
+                      mgp::ProcedureType::Read,
+                      {
+                        mgp::Parameter(kParameterStart, mgp::Type::Node),
+                        mgp::Parameter(kParameterSteps, mgp::Type::Int, default_steps)
+                      },
+                      {
+                        mgp::Return(kReturnStep, mgp::Type::Int),
+                        mgp::Return(kReturnNode, mgp::Type::Node)
+                      }, 
+                      module,
+                      memory);
+  } catch (const std::exception &e) {
+    return 1;
+  }
+  return 0;
+}
+
+extern "C" int mgp_shutdown_module() { return 0; }
+
+```
+
+We are going to go back and explain the code in detail, but for now, we are going to compile the code.
+
+Keep in mind that you can use any other text editor, at this point it would be recommended to use the one you are most familiar with, connect to the docker contaier via that IDE and create the file there. 
+Then you can customise the enviroment to suite your development needs. 
+
+
+### Compile the query module
+
+First create a `CMakeLists.txt` file in the same directory as your `hello_query_module.cpp` file. You can do this by running the following command:
+
+```bash
+vim CMakeLists.txt
+```
+
+In the file you can copy the following code:
+
+```cmake
+cmake_minimum_required(VERSION 3.10.0)
+project(hello_query_module)
+set(CMAKE_CXX_STANDARD 17)
+
+add_library(_hello_query_module SHARED hello_query_module.cpp)
+```
+
+Create a build direcory and run the cmake command:
+
+```bash
+mkdir build
+cd build
+```
+
+Run the cmake and make: 
+
+```bash
+cmake DMAKE_BUILD_TYPE=Release ..
+make
+```
+
+### Move and load the query module 
+
+After the compilation is done, you can move the query module to the Memgraph query modules directory. You can do this by running the following command:
+
+```bash
+mv lib_hello_query_module.so /usr/lib/memgraph/query_modules/lib_hello_query_module.so
+```
+
+
+
+### Load the query module in Memgraph 
+
+By running mgconsole that is included with every Memgraph image, you can load the query module. You can do this by running the following command:
+
+```bash
+mgconsole
+```
+
+Once inside the mgconsole, you can load the query module by running the following command:
+
+```bash
+CALL mg.load_all();
+```
+
+### Test the query module
+
+Now that we have loaded the query module, we can test it. You can do this by running the following command:
+
+```cypher
+CREATE (a:NodeA)-[:Relationship]->(b:NodeB);
+```
+Call the query module: 
+
+```cypher
+MATCH (a:NodeA)
+WITH a
+CALL lib_hello_query_module.get(a, 1) YIELD node, step
+RETURN *;
+```
+
+### Next steps 
+
+Introduce yourself to the API 
+Setup a git repository for your query modules 
+
+
+
+## Query module arhitecture 
 
 
 
