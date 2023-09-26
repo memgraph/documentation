@@ -1,4 +1,4 @@
-import Script from "next/script";
+  import Script from "next/script";
 import type { AppProps } from 'next/app';
 import { Inter } from 'next/font/google'
 import '../styles/globals.css'
@@ -22,7 +22,9 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
 })(window,document,'script','dataLayer','GTM-N45PRD5');
 `}</Script>
-
+ <main className={inter.className}>
+          <Component {...pageProps} />
+        </main>
     </>
   );
 }
