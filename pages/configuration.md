@@ -16,7 +16,9 @@ records of all queries executed on the database.
 ## [Auth module](/configuration/auth-module)
 
 Authentication modules play a crucial role in ensuring the security and
-integrity of systems by preventing unauthorized access.
+integrity of systems by preventing unauthorized access. For the purpose of
+supporting LDAP authentication and (optional) authorization, we have built an
+auth module that is packaged with Memgraph Enterprise. 
 
 ## [Configuration settings](/configuration/configuration-settings)
 
@@ -34,19 +36,6 @@ these files.
 Check how to enable Memgraph Enterprise to get access to advanced security
 features and multi-tenancy. 
 
-## [Exposing system metrics](/configuration/exposing-system-metrics)
-
-In production systems, monitoring of applications is crucial, and that includes
-databases as well. Memgraph allows tracking information about transactions,
-query latencies, snapshot recovery latencies, triggers, bolt messages, indexes,
-streams, and many more using an HTTP server.
-
-## [LDAP security](/configuration/ldap-security)
-
-For the purpose of supporting LDAP authentication and (optional)
-authorization, we have built an auth module that is packaged with Memgraph
-Enterprise. 
-
 ## [Logs](/configuration/logs)
 
 Check how to access logs and change log tracking level. 
@@ -58,7 +47,8 @@ the requested results. Find out how to access it.
 
 ## [Monitoring server](/configuration/monitoring-server)
 
-Receive logs and runtime information from Memgraph in real-time via WebSocket connection.
+Receive logs and runtime information from Memgraph in real-time using a
+WebSocket or HTTP server.
 
 ## [Multi-tenancy](/configuration/multi-tenancy)
 
