@@ -2191,7 +2191,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-guides-overview/work-with-docker',
-        destination: '/getting-started/install-memgraph/docker',
+        destination: '/getting-started/first-steps-with-docker',
         permanent: true
       },
       {
@@ -2201,7 +2201,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-work-with-docker',
-        destination: '/getting-started/install-memgraph/docker',
+        destination: '/getting-started/first-steps-with-docker',
         permanent: true
       },
       {
