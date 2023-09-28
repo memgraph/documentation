@@ -1565,6 +1565,7 @@ Path(Path &&other) noexcept
 | `GetNodeAt`         | Returns the node at the given `index`.  The `index` must be less than or equal to length of the path. |
 | `GetRelationshipAt` | Returns the relationship at the given `index`. The `index` must be less than length of the path.      |
 | `Expand`            | Adds a relationship continuing from the last node on the path.                                        |
+| `Pop`               | Removes the last node and the last relationship from the path.                                        |
 | `ToString`          | Returns the path's string representation.                                                             |
 
 ##### Length
@@ -1597,6 +1598,14 @@ Adds a relationship continuing from the last node on the path.
 
 ```cpp
 void Expand(const Relationship &relationship)
+```
+
+##### Pop
+
+Removes the last node and the last relationship from the path.
+
+```cpp
+void Pop()
 ```
 
 ##### ToString
