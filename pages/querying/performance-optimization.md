@@ -24,9 +24,9 @@ close the distribution of property-value group size is to the uniform
 distribution. The index with a distribution closest to the uniform distribution
 is selected.
 
-$$
+$
 \chi^2 = \sum_{i}\frac{(E_i-O_i)^2}{E_i}
-$$
+$
 
 Upon running the `ANALYZE GRAPH` query, Memgraph also check the node degree of
 every indexed nodes and calculates the average degree. By having these values,
@@ -49,7 +49,7 @@ Run the following query to calculate the statistics:
 ANALYZE GRAPH;
 ```
 
-The query will iterate over all label and label-property indices in the database
+The query will iterate over all label and label-property indexes in the database
 and calculate the average group size, chi-squared statistic and avg degree for
 each one, then return the following output:
 
@@ -76,7 +76,7 @@ deleted by running:
 ANALYZE GRAPH DELETE STATISTICS;
 ```
 
-The results will contain all label-property indices that were successfully deleted:
+The results will contain all label-property indexes that were successfully deleted:
 
 | label | property |
 | ----- | -------- |

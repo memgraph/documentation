@@ -45,7 +45,7 @@ void AddProcedure(
     mgp_memory *memory);
 ```
 
-#### Input
+{<h4> Input: </h4>}
 
 - `callback`: procedure callback
 - `name`: procedure name
@@ -80,7 +80,7 @@ void AddBatchProcedure(
     mgp_memory *memory);
 ```
 
-#### Input
+{<h4> Input: </h4>}
 
 - `callback`: procedure callback, invoked through OpenCypher
 - `initializer`: procedure initializer, invoked before callback
@@ -114,7 +114,7 @@ void AddFunction(
     mgp_memory *memory);
 ```
 
-#### Input
+{<h4> Input: </h4>}
 
 - `callback`: function callback
 - `name`: function name
