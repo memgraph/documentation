@@ -2878,7 +2878,12 @@ module.exports = withNextra({
         source: '/configuration/ldap-security',
         destination: '/configuration/auth-module',
         permanent: true
-      }             
+      },
+      {
+        source: '/memgraph/next/reference-guide/exposing-system-metrics',
+        destination: '/configuration/monitoring-server',
+        permanent: true
+      }                   
     ];
   },
 });
