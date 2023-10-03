@@ -1,12 +1,13 @@
+---
+title: Graphing the Premier League
+description: Graph computing for the Premier League with Memgraph. Tutorialize the visualization of data with in-depth documentation and tutorials detailing the graph analysis of relevant queries.
+---
+
 # Graphing the Premier League
 
 This article is a part of a series intended to show users how to use Memgraph on
 real-world data and, by doing so, retrieve some interesting and useful
 information.
-
-We highly recommend checking out the other articles from this series which are
-listed in our [tutorial overview section](/), where you
-can also find instructions on how to start with the tutorial.
 
 ## Introduction
 
@@ -42,7 +43,7 @@ continue with the tutorial there. Note that you will not be able to execute
 `write` operations.
 
 On the other hand, if you would like to add changes to the dataset, download the
-[Memgraph Platform](https://memgraph.com/download#memgraph-platform). Once you
+[Memgraph Platform](https://memgraph.com/download). Once you
 have it up and running, open Memgraph Lab web application within the browser on
 [`localhost:3000`](http://localhost:3000) and navigate to `Datasets` in the
 sidebar. From there, choose the dataset `Football Premier league games` and

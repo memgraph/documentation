@@ -43,7 +43,7 @@ module.exports = withNextra({
       },
       {
         source: '/mage/algorithms/machine-learning-graph-analytics/graph-classification-algorithm',
-        destination: '/advanced-algorithms/available-algorithms/available-algorithms',
+        destination: '/advanced-algorithms',
         permanent: true
       },
       {
@@ -228,7 +228,7 @@ module.exports = withNextra({
       },
       {
         source: '/mage/algorithms/machine-learning-graph-analytics/k-means-clustering-algorithm',
-        destination: '/advanced-algorithms/available-algorithms/k_means_clustering',
+        destination: '/advanced-algorithms/available-algorithms/kmeans_clustering',
         permanent: true
       },
       {
@@ -358,12 +358,12 @@ module.exports = withNextra({
       },
       {
         source: '/mage/algorithms/machine-learning-graph-analytics/temporal-graph-networks',
-        destination: '/advanced-algorithms/available-algorithms/temporal_graph_networks',
+        destination: '/advanced-algorithms/available-algorithms/tgn',
         permanent: true
       },
       {
         source: '/mage/query-modules/python/temporal-graph-networks',
-        destination: '/advanced-algorithms/available-algorithms/temporal_graph_networks',
+        destination: '/advanced-algorithms/available-algorithms/tgn',
         permanent: true
       },
       {
@@ -443,17 +443,17 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-guides/networkx',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/tutorials/social-network-analysis',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/tutorials/understanding-music-with-modules',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
@@ -558,17 +558,17 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/exposing-system-metrics',
-        destination: '/configuration/exposing-system-metrics',
+        destination: '/configuration/monitoring-server',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/manage-users-using-ldap',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/ldap-security',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
@@ -913,7 +913,7 @@ module.exports = withNextra({
       },
       {
         source: '/cypher-manual/working-with-memgraph',
-        destination: '/docs',
+        destination: '/',
         permanent: true
       },
       {
@@ -953,7 +953,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/storage-modes',
-        destination: '/fundamentals/storage',
+        destination: '/fundamentals/storage-memory-usage',
         permanent: true
       },
       {
@@ -1113,67 +1113,67 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/install-memgraph-on-windows-wsl',
-        destination: '/getting-started/install-memgraph/windows-subsystem-for-linux',
+        destination: '/getting-started/install-memgraph/wsl',
         permanent: true
       },
       {
         source: '/memgraph/tutorials/install-memgraph-windows-10',
-        destination: '/getting-started/install-memgraph/windows-subsystem-for-linux',
+        destination: '/getting-started/install-memgraph/wsl',
         permanent: true
       },
       {
         source: '/memgraph/tutorials/graph-modeling',
-        destination: '/graph-modeling',
+        destination: '/fundamentals/graph-modeling',
         permanent: true
       },
       {
         source: '/errors',
-        destination: '/help-center/errors',
+        destination: '/help-center/errors/overview',
         permanent: true
       },
       {
         source: '/errors/memgraph/auth',
-        destination: '/help-center/errors/memgraph/auth',
+        destination: '/help-center/errors/auth',
         permanent: true
       },
       {
         source: '/errors/memgraph/durability',
-        destination: '/help-center/errors/memgraph/durability',
+        destination: '/help-center/errors/durability',
         permanent: true
       },
       {
         source: '/errors/memgraph/memory',
-        destination: '/help-center/errors/memgraph/memory',
+        destination: '/help-center/errors/memory',
         permanent: true
       },
       {
         source: '/errors/memgraph/modules',
-        destination: '/help-center/errors/memgraph/modules',
+        destination: '/help-center/errors/modules',
         permanent: true
       },
       {
         source: '/errors/memgraph/ports',
-        destination: '/help-center/errors/memgraph/ports',
+        destination: '/help-center/errors/ports',
         permanent: true
       },
       {
         source: '/errors/memgraph/python-modules',
-        destination: '/help-center/errors/memgraph/python-modules',
+        destination: '/help-center/errors/python-modules',
         permanent: true
       },
       {
         source: '/errors/memgraph/replication',
-        destination: '/help-center/errors/memgraph/replication',
+        destination: '/help-center/errors/replication',
         permanent: true
       },
       {
         source: '/errors/memgraph/snapshots',
-        destination: '/help-center/errors/memgraph/snapshots',
+        destination: '/help-center/errors/snapshots',
         permanent: true
       },
       {
         source: '/errors/memgraph/socket',
-        destination: '/help-center/errors/memgraph/socket',
+        destination: '/help-center/errors/socket',
         permanent: true
       },
       {
@@ -1183,7 +1183,7 @@ module.exports = withNextra({
       },
       {
         source: '/errors/memgraph/unknown',
-        destination: '/help-center/errors/memgraph/unknown',
+        destination: '/help-center/errors/unknown',
         permanent: true
       },
       {
@@ -1601,52 +1601,52 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/tutorials-overview/understanding-music-with-modules',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/tutorials-overview/social-network-analysis',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/networkx',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/networkx/graph-analyzer',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/networkx/wcc',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/networkx/nxalg',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/networkx',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/networkx/graph-analyzer',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/networkx/nxalg',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/networkx',
-        destination: '/advanced-algorithms/utilize-the-networkx-library',
+        destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
       },
       {
@@ -1761,17 +1761,17 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-guides-overview/manage-users-using-ldap',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/ldap-security',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/manage-users-using-ldap',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
@@ -2191,7 +2191,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-guides-overview/work-with-docker',
-        destination: '/getting-started/install-memgraph/docker',
+        destination: '/getting-started/first-steps-with-docker',
         permanent: true
       },
       {
@@ -2201,7 +2201,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-work-with-docker',
-        destination: '/getting-started/install-memgraph/docker',
+        destination: '/getting-started/first-steps-with-docker',
         permanent: true
       },
       {
@@ -2211,7 +2211,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/getting-started/installation/wsl-installation',
-        destination: '/getting-started/install-memgraph/windows-subsystem-for-linux',
+        destination: '/getting-started/install-memgraph/wsl',
         permanent: true
       },
       {
@@ -2415,11 +2415,6 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/gqlalchemy/how-to-guides/networkx',
-        destination: 'https://github.com/memgraph/gqlalchemy',
-        permanent: true
-      },
-      {
         source: '/mage/applications/bioinformatics-application',
         destination: 'https://memgraph.com/use-cases',
         permanent: true
@@ -2473,8 +2468,422 @@ module.exports = withNextra({
         source: '/mage/applications/transportation-application',
         destination: 'https://memgraph.com/use-cases',
         permanent: true
-      }
+      },
       //END Old Docusarus redirects
+      //START GQLAlchemy redirects
+      {
+        source: '/gqlalchemy/how-to-guides/networkx',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/translators/import-python-graphs/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy',
+        destination: 'https://memgraph.github.io/gqlalchemy/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/changelog',
+        destination: 'https://memgraph.github.io/gqlalchemy/changelog/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/overview/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/custom-file-system-importer',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/loaders/make-a-custom-file-system-importer/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/export-python-graphs',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/translators/export-python-graphs/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/import-python-graphs',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/translators/import-python-graphs/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/memgraph-binary-instance',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/instance-runner/memgraph-binary-instance/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/memgraph-docker-instance',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/instance-runner/memgraph-docker-instance/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/ogm',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/ogm/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/on-disk-storage',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/on-disk-storage/on-disk-storage/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/query-builder',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/query-builder/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/query-builder/graph-projection',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/query-builder/graph-projection/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/streams/manage-kafka-streams',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/streams/kafka-streams/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/streams/manage-pulsar-streams',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/streams/pulsar-streams/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/table-to-graph-importer',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/loaders/import-table-data-to-graph-database/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/triggers',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/triggers/triggers/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/import-data',
+        destination: 'https://memgraph.github.io/gqlalchemy/import-data/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/installation',
+        destination: 'https://memgraph.github.io/gqlalchemy/installation/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/overview/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/connection',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/connection/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/disk_storage',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/disk_storage/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/exceptions',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/exceptions/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/graph_algorithms/integrated_algorithms',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/graph_algorithms/integrated_algorithms/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/graph_algorithms/query_builder',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/graph_algorithms/query_builder/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/graph_algorithms/query_modules',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/graph_algorithms/query_modules/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/instance_runner',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/instance_runner/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/models',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/models/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/query_builders/declarative_base',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/query_builders/declarative_base/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/query_builders/memgraph_query_builder',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/query_builders/memgraph_query_builder/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/overview/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/export/graph_transporter',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/export/graph_transporter/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/export/transporter',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/export/transporter/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/importing/graph_importer',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/importing/graph_importer/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/importing/loaders',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/importing/loaders/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/translators/dgl_translator',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/translators/dgl_translator/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/translators/nx_translator',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/translators/nx_translator/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/translators/pyg_translator',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/translators/pyg_translator/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/transformations/translators/translator',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/transformations/translators/translator/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/utilities',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/utilities/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/vendors/database_client',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/vendors/database_client/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/vendors/memgraph',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/vendors/memgraph/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/reference/vendors/neo4j',
+        destination: 'https://memgraph.github.io/gqlalchemy/reference/gqlalchemy/vendors/neo4j/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/under-the-hood',
+        destination: 'https://memgraph.github.io/gqlalchemy/under-the-hood/overview/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/under-the-hood/python-graph-translators',
+        destination: 'https://memgraph.github.io/gqlalchemy/under-the-hood/python-graph-translators/',
+        permanent: true
+      },
+      //END GQLAlchemy redirects
+      //START 404 links redirects
+      {
+        source: '/memgraph/latest',
+        destination: '/',
+        permanent: true
+      },
+      {
+        source: '/memgraph/1.3.0/concepts/graph-algorithms',
+        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        permanent: true
+      },
+      {
+        source: '/memgraph/1.3.0/reference-guide/security',
+        destination: '/configuration/security',
+        permanent: true
+      },
+      {
+        source: '/memgraph/1.6.1/database-functionalities/replication',
+        destination: '/configuration/replication',
+        permanent: true
+      },
+      {
+        source: '/memgraph/1.6.1/macos-installation-troubleshooting',
+        destination: '/getting-started/install-memgraph/docker',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.0.0/macos-installation-troubleshooting',
+        destination: '/getting-started/install-memgraph/docker',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.0.0/reference-guide/security',
+        destination: '/configuration/security',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.0.1/import-data',
+        destination: '/data-migration',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.1.0/database-functionalities/streams/pulsar/pulsar-streams',
+        destination: '/data-streams',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.1.1/how-to-guides/streams/pulsar/implement-transformation-module',
+        destination: '/data-streams/transformation-modules',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.1.1/install-memgraph-on-linux-docker',
+        destination: '/getting-started/install-memgraph/docker',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.1.1/reference-guide/query-modules/api/c-api/classes/mgp_duration_parameters',
+        destination: '/custom-query-modules/c/c-api',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.10.0/reference-guide/runtime-settings',
+        destination: '/configuration/enabling-memgraph-enterprise',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.2.0/install-memgraph-on-windows-wsl',
+        destination: '/getting-started/install-memgraph/wsl',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.2.1/install-memgraph-from-rpm',
+        destination: '/getting-started/install-memgraph/rpm-package',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.3.0/reference-guide/query-modules/available-query-modules',
+        destination: '/advanced-algorithms/available-algorithms',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.3.0/reference-guide/query-modules/implement-custom-query-modules/overview',
+        destination: '/custom-query-modules',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.3.0/tutorials/football-transfers',
+        destination: '/querying/exploring-datasets/football-transfers',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.3.1/installation',
+        destination: '/getting-started/install-memgraph',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.3.1/reference-guide/audit-log',
+        destination: '/configuration/audit-log',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.4.0/import-data/load-csv-clause',
+        destination: '/data-migration/csv',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.4.0/reference-guide/enabling-enterprise',
+        destination: '/configuration/enabling-memgraph-enterprise',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.4.0/reference-guide/query-modules/load-call-query-modules',
+        destination: '/custom-query-modules/manage-query-modules',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.4.1/tutorials/first-steps-with-memgraph',
+        destination: '/getting-started/first-steps-with-memgraph',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.4.1/tutorials/got-deaths',
+        destination: '/querying/exploring-datasets/got-deaths',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.4.1/tutorials/graph-modeling',
+        destination: '/fundamentals/graph-modeling',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.4.1/tutorials/understanding-music-with-modules',
+        destination: '/advanced-algorithms/utilize-networkx',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.4.2/connect-to-memgraph/drivers',
+        destination: '/client-libraries',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.4.2/tutorials/understanding-music-with-modules',
+        destination: '/advanced-algorithms/utilize-networkx',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.5.1/connect-to-memgraph/drivers/c-sharp',
+        destination: '/client-libraries/c-sharp',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.5.2/reference-guide/replication',
+        destination: '/configuration/replication',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.6.0/how-to-guides/create-backup',
+        destination: '/configuration/data-durability-and-backup',
+        permanent: true
+      },
+      {
+        source: '/memgraph/next/tutorials/backpacking-through-europe',
+        destination: '/querying/exploring-datasets/backpacking-through-europe',
+        permanent: true
+      },
+      {
+        source: '/memgraph/1.5.0/getting-started/installation',
+        destination: '/getting-started/install-memgraph',
+        permanent: true
+      },
+      //END 404 links redirects
+      {
+        source: '/configuration/exposing-system-metrics',
+        destination: '/configuration/monitoring-server',
+        permanent: true
+      },       
+      {
+        source: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
+        permanent: true
+      },
+      {
+        source: '/memgraph/next/reference-guide/exposing-system-metrics',
+        destination: '/configuration/monitoring-server',
+        permanent: true
+      }                   
     ];
   },
 });

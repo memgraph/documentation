@@ -1,3 +1,8 @@
+---
+title: Docker Compose
+description: Experience Memgraph's integration with Docker Compose. Our dedicated documentation walks you through maximizing your graph computing capabilities.
+---
+
 # Docker Compose
 
 If you define an application with **Docker Compose**, you can use that
@@ -31,13 +36,19 @@ services:
       - mg_lib:/var/lib/memgraph
       - mg_log:/var/log/memgraph
       - mg_etc:/etc/memgraph
-    environment:
-      - MEMGRAPH="--log-level=TRACE"
+    env_file:
+      - /.env
     entrypoint: ["/usr/bin/supervisord"]
 volumes:
   mg_lib:
   mg_log:
   mg_etc:
+```
+
+and your `.env` file contains configuration flags you want to set:
+
+```
+MEMGRAPH="--log-level=TRACE"
 ```
 
 The port `7687` is used for communication with Memgraph via Bolt protocol. The

@@ -1,11 +1,12 @@
+---
+title: Game of Thrones deaths
+description: Bring Game of Thrones data to life with Memgraph's graph computing visualization. Learn how with detailed tutorials and documentation on the processing capabilities with GoT data.
+---
+
 # Game of Thrones deaths
 
 This article is part of a series intended to show how to use Memgraph on
 real-world data to retrieve some interesting and useful information.
-
-We highly recommend checking out the other articles from this series which are
-listed in our [tutorial overview section](/), where you
-can also find instructions on how to start with the tutorial.
 
 ## Introduction
 
@@ -83,7 +84,7 @@ continue with the tutorial there. Note that you will not be able to execute
 `write` operations.
 
 On the other hand, if you would like to add changes to the dataset, download the
-[Memgraph Platform](https://memgraph.com/download#memgraph-platform). Once you
+[Memgraph Platform](https://memgraph.com/download). Once you
 have it up and running, open Memgraph Lab web application within the browser on
 [`localhost:3000`](http://localhost:3000) and navigate to `Datasets` in the
 sidebar. From there, choose the dataset `Game of Thrones deaths` and continue

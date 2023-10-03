@@ -1,3 +1,8 @@
+---
+title: Import data from CSV files
+description: Leverage CSV files in Memgraph operations. Our detailed guide simplifies the process for an enhanced graph computing journey.
+---
+
 import { Callout } from 'nextra/components'
 import { Steps } from 'nextra/components'
 import { Tabs, Tab } from 'nextra/components'
@@ -9,16 +14,17 @@ database from a designated CSV files using the `LOAD CSV` Cypher clause. The
 clause reads row by row from a CSV file, binds the contents of the parsed row to
 the variable you specified and populates the database if it is empty, or appends
 new data to an existing dataset. Memgraph supports the Excel CSV dialect, as
-it's the most common one. 
+it's the most common one.
 
 `LOAD CSV` clause cannot be used with a Memgraph Cloud instance because at the
-moment it is impossible to make files accessible by Memgraph. 
+moment it is impossible to make files accessible by Memgraph.
 
 <Callout>
 
-If the data is importing slower than expected, you can [speed it
-up](#increase-import-speed) by creating indexes or switching the storage mode to
-analytical.
+If the data is importing slower than expected, you can [speed up the
+import](#increase-import-speed) by creating indexes on nodes to improve the
+import speed of relationships, or switching the [storage
+mode](/fundamentals/storage-memory-usage#storage-modes) to analytical.
 
 If the import speed is still unsatisfactory, don't hesitate to reach out on
 [Discord](https://discord.com/invite/memgraph).
@@ -75,7 +81,7 @@ LOAD CSV FROM <csv-location> ( WITH | NO ) HEADER [IGNORE BAD] [DELIMITER <delim
 * `NULLIF <nullif-string>` option enables you to specify a sequence of
   characters that will be parsed as null. By default, all empty columns in
   Memgraph are treated as empty strings, so if this option is not used, no
-  values will be treated as null. 
+  values will be treated as null.
 
 * `<variable-name>` is a symbolic name representing the variable to which the
   contents of the parsed row will be bound to, enabling access to the row
@@ -93,11 +99,11 @@ When using the `LOAD CSV` clause please keep in mind:
   functions](/querying/functions).
 
   If all values are indeed strings and the file has a header, you can import
-  data using the following query: 
+  data using the following query:
 
   ```cypher
   LOAD CSV FROM "/people.csv" WITH HEADER AS row
-  CREATE (p:People) SET p += row; 
+  CREATE (p:People) SET p += row;
   ```
 
 - **The `LOAD CSV` clause is not a standalone clause**, which means that a valid query
@@ -105,7 +111,7 @@ When using the `LOAD CSV` clause please keep in mind:
 
   ```cypher
   LOAD CSV FROM "/people.csv" WITH HEADER AS row
-  CREATE (p:People) SET p += row; 
+  CREATE (p:People) SET p += row;
   ```
 
   In this regard, the following query will throw an exception:
@@ -123,7 +129,7 @@ When using the `LOAD CSV` clause please keep in mind:
   `LOAD CSV` clause will cause a Memgraph runtime error.
 
 - **The `LOAD CSV` clause can be used at most once per query**, so the queries like the one
-  below wll throw an exception: 
+  below wll throw an exception:
 
   ```cypher
   LOAD CSV FROM "/x.csv" WITH HEADER as x
@@ -135,14 +141,14 @@ When using the `LOAD CSV` clause please keep in mind:
 
 The `LOAD CSV` clause will create relationships much faster, and consequently
 speed up data import, if you [create indexes](/fundamentals/indexes) on
-nodes or node properties once you import them: 
+nodes or node properties once you import them:
 
 ```cypher
   CREATE INDEX ON :Node(id);
 ```
 
 If the LOAD CSV clause is merging data instead of creating it, create indexes
-before running the LOAD CSV clause. 
+before running the LOAD CSV clause.
 
 You can also speed up import if you switch Memgraph to [**analytical storage
 mode**](/fundamentals/storage-memory-usage#storage-modes). In the analytical
@@ -160,12 +166,16 @@ STORAGE MODE IN_MEMORY_{TRANSACTIONAL|ANALYTICAL};
 When in the analytical storage mode, **don't** import data using multiple
 threads.
 
-The LOAD CSV clause can handle CSV's which are compressed with `gzip` or `bzip2`. 
+The LOAD CSV clause can handle CSV's which are compressed with `gzip` or `bzip2`.
 This can speed up time it takes to fetch and/or load the file.
+
+If you are using on-disk storage mode consider using
+[Edge import mode](/fundamentals/storage-memory-usage#import-data-using-load-csv-command)
+to get the best import performance.
 
 ## Import files WITH and NO HEADER
 
-The goal of this example is to import two CSV files. 
+The goal of this example is to import two CSV files.
 
 One file contains data we will use to create nodes labeled `:People`, and the
 other file will be used to connect those nodes with the `:IS_FRIENDS_WITH`.
@@ -174,13 +184,13 @@ There are also two variations of the files, files with a header, and files witho
 
 <Steps>
 
-  ### Download the files
+  {<h3>Download the files</h3>}
 
   <Tabs items={['CSV files with a header', 'CSV files without a header']}>
 
     <Tab>
   - [`people_nodes_wh.csv`](https://public-assets.memgraph.com/import-data/load-csv-cypher/one-type-nodes/with-header/people_nodes.csv)<br/>
-    The file contains the following data: 
+    The file contains the following data:
       ```plaintext
       id,name
       100,Daniel
@@ -202,7 +212,7 @@ There are also two variations of the files, files with a header, and files witho
   </Tab>
   <Tab>
     - [`people_nodes_nh.csv`](https://public-assets.memgraph.com/import-data/load-csv-cypher/one-type-nodes/no-header/people_nodes.csv)<br/>
-      The file contains the following data: 
+      The file contains the following data:
         ```plaintext
         100,Daniel
         101,Alex
@@ -223,23 +233,23 @@ There are also two variations of the files, files with a header, and files witho
     </Tab>
   </Tabs>
 
-  ### Check the location of the CSV files
+  {<h3>Check the location of the CSV files</h3>}
   If you are working with Docker, [copy the files from your local directory into
   the Docker
   container](/getting-started/install-memgraph/docker#copy-files-from-and-to-a-docker-container)
-  so Memgraph can access them. 
+  so Memgraph can access them.
 
-  ### Import nodes
+  {<h3>Import nodes</h3>}
 
 <Tabs items={['CSV files with a header', 'CSV files without a header']}>
 
   <Tab>
 
-    These CSV files have a header, which means the `HEADER` option of the `LOAD CSV` clause needs 
-    to be set to `WITH`. Each row will be parsed as a map, and the fields can be accessed using the 
-    property lookup syntax (e.g. `id:row.id`). 
-    
-    The following query will load row by row from the `people_nodes_wh` CSV file, and create a 
+    These CSV files have a header, which means the `HEADER` option of the `LOAD CSV` clause needs
+    to be set to `WITH`. Each row will be parsed as a map, and the fields can be accessed using the
+    property lookup syntax (e.g. `id:row.id`).
+
+    The following query will load row by row from the `people_nodes_wh` CSV file, and create a
     new node for each row with properties based on the parsed row values:
 
     ```cypher
@@ -256,7 +266,7 @@ There are also two variations of the files, files with a header, and files witho
     needs to be set to `NO`. Each row will be parsed as a list, and you can access
     elements by defining the position of the element in the list.
 
-    The following query will load row by row from the `people_nodes_nh` CSV file, and 
+    The following query will load row by row from the `people_nodes_nh` CSV file, and
     create a new node for each row with properties based on the parsed row values:
 
     ```cypher
@@ -264,20 +274,23 @@ There are also two variations of the files, files with a header, and files witho
     CREATE (p:Person {id: row[0], name: row[1]});
     ```
 
-    If successful, you should receive an `Empty set (0.014 sec)` message. 
+    If successful, you should receive an `Empty set (0.014 sec)` message.
 
   </Tab>
 </Tabs>
 
-  ### Create indexes
-    Creating an [index](/fundamentals/indexes) on a property used to connect nodes with relationships, 
-    in this case, the `id`, will improve import speed, especially with large datasets:
+  {<h3>Create indexes</h3>} 
+  
+    Creating an [index](/fundamentals/indexes) on a
+    property used to connect nodes with relationships, in this case, the `id`
+    property of the `:Person` nodes, will speed up the import of relationships,
+    especially with large datasets:
 
     ```cypher
     CREATE INDEX ON :Person(id);
     ```
 
-  ### Import relationships
+  {<h3>Import relationships</h3>}
 
 <Tabs items={['CSV files with a header', 'CSV files without a header']}>
 
@@ -290,8 +303,8 @@ There are also two variations of the files, files with a header, and files witho
     MATCH (p1:Person {id: row.id_from}), (p2:Person {id: row.id_to})
     CREATE (p1)-[:IS_FRIENDS_WITH]->(p2);
     ```
-    
-    If successful, you should receive an `Empty set (0.014 sec)` message. 
+
+    If successful, you should receive an `Empty set (0.014 sec)` message.
 
   </Tab>
   <Tab>
@@ -304,17 +317,17 @@ There are also two variations of the files, files with a header, and files witho
     CREATE (p1)-[:IS_FRIENDS_WITH]->(p2);
     ```
 
-    If successful, you should receive an `Empty set (0.014 sec)` message. 
+    If successful, you should receive an `Empty set (0.014 sec)` message.
 
   </Tab>
 
 </Tabs>
 
-  ### Final result
+  {<h3>Final result</h3>}
   Run the following query to see how the imported data looks as a graph:
 
   ```
-  MATCH p=()-[]-() RETURN p; 
+  MATCH p=()-[]-() RETURN p;
   ```
   ![](/pages/data-migration/csv/load_csv_one_type_of_nodes_and_relationships.png)
 
@@ -325,13 +338,13 @@ ____
 ## Import multiple CSV files with distinct graph objects
 
 In this example, the data is split across four files, each file contains nodes
-of a single label or relationships of a single type. All files have a header. 
+of a single label or relationships of a single type. All files have a header.
 
 <Steps>
 
-  ### Download the files
+  {<h3>Download the files</h3>}
 
-  - [`people_nodes.csv`](https://public-assets.memgraph.com/import-data/load-csv-cypher/multiple-types-nodes/people_nodes.csv) is used to create nodes labeled `:Person`.<br/> The file contains the following data: 
+  - [`people_nodes.csv`](https://public-assets.memgraph.com/import-data/load-csv-cypher/multiple-types-nodes/people_nodes.csv) is used to create nodes labeled `:Person`.<br/> The file contains the following data:
     ```csv
     id,name,age,city
     100,Daniel,30,London
@@ -340,7 +353,7 @@ of a single label or relationships of a single type. All files have a header.
     103,Mia,25,Zagreb
     104,Lucy,21,Paris
     ```
-- [`restaurants_nodes.csv`](https://public-assets.memgraph.com/import-data/load-csv-cypher/multiple-types-nodes/restaurants_nodes.csv) is used to create nodes labeled `:Resturants`.<br/> The file contains the following data: 
+- [`restaurants_nodes.csv`](https://public-assets.memgraph.com/import-data/load-csv-cypher/multiple-types-nodes/restaurants_nodes.csv) is used to create nodes labeled `:Restaurants`.<br/> The file contains the following data:
     ```csv
     id,name,menu
     200,Mc Donalds,Fries;BigMac;McChicken;Apple Pie
@@ -348,7 +361,7 @@ of a single label or relationships of a single type. All files have a header.
     202,Subway,Ham Sandwich;Turkey Sandwich;Foot-long
     203,Dominos,Pepperoni Pizza;Double Dish Pizza;Cheese filled Crust
     ```
-  
+
 - [`people_relationships.csv`](https://public-assets.memgraph.com/import-data/load-csv-cypher/multiple-types-nodes/people_relationships.csv) is used to connect people with the `:IS_FRIENDS_WITH` relationship.<br/> The file contains the following data:
     ```csv
     first_person,second_person,met_in
@@ -372,13 +385,13 @@ of a single label or relationships of a single type. All files have a header.
     102,201,true
     ```
 
-  ### Check the location of the CSV files. 
+  {<h3>Check the location of the CSV files</h3>}
   If you are working with Docker, [copy the files from your local directory into
   the Docker
   container](/getting-started/install-memgraph/docker#copy-files-from-and-to-a-docker-container)
   so Memgraph can access them.
 
-  ### Import nodes
+  {<h3>Import nodes</h3>}
 
   The CSV files have a header, which means the `HEADER` option of the `LOAD CSV`
   clause needs to be set to `WITH`. Each row will be parsed as a map, and the
@@ -398,18 +411,18 @@ of a single label or relationships of a single type. All files have a header.
       LOAD CSV FROM "/path-to/restaurants_nodes.csv" WITH HEADER AS row
       CREATE (n:Restaurant {id: row.id, name: row.name, menu: row.menu});
       ```
-  
-  ### Set indexes
-  Especially with large datasets, it's beneficial to create
-  [indexes](/fundamentals/indexes) on a property that will be used to connect
-  nodes and relationships, in this case, the `id` property of the `:Person`
-  nodes.
+
+  {<h3>Create indexes</h3>}
+
+  Creating an [index](/fundamentals/indexes) on a property used to connect nodes
+  with relationships, in this case, the `id` property of the `:Person` nodes,
+  will speed up the import of relationships, especially with large datasets:
 
       ```cypher
       CREATE INDEX ON :Person(id);
       ```
 
-  ### Import relationships  
+  {<h3>Import relationships</h3>}
   The following query will create relationships between the people nodes:
 
   ```cypher
@@ -430,12 +443,12 @@ of a single label or relationships of a single type. All files have a header.
   SET ate.liked = ToBoolean(row.liked);
   ```
 
-  ### Final result
+  {<h3>Final result</h3>}
   Run the following query to see how the imported data looks as a graph:
 
   ```
-  MATCH p=()-[]-() RETURN p; 
-  ``` 
+  MATCH p=()-[]-() RETURN p;
+  ```
 
   ![](/pages/data-migration/csv/load_csv_restaurants_relationships.png)
 

@@ -1,3 +1,8 @@
+---
+title: Exploring datasets with graph analytics
+description: Traverse larger datasets with ease with Memgraph's data exploration capabilities. Detailing tutorials and documentation, get started with your Memgraph exploration now.
+---
+
 # Exploring datasets with graph analytics
 
 The tutorials that focus on exploring datasets want to showcase how to use
@@ -11,7 +16,7 @@ Playground](https://playground.memgraph.com/sandboxes/) and continue with the
 tutorials there. Note that you will not be able to execute `write` operations.
 
 On the other hand, if you would like to add changes to the dataset, download the
-[Memgraph Platform](https://memgraph.com/download#memgraph-platform). Once you
+[Memgraph Platform](https://memgraph.com/download). Once you
 have it up and running, open Memgraph Lab web application within the browser on
 [`localhost:3000`](http://localhost:3000) and navigate to the `Datasets` in the
 sidebar. From there, choose the dataset that seems interesting to you and

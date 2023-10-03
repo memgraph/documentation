@@ -1,3 +1,8 @@
+---
+title: Example of a query module written in C++
+description: pages/custom-query-modules/cpp/cpp-example.mdx
+---
+
 import { Callout } from 'nextra/components'
 
 # Example of a query module written in C++
@@ -54,7 +59,7 @@ As mentioned above, procedures are registered in `mgp_init_module`.
 ```cpp
 extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
   try {
-    mgp::memory = memory;
+    mgp::MemoryDispatcherGuard guard(memory);
 
     AddProcedure(RandomWalk, "get", mgp::ProcedureType::Read,
                  {mgp::Parameter("start", mgp::Type::Node), mgp::Parameter("length", mgp::Type::Int)},
@@ -78,7 +83,7 @@ When the procedure is called, its arguments (& the graph) will be passed to the
 <Callout type="info">
 
 The API needs memory access for registration; you may grant it with
-`mgp::memory = memory`.
+`mgp::MemoryDispatcherGuard guard(memory)` or `mgp::memory = memory`.
 
 As any exceptions should never leave the scope of the module, the procedure was
 registered inside a try-catch block.
@@ -91,8 +96,9 @@ As `mgp::memory` is a global object, that means all of the procedures and
 functions in a single shared library will refer to the same `mgp::memory`
 object. As a result, calling such callables simultaneously from multiple threads
 will lead to incorrect memory usage. This also includes the case when the same
-callable is called from different user sessions. This is a constraint of the
-current C++ API that we are planning to improve in the future.
+callable is called from different user sessions. This is a constraint when using
+`mgp::memory` so the use of the thread-safe `MemoryDispatcherGuard guard(memory)`
+is advised instead.
 
 </Callout>
 
@@ -113,7 +119,7 @@ manual memory management.
 ```cpp
 void RandomWalk(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
   try {
-    mgp::memory = memory;
+    mgp::MemoryDispatcherGuard guard(memory);
     const auto arguments = mgp::List(args);
     const auto record_factory = mgp::RecordFactory(result);
 
@@ -148,7 +154,7 @@ user-specified number of nodes (given by int parameter `number`) to the graph.
 ```cpp
 extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
   try {
-    mgp::memory = memory;
+    mgp::MemoryDispatcherGuard guard(memory);
 
     mgp::AddProcedure(AddXNodes, "add_x_nodes", mgp::ProcedureType::Write, {mgp::Parameter("number", mgp::Type::Int)},
                       {}, module, memory);
@@ -163,7 +169,7 @@ extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *mem
 
 ```cpp
 void AddXNodes(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
-  mgp::memory = memory;
+  mgp::MemoryDispatcherGuard guard(memory);
   const auto arguments = mgp::List(args);
   auto graph = mgp::Graph(memgraph_graph);
 
@@ -194,7 +200,7 @@ void CleanupBatchCsvFile(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *
 
 extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
   try {
-    mgp::memory = memory;
+    mgp::MemoryDispatcherGuard guard(memory);
 
     AddBatchProcedure(BatchCSVFile, InitBatchCsvFile, CleanupBatchCsvFile,
                  "read_csv", mgp::ProcedureType::Read,
@@ -223,7 +229,7 @@ modify the graph).
 ```cpp
 extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
   try {
-    mgp::memory = memory;
+    mgp::MemoryDispatcherGuard guard(memory);
 
     mgp::AddFunction(Multiply, "multiply",
                      {mgp::Parameter("int", mgp::Type::Int), mgp::Parameter("int", mgp::Type::Int)}, module, memory);
@@ -244,7 +250,7 @@ a different C++ API class: `Result`. Our function is implemented as follows:
 
 ```cpp
 void Multiply(mgp_list *args, mgp_func_context *ctx, mgp_func_result *res, mgp_memory *memory) {
-  mgp::memory = memory;
+  mgp::MemoryDispatcherGuard guard(memory);
   const auto arguments = mgp::List(args);
   auto result = mgp::Result(res);
 
@@ -262,7 +268,7 @@ TRANSACTIONS "id";`](/fundamentals/transactions) query,
 the execution of the procedure can as well, if it takes too long to yield a
 response or gets stuck in an infinite loop due to unpredicted input data.
 
-Transaction ID is visible upon calling the SHOW TRANSACTIONS; query. 
+Transaction ID is visible upon calling the SHOW TRANSACTIONS; query.
 
 In order to be able to terminate the procedure, it has to contain function
 `graph.CheckMustAbort();` which precedes crucial parts of the code, such as
@@ -286,7 +292,7 @@ char const *return_field = "return";
 
 
 void Test(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
-    mgp::memory = memory;
+    mgp::MemoryDispatcherGuard guard(memory);
     const auto record_factory = mgp::RecordFactory(result);
     auto graph = mgp::Graph(memgraph_graph);
     int64_t id_ = 1;
@@ -305,11 +311,11 @@ void Test(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_mem
 
 extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
     try {
-        mgp::memory = memory;
+        mgp::MemoryDispatcherGuard guard(memory);
         mgp::AddProcedure(Test, get, mgp::ProcedureType::Read, {}, {mgp::Return(return_field, mgp::Type::Int)}, module, memory);
     } catch(const std::exception &e) {
         return 1;
-    } 
+    }
     return 0;
 }
 

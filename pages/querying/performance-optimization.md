@@ -1,3 +1,8 @@
+---
+title: Performance optimization
+description: Optimize your graph computing performance with Memgraph. Access tips on performance optimization in our tutorials and detailed documentation to maximize efficiency.
+---
+
 # Performance optimization
 
 ## Analyze graph
@@ -19,7 +24,9 @@ close the distribution of property-value group size is to the uniform
 distribution. The index with a distribution closest to the uniform distribution
 is selected.
 
-<a href="https://latex.codecogs.com/gif.image?\dpi{110}\chi^2&space;=&space;\sum_{i}\frac{(E_i-O_i)^2}{E_i}" target="_blank"><img src="https://latex.codecogs.com/gif.image?\dpi{110}\chi^2&space;=&space;\sum_{i}\frac{(E_i-O_i)^2}{E_i}" title="Chi-squared statistic" /></a>
+$
+\chi^2 = \sum_{i}\frac{(E_i-O_i)^2}{E_i}
+$
 
 Upon running the `ANALYZE GRAPH` query, Memgraph also check the node degree of
 every indexed nodes and calculates the average degree. By having these values,
@@ -42,7 +49,7 @@ Run the following query to calculate the statistics:
 ANALYZE GRAPH;
 ```
 
-The query will iterate over all label and label-property indices in the database
+The query will iterate over all label and label-property indexes in the database
 and calculate the average group size, chi-squared statistic and avg degree for
 each one, then return the following output:
 
@@ -69,7 +76,7 @@ deleted by running:
 ANALYZE GRAPH DELETE STATISTICS;
 ```
 
-The results will contain all label-property indices that were successfully deleted:
+The results will contain all label-property indexes that were successfully deleted:
 
 | label | property |
 | ----- | -------- |
@@ -259,15 +266,15 @@ PROFILE MATCH (n :Node)-[:Edge]-(m :Node) WHERE n.prop = 42 RETURN *;
 ```
 
 ```plaintext
-+---------------+---------------+---------------+---------------+
-| OPERATOR      | ACTUAL HITS   | RELATIVE TIME | ABSOLUTE TIME |
-+---------------+---------------+---------------+---------------+
-| * Produce     | 1             |   7.134628 %  |   0.003949 ms |
-| * Filter      | 1             |  12.734765 %  |   0.007049 ms |
-| * Expand      | 1             |   5.181460 %  |   0.002868 ms |
-| * ScanAll     | 1             |   3.325061 %  |   0.001840 ms |
-| * ScanAll     | 1             |  71.061241 %  |   0.039334 ms |
-| * Once        | 2             |   0.562844 %  |   0.000312 ms |
-+---------------+---------------+---------------+---------------+
++-------------------------------+---------------+---------------+---------------+
+| OPERATOR                      | ACTUAL HITS   | RELATIVE TIME | ABSOLUTE TIME |
++-------------------------------+---------------+---------------+---------------+
+| * Produce {m, n}              | 1             |   7.134628 %  |   0.003949 ms |
+| * Filter                      | 1             |  12.734765 %  |   0.007049 ms |
+| * Expand (m)-[anon1:Edge]-(n) | 1             |   5.181460 %  |   0.002868 ms |
+| * ScanAll                     | 1             |   3.325061 %  |   0.001840 ms |
+| * ScanAll (m)                 | 1             |  71.061241 %  |   0.039334 ms |
+| * Once                        | 2             |   0.562844 %  |   0.000312 ms |
++-------------------------------+---------------+---------------+---------------+
 ```
 

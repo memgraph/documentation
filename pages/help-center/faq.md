@@ -1,3 +1,8 @@
+---
+title: Frequently asked questions
+description: Explore the documentation page for Memgraph and access the FAQ section to find solutions to common queries and concerns. Discover essential information and insights now. 
+---
+
 # Frequently asked questions
 
 ## Memgraph 101
@@ -279,8 +284,8 @@ number of stored nodes and relationships and memory usage.
 ### Where does Memgraph save or preview logs?
 
 By default, Memgraph saves the log at `/var/log/memgraph/memgraph.log`.
-Accessing logs depends on how you've started Memgraph, so check the [how-to
-guide about accessing logs](/configuration/configuration-settings).
+Accessing logs depends on how you've started Memgraph, so check the
+[documentation about accessing logs](/configuration/configuration-settings).
 
 You can check the logs using Memgraph Lab (the visual interface). Memgraph Lab
 listens to logs on the 7444 port. You can also use this web socket port 7444 and
@@ -297,6 +302,16 @@ You don't need to know Cypher to query the database. You can use
 notation to communicate to a graph database. Instead of writing Cypher queries,
 you can write Python code, which the OGM will automatically translate into
 Cypher queries. It supports both Memgraph and Neo4j.
+
+### Where can I find the documentation for older releases of Memgraph?
+
+For easy browsing of documentation for versions between Memgraph 2.0 and 2.10.1,
+you can use [the documentation
+archive](https://memgraph-archive-docs.netlify.app/).
+
+For comprehensive documentation spanning versions from 1.3.0 to 2.10.1, refer to
+the [archived GitHub
+repository](https://github.com/memgraph/docs/tree/master/memgraph_versioned_docs).
 
 ## Cypher
 

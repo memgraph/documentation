@@ -1,3 +1,8 @@
+---
+title: Enforce constraints
+description: Understand the constraints in Memgraph's operations. Our guide breaks it down, streamlining your approach to graph use cases.
+---
+
 # Enforce constraints
 
 ## Existence constraint

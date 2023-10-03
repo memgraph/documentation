@@ -1,3 +1,8 @@
+---
+title: WITH clause
+description: Enhance your queries with Memgraph's WITH clause. Learn how to create intermediate results and break down complex queries into smaller, easily manageable steps.
+---
+
 # WITH clause
 
 The `WITH` is used to chain together parts of a query, piping the results from one to be used as starting points or criteria in the next.
