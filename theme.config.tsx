@@ -47,6 +47,13 @@ const config: DocsThemeConfig = {
       titleTemplate: "%s",
     };
   },
+  search: {
+    component: <Docsearch />,
+    placeholder: 'Search...',
+    emptyResult: 'No results found.',
+    loading: 'Searching...',
+    error: 'An error occurred while searching.',
+  },
 };
 
 export default config;
