@@ -2696,6 +2696,21 @@ module.exports = withNextra({
         destination: 'https://memgraph.github.io/gqlalchemy/under-the-hood/python-graph-translators/',
         permanent: true
       },
+      {
+        source: '/gqlalchemy/how-to-guides/query-builder/create-nodes-relationships',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/query-builder/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/query-builder/return-results',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/query-builder/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/ogm/map-nodes-and-relationships',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/ogm/',
+        permanent: true
+      },
       //END GQLAlchemy redirects
       //START 404 links redirects
       {
@@ -2839,6 +2854,11 @@ module.exports = withNextra({
         permanent: true
       },
       {
+        source: '/memgraph/2.4.0/connect-to-memgraph/drivers',
+        destination: '/client-libraries',
+        permanent: true
+      },
+      {
         source: '/memgraph/2.4.2/tutorials/understanding-music-with-modules',
         destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
@@ -2866,6 +2886,11 @@ module.exports = withNextra({
       {
         source: '/memgraph/1.5.0/getting-started/installation',
         destination: '/getting-started/install-memgraph',
+        permanent: true
+      },
+      {
+        source: '/mage/query-modules/python/pagerank',
+        destination: '/advanced-algorithms/available-algorithms/pagerank',
         permanent: true
       },
       //END 404 links redirects
