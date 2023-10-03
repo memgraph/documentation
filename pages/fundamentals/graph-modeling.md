@@ -311,7 +311,7 @@ basic types:
   have no orientation. These relationships are sometimes referred to as
   **bi-directional**. The relationships in a directed graph have an orientation.
 
-![graph-modeling-undirected-graph](/pages/fundamentals/graph-modeling/graph-modeling-undirected-graph.png)![graph-modeling-directed-graph](/pages/fundamentals/graph-modeling/graph-modeling-directed-graph.png)
+![graph-modeling-undirected-graph](/pages/fundamentals/graph-modeling/graph-modeling-un-directed-graph.png)
 
 - **Weighted And Unweighted Graphs** - A weighted graph has attributes on its
   relationships that specify their weight. For example, a relationship that
