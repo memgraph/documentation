@@ -1,38 +1,57 @@
 ---
-title: Enforce constraints
+title: Constraints
 description: Understand the constraints in Memgraph's operations. Our guide breaks it down, streamlining your approach to graph use cases.
 ---
 
-# Enforce constraints
+# Constraints
+
+In modern database systems, ensuring data integrity and reducing redundancy is
+paramount. Constraints play a pivotal role, ensuring that only valid data is
+entered into the database. The following chapters delve deep into two
+fundamental types of constraints, existence and uniqueness.
+
+The existence constraint ensures the presence of specific data within the
+database, while the uniqueness constraint ensures that specific label-property
+pairs remain unique across entries.
 
 ## Existence constraint
 
-Existence constraint enforces that each vertex that has a specific `label`
-also must have the specified `property`. Only one label and property can be
-supplied at a time.  This constraint can be enforced using the following
-language construct:
+Existence constraint enforces that each node with a specific label also must
+have a certain property. Only one label and property can be supplied at a time.
+
+This constraint can be enforced using the following language construct:
 
 ```cypher
 CREATE CONSTRAINT ON (n:label) ASSERT EXISTS (n.property);
 ```
 
-For example, suppose you are keeping track of basic employee info in your
-database. Obviously, each employee should have a first name and last name. You
-can enforce this by issuing the following queries:
+To confirm that the constraint was successfully created use the following query:
+
+```cypher
+SHOW CONSTRAINT INFO;
+```
+
+Trying to modify the database in a way that violates the constraint will
+yield an error.
+
+Constraints are dropped using the `DROP` clause:
+
+```cypher
+DROP CONSTRAINT ON (n:label) ASSERT EXISTS (n.property);
+```
+
+### Example
+
+If the database is used to hold basic employee information, each
+employee should have a first name and a last name. You can enforce this by
+running the following queries:
 
 ```cypher
 CREATE CONSTRAINT ON (n:Employee) ASSERT EXISTS (n.first_name);
 CREATE CONSTRAINT ON (n:Employee) ASSERT EXISTS (n.last_name);
 ```
 
-You can confirm that your constraint was successfully created by issuing the
-following query:
-
-```cypher
-SHOW CONSTRAINT INFO;
-```
-
-You should get a result similar to this:
+The `SHOW CONSTRAINT INFO;` should return the following result:
 
 ```
 +-----------------+-----------------+-----------------+
@@ -43,25 +62,21 @@ You should get a result similar to this:
 +-----------------+-----------------+-----------------+
 ```
 
-Trying to modify the database in a way that violates the constraint will
-yield an error.
-
-Constraints can also be dropped using the `DROP` keyword. For example,
-dropping the previously created constraints can be done by the following
-query:
+To drop the created constraints use the following queries:
 
 ```cypher
 DROP CONSTRAINT ON (n:Employee) ASSERT EXISTS (n.first_name);
 DROP CONSTRAINT ON (n:Employee) ASSERT EXISTS (n.last_name);
 ```
 
-Now, `SHOW CONSTRAINT INFO;` yields an empty set.
+Now, `SHOW CONSTRAINT INFO;` returns an empty set.
 
 ## Uniqueness constraint
 
-Uniqueness constraint enforces that each `label, property_set` pair is unique.
-Adding uniqueness constraint does not create a label-property index, it needs to
-be added manually. 
+Uniqueness constraint enforces that each label-property pair is unique. You can
+also specify multiple properties when creating uniqueness constraints. Adding a
+uniqueness constraint does not create a [label-property
+index](/fundamentals/indexes), it needs to be added manually. 
 
 The uniqueness constraint can be enforced using the following language
 construct:
@@ -70,42 +85,46 @@ construct:
 CREATE CONSTRAINT ON (n:label) ASSERT n.property1, n.property2, ..., IS UNIQUE;
 ```
 
-For example, suppose you are keeping track of basic employee info in your
-database. Obviously, each employee should have a unique e-mail address. You can
-enforce this by issuing the following query:
-
-```cypher
-CREATE CONSTRAINT ON (n:Employee) ASSERT n.email IS UNIQUE;
-```
-
-You can confirm that your constraint was successfully created by issuing the
-following query:
+To confirm that the constraint was successfully created use the following query:
 
 ```cypher
 SHOW CONSTRAINT INFO;
-```
-
-You should get a result similar to this:
-
-```
-+-----------------+-----------------+-----------------+
-| constraint type | label           | properties      |
-+-----------------+-----------------+-----------------+
-| unique          | Employee        | email           |
-+-----------------+-----------------+-----------------+
 ```
 
 Trying to modify the database in a way that violates the constraint will yield
 an error `Unable to commit due to unique constraint violation on
 :Employee(email)`.
 
-Naturally, you can also specify multiple properties when creating uniqueness
-constraints. For example, we might want to enforce that all employees have a
-unique `(name, surname)` pair (obviously, this would be a bad decision in real
-life). This can be achieved by the following query:
+Constraints are dropped using the `DROP` clause:
 
 ```cypher
-CREATE CONSTRAINT ON (n:Employee) ASSERT n.name, n.surname IS UNIQUE;
+DROP CONSTRAINT ON (n:label) ASSERT (n.property) IS UNIQUE;
+```
+
+### Example
+
+If the database is used to hold basic employee information, each employee should
+have a unique id. You can enforce this by running the following query:
+
+```cypher
+CREATE CONSTRAINT ON (n:Employee) ASSERT n.id IS UNIQUE;
+```
+
+The `SHOW CONSTRAINT INFO;` should return the following result:
+
+```
++-----------------+-----------------+-----------------+
+| constraint type | label           | properties      |
++-----------------+-----------------+-----------------+
+| unique          | Employee        | id              |
++-----------------+-----------------+-----------------+
+```
+
+To specify multiple properties when creating uniqueness
+constraints, list them one after the other:
+
+```cypher
+CREATE CONSTRAINT ON (n:Employee) ASSERT n.email, n.phone IS UNIQUE;
 ```
 
 At this point, `SHOW CONSTRAINT INFO;` yields the following result:
@@ -114,18 +133,16 @@ At this point, `SHOW CONSTRAINT INFO;` yields the following result:
 +-----------------+-----------------+-----------------+
 | constraint type | label           | properties      |
 +-----------------+-----------------+-----------------+
-| unique          | Employee        | email           |
-| unique          | Employee        | name, surname   |
+| unique          | Employee        | id              |
+| unique          | Employee        | email, phone    |
 +-----------------+-----------------+-----------------+
 ```
 
-Constraints can also be dropped using the `DROP` keyword. For example,
-dropping the previously created constraints can be done by the following
-query:
+To drop the created constraints use the following queries:
 
 ```cypher
-DROP CONSTRAINT ON (n:Employee) ASSERT n.email IS UNIQUE;
-DROP CONSTRAINT ON (n:Employee) ASSERT n.name, n.surname IS UNIQUE;
+DROP CONSTRAINT ON (n:Employee) ASSERT n.id IS UNIQUE;
+DROP CONSTRAINT ON (n:Employee) ASSERT n.email, n.phone IS UNIQUE;
 ```
 
-Now, `SHOW CONSTRAINT INFO;` yields an empty set.
+Now, `SHOW CONSTRAINT INFO;` returns an empty set.
