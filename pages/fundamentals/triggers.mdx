@@ -5,135 +5,111 @@ description: Understand the intricacies of Memgraph triggers. A well-explained g
 
 # Triggers
 
-**Database triggers** are an integral part of most database systems. A trigger is a procedural code that is automatically executed in response to specific events. Events are related to some change in data, such as created, updated and deleted data records. The trigger is often used for maintaining the integrity of the information in the database. For example, in a graph database, when a new property is added to the Employee node, a new Tax, Vacation, and Salary node should be created, along with the relationships between them. Triggers can also be used to log historical data, for example, to keep track of employees' previous salaries.
-
-## Introduction
+**Database triggers** are an integral part of most database systems. A trigger
+is a procedural code that is automatically executed in response to specific
+events. Events are related to some change in data, such as created, updated and
+deleted data records. The trigger is often used for maintaining the integrity of
+the information in the database. 
 
 Memgraph supports running openCypher clauses after a certain event happens
-during database transaction execution, i.e. triggers.
+during database transaction execution, i.e. triggers. For example, when a new
+`Employee` node is added, all relevant relationships should be created. Triggers
+can also be used to log historical data, for example, to keep track of
+employees' previous salaries.
 
 You can **create**, **delete** and **print** triggers. All the triggers are
 persisted on the disk, so no information is lost on database reruns.
 
-## Creating a trigger
+## Create a trigger
 
-To create a new trigger, a query of the following format should be used:
+To create a new trigger, use a query of the following format:
 
 ```plaintext
-CREATE TRIGGER trigger_name ( ON ( () | --> ) CREATE | UPDATE | DELETE )
-( BEFORE | AFTER ) COMMIT
+CREATE TRIGGER trigger_name [ ON [ () | --> ] CREATE | UPDATE | DELETE ]
+[ BEFORE | AFTER ] COMMIT
 EXECUTE openCypherStatements
 ```
-As you can see from the format, you can choose on what object event needs to happen , on `()` node or `-->` relationship. After that you can define on what type of event you what to execute the trigger `CREATE`, `UPDATE` or `DELETE`. After the `EXECUTE` is series of Cypher clauses you want to execute.
 
-An example of a trigger would be:
+The first line creates a trigger with a certain name and defines event type.
+Event type determines what event will trigger the execution of Cypher
+statements. The event type can be the creation, updated or deletion of nodes ( `()` )
+or relationships ( `-->` ) before or after the commitment of that transaction.
 
-```cypher
-CREATE TRIGGER exampleTrigger
-ON UPDATE AFTER COMMIT EXECUTE
-UNWIND updatedObjects AS updatedObject
-WITH CASE
-        WHEN updatedObject.vertex IS NOT null THEN updatedObject.vertex
-        WHEN updatedObject.edge IS NOT null THEN updatedObject.edge
-    END AS object
-SET object.updated_at = timestamp();
-```
-
-The query may seem complex, so let's break it down:
-* `CREATE TRIGGER exampleTrigger`: This statement creates the trigger. Here the
-  part `exampleTrigger` is the name of the trigger and it must be unique.
-* `ON UPDATE AFTER COMMIT EXECUTE`: This statement specifies what kind of event
-  should activate the execution of trigger. This one will be triggered for every update
-  operation and the query below will be executed after the update event has been
-  committed.
-* `UNWIND updatedObjects AS updatedObject`: If multiple objects were updated,
-  unwind the list and go over each one.
-* `WITH CASE...`: The `CASE` expression checks what type of object was updated,
-  a node (vertex) or a relationship (edge).
-* `SET object.updated_at = timestamp();`: Add an `updated_at` property to the
-  object indicating when the action happened.
+Let's break down each element of the query.
 
 ### Trigger name
-Each created trigger must have a globally unique name. This implies that you
-can't have a pair of triggers with the same name, even if they apply to
-different events.
+
+Each created trigger must have a globally unique name. Two triggers can't have
+the same name even if they apply to different events.
 
 ### Event type
-Optionally, users can define on which event a trigger should execute its
-statements. The event type is defined using the following part:
 
-```plaintext
-ON ( () | --> ) CREATE | UPDATE | DELETE
-```
+The event type defines what will trigger the execution of certain Cypher
+statements.
 
 There are three main event types:
   - CREATE
   - UPDATE
   - DELETE
 
-For each event type, users can specify whether to execute the trigger statements
-only on the events that happened on a vertex, or on an edge. Vertices are
-denoted with `()`, and edges with `-->`.
+Each event type can be fined tuned to trigger the execution only when nodes were
+modifed by adding `()`, when relationships were modified by adding `-->` or when
+any object was modified by not defining `()` or `-->` in the trigger creation.
 
-Few examples would be:
-* `ON CREATE` - trigger the statements only if an object (vertex and/or edge)
-  was created during the transaction execution.
-* `ON () UPDATE` - trigger the statements only if a vertex was updated (e.g.
-  property was set on it) during the transaction execution.
-* `ON --> DELETE` - trigger the statements only if an edge was deleted during
-  the transaction execution.
+For example:
+* `ON CREATE` - Execute certain Cypher statements if an object (node or a
+  relationship) was created by a transaction.
+* `ON () UPDATE` - Execute certain Cypher statements if a node was updated by a
+  transaction, perhaps a new property was added, or an existing property
+  changed.
+* `ON --> DELETE` - Execute certain Cypher statements if a relationship was
+  deleted by a transaction.
 
-Each event comes with certain information that can be used in the openCypher
-statements the trigger executes. The information is contained in the form of
-[predefined variables](#predefined-variables).
+Event type produces information about created, updated or deleted objects within
+predefined variables, which can be used to write the Cypher queries trigger was
+set to execute.
 
 If no event type is specified, the trigger executes its statements every time,
 and all the predefined variables can be used.
 
-### Statement execution phase
-A trigger can execute its statements at a specified phase, before or after
-committing the transaction that triggered it. If the `BEFORE COMMIT` option is
-used, the trigger will execute its statements as part of that transaction before
-it's committed. If the `AFTER COMMIT` option is used, the trigger will execute
-its statements asynchronously after that transaction is committed.
+#### Predefined variables
 
-### Execute statements
-A trigger can execute any valid openCypher query. No specific constraints are
-imposed on the queries. The only way trigger queries (i.e. statements) differ
-from standard queries is that a trigger query may use predefined variables,
-which are based on the event type specified for the trigger.
+When an event that triggers execution of certain Cypher queries is identified,
+information about the event, that is the information about the created, updated,
+or delted objects (nodes, relationships or both) in a single transaction are
+saved within a predifined variables. 
 
-### Predefined variables
-Statements that a trigger executes can contain certain predefined variables
-which contain information about the event that triggered it. Values of
-predefined variables are determined by database transactions, that is, by all
-the creations, updates or deletes that are part of a single transaction.
+Each event type creates different predefined variables: 
 
-Based on the event type, the following predefined variables are available:
+| Event type              | Predefined variables |
+| ----------------------- | -------------------- |
+| ON CREATE               | `createdVertices`, `createdEdges`, `createdObjects`|
+| ON () CREATE            | `createdVertices` |
+| ON --> CREATE           | `createdEdges` |
+| ON UPDATE               | `setVertexProperties`, `setEdgeProperties`, `removedVertexProperties`, `removedEdgeProperties`, `setVertexLabels`, `removedVertexLabels`, `updatedVertices`, `updatedEdges`, `updatedObjects` |
+| ON () UPDATE            | `setVertexProperties`, `removedVertexProperties`, `setVertexLabels`, `removedVertexLabels`, `updatedVertices` |
+| ON --> UPDATE           | `setEdgeProperties`, `removedEdgeProperties`, `updatedEdges` |
+| ON DELETE               | `deletedVertices`, `deletedEdges`, `deletedObjects` |
+| ON () DELETE            | `deletedVertices` |
+| ON --> DELETE           | `deletedEdges` |
+| no event type specified | All predefined variables can be used. |
 
-| Event type | Predefined variables |
-| ---------- | -------------------- |
-| ON CREATE  | createdVertices, createdEdges, createdObjects|
-| ON () CREATE | createdVertices |
-| ON --> CREATE | createdEdges |
-| ON UPDATE | setVertexProperties, setEdgeProperties, removedVertexProperties, removedEdgeProperties, setVertexLabels, removedVertexLabels, updatedVertices, updatedEdges, updatedObjects |
-| ON () UPDATE | setVertexProperties, removedVertexProperties, setVertexLabels, removedVertexLabels, updatedVertices |
-| ON --> UPDATE | setEdgeProperties, removedEdgeProperties, updatedEdges |
-| ON DELETE | deletedVertices, deletedEdges, deletedObjects |
-| ON () DELETE | deletedVertices |
-| ON --> DELETE | deletedEdges |
-| no event type specified | All predefined variables can be used |
+##### `ON CREATE`
 
+{<h6> <code>createdVertices</code> </h6>}
 
-#### createdVertices
-List of all created vertices.
+List of all created nodes (vertices).
 
-#### createdEdges
-List of all created edges
+{<h6> <code>createdEdges</code> </h6>}
 
-#### createdObjects
-List of all created objects where each element is a map. If the element contains
-a created vertex, it will be in the following format
+List of all created relationships (edges).
+
+{<h6> <code>createdObjects</code> </h6>}
+
+List of all created objects where each element is a map. 
+
+If the element containsa created node (vertex), it will be in the following format:
+
 ```json
 {
   "event_type": "created_vertex",
@@ -141,7 +117,8 @@ a created vertex, it will be in the following format
 }
 ```
 
-If the element contains a created edge, it will be in the following format
+If the element contains a created relationship (edge), it will be in the following format:
+
 ```json
 {
   "event_type": "created_edge",
@@ -149,38 +126,20 @@ If the element contains a created edge, it will be in the following format
 }
 ```
 
-#### deletedVertices
-List of all deleted vertices.
+##### `ON UPDATE`
 
-#### deletedEdges
-List of all deleted edges
+Setting an element to `NULL` is counted as a removal. 
 
-#### deletedObjects
-List of all deleted objects where each element is a map. If the element contains
-a deleted vertex, it will be in the following format
-```json
-{
-  "event_type": "deleted_vertex",
-  "vertex": deleted_vertex_object
-}
-```
+The changes are looked at on the transaction level only. That means if the value
+of a property on the same object was changed multiple times, only one update
+will be generated. The same applies for changes to node labels.
 
-If the element contains a deleted edge, it will be in the following format
-```json
-{
-  "event_type": "deleted_edge",
-  "edge": deleted_edge_object
-}
-```
+{<h6> <code>setVertexProperties</code> </h6>}
 
-#### General notes about the predefined variables for updates
-Setting an element to `NULL` is counted as a removal. The changes are looked at
-on the transaction level only. That means if the value under a property on the
-same object was changed multiple times, only one update will be generated. The
-same applies for the labels on the vertex.
+List of all set node (vertex) properties. 
 
-#### setVertexProperties
-List of all set vertex properties. Each element is in the following format:
+Each element is in the following format:
+
 ```json
 {
   "vertex": updated_vertex_object,
@@ -190,8 +149,12 @@ List of all set vertex properties. Each element is in the following format:
 }
 ```
 
-#### setEdgeProperties
-List of all set edge properties. Each element is in the following format:
+{<h6> <code>setEdgeProperties</code> </h6>}
+
+List of all set relationship (edge) properties.
+
+ Each element is in the following format:
+
 ```json
 {
   "edge": updated_vertex_object,
@@ -201,8 +164,12 @@ List of all set edge properties. Each element is in the following format:
 }
 ```
 
-#### removedVertexProperties
-List of all removed vertex properties. Each element is in the following format:
+{<h6> <code>removedVertexProperties</code> </h6>}
+
+List of all removed node (vertex) properties. 
+
+Each element is in the following format:
+
 ```json
 {
   "vertex": updated_vertex_object,
@@ -211,8 +178,12 @@ List of all removed vertex properties. Each element is in the following format:
 }
 ```
 
-#### removedEdgeProperties
-List of all removed edge properties. Each element is in the following format:
+{<h6> <code>removedEdgeProperties</code> </h6>}
+
+List of all removed relationship (edge) properties. 
+
+Each element is in the following format:
+
 ```json
 {
   "vertex": updated_vertex_object,
@@ -221,8 +192,12 @@ List of all removed edge properties. Each element is in the following format:
 }
 ```
 
-#### setVertexLabels
-List of all set vertex labels. Each element is in the following format:
+{<h6> <code>setVertexLabels</code> </h6>}
+
+List of all set node (vertex) labels. 
+
+Each element is in the following format:
+
 ```json
 {
   "label": label,
@@ -230,8 +205,12 @@ List of all set vertex labels. Each element is in the following format:
 }
 ```
 
-#### removedVertexLabels
-List of all removed vertex labels. Each element is in the following format:
+{<h6> <code>removedVertexLabels</code> </h6>}
+
+List of all removed node (vertex) labels. 
+
+Each element is in the following format:
+
 ```json
 {
   "label": label,
@@ -239,22 +218,25 @@ List of all removed vertex labels. Each element is in the following format:
 }
 ```
 
-#### updatedVertices
+{<h6> <code>updatedVertices</code> </h6>}
+
 List of updates consisting of set and removed properties, and set and removed
-labels on vertices.
+labels on nodes (vertices).
 
-#### updatedEdges
-List of updates consisting of set and removed properties on edges.
+{<h6> <code>updatedEdges</code> </h6>}
 
-#### updatedObjects
-List of updates consisting of set and removed properties on edges and vertices,
-and set and removed labels on vertices.
+List of updates consisting of set and removed properties on relationships (edges).
 
-#### Elements of the predefined variables for update
-Each element has a similar format as the previously defined elements.
+{<h6> <code>updatedObjects</code> </h6>}
 
-If the element contains information about a set vertex property, it's in the
-following format:
+List of updates consisting of set and removed properties on relationships
+(edges) and nodes (vertices), and set and removed labels on nodes (vertices).
+
+{<h6> Elements of update predefined variables </h6>}
+
+If the element contains information about a set node (vertex) property, it's in
+the following format:
+
 ```json
 {
   "event_type": "set_vertex_property",
@@ -265,8 +247,9 @@ following format:
 }
 ```
 
-If the element contains information about a removed vertex property, it's in the
-following format:
+If the element contains information about a removed node (vertex) property, it's
+in the following format:
+
 ```json
 {
   "event_type": "removed_vertex_property",
@@ -276,8 +259,9 @@ following format:
 }
 ```
 
-If the element contains information about a set edge property, it's in the
-following format:
+If the element contains information about a set relationship (edge) property,
+it's in the following format:
+
 ```json
 {
   "event_type": "set_edge_property",
@@ -288,8 +272,9 @@ following format:
 }
 ```
 
-If the element contains information about a removed edge property, it's in the
-following format:
+If the element contains information about a removed relationship (edge)
+property, it's in the following format:
+
 ```json
 {
   "event_type": "removed_edge_property",
@@ -299,8 +284,9 @@ following format:
 }
 ```
 
-If the element contains information about a set vertex label, it's in the
+If the element contains information about a set node (vertex) label, it's in the
 following format:
+
 ```json
 {
   "event_type": "set_vertex_label",
@@ -309,8 +295,9 @@ following format:
 }
 ```
 
-If the element contains information about a removed vertex label, it's in the
-following format:
+If the element contains information about a removed node (vertex) label, it's in
+the following format:
+
 ```json
 {
   "event_type": "removed_vertex_label",
@@ -318,122 +305,132 @@ following format:
   "label": label
 }
 ```
-### Owner
 
-The user who executes the create query is going to be the owner of the trigger.
-Authentication and authorization are not supported in Memgraph Community, thus
-the owner will always be `Null`, and the privileges are not checked in Memgraph
-Community. In Memgraph Enterprise the privileges of the owner are used when
-executing `openCypherStatements`, in other words, the execution of the
-statements will fail if the owner doesn't have the required privileges. More
-information about how the owner affects the trigger can be found in the
-[reference guide](/configuration/security#owners).
+##### `ON DELETE`
+
+{<h6> <code>deletedVertices</code> </h6>}
+
+List of all deleted (nodes) vertices.
+
+{<h6> <code>deletedEdges</code> </h6>}
+
+List of all deleted (relationships) edges.
+
+{<h6> <code>deletedObjects</code> </h6>}
+
+List of all deleted objects where each element is a map.
+
+If the element containsa created node (vertex), it will be in the following format:
+
+```json
+{
+  "event_type": "deleted_vertex",
+  "vertex": deleted_vertex_object
+}
+```
+
+If the element contains a created relationship (edge), it will be in the following format:
+
+```json
+{
+  "event_type": "deleted_edge",
+  "edge": deleted_edge_object
+}
+```
+
+### Statement execution phase
+
+A trigger can execute its statements at a specified phase, before or after
+Memgraph commits the transaction that triggered it. If the `BEFORE COMMIT` option is
+used, the trigger will execute its statements as part of that transaction before
+it's committed. If the `AFTER COMMIT` option is used, the trigger will execute
+its statements asynchronously after that transaction is committed.
+
+### Execute statements
+
+A trigger can execute any valid openCypher query. No specific constraints are
+imposed on the queries. The only way trigger queries (i.e. statements) differ
+from standard queries is that a trigger query may use predefined variables,
+which are based on the event type specified for the trigger.
+
+### Example triggers
+
+An example of a trigger would be:
+
+```
+CREATE TRIGGER exampleTrigger1 
+ON () CREATE AFTER COMMIT EXECUTE
+UNWIND createdVertices AS newNodes
+SET createdVertex.created = timestamp();
+```
+
+When a new node is created and the transaction is commited, the `exampleTrigger1`
+will take the list of newly created nodes and for each new node set the property
+`created` to a timestamp value indicating the time of its creation. 
+
+A more complex example would be:
+
+```cypher
+CREATE TRIGGER exampleTrigger2
+ON UPDATE AFTER COMMIT EXECUTE
+UNWIND updatedObjects AS updatedObject
+WITH CASE
+        WHEN updatedObject.vertex IS NOT null THEN updatedObject.vertex
+        WHEN updatedObject.edge IS NOT null THEN updatedObject.edge
+    END AS object
+SET object.updated_at = timestamp();
+```
+
+The query is more complex, so let's break it down:
+
+* `CREATE TRIGGER exampleTrigger`: Creates the trigger and gives it a unique name `exampleTrigger`.
+* `ON UPDATE AFTER COMMIT EXECUTE`: Specifies what event will trigger the
+  execution of Cypher statements. In `exampleTrigger2` any update of any graph
+  object will trigger the execution once the update event has been committed. 
+* `UNWIND updatedObjects AS updatedObject`: If multiple objects were updated,
+  unwind the list inside the predefined variable and go over each one.
+* `WITH CASE...`: The `CASE` expression checks what type of object was updated,
+  a node (vertex) or a relationship (edge).
+* `SET object.updated_at = timestamp();`: Add an `updated_at` property to the
+  object indicating when the action happened.
 
 ## Dropping a trigger
-A trigger can be removed by running the following query:
+
+A trigger can be deleted by running the following query:
 
 ```plaintext
 DROP TRIGGER trigger_name;
 ```
 
+## Trigger owner
+
+The user who executes the `CREATE TRIGGER` query is the owner of the trigger.
+Authentication and authorization are not supported in Memgraph Community, thus
+the owner is always `Null`, and the privileges are not checked. 
+
+In Memgraph Enterprise, the privileges of the
+[owner](/configuration/security#owners) are used when executing Cypher
+statements, in other words, the execution of the statements will fail if the
+owner doesn't have the required
+[privileges](/configuration/security#role-based-access-control-enterprise).
+
 ## Trigger info
-Users can get info about all the triggers by using the following query:
+
+The following query will return information about all triggers:
 
 ```plaintext
 SHOW TRIGGERS;
 ```
-which returns results in the following format:
 
-|trigger name| statement | event type | phase | owner |
-|----------- |---------- | -----------| ------|-------|
-| name of the trigger| statement which the trigger executes | event which triggers the statement | phase at which the trigger executes its statement | owner of the trigger or `Null` |
+Information:
+
+| trigger name | statement                       | event type                                        | phase                         | owner                          |
+|--------------|-------------------------------- | --------------------------------------------------| ------------------------------|--------------------------------|
+| Trigger name | Statement the trigger executes. | Event type that triggers the statement execution. | When is the trigger executed. | The trigger owner or `Null`.   |
 
 
-## How to guide
+### Create a trigger for Python query module
 
-Memgraph supports **database triggers** that can be executed if a particular
-type of event occurs. Events are related to changes in data, such as created,
-updated, and deleted nodes or relationships. 
-
-### How to create a trigger?
-
-You can create a trigger by executing Cypher clauses. Creating a trigger will
-ensure that some procedural code is executed on a certain type of event. All
-created triggers are persisted on the disk, which means they will be active on
-database reruns and no information is ever lost.
-
-#### Trigger execution upon node creation
-
-Node creation is the most common event your Memgraph database can react to. For
-example, you need to update some values on a created node. If you need a trigger
-after the node (vertex) has been created, you can set up the following trigger: 
-
-```cypher
-CREATE TRIGGER createVertex
-ON () CREATE AFTER COMMIT EXECUTE
-UNWIND createdVertices AS createdVertex
-SET createdVertex.created = timestamp()
-```
-
-Here the trigger's name is `createdVertex` and should be unique. Cypher clause
-`ON CREATE` defines on what event will trigger be executed. `AFTER COMMIT
-EXECUTE` means the trigger will be executed after changes have been committed to
-the database. For the sake of ease of use, triggers have a set of **predefined
-variables**. One of them is `createdVertices`, a list of all created nodes
-(vertices). In this example, the list is unwound by a Cypher clause `UNWIND`. To
-find a complete list of predefined variables, supported operations, and
-configuration details, look at triggers [reference
-guide](/fundamentals/triggers).
-
-In this trigger, a node is getting a timestamp upon creation via the `SET
-createdVertex.created = timestamp()` Cypher clause.
-
-#### Trigger execution upon node update
-
-Node property updates are common in graphs, in order to react to them, you can
-create a trigger for that type of event: 
-
-```cypher
-CREATE TRIGGER updateVertex
-ON () UPDATE AFTER COMMIT EXECUTE
-UNWIND updatedVertices AS updatedVertex
-SET updatedVertex.updated_at = timestamp()
-
-```
-The trigger for node updates is almost the same as node creation. Notice
-different predefined variable `updatedVertices` and `ON UPDATE` Cypher clause.
-
-In this trigger, a node is getting a new updated timestamp via `SET
-updatedVertex.updated_at = timestamp()` Cypher clause.
-
-#### Trigger execution upon node or relationship creation
-
-You can also set up a trigger for multiple events, such as node or relationship
-creation. It doesn't matter what will be created, a node or relationship, but
-the event will execute the trigger. A sample query for that kind of trigger: 
-
-```cypher
-CREATE TRIGGER exampleTrigger
-ON CREATE AFTER COMMIT EXECUTE
-UNWIND createdObjects AS createdObject
-WITH CASE
-        WHEN createdObject.vertex IS NOT null THEN createdObject.vertex
-        WHEN createdObject.edge IS NOT null THEN createdObject.edge
-    END AS object
-SET object.created_at = timestamp();
-```
-
-A predefined variable `createdObjects` is a list of dictionaries. Each
-dictionary contains information about the created object, which can be either a
-node or a relationship. The object's key `event_type` is set based on the
-dictionary and information within it, and the value of the key `vertex` or `edge`
-(depending on the type of object) is set to that created object.
-
-In this trigger, the node or relationships property `created_at` is set to the
-current timestamp value via `SET object.created_at = timestamp();` Cypher
-clause. 
-
-### How to create a trigger for Python query module? 
 If you want a trigger to be activated by executing code from a Python query
 module, you can call the query module from the trigger. In the example below,
 the trigger will call `query_module.new_edge(edge)` each time a new relationship
@@ -460,17 +457,13 @@ supported types such as `mgp.Edge`, `mgp.Vertex` etc. If you want to explore the
 API further, feel free to check the reference guide on [Python
 API](/custom-query-modules/python/python-api).
 
-### How to create a trigger for dynamic algorithms? 
+### Create a trigger for dynamic algorithms
 
-Dynamic algorithms are often designed for dataset updates. With a trigger, you
-can ensure that any dataset is up to date and consistent. In the sample code
-below, a trigger is set to use MAGE `pagerank_online` algorithm. For more
-details on dynamic algorithms, visit [MAGE
-docs](/advanced-algorithms/available-algorithms). In this
-case, all created or deleted objects are passed from the database transaction to
-the trigger. After each transaction that has created or deleted objects, the
-trigger will automatically execute the PageRank algorithm and update the rank
-property. This will ensure data consistency and lead to performance benefits. 
+[Dynamic
+algorithms](/advanced-algorithms/available-algorithms#streaming-graph-algorithms)
+are often designed for dataset updates. With a trigger, you can ensure that any
+dataset is up to date and consistent. In the sample code below, a trigger is set
+to use MAGE `pagerank_online` algorithm. 
 
 ```cypher
 CREATE TRIGGER pagerank_trigger 
@@ -479,3 +472,9 @@ EXECUTE CALL pagerank_online.update(createdVertices, createdEdges, deletedVertic
 YIELD node, rank
 SET node.rank = rank;
 ```
+
+In this case, all created or deleted objects are passed from the database
+transaction to the trigger. After each transaction that has created or deleted
+objects, the trigger will automatically execute the PageRank algorithm and
+update the rank property. This will ensure data consistency and lead to
+performance benefits. 
