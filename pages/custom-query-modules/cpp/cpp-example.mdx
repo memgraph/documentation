@@ -4,6 +4,7 @@ description: pages/custom-query-modules/cpp/cpp-example.mdx
 ---
 
 import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
 
 # Custom query module in C++ 
 
@@ -198,8 +199,6 @@ After the compilation is done, you can move the query module to the Memgraph que
 mv lib_hello_query_module.so /usr/lib/memgraph/query_modules/lib_hello_query_module.so
 ```
 
-
-
 ### Load the query module in Memgraph 
 
 By running mgconsole that is included with every Memgraph image, you can load the query module. You can do this by running the following command:
@@ -232,27 +231,21 @@ RETURN *;
 
 ### Next steps 
 
-Introduce yourself to the API 
-Setup a git repository for your query modules 
+TODO: Consider a git repository at some point. 
+Once your basic query module is working you hava a chance to introduce yourself to the C++ API and start developing your own query modules.
 
-
+</Steps>
 
 ## Query module arhitecture 
 
+Query module allows you to extend the functionality of Memgraph by writing your own custom procedures and functions in C++. Inside the query modules file you can define multiple procedures and functions for different purposes: 
 
+1. **Read or write procedures** 
+2. **Magic functions**
+3. **Batched procedures** 
 
+Each of this have a specific purpose and are used in different situations, but they share the same arhitecture during the definition of the query module. 
 
-
-<Callout type="error">
-
-Any exceptions thrown should never leave the scope of your module. You may have
-a top-level exception handler that returns the error value and potentially logs
-any error messages.
-Exceptions that cross the module boundary may cause unexpected issues!
-
-</Callout>
-
-Let’s now take a look at the architecture of a query module itself.
 The basic parts of every query module are as follows:
 
 ```cpp
@@ -272,11 +265,135 @@ extern "C" int mgp_shutdown_module() {
 ```
 
 * The `mgp.hpp` file contains all declarations of the C++ API for implementing
-query module procedures and functions.
+query module procedures and functions. It should be located in the /usr/include/memgraph directory, and it is included with every Memgraph docker image.
 * To make your query procedures and functions available, they need to be
-registered in `mgp_init_module`.
+registered in `mgp_init_module`. 
 * Finally, you may use `mgp_shutdown_module` to reset any global states or release
 global resources at shutdown.
+
+
+### Registering procedures and functions
+
+All query procedures and functions need to be registered in `mgp_init_module`. The way the registration is done depends on the type of the procedure or function.
+
+Here is an example of registering a **read procedure**:
+
+```cpp
+extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
+  try {
+    mgp::MemoryDispatcherGuard guard(memory);
+
+    AddProcedure(RandomWalk, "get", mgp::ProcedureType::Read,
+                 {mgp::Parameter("start", mgp::Type::Node), mgp::Parameter("length", mgp::Type::Int)},
+                 {mgp::Return("random_walk", mgp::Type::Path)}, module, memory);
+  } catch (const std::exception &e) {
+    return 1;
+  }
+  return 0;
+}
+```
+
+Here the procedure’s signature is defined and added it as a readable
+procedure `ProcedureType::Read`, named `get`.
+The procedure will takes two named parameters (`start` and `length`): the starting node and random walk length,
+and it will yields the computed random walk as a `Path` (sequence of nodes connected
+by relationships) in the `random_walk` result field.
+
+When the procedure is called, its arguments (& the graph) will be passed to the
+`RandomWalk` callback function.
+
+Form the perspective of a Cypher query, you would call this procedure as follows:
+
+```cypher
+MATCH (a:NodeA)
+WITH a
+CALL query_module_name.get(a, 10) YIELD random_walk
+RETURN random_walk;
+```
+
+In this case `query_module_name` is the name of the query module (compiled .so file) that contains the procedure. 
+
+
+From perspective of writing an exact RandomWalk procedure, callbacks share the same signature, as laid out below.
+Parameter by parameter, the callback receives the procedure **arguments** `args`,
+**graph context** `memgraph_graph`, **result stream** (`result`), and **memory** access.
+
+```cpp
+void RandomWalk(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
+  try {
+    mgp::MemoryDispatcherGuard guard(memory);
+    const auto arguments = mgp::List(args);
+    const auto record_factory = mgp::RecordFactory(result);
+ 
+    const auto start_node = args[0].ValueNode();
+    const auto length = args[1].ValueInt();
+ 
+    auto random_walk = mgp::Path(start_node);
+ 
+    // (Random walk algorithm logic)
+ 
+    auto record = record_factory.NewRecord();
+    record.Insert("random_walk", random_walk);
+ 
+  } catch (const std::exception &e) {
+    mgp::result_set_error_msg(result, e.what());
+    return;
+  }
+}
+```
+
+Registrating the the write procedure is the same. Aldo, write procedures differ from read procedures in their graph context being mutable.
+
+With them, you may create or delete nodes and relationships, modify their properties, and add or remove node labels.
+
+They use the same interface as readable procedures; the only difference is that the appropriate procedure type parameter is passed to AddProcedure. 
+The below code registers and implements a writeable procedure `add_x_nodes`, which adds a user-specified number of nodes to the graph: 
+
+Here is the full example of registering a **write procedure**:
+
+```cpp
+extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
+  try {
+    mgp::MemoryDispatcherGuard guard(memory);
+ 
+    mgp::AddProcedure(AddXNodes, "add_x_nodes", mgp::ProcedureType::Write, {mgp::Parameter("number", mgp::Type::Int)},
+                      {}, module, memory);
+  } catch (const std::exception &e) {
+    return 1;
+  }
+  return 0;
+}
+``` 
+
+Here is the implementation of the callback function `AddXNodes`:
+
+```cpp
+void AddXNodes(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
+  mgp::MemoryDispatcherGuard guard(memory);
+  const auto arguments = mgp::List(args);
+  auto graph = mgp::Graph(memgraph_graph);
+ 
+  for (int i = 0; i < arguments[0].ValueInt(); i++) {
+    graph.CreateNode();
+  }
+}
+```
+
+
+
+
+
+
+### Errors 
+
+<Callout type="error">
+
+Any exceptions thrown should never leave the scope of your module. You may have
+a top-level exception handler that returns the error value and potentially logs
+any error messages.
+Exceptions that cross the module boundary may cause unexpected issues!
+
+</Callout>
 
 ### Readable procedures
 
