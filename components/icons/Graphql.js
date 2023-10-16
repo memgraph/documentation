@@ -2,7 +2,7 @@ import React from 'react';
 
 const Graphql = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <g clip-path="url(#clip0_1049_1989)">
+  <g clipPath="url(#clip0_1049_1989)">
   <path d="M2.58555 17.6615L3.44809 18.1595L13.0571 1.51676L12.1946 1.01876L2.58555 17.6615Z" fill="#646265"/>
   <path d="M21.606 16.3319H2.388V17.3279H21.606V16.3319Z" fill="#646265"/>
   <path d="M2.76829 16.8914L12.3809 22.4414L12.8789 21.5789L3.26629 16.0289L2.76829 16.8914Z" fill="#646265"/>
