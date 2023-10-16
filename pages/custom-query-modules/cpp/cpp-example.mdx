@@ -86,7 +86,7 @@ const char *kReturnStep = "step";
 const char *kReturnNode = "node";
  
 void RandomWalk(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
-  mgp::memory = memory;
+  mgp::MemoryDispatcherGuard guard(memory);
  
   const auto arguments = mgp::List(args);
   const auto record_factory = mgp::RecordFactory(result);
@@ -272,7 +272,7 @@ registered in `mgp_init_module`.
 global resources at shutdown.
 
 
-### Registering procedures and functions
+### Registering procedures and functions as Query modules 
 
 All query procedures and functions need to be registered in `mgp_init_module`. The way the registration is done depends on the type of the procedure or function.
 
@@ -379,188 +379,7 @@ void AddXNodes(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mg
 }
 ```
 
-
-
-
-
-
-### Errors 
-
-<Callout type="error">
-
-Any exceptions thrown should never leave the scope of your module. You may have
-a top-level exception handler that returns the error value and potentially logs
-any error messages.
-Exceptions that cross the module boundary may cause unexpected issues!
-
-</Callout>
-
-### Readable procedures
-
-We can now examine how query procedures are implemented on the example of the
-**random walk algorithm**.
-
-As mentioned above, procedures are registered in `mgp_init_module`.
-
-```cpp
-extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
-  try {
-    mgp::MemoryDispatcherGuard guard(memory);
-
-    AddProcedure(RandomWalk, "get", mgp::ProcedureType::Read,
-                 {mgp::Parameter("start", mgp::Type::Node), mgp::Parameter("length", mgp::Type::Int)},
-                 {mgp::Return("random_walk", mgp::Type::Path)}, module, memory);
-  } catch (const std::exception &e) {
-    return 1;
-  }
-  return 0;
-}
-```
-
-Here, we defined our procedure’s signature and added it as a readable
-(`ProcedureType::Read`) procedure, named `get`, to our random walk module.
-The function takes two named parameters: the start node and random walk length,
-and it yields the computed random walk as a `Path` (sequence of nodes connected
-by relationships) in the `random_walk` result field.
-
-When the procedure is called, its arguments (& the graph) will be passed to the
-`RandomWalk` callback function.
-
-<Callout type="info">
-
-The API needs memory access for registration; you may grant it with
-`mgp::MemoryDispatcherGuard guard(memory)` or `mgp::memory = memory`.
-
-As any exceptions should never leave the scope of the module, the procedure was
-registered inside a try-catch block.
-
-</Callout>
-
-<Callout type="error">
-
-As `mgp::memory` is a global object, that means all of the procedures and
-functions in a single shared library will refer to the same `mgp::memory`
-object. As a result, calling such callables simultaneously from multiple threads
-will lead to incorrect memory usage. This also includes the case when the same
-callable is called from different user sessions. This is a constraint when using
-`mgp::memory` so the use of the thread-safe `MemoryDispatcherGuard guard(memory)`
-is advised instead.
-
-</Callout>
-
-
-
-Callbacks for query procedures all share the same signature, as laid out below.
-Parameter by parameter, the callback receives the procedure arguments (`args`),
-graph context (`memgraph_graph`), result stream (`result`), and memory access.
-
-<Callout>
-
-In place of working with the raw `mgp_` type arguments, use the C++ API classes
-that provide familiar standard library-like interfaces and do away with needing
-manual memory management.
-
-</Callout>
-
-```cpp
-void RandomWalk(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
-  try {
-    mgp::MemoryDispatcherGuard guard(memory);
-    const auto arguments = mgp::List(args);
-    const auto record_factory = mgp::RecordFactory(result);
-
-    const auto start_node = args[0].ValueNode();
-    const auto length = args[1].ValueInt();
-
-    auto random_walk = mgp::Path(start_node);
-
-    // (Random walk algorithm logic)
-
-    auto record = record_factory.NewRecord();
-    record.Insert("random_walk", random_walk);
-
-  } catch (const std::exception &e) {
-    mgp::result_set_error_msg(result, e.what());
-    return;
-  }
-}
-```
-
-### Writeable procedures
-
-Writeable procedures differ from readable procedures in their graph context
-being **mutable**. With them, you may create or delete nodes and relationships,
-modify their properties, and add or remove node labels.
-
-They use the same interface as readable procedures; the only difference is that
-the appropriate procedure type parameter is passed to `AddProcedure`. The below
-code registers and implements a writeable procedure `add_x_nodes`, which adds a
-user-specified number of nodes (given by int parameter `number`) to the graph.
-
-```cpp
-extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
-  try {
-    mgp::MemoryDispatcherGuard guard(memory);
-
-    mgp::AddProcedure(AddXNodes, "add_x_nodes", mgp::ProcedureType::Write, {mgp::Parameter("number", mgp::Type::Int)},
-                      {}, module, memory);
-  } catch (const std::exception &e) {
-    return 1;
-  }
-  return 0;
-}
-```
-
-
-
-```cpp
-void AddXNodes(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
-  mgp::MemoryDispatcherGuard guard(memory);
-  const auto arguments = mgp::List(args);
-  auto graph = mgp::Graph(memgraph_graph);
-
-  for (int i = 0; i < arguments[0].ValueInt(); i++) {
-    graph.CreateNode();
-  }
-}
-```
-
-### Batched readable and writeable procedures
-
-Batched readable and writeable procedures in C++ are pretty similar to batched procedures in C. The way procedures work is the same as in C API, the only difference is procedure registration.
-
-```cpp
-
-void BatchCSVFile(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
-  ...
-}
-
-void InitBatchCsvFile(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
-  ...
-}
-
-void CleanupBatchCsvFile(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
-  ...
-}
-
-
-extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
-  try {
-    mgp::MemoryDispatcherGuard guard(memory);
-
-    AddBatchProcedure(BatchCSVFile, InitBatchCsvFile, CleanupBatchCsvFile,
-                 "read_csv", mgp::ProcedureType::Read,
-                 {mgp::Parameter("file_name", mgp::Type::String)},
-                 {mgp::Return("row", mgp::Type::Map)}, module, memory);
-  } catch (const std::exception &e) {
-    return 1;
-  }
-  return 0;
-}
-```
-
-
-### Magic functions
+### Registering Magic function 
 
 Magic functions are a Memgraph feature that lets the user write and call custom
 Cypher functions. Unlike procedures, functions are simple operations that can’t
@@ -607,7 +426,63 @@ void Multiply(mgp_list *args, mgp_func_context *ctx, mgp_func_result *res, mgp_m
 }
 ```
 
-### Terminate procedure execution
+
+### Registering Batched procedures
+
+Batched readable and writeable procedures in C++ are pretty similar to batched procedures in C. The way procedures work is the same as in C API, the only difference is procedure registration.
+
+```cpp
+
+void BatchCSVFile(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
+  ...
+}
+
+void InitBatchCsvFile(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
+  ...
+}
+
+void CleanupBatchCsvFile(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory) {
+  ...
+}
+
+
+extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
+  try {
+    mgp::MemoryDispatcherGuard guard(memory);
+
+    AddBatchProcedure(BatchCSVFile, InitBatchCsvFile, CleanupBatchCsvFile,
+                 "read_csv", mgp::ProcedureType::Read,
+                 {mgp::Parameter("file_name", mgp::Type::String)},
+                 {mgp::Return("row", mgp::Type::Map)}, module, memory);
+  } catch (const std::exception &e) {
+    return 1;
+  }
+  return 0;
+}
+```
+
+## Examples of query modules API usage 
+
+### Read procedure example
+
+TODO: Node, Edge, Path and property access and return
+
+
+```cpp
+
+### Write procedure example 
+
+TODO: Create Node, Edge, Path and propery write example 
+
+
+### Types supported in QM 
+
+
+
+
+
+
+## Terminate procedure execution
 
 Just as the execution of a Cypher query can be terminated with [`TERMINATE
 TRANSACTIONS "id";`](/fundamentals/transactions) query,
@@ -669,4 +544,52 @@ extern "C" int mgp_shutdown_module() { return 0; }
 ```
 
 
-# C++ API examples 
+##Callouts 
+
+
+<Callout type="error">
+
+Any exceptions thrown should never leave the scope of your module. You may have
+a top-level exception handler that returns the error value and potentially logs
+any error messages.
+Exceptions that cross the module boundary may cause unexpected issues!
+
+</Callout>
+
+
+
+<Callout type="info">
+
+The API needs memory access for registration; you may grant it with
+`mgp::MemoryDispatcherGuard guard(memory)` or `mgp::memory = memory`.
+
+As any exceptions should never leave the scope of the module, the procedure was
+registered inside a try-catch block.
+
+</Callout>
+
+<Callout type="error">
+
+As `mgp::memory` is a global object, that means all of the procedures and
+functions in a single shared library will refer to the same `mgp::memory`
+object. As a result, calling such callables simultaneously from multiple threads
+will lead to incorrect memory usage. This also includes the case when the same
+callable is called from different user sessions. This is a constraint when using
+`mgp::memory` so the use of the thread-safe `MemoryDispatcherGuard guard(memory)`
+is advised instead.
+
+</Callout>
+
+
+
+Callbacks for query procedures all share the same signature, as laid out below.
+Parameter by parameter, the callback receives the procedure arguments (`args`),
+graph context (`memgraph_graph`), result stream (`result`), and memory access.
+
+<Callout>
+
+In place of working with the raw `mgp_` type arguments, use the C++ API classes
+that provide familiar standard library-like interfaces and do away with needing
+manual memory management.
+
+</Callout>
