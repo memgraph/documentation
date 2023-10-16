@@ -43,19 +43,19 @@ To run the documentation website locally, you will need to install:
 To preview your changes as you edit the files, you can run a local development
 server that will serve your website and reflect the latest changes.
 
-First instal `node` and `pnpm`. After that clone this repository:
+First install `node` and `pnpm`. After that, clone this repository:
 
 ```
 git clone https://github.com/memgraph/documentation.git
 ```
 
-Change the working directory to the one of the cloned repotitory and install the dependencies:
+Change the working directory to the one of the cloned repository and install the dependencies:
 
 ```bash
 pnpm i
 ```
 
-Now you can start the server:
+Now, you can start the server:
 
 ```bash
 pnpm dev
