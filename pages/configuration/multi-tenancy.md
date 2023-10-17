@@ -3,7 +3,7 @@ title: Multi-tenancy (Enterprise)
 description: Discover the benefits of multi-tenancy for scalability, resource utilization, and performance. Also learn how to manage few isolated databases within a single instance in our detailed documentation.
 ---
 
-# Multi-tenancy
+# Multi-tenancy (Enterprise)
 
 Multi-tenant support in Memgraph enables users to manage multiple isolated
 databases within a single instance. The primary objective is to facilitate
@@ -67,7 +67,7 @@ connection experience. Users cannot connect to Memgraph if they lack access
 rights to their default database. This situation may arise from database
 deletion or revoked access rights.
 
-### User Privileges and Database Access
+### User privileges and database access
 
 Authentication and authorization data are shared across databases, providing a
 unified source of truth. A single user can access multiple databases with a
