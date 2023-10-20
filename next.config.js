@@ -2893,6 +2893,11 @@ module.exports = withNextra({
         destination: '/advanced-algorithms/available-algorithms/pagerank',
         permanent: true
       },
+      {
+        source: '/v0.12.0/faq',
+        destination: '/help-center/faq',
+        permanent: true
+      },
       //END 404 links redirects
       {
         source: '/configuration/exposing-system-metrics',
