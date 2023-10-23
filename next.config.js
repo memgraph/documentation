@@ -2898,6 +2898,21 @@ module.exports = withNextra({
         destination: '/help-center/faq',
         permanent: true
       },
+      {
+        source: '/assets/images/font-awesome-locate-icon-442ffab31aeb6947abcbb224a144d7f8.png',
+        destination: '/pages/data-visualization/style-your-graphs-in-memgraph-lab/font-awesome-locate-icon.png',
+        permanent: true
+      },
+      {
+        source: '/assets/images/font-awesome-node-style-c64d6fdff1db0392288d6c3e41420819.png',
+        destination: '/pages/data-visualization/style-your-graphs-in-memgraph-lab/font-awesome-node-style.png',
+        permanent: true
+      },
+      {
+        source: '/assets/images/memgraph_lab_query_modules-e5619e8b4b458425c680c0ce3cefb22c.png',
+        destination: '/pages/custom-query-modules/memgraph_lab_query_modules.png',
+        permanent: true
+      },
       //END 404 links redirects
       {
         source: '/configuration/exposing-system-metrics',
