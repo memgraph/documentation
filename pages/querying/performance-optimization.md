@@ -8,7 +8,7 @@ description: Optimize your graph computing performance with Memgraph. Access tip
 ## Analyze graph
 
 The `ANALYZE GRAPH` will check and calculate certain properties of a graph so
-the database can choose a more optimal index or `MERGE` transaction. 
+that the database can choose a more optimal index or `MERGE` transaction.
 
 Before the introduction of the `ANALYZE GRAPH` query, the database would choose
 an index solely based on the number of indexed nodes. But if the number of nodes
@@ -31,8 +31,8 @@ $
 Upon running the `ANALYZE GRAPH` query, Memgraph also check the node degree of
 every indexed nodes and calculates the average degree. By having these values,
 Memgraph can make a more optimal `MERGE` expansion and improve performance. It's
-always better to perform a `MERGE` by expanding from the node that has a lesser
-degree than the connecting node. 
+always better to perform a `MERGE` by expanding from the node that has a lower
+degree than the connecting node.
 
 The `ANALYZE GRAPH;` command should be run only once after all indexes have been
 created and nodes inserted in the database. In rare situations when one property
@@ -56,7 +56,6 @@ each one, then return the following output:
 | label | property | num estimation nodes | num groups | avg group size | chi-squared value | avg degree
 | ----- | -------- | -------------------- | ---------- | -------------- | ----------------- | ----------
 | index's label | index's property | number of nodes used for estimation | number of distinct values the property contains | average group size of property's values | value of the chi-squared statistic | average degree of the indexed nodes
-
 
 Once the necessary information is obtained, Memgraph can choose the optimal
 index and `MERGE` expansion. If you don't want to run the analysis on all labels,
@@ -125,6 +124,7 @@ produced plan and gain insight into the execution of a query.
 | `ExpandVariable`                | Performs a node expansion of a variable number of relationships                                                          |
 | `Filter`                        | Filters the input it received.                                                                                           |
 | `Foreach`                       | Iterates over a list and applies one or more update clauses.                                                             |
+| `HashJoin`                      | Performs a hash join of the input from its two input branches.                                                                                 |
 | `Limit`                         | Limits certain rows from the pull chain.                                                                                 |
 | `LoadCsv`                       | Loads CSV file in order to import files into the database.                                                               |
 | `Merge`                         | Applies merge on the input it received.                                                                                  |
@@ -277,4 +277,3 @@ PROFILE MATCH (n :Node)-[:Edge]-(m :Node) WHERE n.prop = 42 RETURN *;
 | * Once                        | 2             |   0.562844 %  |   0.000312 ms |
 +-------------------------------+---------------+---------------+---------------+
 ```
-
