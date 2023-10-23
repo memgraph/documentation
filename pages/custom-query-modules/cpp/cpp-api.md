@@ -1813,6 +1813,7 @@ Map(Map &&other) noexcept
 | `Erase`                                   | Erases a mapping by key.                           |
 | `begin`<br/>`end`<br/>`cbegin`<br/>`cend` | Returns the beginning/end of the `Map` iterator.   |
 | `ToString`                                | Returns the map's string representation.           |
+| `KeyExists`                               | Checks if the key exists in a map.                 |
 
 ##### Size
 
@@ -1881,6 +1882,13 @@ Returns the map's string representation, which has this format: "{`key1` : `valu
 
 ```cpp
 const std::string ToString() const
+```
+##### KeyExists
+
+Returns `true` if key is present in the map, otherwise `false`.
+
+```cpp
+bool KeyExists(std::string_view key) const;
 ```
 
 #### Operators
