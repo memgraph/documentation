@@ -87,6 +87,39 @@ Specific labels can be specified with the construct `ON LABELS`:
 ANALYZE GRAPH ON LABELS :Label1 DELETE STATISTICS;
 ```
 
+## Cartesian product
+
+Cartesian product is by default enabled in Memgraph. It enforces the usage of the `Cartesian`
+operator which can be shown when you run `EXPLAIN` or `PROFILE` like in the query below.
+
+```cypher
+EXPLAIN MATCH (n:Person), (m:Employee) WHERE n.age < 30 and m.years_of_experience > 5 RETURN n, m;
+```
+
+```
++----------------------------------------------------------------------+
+| QUERY PLAN                                                           |
++----------------------------------------------------------------------+
+| " * Produce {n, m}"                                                  |
+| " * Cartesian {m : n}"                                               |
+| " |\\ "                                                              |
+| " | * ScanAllByLabelPropertyRange (n :Person {age})"                 |
+| " | * Once"                                                          |
+| " * ScanAllByLabelPropertyRange (m :Employee {years_of_experience})" |
+| " * Once"                                                            |
++----------------------------------------------------------------------+
+```
+
+From the query plan, we can observe that the advantage of the cartesian is filtering both its 
+branches and therefore reduces the cardinality of the rows,
+before coming into the final operator `Produce` which streams the results.
+
+Known disadvantage of the cartesian operator is that it quickly builds up memory if there are a lot
+of rows being produced from its branches. 
+
+Cartesian product can be disabled by setting the `--cartesian-product-enabled` flag to false, and it is
+also present as a run time configurable flag (check [database settings](/configuration/configuration-settings#during-runtime)).
+
 ## Index hinting
 
 When executing a query, Memgraph needs to decide where in the query graph to
@@ -166,6 +199,7 @@ produced plan and gain insight into the execution of a query.
 | `Filter`                        | Filters the input it received.                                                                                           |
 | `Foreach`                       | Iterates over a list and applies one or more update clauses.                                                             |
 | `HashJoin`                      | Performs a hash join of the input from its two input branches.                                                                                 |
+| `IndexedJoin`                   | Performs an indexed join of the input from its two input branches.                                                                                 |
 | `Limit`                         | Limits certain rows from the pull chain.                                                                                 |
 | `LoadCsv`                       | Loads CSV file in order to import files into the database.                                                               |
 | `Merge`                         | Applies merge on the input it received.                                                                                  |
