@@ -88,6 +88,47 @@ Specific labels can be specified with the construct `ON LABELS`:
 ANALYZE GRAPH ON LABELS :Label1 DELETE STATISTICS;
 ```
 
+## Index hinting
+
+When executing a query, Memgraph needs to decide where in the query graph to
+start matching. To get the optimal match, it checks the MATCH clause conditions
+and finds the index that's likely to be the best choice.
+
+However, the selected index might not always be the best one. Sometimes, there
+are multiple candidate indexes, and the query planner picks the suboptimal one
+from a performance point of view.
+
+You can instruct the planner to use specific index(es) (if possible) in the
+query that follows by using the syntax below:
+
+```cypher
+USING INDEX :Label, :Label2 ...;
+```
+
+```cypher
+USING INDEX :Label(Property) ...
+```
+
+It is also possible to specify multiple hints separated with comma. In that
+case, the planner will apply the first hint that is applicable for a given
+match.
+
+An example of selecting an index with USING INDEX: 
+```
+USING INDEX :Person(name)
+MATCH (n:Person {name: 'John'})
+RETURN n;
+```
+
+<Callout type="warning"> 
+
+Overriding planner behavior with index hints should be used with caution, and
+only by experienced developers and/or database administrators, as poor index
+choice may cause queries to perform poorly.
+
+</Callout>
+
+
 ## Inspecting queries
 
 Before a Cypher query is executed, it is converted into an internal form
