@@ -441,7 +441,8 @@ explicit Graph(mgp_graph *graph)
 | `CreateRelationship`   | Creates a relationship of type `type` between nodes `from` and `to` and adds it to the graph. |
 | `DeleteRelationship`   | Deletes a relationship from the graph.                                                        |
 | `SetFrom`              | Changes the `from` (start) node of the given relationship.                                    |
-| `SetTo`                | Changes the `to` (end) node of the given relationship                                         |
+| `SetTo`                | Changes the `to` (end) node of the given relationship.                                        |
+| `ChangeType`           | Changes the relationship type.                                                                |
 
 ##### Order
 
@@ -569,6 +570,14 @@ Changes the `to` (end) node of the given relationship.
 
 ```cpp
 void SetTo(Relationship &relationship, const Node &set_to)
+```
+
+##### ChangeType
+
+Changes the relationship type
+
+```cpp
+void ChangeType(Relationship &relationship, std::string_view new_type);
 ```
 
 #### GraphNodes
