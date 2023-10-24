@@ -441,7 +441,8 @@ explicit Graph(mgp_graph *graph)
 | `CreateRelationship`   | Creates a relationship of type `type` between nodes `from` and `to` and adds it to the graph. |
 | `DeleteRelationship`   | Deletes a relationship from the graph.                                                        |
 | `SetFrom`              | Changes the `from` (start) node of the given relationship.                                    |
-| `SetTo`                | Changes the `to` (end) node of the given relationship                                         |
+| `SetTo`                | Changes the `to` (end) node of the given relationship.                                        |
+| `ChangeType`           | Changes the relationship type.                                                                |
 
 ##### Order
 
@@ -569,6 +570,14 @@ Changes the `to` (end) node of the given relationship.
 
 ```cpp
 void SetTo(Relationship &relationship, const Node &set_to)
+```
+
+##### ChangeType
+
+Changes the relationship type
+
+```cpp
+void ChangeType(Relationship &relationship, std::string_view new_type);
 ```
 
 #### GraphNodes
@@ -1813,6 +1822,7 @@ Map(Map &&other) noexcept
 | `Erase`                                   | Erases a mapping by key.                           |
 | `begin`<br/>`end`<br/>`cbegin`<br/>`cend` | Returns the beginning/end of the `Map` iterator.   |
 | `ToString`                                | Returns the map's string representation.           |
+| `KeyExists`                               | Checks if the key exists in a map.                 |
 
 ##### Size
 
@@ -1881,6 +1891,13 @@ Returns the map's string representation, which has this format: "{`key1` : `valu
 
 ```cpp
 const std::string ToString() const
+```
+##### KeyExists
+
+Returns `true` if key is present in the map, otherwise `false`.
+
+```cpp
+bool KeyExists(std::string_view key) const;
 ```
 
 #### Operators

@@ -68,9 +68,11 @@ ANALYZE GRAPH ON LABELS :Label1, :Label2;
 
 ### Delete statistic
 
-If you want the database to ignore information about the average group size, the
-chi-squared statistic and the average degree, the existing statistic can be
-deleted by running:
+Information about the graph is persistent between instance reruns as is
+recovered as all the other data, using [snapshots and WAL
+files](/configuration/data-durability-and-backup). If you want the database to
+ignore information about the average group size, the chi-squared statistic and
+the average degree, the existing statistic can be deleted by running:
 
 ```cypher
 ANALYZE GRAPH DELETE STATISTICS;
