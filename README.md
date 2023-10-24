@@ -61,7 +61,7 @@ Now, you can start the server:
 pnpm dev
 ```
 
-Open the URL [http://localhost:3000](http://localhost:3000) in your browser.
+Open the URL [http://localhost:3000/docs](http://localhost:3000/docs) in your browser.
 
 ## :construction: Build
 
