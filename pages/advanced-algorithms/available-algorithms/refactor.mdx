@@ -510,6 +510,192 @@ CALL refactor.invert(l) YIELD input, output RETURN input, output;
 
 ![](/pages/advanced-algorithms/available-algorithms/refactor/rel_after.png)
 
+### `normalize_as_boolean()`
+
+Normalizes properties to true or false depending whether the property value is contained in `true_values` or `false_values`. If the property value is not contained in either list the property is removed. Throws an exception if both lists contain the same value.
+
+{<h4> Input: </h4>}
+
+- `entity: Node|Relationship` ➡  Node or relationship whose property value will be normalized.
+- `property_key: string` ➡  Key of the property to be normalized.
+- `true_values: List[Any]` ➡  List of property values which will be normalized to true.
+- `false_values: List[Any]` ➡  List of property values which will be normalized to false.
+
+{<h4> Usage: </h4>}
+
+Create a graph using the queries below:
+
+```cypher
+CREATE (n1:Node1 {property: "YES"}) CREATE (n2:Node2 {property: "NO"}) CREATE (n3:Node3 {property: "MAYBE", exists:true}) CREATE (n4:Node4) CREATE (n5:Node5 {exists:false}) CREATE (n1)-[:Rel1 {property:"YES"}]->(n2) CREATE (n2)-[:Rel2 {property:"NO"}]->(n3) CREATE (n3)-[:Rel3]->(n4) CREATE (n4)-[:Rel4 {property:"MAYBE", exists:"YES"}]->(n5);
+```
+
+The following query will change every property called `property` to true if it is equal to `YES` and false if it is equal to `NO`, otherwise it will delete the property:
+```cypher
+MATCH (n) WITH collect(n) AS nodes CALL refactor.normalize_as_boolean(nodes, 'property', ['YES'], ['NO']);
+```
+
+### `extract_node()`
+
+Creates a node from the given relationship (and deletes the relationship) with the given labels and connects the new node to the start and end node of the given relationship with the given types.
+
+{<h4> Input: </h4>}
+
+- `relationships: Relationship|int|List[Relationship|int]` ➡  Relationships to be changed given by their id, themselves, or a list of any of those two.
+- `labels: List[string]` ➡  List of labels of the newly created node.
+- `outType: String` ➡  Type of the outgoing relationship from the newly created node.
+- `inType: String` ➡  Type of the incoming relationship from the newly created node.
+
+{<h4> Output: </h4>}
+
+- `input: integer` ➡ Id of the given deleted relationship.
+- `output: Node` ➡ The newly created node.
+
+{<h4> Usage: </h4>}
+
+Create a graph using the query below:
+
+```cypher
+CREATE (Node1:Label {name: 'Node1'}) CREATE (Node2:Label {name: 'Node2'}) CREATE (Node3:Label {name: 'Node3'}) CREATE (Node4:Label {name: 'Node4'}) CREATE (Node5:Label {name: 'Node5'}) CREATE (Node1)-[:Rel1]->(Node2) CREATE (Node2)-[:Rel2]->(Node3) CREATE (Node3)-[:Rel3]->(Node4) CREATE (Node4)-[:Rel4]->(Node5);
+```
+
+After running the query below:
+```cypher
+MATCH ()-[rel]->() CALL refactor.extract_node(rel, ["NewLabel"], "OutRelationship", "InRelationship") YIELD output RETURN output;
+```
+The graph will look like this:
+![](/pages/advanced-algorithms/available-algorithms/refactor/extract_node_after.png)
+
+### `delete_and_reconnect()`
+
+Deletes the given nodes from the given path (deleting them in the graph) and reconnects the remaining nodes.
+
+{<h4> Input: </h4>}
+
+- `path: Path` ➡  The given path.
+- `nodes: List[Node]` ➡ List of nodes to be deleted.
+- `config: Map` ➡ Config for reconnecting nodes.
+                    - relationshipSelectionStrategy: string = "incoming"
+                          - "incoming" - relationship will the smaller index in the path will be used for reconnection.
+                          - "outgoing" - the relationship with the bigger index in the path will be used for reconnection.
+                          - "merge" - the relationships will be merged, relationship type will be changed to "type2_type1" where type1 is the type of the relationship with the smaller index in the path. If both relationships have the same property the property in the reconnected relationship will be decided by `properties` in the config.
+                    - properties: string = "combine"
+                          - "discard" - property of the relationship with the smaller index in the path wins.
+                          - "overwrite" / "override" - property of the relationship with the bigger index in the path wins.
+                          - "combine" - merges properties by creating a list in which both property values are contained.
+{<h4> Output: </h4>}
+
+- `nodes: List[Node]` ➡ Nodes which were not deleted from the graph.
+- `relationships: List[Relationship]` ➡ Relationships which were not deleted from the graph.
+
+{<h4> Usage: </h4>}
+
+All the examples will be run on the following graph:
+
+```cypher
+CREATE (n1:Node {name: "Node 1"})-[:Rel1 {name: "Rel1"}]->(n2:Node {name: "Node 2"})-[:Rel2 {name: "Rel2"}]->(n3:Node {name: "Node 3"})-[:Rel3 {name: "Rel3"}]->(n4:Node {name: "Node 4"})-[:Rel4 {name: "Rel4"}]->(n5:Node {name: "Node 5"});
+```
+
+Query (incoming):
+```cypher
+MATCH p=(a:Node)-->(b:Node)-->(c:Node)-->(d:Node)-->(e:Node)
+WITH p, [b,d] as l CALL refactor.delete_and_reconnect(p, l, {relationshipSelectionStrategy: 'incoming'}) YIELD nodes, relationships RETURN nodes, relationships;
+```
+
+Result:
+```plaintext
+nodes: [{"id": 5, "labels": ["Node"], "properties": {"name": "Node 1"}, "type": "node"}, {"id": 7, "labels": ["Node"], "properties": {"name": "Node 3"}, "type": "node"}, {"id": 9, "labels": ["Node"], "properties": {"name": "Node 5"}, "type": "node"}]
+relationships: [{"id": 4, "start": 5, "end": 7, "label": "Rel1", "properties": {"name": "Rel1"}, "type": "relationship"}, {"id": 6, "start": 7, "end": 9, "label": "Rel3", "properties": {"name": "Rel3"}, "type": "relationship"}]
+```
+
+Query (outgoing):
+```cypher
+MATCH p=(a:Node)-->(b:Node)-->(c:Node)-->(d:Node)-->(e:Node)
+WITH p, [b,d] as l CALL refactor.delete_and_reconnect(p, l, {relationshipSelectionStrategy: 'outgoing'}) YIELD nodes, relationships RETURN nodes, relationships;
+```
+
+Result:
+```plaintext
+nodes: [{"id": 15, "labels": ["Node"], "properties": {"name": "Node 1"}, "type": "node"}, {"id": 17, "labels": ["Node"], "properties": {"name": "Node 3"}, "type": "node"}, {"id": 19, "labels": ["Node"], "properties": {"name": "Node 5"}, "type": "node"}]
+relationships: [{"id": 13, "start": 15, "end": 17, "label": "Rel2", "properties": {"name": "Rel2"}, "type": "relationship"}, {"id": 15, "start": 17, "end": 19, "label": "Rel4", "properties": {"name": "Rel4"}, "type": "relationship"}]
+```
+
+Query (merge + discard):
+```cypher
+MATCH p=(a:Node)-->(b:Node)-->(c:Node)-->(d:Node)-->(e:Node)
+WITH p, [b,d] as l CALL refactor.delete_and_reconnect(p, l, {relationshipSelectionStrategy: 'merge', properties: 'discard'}) YIELD nodes, relationships RETURN nodes, relationships;
+```
+
+Result:
+```plaintext
+nodes: [{"id": 20, "labels": ["Node"], "properties": {"name": "Node 1"}, "type": "node"}, {"id": 22, "labels": ["Node"], "properties": {"name": "Node 3"}, "type": "node"}, {"id": 24, "labels": ["Node"], "properties": {"name": "Node 5"}, "type": "node"}]
+relationships: [{"id": 16, "start": 20, "end": 22, "label": "Rel2_Rel1", "properties": {"name": "Rel1"}, "type": "relationship"}, {"id": 18, "start": 22, "end": 24, "label": "Rel4_Rel3", "properties": {"name": "Rel3"}, "type": "relationship"}]
+```
+
+Query (merge + override):
+```cypher
+MATCH p=(a:Node)-->(b:Node)-->(c:Node)-->(d:Node)-->(e:Node)
+WITH p, [b,d] as l CALL refactor.delete_and_reconnect(p, l, {relationshipSelectionStrategy: 'merge', properties: 'override'}) YIELD nodes, relationships RETURN nodes, relationships;
+```
+
+Result:
+```plaintext
+nodes: [{"id": 25, "labels": ["Node"], "properties": {"name": "Node 1"}, "type": "node"}, {"id": 27, "labels": ["Node"], "properties": {"name": "Node 3"}, "type": "node"}, {"id": 29, "labels": ["Node"], "properties": {"name": "Node 5"}, "type": "node"}]
+relationships: [{"id": 21, "start": 25, "end": 27, "label": "Rel2_Rel1", "properties": {"name": "Rel2"}, "type": "relationship"}, {"id": 23, "start": 27, "end": 29, "label": "Rel4_Rel3", "properties": {"name": "Rel4"}, "type": "relationship"}]
+```
+
+Query (merge + combine):
+```cypher
+MATCH p=(a:Node)-->(b:Node)-->(c:Node)-->(d:Node)-->(e:Node)
+WITH p, [b,d] as l CALL refactor.delete_and_reconnect(p, l, {relationshipSelectionStrategy: 'merge', properties: 'combine'}) YIELD nodes, relationships RETURN nodes, relationships;
+```
+
+Result:
+```plaintext
+nodes: [{"id": 35, "labels": ["Node"], "properties": {"name": "Node 1"}, "type": "node"}, {"id": 37, "labels": ["Node"], "properties": {"name": "Node 3"}, "type": "node"}, {"id": 39, "labels": ["Node"], "properties": {"name": "Node 5"}, "type": "node"}]
+relationships: [{"id": 28, "start": 35, "end": 37, "label": "Rel2_Rel1", "properties": {"name": ["Rel1", "Rel2"]}, "type": "relationship"}, {"id": 30, "start": 37, "end": 39, "label": "Rel4_Rel3", "properties": {"name": ["Rel3", "Rel4"]}, "type": "relationship"}]
+```
+
+### `rename_type()`
+
+Changes the relationship type.
+
+{<h4> Input: </h4>}
+
+- `oldType: string` ➡  The relationship type that will be renamed.
+- `newType: string` ➡  The new relationship type.
+- `rels: List[Relationship]` ➡  The list of relationships whose types will be renamed.
+
+{<h4> Output: </h4>}
+
+- `relationships_changed: integer` ➡ The number of relationships with a changed property name.
+
+{<h4> Usage: </h4>}
+
+Create a graph using the queries below:
+
+```cypher
+CREATE (h:Human {name:"Carl"})-[r1:RUNS {distance_in_km:20}]->(d:Destination),
+(h1:Human {name:"Marta"})-[r2:RUNS {distance_in_km: 20}]->(d),
+(h2:Human {name:"Peter"})-[r3:RUNS {distance_in_km: 40}]->(d);
+```
+
+Use the procedure to change the type `RUNS` to `SPRINTS` in all relationships:
+
+```cypher
+MATCH ()-[r]-()
+WITH COLLECT(distinct(r)) AS rels
+CALL refactor.rename_type("RUNS", "SPRINTS", rels) YIELD relationships_changed RETURN relationships_changed;
+```
+The procedure returns the number of updated relationships:
+
+```plaintext
++---------------------------------------+
+| relationships_changed                 |
++---------------------------------------+
+| 3                                     |
++---------------------------------------+
+```
+
 ### `rename_type_property()`
 
 Renames the property of a relationship.
