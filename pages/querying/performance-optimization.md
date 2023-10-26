@@ -186,7 +186,7 @@ produced plan and gain insight into the execution of a query.
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `Accumulate`                    | Accumulates the input it received.                                                                                       |
 | `Aggregate`                     | Aggregates the input it received.                                                                                        |
-| `Apply`                         | Joins the returned symbols from two branches of execution.                                                              |
+| `Apply`                         | Joins the returned symbols from two branches of execution.                                                               |
 | `CallProcedure`                 | Calls a procedure.                                                                                                       |
 | `Cartesian`                     | Applies the Cartesian product (the set of all possible ordered combinations consisting of one member from each of those sets) on the input it received. |
 | `ConstructNamedPath`            | Creates a path.                                                                                                          |
@@ -200,8 +200,8 @@ produced plan and gain insight into the execution of a query.
 | `ExpandVariable`                | Performs a node expansion of a variable number of relationships                                                          |
 | `Filter`                        | Filters the input it received.                                                                                           |
 | `Foreach`                       | Iterates over a list and applies one or more update clauses.                                                             |
-| `HashJoin`                      | Performs a hash join of the input from its two input branches.                                                                                 |
-| `IndexedJoin`                   | Performs an indexed join of the input from its two input branches.                                                                                 |
+| `HashJoin`                      | Performs a hash join of the input from its two input branches.                                                           |
+| `IndexedJoin`                   | Performs an indexed join of the input from its two input branches.                                                       |
 | `Limit`                         | Limits certain rows from the pull chain.                                                                                 |
 | `LoadCsv`                       | Loads CSV file in order to import files into the database.                                                               |
 | `Merge`                         | Applies merge on the input it received.                                                                                  |
