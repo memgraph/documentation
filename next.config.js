@@ -2928,6 +2928,16 @@ module.exports = withNextra({
         source: '/memgraph/next/reference-guide/exposing-system-metrics',
         destination: '/configuration/monitoring-server',
         permanent: true
+      },
+      {
+        source: '/advanced-algorithms/available-algorithms/schema',
+        destination: '/querying/functions#schema',
+        permanent: true
+      },       
+      {
+        source: '/advanced-algorithms/available-algorithms/convert',
+        destination: '/querying/functions#conversion-functions',
+        permanent: true
       }                   
     ];
   },
