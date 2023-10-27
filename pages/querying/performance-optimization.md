@@ -8,7 +8,7 @@ description: Optimize your graph computing performance with Memgraph. Access tip
 ## Analyze graph
 
 The `ANALYZE GRAPH` will check and calculate certain properties of a graph so
-the database can choose a more optimal index or `MERGE` transaction. 
+that the database can choose a more optimal index or `MERGE` transaction.
 
 Before the introduction of the `ANALYZE GRAPH` query, the database would choose
 an index solely based on the number of indexed nodes. But if the number of nodes
@@ -31,8 +31,8 @@ $
 Upon running the `ANALYZE GRAPH` query, Memgraph also check the node degree of
 every indexed nodes and calculates the average degree. By having these values,
 Memgraph can make a more optimal `MERGE` expansion and improve performance. It's
-always better to perform a `MERGE` by expanding from the node that has a lesser
-degree than the connecting node. 
+always better to perform a `MERGE` by expanding from the node that has a lower
+degree than the connecting node.
 
 The `ANALYZE GRAPH;` command should be run only once after all indexes have been
 created and nodes inserted in the database. In rare situations when one property
@@ -56,7 +56,6 @@ each one, then return the following output:
 | label | property | num estimation nodes | num groups | avg group size | chi-squared value | avg degree
 | ----- | -------- | -------------------- | ---------- | -------------- | ----------------- | ----------
 | index's label | index's property | number of nodes used for estimation | number of distinct values the property contains | average group size of property's values | value of the chi-squared statistic | average degree of the indexed nodes
-
 
 Once the necessary information is obtained, Memgraph can choose the optimal
 index and `MERGE` expansion. If you don't want to run the analysis on all labels,
@@ -87,6 +86,47 @@ Specific labels can be specified with the construct `ON LABELS`:
 ```cypher
 ANALYZE GRAPH ON LABELS :Label1 DELETE STATISTICS;
 ```
+
+## Index hinting
+
+When executing a query, Memgraph needs to decide where in the query graph to
+start matching. To get the optimal match, it checks the MATCH clause conditions
+and finds the index that's likely to be the best choice.
+
+However, the selected index might not always be the best one. Sometimes, there
+are multiple candidate indexes, and the query planner picks the suboptimal one
+from a performance point of view.
+
+You can instruct the planner to use specific index(es) (if possible) in the
+query that follows by using the syntax below:
+
+```cypher
+USING INDEX :Label, :Label2 ...;
+```
+
+```cypher
+USING INDEX :Label(Property) ...
+```
+
+It is also possible to specify multiple hints separated with comma. In that
+case, the planner will apply the first hint that is applicable for a given
+match.
+
+An example of selecting an index with USING INDEX: 
+```
+USING INDEX :Person(name)
+MATCH (n:Person {name: 'John'})
+RETURN n;
+```
+
+<Callout type="warning"> 
+
+Overriding planner behavior with index hints should be used with caution, and
+only by experienced developers and/or database administrators, as poor index
+choice may cause queries to perform poorly.
+
+</Callout>
+
 
 ## Inspecting queries
 
@@ -125,6 +165,7 @@ produced plan and gain insight into the execution of a query.
 | `ExpandVariable`                | Performs a node expansion of a variable number of relationships                                                          |
 | `Filter`                        | Filters the input it received.                                                                                           |
 | `Foreach`                       | Iterates over a list and applies one or more update clauses.                                                             |
+| `HashJoin`                      | Performs a hash join of the input from its two input branches.                                                                                 |
 | `Limit`                         | Limits certain rows from the pull chain.                                                                                 |
 | `LoadCsv`                       | Loads CSV file in order to import files into the database.                                                               |
 | `Merge`                         | Applies merge on the input it received.                                                                                  |
@@ -186,16 +227,16 @@ EXPLAIN MATCH (n :Node)-[:Edge]-(m :Node) WHERE n.prop = 42 RETURN *;
 ```
 
 ```
-+--------------------------------+
-| QUERY PLAN                     |
-+--------------------------------+
-|  * Produce {m, n}              |
-|  * Filter                      |
-|  * Expand (m)-[anon1:Edge]-(n) |
-|  * ScanAllByLabel (n :Node)    |
-|  * ScanAllByLabel (m :Node)    |
-|  * Once                        |
-+--------------------------------+
++------------------------------------------+
+| QUERY PLAN                               |
++------------------------------------------+
+|  * Produce {m, n}                        |
+|  * Filter (n :Node), {n.prop}            |
+|  * Expand (m)-[anon1:Edge]-(n)           |
+|  * ScanAllByLabel (n :Node)              |
+|  * ScanAllByLabel (m :Node)              |
+|  * Once                                  |
++------------------------------------------+
 ```
 
 In this example, the `Filter` logical operator is used to filter the matched
@@ -266,15 +307,14 @@ PROFILE MATCH (n :Node)-[:Edge]-(m :Node) WHERE n.prop = 42 RETURN *;
 ```
 
 ```plaintext
-+-------------------------------+---------------+---------------+---------------+
-| OPERATOR                      | ACTUAL HITS   | RELATIVE TIME | ABSOLUTE TIME |
-+-------------------------------+---------------+---------------+---------------+
-| * Produce {m, n}              | 1             |   7.134628 %  |   0.003949 ms |
-| * Filter                      | 1             |  12.734765 %  |   0.007049 ms |
-| * Expand (m)-[anon1:Edge]-(n) | 1             |   5.181460 %  |   0.002868 ms |
-| * ScanAll                     | 1             |   3.325061 %  |   0.001840 ms |
-| * ScanAll (m)                 | 1             |  71.061241 %  |   0.039334 ms |
-| * Once                        | 2             |   0.562844 %  |   0.000312 ms |
-+-------------------------------+---------------+---------------+---------------+
++-----------------------------------------+---------------+---------------+---------------+
+| OPERATOR                                | ACTUAL HITS   | RELATIVE TIME | ABSOLUTE TIME |
++-----------------------------------------+---------------+---------------+---------------+
+| * Produce {m, n}                        | 1             |   7.134628 %  |   0.003949 ms |
+| * Filter (n :Node), {n.prop}            | 1             |  12.734765 %  |   0.007049 ms |
+| * Expand (m)-[anon1:Edge]-(n)           | 1             |   5.181460 %  |   0.002868 ms |
+| * ScanAll (n)                           | 1             |   3.325061 %  |   0.001840 ms |
+| * ScanAll (m)                           | 1             |  71.061241 %  |   0.039334 ms |
+| * Once                                  | 2             |   0.562844 %  |   0.000312 ms |
++-----------------------------------------+---------------+---------------+---------------+
 ```
-
