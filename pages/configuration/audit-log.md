@@ -28,9 +28,10 @@ escaped and quoted so that commas in queries don't affect the correctness of
 the CSV. The parameters are encoded as JSON objects and are then escaped and
 quoted.
 
-## Example
+### Example
 
 This is an example of the audit log:
+
 ```plaintext
 1551376833.225395,127.0.0.1,admin,"MATCH (n) DETACH DELETE n","{}"
 1551376833.257825,127.0.0.1,admin,"CREATE (n {name: $name})","{\"name\":\"alice\"}"
@@ -52,6 +53,7 @@ MATCH (n), (m) SET n.value = m.value              | {}
 
 If you wish to parse the log, the following Python snippet shows how to extract
 data from the audit log:
+
 ```python
 import csv
 import json
@@ -69,11 +71,10 @@ with open("audit.log") as f:
 
 ## Flags
 
-This section contains the list of flags that are used to configure audit
-logging in Memgraph.
+Use the following flags to configure audit logging in Memgraph.
 
- Flag                               | Description
-------------------------------------|------------
- `--audit-enabled`                  | Enables audit logging.
- `--audit-buffer-size`              | Controls the in-memory buffer size used for audit logs.
- `--audit-buffer-flush-interval-ms` | Controls the time interval (in milliseconds) used for flushing the in-memory buffer to disk.
+| Flag                               | Description                                                                                    |
+|------------------------------------|------------------------------------------------------------------------------------------------|
+| `--audit-enabled`                  | Enables audit logging.                                                                         |
+| `--audit-buffer-size`              | Controls the in-memory buffer size used for audit logs.                                        |
+| `--audit-buffer-flush-interval-ms` | Controls the time interval (in milliseconds) used for flushing the in-memory buffer to disk.   |

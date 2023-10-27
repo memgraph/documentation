@@ -16,10 +16,12 @@ modes.
 
 Memgraph supports three different storage modes:
 * `IN_MEMORY_TRANSACTIONAL` - the default database storage mode that favors
-    strongly-consistent ACID transactions using WAL files and snapshots, but
-    requires more time and resources during data import and analysis.
+    strongly-consistent ACID transactions using [WAL files and
+    snapshots](/configuration/data-durability-and-backup), but requires more
+    time and resources during data import and analysis.
 * `IN_MEMORY_ANALYTICAL` - speeds up import and data analysis but offers no ACID
-    guarantees besides manually created snapshots.
+    guarantees besides manually created
+    [snapshots](/configuration/data-durability-and-backup#snapshots).
 * `ON_DISK_TRANSACTIONAL` - supports ACID properties in the same way as
     `IN_MEMORY_TRANSACTIONAL` with the additional ability to store data on disk
     (HDD or SSD), thus trading performance for lower costs.
@@ -32,13 +34,16 @@ Memgraph supports three different storage modes:
 You can switch between in-memory modes within a session using the following query:
 
 ```cypher
-STORAGE MODE IN_MEMORY_{TRANSACTIONAL|ANALYTICAL};
+STORAGE MODE IN_MEMORY_TRANSACTIONAL;
+```
+```cypher
+STORAGE MODE IN_MEMORY_ANALYTICAL;
 ```
 
 When switching modes, Memgraph will wait until all other transactions are done.
 If some other transactions are running in your system, you will receive a
 warning message, so be sure to [set the log level to
-`WARNING`](/configuration/configuration-settings#other).
+`WARNING`](/configuration/logs).
 
 Switching from the in-memory storage mode to the on-disk storage mode is allowed
 when there is only one active session and the database is empty. As Memgraph Lab
@@ -55,7 +60,7 @@ STORAGE MODE ON_DISK_TRANSACTIONAL;
 
 It is forbidden to change the storage mode from `ON_DISK_TRANSACTIONAL` to any
 of the in-memory storage modes while there is data in the database as it might
-not fit in the RAM. To change the storage mode to any of the in-memory storages,
+not fit into the RAM. To change the storage mode to any of the in-memory storages,
 empty the instance and restart it. An empty database will start in the default
 storage mode (in-memory transactional).
 
@@ -88,7 +93,7 @@ backbone upon which Memgraph provides atomicity, consistency, isolation, and
 durability - ACID. By using `Deltas`, Memgraph creates
 [write-ahead-logs](/configuration/data-durability-and-backup#write-ahead-logging)
 for durability, provides isolation, consistency, and atomicity (by ensuring that
-everything is executed or nothing).
+everything is executed or nothing is).
 
 Depending on the transaction [isolation
 level](/fundamentals/transactions#isolation-levels), other transactions may see
@@ -98,8 +103,9 @@ In the transactional storage mode,
 [snapshots](/configuration/data-durability-and-backup#snapshots) are created
 periodically or manually. They capture the database state and store it on the
 disk. A snapshot is used to recover the database upon startup (depending on the
-setting of the configuration flag `--storage-recover-on-startup`, which defaults
-to `true`).
+setting of the configuration flag
+[`--storage-recover-on-startup`](/configuration/configuration-settings#storage),
+which defaults to `true`).
 
 When Memgraph starts creating a periodic snapshot, it is not possible to
 manually create a snapshot, until the periodic snapshot is created.
@@ -136,28 +142,28 @@ can see the changes it is doing](/fundamentals/transactions#isolation-levels).
 This means that the transactions can be committed in random orders, and the
 updates to the data, in the end, might not be correct.
 
-Also, no [write-ahead
-logs](/configuration/data-durability-and-backup#write-ahead-logging) are created
-in the `IN_MEMORY_ANALYTICAL` mode. When switching back to the
-`IN_MEMORY_TRANSACTIONAL` mode it is recommended to create a snapshot manually
-with `CREATE SNAPSHOT;` Cypher query. Once Memgraph switches to the
-`IN_MEMORY_TRANSACTIONAL` mode, for all new updates it will create a WAL if not
-otherwise instructed by the config file.
-
-[Snapshots](/configuration/data-durability-and-backup#snapshots) capture the
-database state and store it on the disk. A snapshot is used to recover the
-database upon startup (depending on the setting of the [configuration
+Memgraph uses [snapshots](/configuration/data-durability-and-backup#snapshots)
+and [write-ahead
+logs](/configuration/data-durability-and-backup#write-ahead-logging) to ensure
+data durability and backup. Snapshots capture the database state and store it on
+the disk. A snapshot is then used to recover the database upon startup (depending on
+the setting of the [configuration
 flag](/configuration/configuration-settings#storage)
 `--storage-recover-on-startup`, which defaults to `true`).
 
-In Memgraph, snapshots are created periodically or manually.
+In Memgraph, snapshots are created periodically or manually with `CREATE
+SNAPSHOT;` Cypher query. 
 
-In the `IN_MEMORY_ANALYTICAL` mode, periodic snapshots are **disabled**.
+In the analytical storage mode, WAL files and periodic snapshots are **not created**. 
 
-Manual snapshots are created by running the `CREATE SNAPSHOT;` query. When the
-query is run in the `IN_MEMORY_ANALYTICAL` mode, Memgraph guarantees that it
-will be **the only** transaction present in the system, and all the other
-transactions will wait until the snapshot is created to ensure its validity.
+Before switching back to the in-memory transactional storage mode create a
+snapshot manually. In the in-memory analytical storage mode, Memgraph guarantees
+that creating a snapshot is **the only** transaction present in the system, and
+all the other transactions will wait until the snapshot is created to ensure its
+validity. Once Memgraph switches to the in-memory transactional mode, it will
+restore from the snapshot file and create a WAL for all new updates, if not
+otherwise instructed by the [config
+file](/configuration/configuration-settings#storage).
 
 ### On-disk transactional storage mode
 
@@ -175,16 +181,17 @@ can hold, without the performance overhead caused by the buffer pool.
 
 The imported data is residing on the disk, while the main memory contains two
 caches, one executing operations on main RocksDB instance and the other for
-operations that require indices. In both cases, Memgraph's custom
+operations that require indexes. In both cases, Memgraph's custom
 `SkipList` cache is used, which allows a multithreaded read-write access pattern.
 
 #### Implications
 
 Concurrent execution of transactions is supported differently for on-disk
-storage than for in-memory. The in-memory storage mode relies on delta objects
-which store the exact versions of data at the specific moment in time.
-Therefore, the in-memory storage mode uses a pessimistic approach and
-immediately checks whether there is a conflict between two transactions.
+storage than for in-memory. The in-memory storage mode relies on
+[`Delta`](#delta-memory-layout) objects which store the exact versions of data
+at the specific moment in time. Therefore, the in-memory storage mode uses a
+pessimistic approach and immediately checks whether there is a conflict between
+two transactions.
 
 In the on-disk storage mode, the cache is used per transaction. This
 significantly simplifies object management since there is no need to question
@@ -193,30 +200,31 @@ conflict resolution between transactions.
 
 In the on-disk storage mode, the conflict is checked at the transaction's commit
 time with the help of RocksDB's transaction support. This also implies that
-deltas are cleared after each transaction, which can optimize memory usage
+Deltas are cleared after each transaction, which can optimize memory usage
 during execution. Deltas are still used to fully support Cypher's semantic of
 the write queries. The design of the on-disk storage also simplifies the process
 of garbage collection, since all the data is on disk.
 
-The on-disk storage mode supports only snapshot isolation level. Mostly because
-it's the Memgraph viewpoint that snapshot isolation should be the default
-isolation level for most applications relying on databases. But the snapshot
-isolation level also simplifies the query's execution flow since no data is
-transferred to the disk until the commit of the transaction.
+The on-disk storage mode supports only [snapshot isolation
+level](/fundamentals/transactions#isolation-levels). Mostly because it's the
+Memgraph viewpoint that snapshot isolation should be the default isolation level
+for most applications relying on databases. But the snapshot isolation level
+also simplifies the query's execution flow since no data is transferred to the
+disk until the commit of the transaction.
 
-The on-disk storage mode supports both label and label-property indices. They
-are stored in separate RocksDB instances as key-value pairs so that the access
-to the data is faster. Whenever the indexed node is accessed, it's stored into a
-separate in-memory cache to maximize the reading speed.
+[Label and label-property indexes](/fundamentals/indexes) are stored in separate
+RocksDB instances as key-value pairs so that the access to the data is faster.
+Whenever the indexed node is accessed, it's stored into a separate in-memory
+cache to maximize the reading speed.
 
-The on-disk storage mode supports both existence and uniqueness constraints.
-Existence constraints don't use context from the disk since the validity of
-nodes can be checked by looking only at this single node. On the other side,
-uniqueness constraints require a different approach. For a node to be valid, the
-engine needs to iterate through all other nodes under constraint and check
-whether a conflict exists. To speed up this iteration process, nodes under
-constraint are stored into a separate RocksDB instance to eliminate the cost of
-iterating over nodes which are not under constraint.
+When it comes to [constraints](/fundamentals/constraints), the existence
+constraints don't use context from the disk since the validity of nodes can be
+checked by looking only at this single node. On the other side, uniqueness
+constraints require a different approach. For a node to be valid, the engine
+needs to iterate through all other nodes under constraint and check whether a
+conflict exists. To speed up this iteration process, nodes under constraint are
+stored into a separate RocksDB instance to eliminate the cost of iterating over
+nodes which are not under constraint.
 
 In the on-disk storage mode, durability is supported by RocksDB since it keeps
 its own
@@ -225,15 +233,15 @@ Memgraph persists the metadata used in the implementation of the on-disk
 storage.
 
 If the workload is larger than memory, a single transaction must fit into the
-memory. A memory tracker track all allocations happening throughout the
+memory. A memory tracker tracks all allocations happening throughout the
 transaction's lifetime. Disk space also has to be carefully managed. Since the
 timestamp is serialized together with the raw node and relationship data, the
 engine needs to ensure that when the new version of the same node is stored, the
 old one is deleted.
 
-At the moment, the on-disk storage doesn't support replication.
+At the moment, the on-disk storage **doesn't support replication**.
 
-#### Data formats
+{<h4>  Data formats </h4>} 
 
 Below is the format in which data is serialized to the disk.
 
@@ -262,46 +270,67 @@ Value - `label1_id, label2_id, ... | property1, property2, ...`
 
 Value does not contain `indexing label`.
 
-### Edge import mode
+#### Edge import mode
 
-Memgraph on-disk storage supports `Edge import mode` to import edges with high
-throughput. In this mode, only edges can be created and modified. Any vertex
-operations other than read are prohibited and will throw an exception.
+Memgraph on-disk storage supports the `EDGE IMPORT MODE` to import relationships
+with high throughput. When the database is in this mode, only relationships can
+be created and modified. Any operation on nodes other than read are prohibited
+and will throw an exception.
 
-To enable the mode run
+To enable the mode run:
 ```plaintext
 EDGE IMPORT MODE ACTIVE;
 ```
 
-To disable the mode run
+To disable the mode run:
 ```plaintext
 EDGE IMPORT MODE INACTIVE;
 ```
 
-#### Import data using LOAD CSV command
+{<h5> Import data using `LOAD CSV` clause </h5>}
 
-When importing data using a CSV file, seperate importing nodes and
-relationships. Currently, for the best edges import performance we recommend
-**not creating** any indexes.
+When importing data using a [CSV file](/data-migration/csv), import nodes and
+relationships seperately. Currently, to import relationships as fast as
+possible, **don't create indexes**.
+
+Here is an example how to import data using the LOAD CSV clause.
+
+First, import the nodes:
 
 ```plaintext
 LOAD CSV FROM "/path-to/people_nodes.csv" WITH HEADER AS row
 CREATE (p:Person {id: row.id, name: row.name});
-CREATE INDEX ON :Person(id);
+```
+
+Activate the `EDGE IMPORT MODE`:
+
+```
 EDGE IMPORT MODE ACTIVE;
+```
+
+Import the relationships:
+
+```
 LOAD CSV FROM "/path-to/people_relationships.csv" WITH HEADER AS row
 MATCH (p1:Person {id: row.id_from}), (p2:Person {id: row.id_to})
 CREATE (p1)-[:IS_FRIENDS_WITH]->(p2);
+```
+
+Deactivate the `EDGE IMPORT MODE`:
+
+```
 EDGE IMPORT MODE INACTIVE;
 ```
 
-#### Import data using Cypher queries
+{<h5> Import data using Cypher queries </h5>} 
 
-For files containing Cypher queries (.cypherql), first all vertices should be
-created, then command `EDGE IMPORT MODE ACTIVE;` specified and then can the
-edges be created. Indices can be specified before or after `EDGE IMPORT MODE
-ACTIVE;`. We recommend to [**create label-property
-index**](/fundamentals/indexes) on nodes for the best edges import performance.
+For [files containing Cypher queries (.cypherql)](/data-migration/cypherl),
+create all nodes, then activate the `EDGE IMPORT MODE` and create relationships.
+Indexes can be created before or after activating the `EDGE IMPORT MODE`. It's
+best to [**create a label-property index**](/fundamentals/indexes) on node
+properties used to match nodes that will be connected with a relationhsip. 
+
+Here as an exampe of a CYPHERL file:
 
 ```plaintext
 CREATE (n:User {id: 1});
@@ -309,7 +338,6 @@ CREATE (n:User {id: 2});
 CREATE (n:User {id: 3});
 CREATE (n:User {id: 4});
 EDGE IMPORT MODE ACTIVE;
-CREATE INDEX ON :User;
 CREATE INDEX ON :User(id);
 MATCH (n:User {id: 1}), (m:User {id: 2}) CREATE (n)-[r:FRIENDS {id: 1}]->(m);
 MATCH (n:User {id: 3}), (m:User {id: 4}) CREATE (n)-[r:FRIENDS {id: 2}]->(m);
@@ -322,8 +350,8 @@ Estimating Memgraph's storage memory usage is not entirely straightforward
 because it depends on a lot of variables, but it is possible to do so quite
 accurately.
 
-If you want to **estimate** IN_MEMORY_TRASNACTIONAL storage mode memory usage,
-use the following formula:
+If you want to **estimate** IN_MEMORY_TRASNACTIONAL storage mode memory usage in
+the in-memory transactional storage mode, use the following formula:
 
 $\texttt{StorageRAMUsage} = \texttt{NumberOfVertices} \times 260\text{B} + \texttt{NumberOfEdges} \times 180\text{B}$
 
@@ -371,11 +399,11 @@ But, if the database has a lot of concurrent operations, many `Delta` objects
 will be created. Of course, the `Delta` objects will be kept in memory as long as
 needed, and a bit more, because of the internal GC inefficiencies.
 
-#### `Delta` memory layout
+{<h4> <code>Delta</code> memory layout </h4>}
 
 Each `Delta` object has a least **104B**.
 
-#### `Vertex` memory layout
+{<h4> <code>Vertex</code> memory layout </h4>}
 
 Each `Vertex` object has at least **112B** + **104B** for the `Delta` object, in
 total, a minimum of **216B**.
@@ -386,12 +414,12 @@ Keep in mind that three labels take as much space as four labels, and five to
 seven labels take as much space as eight labels, etc., due to the dynamic
 memory allocation.
 
-#### `Edge` memory layout
+{<h4> <code>Edge</code> memory layout </h4>}
 
 Each `Edge` object has at least **40B** + **104B** for the `Delta` object, in
 total, a minimum of **144B**.
 
-#### `SkipList` memory layout
+{<h4> <code>SkipList</code> memory layout </h4>}
 
 Each object (`Vertex`, `Edge`) is placed inside a data structure
 called a `SkipList`. The `SkipList` has an additional overhead in terms of
@@ -405,7 +433,7 @@ objects** because the number of pointers is generated by binomial distribution
 code](https://github.com/memgraph/memgraph/blob/master/src/utils/skip_list.hpp)
 for details).
 
-#### Index memory layout
+{<h4> Index memory layout </h4>}
 
 Each `LabelIndex::Entry` object has exactly **16B**.
 
@@ -419,7 +447,7 @@ Objects of both types are placed into the `SkipList`.
 - `SkipListNode<LabelPropertyIndex::Entry>` has at least **80B**.
 - Each `SkipListNode` has an additional **16B** because of the **next_pointers**.
 
-#### Properties
+{<h4> Properties </h4>}
 
 All properties use **1B** for metadata - type, size of property ID and the size
 of payload in the case of `NULL` and `BOOLEAN` values, or size of payload size
@@ -431,9 +459,7 @@ property takes up at least 2B. After those 2B, some properties (for example,
 `STRING` values) store addition metadata. And lastly, all properties store the
 value. So the layout of each property is:
 
-
 $\texttt{propertySize} = \texttt{basicMetadata} + \texttt{propertyID} + [\texttt{additionalMetadata}] + \texttt{value}.$
-
 
 |Value type       |Size                            |Note
 |-----------------|--------------------------------|-----------------------------------------------------------------------------------------------------|
@@ -446,10 +472,10 @@ $\texttt{propertySize} = \texttt{basicMetadata} + \texttt{propertyID} + [\texttt
 |`MAP`            |1B + 1B + 1B + min 1B           | Basic metadata, property ID, additional metadata and the total size depends on the number and size of the values in the map.|
 |`TEMPORAL_DATA`  |1B + 1B + 1B + min 1B + min 1B  | Basic metadata, property ID, additional metadata, seconds, microseconds. Value od the seconds and microseconds is at least 1B, but probably 4B in most cases due to the large values they store.|
 
-#### Marvel dataset use case
+### Marvel dataset use case
 
 The Marvel dataset consists of `Hero`, `Comic` and `ComicSeries` labels, which
-are indexed. There are also three label-property indices - on the `name`
+are indexed. There are also three label-property indexes - on the `name`
 property of `Hero` and `Comic` vertices, and on the `title` property of
 `ComicSeries` vertices. The `ComicSeries` vertices also have the `publishYear`
 property.
@@ -490,12 +516,12 @@ There are 682,943 edges in the Marvel dataset. Hence, we have:
 
 $682,943 \times (40\text{B}+16\text{B}+16\text{B}+104\text{B}) = 682,943 \times 176\text{B} = 120,197,968\text{B}.$
 
-Next, `Hero`, `Comic` and `ComicSeries` labels have label indices. To calculate
+Next, `Hero`, `Comic` and `ComicSeries` labels have label indexes. To calculate
 how much space they take up, use the following formula:
 
 $\texttt{NumberOfLabelIndices} \times \texttt{NumberOfVertices} \times (\texttt{SkipListNode<LabelIndex::Entry>} + \texttt{next\_pointers}).$
 
-Since there are three label indices, we have the following calculation:
+Since there are three label indexes, we have the following calculation:
 
 $3 \times 21,723 \times (24\text{B}+16\text{B}) = 65,169 \times 40\text{B} = 2,606,760\text{B}.$
 
@@ -571,6 +597,7 @@ MATCH (n) RETURN (n) QUERY MEMORY LIMIT 10 KB;
 ```plaintext
 MATCH (n) RETURN (n) QUERY MEMORY UNLIMITED;
 ```
+
 ### Control procedure memory usage
 
 Each procedure call can contain the following clause:
@@ -602,7 +629,7 @@ CALL example.procedure(arg1, arg2, ...) PROCEDURE MEMORY UNLIMITED YIELD result;
 
 ### Inspect memory usage
 
-Run the following query to get information about information about the currently
+Run the following query to get information about the currently
 used storage mode, memory usage, disk usage, allocated memory and the allocation
 limit:
 
@@ -664,6 +691,3 @@ FREE MEMORY;
 
 This query tries to clean up as much unused memory as possible without affecting
 currently running transactions.
-
-
-

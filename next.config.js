@@ -558,17 +558,17 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/exposing-system-metrics',
-        destination: '/configuration/exposing-system-metrics',
+        destination: '/configuration/monitoring-server',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/manage-users-using-ldap',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/ldap-security',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
@@ -1761,17 +1761,17 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-guides-overview/manage-users-using-ldap',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/ldap-security',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/manage-users-using-ldap',
-        destination: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
         permanent: true
       },
       {
@@ -2191,7 +2191,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-guides-overview/work-with-docker',
-        destination: '/getting-started/install-memgraph/docker',
+        destination: '/getting-started/first-steps-with-docker',
         permanent: true
       },
       {
@@ -2201,7 +2201,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-work-with-docker',
-        destination: '/getting-started/install-memgraph/docker',
+        destination: '/getting-started/first-steps-with-docker',
         permanent: true
       },
       {
@@ -2696,6 +2696,21 @@ module.exports = withNextra({
         destination: 'https://memgraph.github.io/gqlalchemy/under-the-hood/python-graph-translators/',
         permanent: true
       },
+      {
+        source: '/gqlalchemy/how-to-guides/query-builder/create-nodes-relationships',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/query-builder/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/query-builder/return-results',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/query-builder/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/ogm/map-nodes-and-relationships',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/ogm/',
+        permanent: true
+      },
       //END GQLAlchemy redirects
       //START 404 links redirects
       {
@@ -2839,6 +2854,11 @@ module.exports = withNextra({
         permanent: true
       },
       {
+        source: '/memgraph/2.4.0/connect-to-memgraph/drivers',
+        destination: '/client-libraries',
+        permanent: true
+      },
+      {
         source: '/memgraph/2.4.2/tutorials/understanding-music-with-modules',
         destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
@@ -2867,8 +2887,28 @@ module.exports = withNextra({
         source: '/memgraph/1.5.0/getting-started/installation',
         destination: '/getting-started/install-memgraph',
         permanent: true
-      }
-      //END 404 links redirects                  
+      },
+      {
+        source: '/mage/query-modules/python/pagerank',
+        destination: '/advanced-algorithms/available-algorithms/pagerank',
+        permanent: true
+      },
+      //END 404 links redirects
+      {
+        source: '/configuration/exposing-system-metrics',
+        destination: '/configuration/monitoring-server',
+        permanent: true
+      },       
+      {
+        source: '/configuration/ldap-security',
+        destination: '/configuration/auth-module',
+        permanent: true
+      },
+      {
+        source: '/memgraph/next/reference-guide/exposing-system-metrics',
+        destination: '/configuration/monitoring-server',
+        permanent: true
+      }                   
     ];
   },
 });
