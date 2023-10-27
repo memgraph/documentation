@@ -92,10 +92,14 @@ ANALYZE GRAPH ON LABELS :Label1 DELETE STATISTICS;
 ## Cartesian product
 
 Cartesian product is by default enabled in Memgraph. It enforces the usage of the `Cartesian`
-operator which can be shown when you run `EXPLAIN` or `PROFILE` like in the query below.
+operator which can be shown when you run `EXPLAIN` or `PROFILE`, like in the query below.
+
 
 ```cypher
-EXPLAIN MATCH (n:Person), (m:Employee) WHERE n.age < 30 and m.years_of_experience > 5 RETURN n, m;
+EXPLAIN MATCH (n:Person), (m:Employee) 
+WHERE n.age < 30 and m.years_of_experience > 5 
+RETURN n, m;
+
 ```
 
 ```
@@ -112,15 +116,18 @@ EXPLAIN MATCH (n:Person), (m:Employee) WHERE n.age < 30 and m.years_of_experienc
 +----------------------------------------------------------------------+
 ```
 
-From the query plan, we can observe that the advantage of the cartesian is filtering both its 
+From the query plan, we can observe that the advantage of the `Cartesian` operator is filtering both its 
 branches and therefore reduces the cardinality of the rows,
 before coming into the final operator `Produce` which streams the results.
 
-Known disadvantage of the cartesian operator is that it quickly builds up memory if there are a lot
+
+Known disadvantage of the `Cartesian` operator is that it quickly builds up memory if there are a lot
+
 of rows being produced from its branches. 
 
-Cartesian product can be disabled by setting the `--cartesian-product-enabled` flag to false, and it is
-also present as a run time configurable flag (check [database settings](/configuration/configuration-settings#during-runtime)).
+The cartesian product can be disabled by setting the `--cartesian-product-enabled` flag to `false`, and it is
+also present as a [run-time configurable flag](/configuration/configuration-settings#during-runtime).
+
 
 ## Index hinting
 
