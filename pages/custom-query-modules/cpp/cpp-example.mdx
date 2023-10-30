@@ -43,7 +43,7 @@ After you have started the Memgraph instance, you need to enter the shell. You c
 docker exec -u 0 -it memgraph bash
 ```
 
-This will start bash inside the container as root user. Since we need to install and compile stuff, we need to be root user.
+This will start bash inside the container4 as root user. Since we need to install and compile stuff, we need to be root user.
 
 ### Install the required dependecies 
 
@@ -126,7 +126,7 @@ void RandomWalk(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, m
 }
 
 extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *memory) {
-  mgp::memory = memory;
+  mgp::MemoryDispatcherGuard guard(memory);
  
   std::int64_t default_steps = 10;
   try {
@@ -172,7 +172,7 @@ In the file you can copy the following code:
 ```cmake
 cmake_minimum_required(VERSION 3.10.0)
 project(hello_query_module)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 add_library(_hello_query_module SHARED hello_query_module.cpp)
 ```
@@ -212,6 +212,13 @@ Once inside the mgconsole, you can load the query module by running the followin
 ```bash
 CALL mg.load_all();
 ```
+
+Check that the query module is loaded by running the following command:
+
+```bash
+CALL mg.procedures() YIELD *;
+```
+
 
 ### Test the query module
 
@@ -379,7 +386,7 @@ void AddXNodes(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mg
 }
 ```
 
-### Registering Magic function 
+#### Registering Magic function 
 
 Magic functions are a Memgraph feature that lets the user write and call custom
 Cypher functions. Unlike procedures, functions are simple operations that can’t
@@ -427,7 +434,7 @@ void Multiply(mgp_list *args, mgp_func_context *ctx, mgp_func_result *res, mgp_m
 ```
 
 
-### Registering Batched procedures
+#### Registering Batched procedures
 
 Batched readable and writeable procedures in C++ are pretty similar to batched procedures in C. The way procedures work is the same as in C API, the only difference is procedure registration.
 
@@ -465,6 +472,26 @@ extern "C" int mgp_init_module(struct mgp_module *module, struct mgp_memory *mem
 
 ### Read procedure example
 
+
+void GetNodesFromMemgraph(mgp_list *args, mgp_graph *memgraph_graph, mgp_result *result, mgp_memory *memory){
+    const mgp::RecordFactory record_factory = mgp::RecordFactory(result);
+    const mgp::List arguments = mgp::List(args);
+    const mgp::Graph graph(memgraph_graph);
+  
+  try {
+    mgp::Nodes::Iterator it = graph.Nodes().begin();
+    while (it != graph.Nodes().end()) {
+      auto record = record_factory.NewRecord();
+      mgp::Node node = *it;
+      record.Insert(kReturnNodes, std::move(node));
+      ++it;
+    }
+  } catch (const std::exception &e) {
+    mgp_error err = mgp_log(mgp_log_level::MGP_LOG_LEVEL_ERROR, "Issue with running the procedure!");      
+    record_factory.SetErrorMessage(e.what());
+    return;
+  }
+}
 TODO: Node, Edge, Path and property access and return
 
 
