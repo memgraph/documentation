@@ -481,7 +481,7 @@ MATCH (n:Person) SET n.age = n.age + 1;
 
 ### DELETE
 
-This clause is used to delete nodes and relationships from the database.
+This clause is used to delete nodes, relationships and paths from the database.
 
 For example, removing all relationships of a single type:
 
@@ -505,6 +505,14 @@ will remove relationships from a node you are deleting. The following should wor
 ```cypher
 MATCH (node) DETACH DELETE node;
 ```
+
+To delete the path you can use:
+
+```cypher
+MATCH p = (:X)-->()-->()-->()
+DETACH DELETE p;
+```
+
 
 More examples are available [here](/querying/clauses/delete).
 
