@@ -72,28 +72,42 @@ You might be interested in the following blog posts about link prediction:
 - [Node2Vec](https://memgraph.com/blog/link-prediction-with-node2vec-in-physics-collaboration-network)
 - [GNN Link prediction](https://memgraph.com/blog/building-a-recommendation-system-for-telecommunication-packages-using-graph-neural-networks)
 
-## Implementation details
-
 For the underlying **GNN** training Memgraph uses the [DGL library](https://github.com/dmlc/dgl/).
 
-### **Splitting the dataset**
+<Cards>
+  <Card
+    icon={<GitHub />}
+    title="Source code"
+    href="https://github.com/memgraph/mage/blob/main/python/link_prediction.py"
+  />
+</Cards>
 
-When setting the model paramaters, if you specify the `split_ratio 1.0`, the model will train normally on a
-whole dataset without validating its performance on a validation set. However,
-if the `split_ratio` is a value between 0.0 and 1.0 but the graph is
-too small to have such a split, an exception will be thrown.
+## Procedures
 
-#### **Self-loops**
+The **link prediction module** is used by calling the procedures in the following order:
 
-**Self-loop edge** is added to every node to improve **link_prediction**
-performance if specified by the user. **Self-loop edges** are added only as
-**edge_type** `self`, not in any other way, and to enable this, a custom module
-has been added.
+1. Set parameters by calling the `set_model_parameters` procedure.
+2. Train a model by calling the `train` procedure.
+3. Inspect training results (optional) by calling the `get_training_results` procedure.
+4. Predict the relationship between two vertices by calling the `predict` procedure.
+5. Find the most likely relationships by calling the `recommend` procedure.
 
-#### **Batch training**
+<Callout type="info"> 
 
-In heterogeneous graphs, all edges are used for creating the node’s
-neighbourhood but trained on only one edge type that can be set by the user.
+You can execute this algorithm on [graph projections,
+subgraphs or portions of the
+graph](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph).
+
+</Callout>
+
+### `set_model_parameters()`
+
+Start by setting the parameters that are going to be used in the training. If
+the graph is **heterogeneous** (more than one **edge type**), all edges are used
+for creating the node’s neighbourhood but trained on only one edge type that can
+be set by the `target_relation` parameter. Then the model could distinguish
+**supervision edges** (edges used in prediction) from **message passing edges**
+(used for message aggregation). 
 
 > For each gradient descent step, we select a mini-batch of nodes whose final
 > representations at the L-th layer are to be computed. We then take all or some
@@ -106,38 +120,31 @@ neighbourhood but trained on only one edge type that can be set by the user.
 >
 > -- DGL docs
 
-The reader is encouraged to take a look at the [DGL mini-batch explanation](https://docs.dgl.ai/guide/minibatch.html) for more details.
+Take a look at the [DGL mini-batch explanation](https://docs.dgl.ai/guide/minibatch.html) for more details.
 
-<Cards>
-  <Card
-    icon={<GitHub />}
-    title="Source code"
-    href="https://github.com/memgraph/mage/blob/main/python/link_prediction.py"
-  />
-</Cards>
+In the case of **homogeneous graph**, `target_relation` will be
+automatically inferred. 
 
-## Usage
+The `node_features_property` parameter must also be sent by the user to specify
+where the original node features are saved. Those are needed by the **graph neural
+networks** to compute **node embeddings**. 
 
-The **link prediction module** is used by calling the procedures in the following order:
+All other parameters are optional.
 
-1. Set parameters by calling the `set_model_parameters` procedure.
-2. Train a model by calling the `train` procedure.
-3. Inspect training results (optional) by calling the `get_training_results` procedure.
-4. Predict the relationship between two vertices by calling the `predict` procedure.
-5. Find the most likely relationships by calling the `recommend` procedure.
+When setting the model paramaters, if you specify the `split_ratio 1.0`, the
+model will train normally on a whole dataset without validating its performance
+on a validation set. However, if the `split_ratio` is a value between 0.0 and
+1.0 but the graph is too small to have such a split, an exception will be
+thrown.
 
-## Procedures
+**Self-loop edge** is added to every node to improve **link_prediction**
+performance if `add_self_loop` is set to `true`. **Self-loop edges** are added
+only as **edge_type** `self`, not in any other way.
 
-<Callout type="info">
-You can execute this algorithm on [graph projections, subgraphs or portions of the graph](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph).
-</Callout>
+Here is the description of all parameters supported by **link prediction** that
+you can set by calling the `set_model_parameters` method:
 
-The link prediction module is organized as a stateful module in which the user can run several methods one after another without losing the context. The user should start with setting the parameters that are going to be used in the training. If the graph is **heterogeneous** (more than one **edge type**), `target_relation` parameter must be set so the model could distinguish **supervision edges** (edges used in prediction) from **message passing edges** (used for message aggregation). In the case of **homogeneous graph**, `target relation` will be automatically inferred. `Node_features_property` must also be sent by the user to specify where are saved original node features. Those are needed by **graph neural networks** to compute **node embeddings**. All other parameters are optional.
-
-### `set_model_parameters()`
-
-Here is the description of all parameters supported by **link prediction** that you can set by calling the `set_model_parameters` method:
-#### **Input**:
+{<h4> Input: </h4>}
 
 | Name            | Type  | Default     | Description |
 | --------------- | ----- | ----------- | ----------- |
@@ -163,12 +170,17 @@ Here is the description of all parameters supported by **link prediction** that 
 | `sampling_workers` | int | `5` | Number of workers that will cooperate in the sampling procedure in the training and validation. |
 | `last_activation_function` | str | `sigmoid` | Activation function that is applied after the last layer in the model and before the `predictor_type`. Currently, only `sigmoid` is supported. |
 | `add_reverse_edges` | bool | `False` | Whether the module should add reverse edges for each existing edge in the obtained graph. If the source and destination node are of the same type, edges of the same edge type will be created. If the source and destination nodes are different, then the prefix `rev_` will be added to the previous edge type. Reverse edges will be excluded as message passing edges for corresponding supervision edges. |
+| `add_self_loop` | bool | `False` | Flag which specifies whether self loop edges will be added to every node in the graph with edge_type set to "self". |
 
-#### **Output**:
+{<h4> Output: </h4>}
+
 - `status: bool` -> `True` if all parameters were successfully updated, `False` otherwise.
 - `message: str` -> `OK` if all parameters were successfully updated, `Error message` otherwise.
 
-Only those parameters that need changing from their default values are sent when calling the procedure:
+{<h4> Usage: </h4>}
+
+When calling the procedure, send only those parameters that need changing from their default values:
+
 ```
 CALL link_prediction.set_model_parameters({num_epochs: 100, node_features_property: "features", tr_acc_patience: 8, target_relation: "CITES", batch_size: 256, last_activation_function: "sigmoid", add_reverse_edges: True})
 YIELD status, message
@@ -176,23 +188,39 @@ RETURN status, message;
 ```
 
 ### `train()`
-The `train` method doesn't take any parameters, so it is very simple to use.
 
-#### **Output**:
+The `train` procedure is used to train a model and it doesn't take any input parameters.
+
+{<h4> Output: </h4>}
+
 - `training_results: List[Dict[str, float]]` -> List of training results through epochs. Model's performance is evaluated every `console_log_freq` epochs.
 - `validation results: List[Dict[str, float]]` -> List of validation results through epochs. Model's performance is evaluated every `console_log_freq` epochs.
 
-You can just call
+{<h4> Usage: </h4>}
+
+To train the module and get the training and validation results summarized
+through epochs, use the following query:
+
 ```
 CALL link_prediction.train()
 YIELD training_results, validation_results
 RETURN training_results, validation_results;
 ```
-to get training and validation results summarized through epochs.
 
 ### `get_training_results()`
 
-The `get_training_results` method is used when the user wants to get performance data obtained from the last training. It is in the same form as a result of calling the training method. If there is no loaded model, the exception will be thrown.
+The `get_training_results()` procedure is used to get performance data obtained
+from the last training. The results are in the same format as the results of the
+`train()` procedure. If there is no loaded model, an exception will be thrown.
+
+{<h4> Output: </h4>}
+
+- `training_results: List[Dict[str, float]]` -> List of training results through epochs. Model's performance is evaluated every `console_log_freq` epochs.
+- `validation results: List[Dict[str, float]]` -> List of validation results through epochs. Model's performance is evaluated every `console_log_freq` epochs.
+
+{<h4> Usage: </h4>}
+
+To get the performance data from the last training, use the following query:
 
 ```
 CALL link_prediction.get_training_results()
@@ -200,20 +228,26 @@ YIELD training_results, validation_results;
 RETURN training_results, validation_results;
 ```
 
-#### **Output:**
-- `training_results: List[Dict[str, float]]` -> List of training results through epochs. Model's performance is evaluated every `console_log_freq` epochs.
-- `validation results: List[Dict[str, float]]` -> List of validation results through epochs. Model's performance is evaluated every `console_log_freq` epochs.
-
 ### `predict()`
 
-The `predict` method takes two arguments, **src_vertex** and **dest_vertex**, and predicts whether there is an edge between them or not. It supports an `“actual”` prediction scenario when the edge doesn’t exist and the user wants to predict whether there is an edge or not but also a scenario in which there is an edge between two vertices and the user wants to check the model’s evaluation.
+The `predict()` procedure takes two arguments, `src_vertex` and `dest_vertex`,
+and predicts whether there is an edge between them or not. It supports an
+`“actual”` prediction scenario when the edge doesn’t exist and the user wants to
+predict whether there is an edge or not but also a scenario in which there is an
+edge between two vertices and the user wants to check the model’s evaluation.
 
 {<h4> Input: </h4>}
-- `src_vertex: mgp.Vertex` -> Source vertex of the edge
+
+- `src_vertex: mgp.Vertex` -> Source vertex of the edge.
 - `dest_vertex: mgp.Vertex` -> Destination vertex of the edge.
 
 {<h4> Output: </h4>}
+
 - `score: mgp.Number` -> Score between 0 and 1 that represents the probability of two nodes being connected.
+
+{<h4> Usage: </h4>}
+
+To get a prediction about an existance of a relationship, use the following query:
 
 ```
 MATCH (v1:PAPER {id: "ID_1"})
@@ -225,16 +259,29 @@ RETURN score;
 
 ### `recommend()`
 
-The `recommend` method can be used to recommend the best k nodes from `dest_vertices` to `src_vertex`. It is implemented efficiently using the **max heap** data structure. The best nodes are determined based on the edge scores. Metrics specific to recommendation systems (**precision@k, recall@k, f1@k and average precision**) are logged to the **standard output**. **K** is equal to the given `min(k, length(dest_vertices), length(results))` where results are a list of all recommendations given by the model(classified as a positive example.)
+The `recommend()` procedure can be used to recommend the best k nodes from
+`dest_vertices` to `src_vertex`. It is implemented efficiently using the **max
+heap** data structure. The best nodes are determined based on the edge scores.
+Metrics specific to recommendation systems (**precision@k, recall@k, f1@k and
+average precision**) are logged to the **standard output**. **K** is equal to
+the given `min(k, length(dest_vertices), length(results))` where results are a
+list of all recommendations given by the model(classified as a positive
+example.)
 
 {<h4> Input: </h4>}
+
 - `src_vertex: mgp.Vertex` → Source node.
-- `dest_vertices: List[mgp.Vertex]` → destination nodes. If they are not of the same type, an exception is thrown.
+- `dest_vertices: List[mgp.Vertex]` → Destination nodes. If they are not of the same type, an exception is thrown.
 - `k: int` → Number of edges to recommend.
 
 {<h4> Output: </h4>}
+
 - `score: mgp.Number` → Score between 0 and 1 that represents the probability of two nodes being connected.
 - `recommendation: mgp.Vertex` → A reference to the target node.
+
+{<h4> Usage: </h4>}
+
+To get the k-nodes recommendations, use the following query: 
 
 ```
 MATCH (v1:Customer {id: "8779-QRDMV"})
@@ -247,32 +294,56 @@ RETURN v1, score, recommendation;
 
 ### `load_context()`
 
-Loading the context means loading the model and the predictor. If the user specifies the path, the method will try to load it from there. Otherwise, context will be loaded from the default parameter specified in the **link_prediction_parameters** module.
+Loading the context means loading the model and the predictor. If the user
+specifies the path, the method will try to load it from there. Otherwise,
+context will be loaded from the default parameter specified in the
+**link_prediction_parameters** module.
 
 {<h4> Input: </h4>}
+
 - `path: str` → Path to the folder where the model and the predictor are saved.
 
 {<h4> Output: </h4>}
+
 - `status: mgp.Any` → True to indicate that execution went well.
 
+{<h4> Usage: </h4>}
+
+To load the context, use the following query:
+
 ```
-CALL link_prediction.load_context() YIELD * RETURN *;
+CALL link_prediction.load_context()
+YIELD * 
+RETURN *;
 ```
 
 ### `reset_parameters()`
 
-You can explicitly reset parameters whenever you want. Note, however, that parameters will be reset before the training even if not specified because of implementation reasons.
+You can explicitly reset parameters whenever you want. Note, however, that
+parameters will be reset before the training even if not specified because of
+implementation reasons.
 
 {<h4> Output: </h4>}
+
 - `status: mgp.Any` → True to indicate that method is successfully finished.
 
+{<h4> Usage: </h4>}
+
+To reset the parameters, use the following query:
+
 ```
-CALL link_prediction.reset_parameters() YIELD * RETURN *;
+CALL link_prediction.reset_parameters()
+YIELD *
+RETURN *;
 ```
 
-## Results
+## Benchmarks
 
-We extensively tested our model on the [**CORA**](https://paperswithcode.com/dataset/cora) dataset and the Telecom recommendation dataset. To show you how the training performance could progress through epochs, here are the results for one of our basic models tried on the Cora dataset:
+Memgraph extensively tested the model on the
+[**CORA**](https://paperswithcode.com/dataset/cora) dataset and the Telecom
+recommendation dataset. To show you how the training performance could progress
+through epochs, here are the results for one of our basic models tried on the
+Cora dataset:
 
 | epoch_num | AUC   | accuracy | precision | recall | f1    |
 | --------- | ----- | -------- | --------- | ------ | ----- |
@@ -290,11 +361,14 @@ We extensively tested our model on the [**CORA**](https://paperswithcode.com/dat
 ## Example
 
 <Steps>
-### Input graph
+
+{<h3> Database state </h3>} 
+
+The database contains the following data: 
 
 ![](/pages/advanced-algorithms/available-algorithms/gnn_link_prediction/gnn-link-prediction-example-visualization.png)
 
-### Load commands
+Created with the following Cypher queries:
 
 ```cypher
 CREATE (v1:PAPER {id: 10, features: [1, 2, 3]});
@@ -306,22 +380,25 @@ MATCH (v2:PAPER {id: 11}), (v3:PAPER {id: 12}) CREATE (v2)-[e:CITES {}]->(v3);
 MATCH (v3:PAPER {id: 12}), (v4:PAPER {id: 13}) CREATE (v3)-[e:CITES {}]->(v4);
 MATCH (v4:PAPER {id: 13}), (v1:PAPER {id: 10}) CREATE (v4)-[e:CITES {}]->(v1);
 ```
+{<h3> Set model parameters </h3>} 
 
-### Set model parameters
+To set the model parameters, use the following query:
 
 ```cypher
 CALL link_prediction.set_model_parameters({target_relation: ["PAPER", "CITES", "PAPER"], node_features_property: "features",
 split_ratio: 1.0, predictor_type: "mlp", num_epochs: 100, hidden_features_size: [256], attn_num_heads: [1]}) YIELD * RETURN *;
 ```
 
-### Train
+{<h3> Train the module </h3>} 
+
+To train the module, use the following query:
 
 ```cypher
 CALL link_prediction.train() YIELD training_results, validation_results
 RETURN training_results, validation_results;
 ```
 
-### Train results
+Train results:
 
 ```plaintext
 +--------------------+--------------------+--------------------+--------------------+--------------------+
@@ -339,7 +416,9 @@ RETURN training_results, validation_results;
 | 26                 | 1.0                | 1.0                | 0.202              | 1.0                |
 ```
 
-### Predict
+{<h3> Predict relationships </h3>} 
+
+To predict relationships, use the following query:
 
 ```cypher
 MATCH (v1:PAPER {id: 10})
@@ -349,7 +428,7 @@ YIELD score
 RETURN score;
 ```
 
-### Predict results
+Result:
 
 ```plaintext
 +-------+
@@ -361,14 +440,23 @@ RETURN score;
 
 ## FAQ
 
-### **Why can I get into problems with reverse edges?**
+{<h3> Why can I get into problems with reverse edges? </h3>} 
 
-Having a `reverse_edge` in your dataset can be a problem if they are not excluded from `message passing edges` in the prediction of its `opposite edge`(`supervision edge`). The best thing you can do is have a `directed` graph and the module will automatically add reverse edges, if you specify `add_reverse_edges` in the `set_model_parameters` method, in a way that doesn't cause information flow.
-### **What is a transductive dataset split?**
+Having a `reverse_edge` in your dataset can be a problem if they are not
+excluded from `message passing edges` in the prediction of its `opposite
+edge`(`supervision edge`). The best thing you can do is have a `directed` graph
+and the module will automatically add reverse edges, if you specify
+`add_reverse_edges` in the `set_model_parameters` method, in a way that doesn't
+cause information flow.
 
-The transductive dataset split assumes that the entire graph can be observed in all dataset splits. We distinguish four types of edges, and those are: `validation`, `training`, `message passing` and `supervision edges`.
+{<h3> What is a transductive dataset split? </h3>} 
+
+The transductive dataset split assumes that the entire graph can be observed in
+all dataset splits. We distinguish four types of edges, and those are:
+`validation`, `training`, `message passing` and `supervision edges`.
 
 ![](/pages/advanced-algorithms/available-algorithms/gnn_link_prediction/gnn-link-prediction-transductive-dataset-split.png)
 
-The transductive dataset split is described in detail by prof. Jure Leskovec at one of its presentations for [Graph ML course](https://snap.stanford.edu/class/cs224w-2020/slides/08-GNN-application.pdf).
-
+The transductive dataset split is described in detail by prof. Jure Leskovec at
+one of its presentations for [Graph ML
+course](https://snap.stanford.edu/class/cs224w-2020/slides/08-GNN-application.pdf).
