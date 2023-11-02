@@ -97,7 +97,7 @@ background map.
 Here is the list of all properties that can be defined in the `@ViewStyle.Map`
 directive, along with their expected types.
 
-#### 1. `tile-layer: string: "detailed" | "light" | "dark" | "basic" | "satellite"`
+#### `tile-layer: string: "detailed" | "light" | "dark" | "basic" | "satellite"`
 
 Sets the map tile for the map background. The default map tile is `"light"`.
 
