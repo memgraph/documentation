@@ -67,9 +67,11 @@ ANALYZE GRAPH ON LABELS :Label1, :Label2;
 
 ### Delete statistic
 
-If you want the database to ignore information about the average group size, the
-chi-squared statistic and the average degree, the existing statistic can be
-deleted by running:
+Information about the graph is persistent between instance reruns as is
+recovered as all the other data, using [snapshots and WAL
+files](/configuration/data-durability-and-backup). If you want the database to
+ignore information about the average group size, the chi-squared statistic and
+the average degree, the existing statistic can be deleted by running:
 
 ```cypher
 ANALYZE GRAPH DELETE STATISTICS;
@@ -86,6 +88,46 @@ Specific labels can be specified with the construct `ON LABELS`:
 ```cypher
 ANALYZE GRAPH ON LABELS :Label1 DELETE STATISTICS;
 ```
+
+## Cartesian product
+
+Cartesian product is by default enabled in Memgraph. It enforces the usage of the `Cartesian`
+operator which can be shown when you run `EXPLAIN` or `PROFILE`, like in the query below.
+
+
+```cypher
+EXPLAIN MATCH (n:Person), (m:Employee) 
+WHERE n.age < 30 and m.years_of_experience > 5 
+RETURN n, m;
+
+```
+
+```
++----------------------------------------------------------------------+
+| QUERY PLAN                                                           |
++----------------------------------------------------------------------+
+| " * Produce {n, m}"                                                  |
+| " * Cartesian {m : n}"                                               |
+| " |\\ "                                                              |
+| " | * ScanAllByLabelPropertyRange (n :Person {age})"                 |
+| " | * Once"                                                          |
+| " * ScanAllByLabelPropertyRange (m :Employee {years_of_experience})" |
+| " * Once"                                                            |
++----------------------------------------------------------------------+
+```
+
+From the query plan, we can observe that the advantage of the `Cartesian` operator is filtering both its 
+branches and therefore reduces the cardinality of the rows,
+before coming into the final operator `Produce` which streams the results.
+
+
+Known disadvantage of the `Cartesian` operator is that it quickly builds up memory if there are a lot
+
+of rows being produced from its branches. 
+
+The cartesian product can be disabled by setting the `--cartesian-product-enabled` flag to `false`, and it is
+also present as a [run-time configurable flag](/configuration/configuration-settings#during-runtime).
+
 
 ## Index hinting
 
@@ -151,7 +193,7 @@ produced plan and gain insight into the execution of a query.
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `Accumulate`                    | Accumulates the input it received.                                                                                       |
 | `Aggregate`                     | Aggregates the input it received.                                                                                        |
-| `Apply`                         | Joins the returned symbols from two branches of execution.                                                              |
+| `Apply`                         | Joins the returned symbols from two branches of execution.                                                               |
 | `CallProcedure`                 | Calls a procedure.                                                                                                       |
 | `Cartesian`                     | Applies the Cartesian product (the set of all possible ordered combinations consisting of one member from each of those sets) on the input it received. |
 | `ConstructNamedPath`            | Creates a path.                                                                                                          |
@@ -165,7 +207,8 @@ produced plan and gain insight into the execution of a query.
 | `ExpandVariable`                | Performs a node expansion of a variable number of relationships                                                          |
 | `Filter`                        | Filters the input it received.                                                                                           |
 | `Foreach`                       | Iterates over a list and applies one or more update clauses.                                                             |
-| `HashJoin`                      | Performs a hash join of the input from its two input branches.                                                                                 |
+| `HashJoin`                      | Performs a hash join of the input from its two input branches.                                                           |
+| `IndexedJoin`                   | Performs an indexed join of the input from its two input branches.                                                       |
 | `Limit`                         | Limits certain rows from the pull chain.                                                                                 |
 | `LoadCsv`                       | Loads CSV file in order to import files into the database.                                                               |
 | `Merge`                         | Applies merge on the input it received.                                                                                  |
