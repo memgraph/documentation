@@ -87,13 +87,24 @@ If this algorithm implementation is too slow for your use case, [contact us](mai
 
 ## Procedures
 
+The basic node classification workflow is as follows:
+
+1. Load data to Memgraph.
+2. Set updater parameters by calling the `set_streamwalk_updater()` procedure. 
+3. Set learner parameters by calling the `set_streamwalk_learner()` procedure. 
+3. Call the `update()` procedure to set the node embeddings.
+4. Inspect the results by calling the `get()` procedures.
+5. If you want to reset the parameters and start again, call the `restart()` procedure.
+
 <Callout type="info">
 You can execute this algorithm on [graph projections, subgraphs or portions of the graph](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph).
 </Callout>
 
 ### `set_streamwalk_updater()`
 
-Use the procedure to 
+Use the procedure to sample the temporal random walks in the graph. Once the
+`set_word2vec_learner()` parameters are set, you first need to call the
+`reset()` procedure to update the parameters.
 
 {<h4> Input: </h4>}
 
@@ -103,9 +114,38 @@ Use the procedure to
 * `beta: float` ➡ The damping factor for long paths.
 * `cutoff: integer` ➡ A temporal cutoff in seconds to exclude very distant past.
 * `sampled_walks: integer` ➡ The number of sampled walks for each edge update.
-* `full_walks: boolean` ➡  Return every node of the sampled walk for representation
-learning (`full_walks=True`) or only the endpoints of the walk
-(`full_walks=False`)
+* `full_walks: boolean` ➡  An option to return every node of the sampled walk
+for representation learning (`full_walks=True`) or only the endpoints of the
+walk (`full_walks=False`).
+
+{<h4> Output: </h4>}
+
+* `message: string` ➡ Whether parameters are set or they need to be reset.
+
+{<h4> Usage: </h4>}
+
+To start sampling the temporal random walks, use the following query:
+
+```cypher
+CALL node2vec_online.set_streamwalk_updater(7200, 3, 0.9, 604800, 4, False) 
+YIELD message RETURN message;
+```
+
+### `set_word2vec_learner()`
+
+Use the procedure to calculate embeddings. To recalculate embeddings with
+different parameters, you first need to call the `reset()` procedure to update
+the parameters.
+
+{<h4> Input: </h4>}
+
+* `embedding_dimension: integer` ➡ The number of dimensions in the representation of the
+  embedding vector.
+* `learning_rate: float` ➡ The learning rate.
+* `skip_gram: boolean (default=True)` ➡ Whether to use skip-gram model (`True`) or
+  continuous-bag-of-words (CBOW) (`False`).
+* `negative_rate: integer` ➡ Negative rate for Gensim Word2Vec model.
+* `threads: integer` ➡ Maximum number of threads for parallelization.
 
 {<h4> Output: </h4>}
 
@@ -114,64 +154,34 @@ learning (`full_walks=True`) or only the endpoints of the walk
 {<h4> Usage: </h4>}
 
 ```cypher
-CALL node2vec_online.set_streamwalk_updater(7200, 3, 0.9, 604800, 4, False);
-```
-
-### `set_word2vec_learner()`
-
-{<h4> Input: </h4>}
-
-* `embedding_dimension: integer` ➡ Number of dimensions in the representation of the
-  embedding vector
-* `learning_rate: float` ➡ Learning rate
-* `skip_gram: boolean` ➡ Whether to use skip-gram model (True) or
-  continuous-bag-of-words (CBOW)
-* `negative_rate: integer` ➡ Negative rate for Gensim Word2Vec model
-* `threads: integer` ➡ Maximum number of threads for parallelization
-
-{<h4> Output: </h4>}
-
-* `message: string` ➡ Whether parameters are set or they need to be reset
-
-{<h4> Usage: </h4>}
-
-```cypher
-CALL node2vec_online.set_word2vec_learner(128, 0.01, True, 10, 1);
-```
-
-### `get()`
-
-{<h4> Output: </h4>}
-
-* `node: mgp.Vertex` ➡ Node in the graph for which embedding exists
-* `embedding: mgp.List[mgp.Number]` ➡ Embedding for the given node
-
-{<h4> Usage: </h4>}
-
-```cypher
-CALL node2vec_online.get();
+CALL node2vec_online.set_word2vec_learner(128, 0.01, True, 10, 1)
+YIELD message RETURN message;
 ```
 
 ### `update()`
 
+Use the `udpate()` procedure to (re)calculate embeddings.
+
 ### Input:
 
-* `edges: mgp.List[mgp.Edge]` ➡  List of edges added to the graph. For those
-  nodes only `node2vec_online` calculates embeddings.
+* `edges: mgp.List[mgp.Edge]` ➡  A list of relationships added to the graph.
+  Embeddings will be (re)calculated only for the starting and ending nodes of those
+  new relationships. 
 
 {<h4> Usage: </h4>}
 
-There are a few options here. The first one is to create a trigger, so every
-time an edge is added to graph, the trigger calls a procedure and makes an
-update.
+You can use the `update()` procedure in two ways.
+
+You can create a trigger, so every time a relationships is added to graph, the
+trigger calls a procedure and makes an update;
 
 ```cypher
 CREATE TRIGGER trigger ON --> CREATE BEFORE COMMIT
 EXECUTE CALL node2vec_online.update(createdEdges) YIELD *;
 ```
 
-The second option is to add all the edges and then call the algorithm with those
-edges:
+Or, you can filter out certain relationships and call the algorithm with those
+relationships:
 
 ```cypher
 MATCH (n)-[e]->(m)
@@ -181,7 +191,25 @@ WITH 1 as x
 RETURN x;
 ```
 
+### `get()`
+
+The `get()` procedure returns the node embeddings.
+
+{<h4> Output: </h4>}
+
+* `node: mgp.Vertex` ➡ The node in the graph for which embedding exists.
+* `embedding: mgp.List[mgp.Number]` ➡ Embedding for the given node.
+
+{<h4> Usage: </h4>}
+
+```cypher
+CALL node2vec_online.get()
+YIELD message RETURN message;
+```
+
 ### `reset()`
+
+Use the procedure to reset the updater and learner parameters.
 
 {<h4> Output: </h4>}
 
@@ -189,42 +217,80 @@ RETURN x;
 
 {<h4> Usage: </h4>}
 
+To reset the parameters, use the following query: 
+
 ```cypher
-CALL node2vec_online.reset();
+CALL node2vec_online.reset()
+YIELD message RETURN message;
 ```
 
 ### `help()`
 
+The procedure will return procedures available in the query module, their
+parameters and descriptions. 
+
 {<h4> Output: </h4>}
 
-* `name: string` ➡ Name of available functions
-* `value: string` ➡ Documentation for every function
+* `name: string` ➡ The name of available functions.
+* `value: string` ➡ Documentation for every function.
 
 {<h4> Usage: </h4>}
 
+To get help, use the following query:
+
 ```cypher
-CALL node2vec_online.help();
+CALL node2vec_online.help()
+YIELD name, value RETURN name, value;
 ```
 
 ## Example
 
 <Steps>
 
-### Input graph
+{<h3> Database state </h3>} 
 
-![](/pages/advanced-algorithms/available-algorithms/node2vec_online/node2vec-online.png)
+The database contains the following data: 
 
-### Set parameters and trigger
+![Input graph](/pages/advanced-algorithms/available-algorithms/node2vec/node2vec.png)
+
+Created with the following Cypher queries:
+
+MERGE (n:Node {id: 1}) MERGE (m:Node {id: 6}) CREATE (n)-[:RELATION]->(m);
+MERGE (n:Node {id: 2}) MERGE (m:Node {id: 6}) CREATE (n)-[:RELATION]->(m);
+MERGE (n:Node {id: 10}) MERGE (m:Node {id: 5}) CREATE (n)-[:RELATION]->(m);
+MERGE (n:Node {id: 5}) MERGE (m:Node {id: 2}) CREATE (n)-[:RELATION]->(m);
+MERGE (n:Node {id: 9}) MERGE (m:Node {id: 7}) CREATE (n)-[:RELATION]->(m);
+MERGE (n:Node {id: 7}) MERGE (m:Node {id: 3}) CREATE (n)-[:RELATION]->(m);
+MERGE (n:Node {id: 3}) MERGE (m:Node {id: 6}) CREATE (n)-[:RELATION]->(m);
+MERGE (n:Node {id: 9}) MERGE (m:Node {id: 8}) CREATE (n)-[:RELATION]->(m);
+MERGE (n:Node {id: 8}) MERGE (m:Node {id: 4}) CREATE (n)-[:RELATION]->(m);
+MERGE (n:Node {id: 4}) MERGE (m:Node {id: 6}) CREATE (n)-[:RELATION]->(m);
+
+{<h3> Set the paramaters </h3>} 
+
+To set the parameters for the updater and the learner, use the following query:
 
 ```cypher
-CALL node2vec_online.set_streamwalk_updater(7200, 2, 0.9, 604800, 2, True) YIELD *;
-CALL node2vec_online.set_word2vec_learner(2, 0.01, True, 1, 1) YIELD *;
-
-CREATE TRIGGER trigger ON --> CREATE BEFORE COMMIT
-EXECUTE CALL node2vec_online.update(createdEdges) YIELD *;
+CALL node2vec_online.set_streamwalk_updater(7200, 2, 0.9, 604800, 2, True) 
+YIELD message RETURN message;
+CALL node2vec_online.set_word2vec_learner(2, 0.01, True, 1, 1) 
+YIELD message RETURN message;
 ```
 
-### Load commands
+{<h3> Set a trigger </h3>} 
+
+In order to recalculate node embeddings when new relationships are added to the
+graph, create a [trigger](/fundamentals/triggers):
+
+```
+CREATE TRIGGER trigger ON --> CREATE BEFORE COMMIT
+EXECUTE CALL node2vec_online.update(createdEdges) 
+YIELD *;
+```
+
+{<h3> Add new relationships</h3>} 
+
+Use the following queries to add new relationships between nodes:
 
 ```cypher
 MERGE (n:Node {id: 1}) MERGE (m:Node {id: 6}) CREATE (n)-[:RELATION]->(m);
@@ -241,15 +307,18 @@ MERGE (n:Node {id: 8}) MERGE (m:Node {id: 4}) CREATE (n)-[:RELATION]->(m);
 MERGE (n:Node {id: 4}) MERGE (m:Node {id: 6}) CREATE (n)-[:RELATION]->(m);
 ```
 
-### Running command
+{<h3> Calculate embeddings </h3>} 
+
+Use the following query to get the calculated embeddings: 
 
 ```cypher
-CALL node2vec_online.get() YIELD node, embedding
+CALL node2vec_online.get() 
+YIELD node, embedding
 RETURN node, embedding
 ORDER BY node.id;
 ```
 
-Step 5: Results
+Results:
 
 ```plaintext
 +-------------------------+-------------------------+
