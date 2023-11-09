@@ -15,7 +15,7 @@ latest version of Memgraph database, take a look at the list below.
 ## Linux
 
 ### Amazon Linux 2
-- [https://download.memgraph.com/memgraph/v2.12.0/amzn-2/memgraph-2.12.0_1-1.x86_64.rpm](https://download.memgraph.com/memgraph/v2.12.0/amzn-2/memgraph-2.12.0_1-1.x86_64.rpm)
+- [https://download.memgraph.com/memgraph/v2.12.0/amzn-2/memgraph-2.12.0-1.x86_64.rpm](https://download.memgraph.com/memgraph/v2.12.0/amzn-2/memgraph-2.12.0-1.x86_64.rpm)
 
 ### CentOS
 - [https://download.memgraph.com/memgraph/v2.12.0/centos-7/memgraph-2.12.0_1-1.x86_64.rpm](https://download.memgraph.com/memgraph/v2.12.0/centos-7/memgraph-2.12.0_1-1.x86_64.rpm)
