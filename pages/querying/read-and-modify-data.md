@@ -506,7 +506,8 @@ will remove relationships from a node you are deleting. The following should wor
 MATCH (node) DETACH DELETE node;
 ```
 
-To delete a path can the following syntax:
+To delete a path, use the following syntax:
+
 
 
 ```cypher
