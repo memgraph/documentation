@@ -508,8 +508,6 @@ MATCH (node) DETACH DELETE node;
 
 To delete a path, use the following syntax:
 
-
-
 ```cypher
 MATCH p = (:X)-->()-->()-->()
 DETACH DELETE p;
