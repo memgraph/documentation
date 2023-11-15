@@ -506,13 +506,13 @@ will remove relationships from a node you are deleting. The following should wor
 MATCH (node) DETACH DELETE node;
 ```
 
-To delete the path you can use:
+To delete a path can the following syntax:
+
 
 ```cypher
 MATCH p = (:X)-->()-->()-->()
 DETACH DELETE p;
 ```
-
 
 More examples are available [here](/querying/clauses/delete).
 
