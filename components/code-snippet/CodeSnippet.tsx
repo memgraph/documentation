@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 
 declare global {
   interface Window {
@@ -10,9 +11,19 @@ declare global {
 }
 
 export default function CodeSnippet(props: { code: string; page: string }) {
+  const [copyIconUrl, setCopyIconUrl] = useState("/docs/copy-icon.svg"); 
+  const [copiedIconUrl, setCopiedIconUrl] = useState("/docs/copied-icon.svg"); 
   const { theme } = useTheme();
-  let copyIconUrl = ((theme === "dark") ? "/docs/copy-icon-dark.svg" : "/docs/copy-icon.svg");
-  let copiedIconUrl = ((theme === "dark") ? "/docs/copied-icon-dark.svg" : "/docs/copied-icon.svg");
+
+  useEffect(() => {
+    if (theme === "light") {
+      setCopyIconUrl("/docs/copy-icon.svg");
+      setCopiedIconUrl("/docs/copied-icon.svg")
+    } else {
+      setCopyIconUrl("/docs/copy-icon-dark.svg");
+      setCopiedIconUrl("/docs/copied-icon-dark.svg")
+    }
+  }, [theme]);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(props.code);
