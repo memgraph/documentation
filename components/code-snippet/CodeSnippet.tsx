@@ -1,20 +1,25 @@
-"use client"
+"use client";
 
 import Image from "next/image";
+import { useTheme } from "next-themes";
 
 declare global {
-    interface Window {
-        analytics: any
-    }
+  interface Window {
+    analytics: any;
+  }
 }
 
-export default function CodeSnippet(props: { code: string, page: string }) {
+export default function CodeSnippet(props: { code: string; page: string }) {
+  const { theme } = useTheme();
+  let copyIconUrl = ((theme === "dark") ? "/docs/copy-icon-dark.svg" : "/docs/copy-icon.svg");
+  let copiedIconUrl = ((theme === "dark") ? "/docs/copied-icon-dark.svg" : "/docs/copied-icon.svg");
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(props.code);
     global.window.analytics.track("Docker Run Copied", {
       source: "docs",
-      page: props.page
-    })
+      page: props.page,
+    });
     document.getElementById("copy-text")?.classList.add("hidden");
     document.getElementById("copied-text")?.classList.remove("hidden");
     setTimeout(() => {
@@ -23,31 +28,29 @@ export default function CodeSnippet(props: { code: string, page: string }) {
     }, 2000);
   };
   return (
-    <div className="p-[16px] leading-[20px] text-[13px] flex flex-row bg-[#f9f9f9] text-[#231F20] rounded-[12px] justify-between">
-      <div className="">
-        <code>{props.code}</code>
-      </div>
+    <div className="mt-[24px] p-[12px] text-[13px] flex flex-row bg-[#f9f9f9] dark:bg-[#3a3536] text-[#231F20] dark:text-[#f9f9f9] rounded-[12px] items-center justify-between">
+      <code>{props.code}</code>
       <button
-        className=""
+        className="shrink-0"
         onClick={copyToClipboard}
         data-tooltip-target="tooltip-click"
         data-tooltip-trigger="click"
       >
         <Image
           alt="copy"
-          src="/docs/copy.svg"
+          src={copyIconUrl}
           id="copy-text"
-          className="cursor-pointer shrink-0"
-          width={20}
-          height={20}
+          className="cursor-pointer"
+          width={30}
+          height={30}
         />
         <Image
           alt="copied"
-          src="/docs/copied.svg"
+          src={copiedIconUrl}
           id="copied-text"
-          className="hidden shrink-0"
-          width={20}
-          height={20}
+          className="hidden"
+          width={30}
+          height={30}
         />
       </button>
     </div>
