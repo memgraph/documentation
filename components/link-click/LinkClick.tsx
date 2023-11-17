@@ -17,6 +17,6 @@ export default function LinkClick(props: { link: string, os: string, distributio
     });
   };
   return (
-      <a href={props.link} onClick={handleClick} className="border-b-[1px] border-[#8c0082] rounded-none">{props.link}</a>
+      <a href={props.link} onClick={handleClick} className="border-b-[1px] border-[#8c0082] rounded-none dark:border-b-0">{props.link}</a>
   );
 }
