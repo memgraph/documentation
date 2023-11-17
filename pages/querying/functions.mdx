@@ -157,11 +157,69 @@ This section contains the list of built-in query modules and their procedures.
 
 ### Schema
 
-The `schema` procedures return information about the database schema.
+The `schema` procedures return information about the database schema and can be used to assert constraints and indices exist in the database.
 
 <Callout type="info">
 You can execute these procedures on [graph projections, subgraphs or portions of the graph using the `project` function](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph).
 </Callout>
+
+{<h4> <code> schema.assert() </code> </h4>}
+
+The `schema.assert()` is used to assert indices and constraints exist in Memgraph.
+
+{<h5> Input: </h5>}
+
+- `indices_map: (mgp.Map, required)`: Map of a label string to a list of string properties. For each property string, if it is empty, label-index will be created, 
+  otherwise label+property index will be created. If the provided list is empty, label index will be created.
+- `unique_constraints: (mgp.Map, required)`: Map of a label string a list of lists containing string properties. List of lists is required since unique constraints can be created on a combination
+  of multiple properties.
+- `existence_constraints: (mgp.Map, optional)`: Map of a label string to a list of string properties. For each property, one existence constraint is created.
+- `drop_existing: (bool, optional, default=true)`: If true, all existing indices and constraints will be dropped. If the user asserts index or constraint which already exist, such won't be dropped
+  and re-created.
+
+{<h5> Output: </h5>}
+
+- `label: string` - Label used for modifying index or constraint.
+- `key: string` - Property(ies) used for modifying index or constraint. For label index, empty string is returned. For unique constraints, where key could be a list of properties, stringified list is returned.
+- `keys: List[string]` - List of properties used for modifying index or constraint.
+- `unique: bool` - true if record modified unique constraint, false for existence constraint and indices.
+
+{<h5> Example: </h5>}
+
+Let's create initial indices and constraints in the database.
+```
+CREATE INDEX ON :Entity;
+CREATE CONSTRAINT ON (p:Person) ASSERT EXISTS (p.address);
+CREATE CONSTRAINT ON (p:Person) ASSERT p.id IS UNIQUE;
+```
+
+The following query will create label index on :Person, label+property index on :Person(id), unique constraints on (Person.name, Person.surname) and (Person.id).
+It will drop label index on :Entity and existence constraint on :Person(id).
+
+```cypher
+CALL schema.assert({Person: ["", "id"]}, {Person: [["name", "surname"], ["id"]]}, {}, true) YIELD * RETURN *;
+```
+
+Results:
+
+```plaintext
++-----------------------------------------------------------------------------+
+| action     | key               | keys                | label       | unique |
++-----------------------------------------------------------------------------+
+| "Created"  | ""                | []                  | "Person"    | false  |
++-----------------------------------------------------------------------------+
+| "Created"  | "id"              | ["id"]              | "Person"    | false  |
++-----------------------------------------------------------------------------+
+| "Dropped"  | ""                | []                  | "Entity"    | false  |
++-----------------------------------------------------------------------------+
+| "Dropped"  | "address"         | ["address"]         | "Person"    | false  |
++-----------------------------------------------------------------------------+
+| "Created"  | "[name, surname]" | ["name", "surname"] | "Person"    | true   |
++-----------------------------------------------------------------------------+
+| "Kept"     | "id"              | ["id"]              | "Person"    | true   |
++-----------------------------------------------------------------------------+
+```
+
 
 {<h4> <code> schema.node_type_properties() </code> </h4>}
 
