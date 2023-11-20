@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useTheme } from "next-themes";
+import { useTheme } from "nextra-theme-docs";
 import { useEffect, useState } from "react";
 
 declare global {
