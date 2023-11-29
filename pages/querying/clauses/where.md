@@ -161,8 +161,8 @@ Output:
 
 ### 1.7. Filter with pattern expressions
 
-Currently, we support pattern expression filters with the `exists(pattern)` function, which can perform filters based on
-neighboring entities:
+Currently, we support pattern expression filters with the `exists(pattern)`
+function, which can perform filters based on neighboring entities:
 
 ```cypher
 MATCH (p:Person)
@@ -170,6 +170,8 @@ WHERE exists((p)-[:LIVING_IN]->(:Country {name: 'Germany'}))
 RETURN p.name
 ORDER BY p.name;
 ```
+
+The [`exists()` function](/querying/functions#pattern-functions) can be used only with the `WHERE` clause.
 
 Output:
 

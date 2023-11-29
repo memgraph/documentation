@@ -5,15 +5,32 @@ description: Get to know how to make use of Memgraph's periodic module to execut
 
 import { Callout } from 'nextra/components'
 import { Steps } from 'nextra/components'
+import { Card, Cards } from 'nextra/components'
+import GitHub from '/components/icons/GitHub'
 
 # periodic
-
-
 
 The **periodic module** enables users to execute a query periodically in
 batches. In this case, the name periodic doesn't indicate that the query is
 executed after a time interval, but rather that, due to the complexity of the
 query, the results of some input source are batched to speed up execution.
+
+<Callout type="info">
+
+If you enabled [authentication](/configuration/security#creating-users) in
+Memgraph, set the following environment variables to be able to use the
+procedures in the query module: 
+
+- `MG_HOST`
+- `MG_PORT`
+- `MG_USERNAME`
+- `MG_PASSWORD`
+
+These environment variables are different from the [MEMGRAPH environment
+variables](/configuration/configuration-settings#environment-variables) and need
+to be set in addition to them. 
+
+</Callout>
 
 <Callout type="warning">
 
@@ -23,59 +40,83 @@ procedure, the already committed batches cannot be rolled back.
 
 </Callout>
 
-[![docs-source](https://img.shields.io/badge/source-graph_util-FB6E00?logo=github&style=for-the-badge)](https://github.com/memgraph/mage/blob/main/cpp/graph_util_module/graph_util_module.cpp)
+<Cards>
+  <Card
+    icon={<GitHub />}
+    title="Source code"
+    href="https://github.com/memgraph/mage/blob/main/cpp/graph_util_module/graph_util_module.cpp"
+  />
+</Cards>
 
-| Trait               | Value                                                                                                     |
-| ------------------- | --------------------------------------------------------------------------------------------------------- |
-| **Module type**     | module                               |
-| **Implementation**  | C++                                 |
-| **Parallelism**     | sequential                         |
+| Trait               | Value            |
+| ------------------- | ---------------- |
+| **Module type**     | module           |
+| **Implementation**  | C++              |
+| **Parallelism**     | sequential       |
 
 ### Procedures
+
+The procedure executes a query periodically in batches.
 
 ### `iterate()`
 
 {<h4> Input: </h4>}
 
-- `input_query: string` ➡ the input query which will yield the results that need to be batched
-- `running_query: string` ➡ query which will be executed on the batched results
-- `config: Map[string, int]` ➡ parameters for the procedure
-  - `batch_size: Integer` ➡ key specifying how many results should a batch contain
-
+- `input_query: string` ➡ The input query which will yield the results that need to be batched.
+- `running_query: string` ➡ The query which will be executed on the batched results:
+- `config: Map[string, int]` ➡ Procedure parameters:
+  - `batch_size: Integer` ➡ The value specifies the number of results in a batch.
 
 {<h4> Output: </h4>}
 
-- `success: boolean` ➡ `true` if the procedure executed successfully, `false` otherwise
-- `number_of_executed_batches: Integer` ➡ number of executed batches (possibly a fraction of the full number if the procedure returned `success: false`)
+- `success: boolean` ➡ `true` if the procedure executed successfully as a whole, `false` otherwise.
+- `number_of_executed_batches: Integer` ➡ The number of executed batches (possibly a fraction of the full number if the procedure returned `success: false`).
 
 {<h4> Usage: </h4>}
+
+To batch results, use the following query:
 
 ```cypher
 CALL periodic.iterate(
   "LOAD CSV FROM '/tmp/file.csv' WITH HEADER AS row RETURN row.node_id AS node_id, row.supernode_id AS supernode_id", 
   "MATCH (s:SuperNode {supernode_id: supernode_id}), (n:Node {node_id: node_id}) CREATE (s)-[:HAS_REL_TO]->(n)", 
   {batch_size: 5000}) 
-YIELD * RETURN *;
+YIELD success, number_of_executed_batches
+RETURN success, number_of_executed_batches;
 ```
 
 ## Example
 
+The example shows how to import relationships that create a supernode from a CSV
+file.
+
 <Steps>
-### Cypher load commands
+
+{<h3> Create indexes </h3>} 
+
+First, create indexes on all relevant labels and properties to speed up import.
 
 ```cypher
 CREATE INDEX ON :SuperNode;
 CREATE INDEX ON :SuperNode(supernode_id);
 CREATE INDEX ON :Node;
 CREATE INDEX ON :Node(node_id);
+```
 
+{<h3> Create nodes </h3>} 
+
+At the end of the example, one node will be connected to the other million
+nodes. The following query will create a million and one nodes.
+
+```
 CREATE (:SuperNode {supernode_id: 1});
 FOREACH (i IN range(1, 1000000) | CREATE (:Node {id: i}));
 ```
 
-### CSV file present
+{<h3> The CSV file </h3>} 
 
-The CSV file should contain the following data:
+The CSV file contains the data needed to create the relationships, the ID of a
+start node and the end node of a relationship:
 
 ```cypher
 supernode_id,node_id
@@ -91,17 +132,21 @@ supernode_id,node_id
 1,1000000
 ```
 
-### Running command
+{<h3> The `periodic.iterate()` procedure </h3>} 
+
+The procedure will execute the relationship creation between a supernode and all
+the other nodes based on the CSV file in batches:
 
 ```cypher
 CALL periodic.iterate(
   "LOAD CSV FROM '/tmp/file.csv' WITH HEADER AS row RETURN row.node_id AS node_id, row.supernode_id AS supernode_id",
   "MATCH (s:SuperNode {supernode_id: supernode_id}), (n:Node {node_id: node_id}) CREATE (s)-[:HAS_REL_TO]->(n)",
   {batch_size: 5000})
-YIELD * RETURN *;
+YIELD success, number_of_executed_batches
+RETURN success, number_of_executed_batches;
 ```
 
-### Results
+Result: 
 
 ```plaintext
 +------------------+----------------------------+
@@ -109,5 +154,6 @@ YIELD * RETURN *;
 +------------------+----------------------------+
 | true             | 200                        |
 +------------------+----------------------------+
+
 ```
 </Steps>
