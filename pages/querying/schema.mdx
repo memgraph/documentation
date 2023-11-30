@@ -7,13 +7,13 @@ import { Callout } from 'nextra/components'
 
 # Schema
 
-The `schema` procedures return information about the database schema.
+The procedures inside the `schema` module return information about the database schema and can be used to ensure constraints and indices exist in the database.
 
 <Callout type="info">
 You can execute these procedures on [graph projections, subgraphs or portions of the graph using the `project` function](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph).
 </Callout>
 
-{<h2><code> schema.node_type_properties() </code> </h2>}
+## node_type_properties()
 
 The `schema.node_type_properties()` procedure returns schema information about nodes and their properties in the graph.
 
@@ -27,12 +27,14 @@ The `schema.node_type_properties()` procedure returns schema information about n
 
 {<h3> Usage: </h3>}
 
+To get the information about nodes and properties, run the following query:
+
 ```cypher
 CALL schema.node_type_properties() 
 YIELD nodeType, nodeLabels, mandatory, propertyName, propertyTypes; 
 ```
 
-{<h2><code> schema.rel_type_properties() </code> </h2>}
+## rel_type_properties()
 
 This `schema.rel_type_properties()` procedure returns schema information about relationships and their properties in the graph.
 
@@ -45,12 +47,93 @@ This `schema.rel_type_properties()` procedure returns schema information about r
 
 {<h3> Usage: </h3>}
 
+
+To get the information about relationships and properties, run the following query:
+
 ```cypher
 CALL schema.rel_type_properties() 
 YIELD relType, mandatory, propertyName, propertyTypes; 
 ```
 
-{<h2>Example: </h2>}
+## assert()
+
+The `schema.assert()` is used to ensure indices and constraints exist in Memgraph.
+
+{<h3> Input: </h3>}
+
+- `indices_map: (mgp.Map, required)`: Requires a map of key-value pairs where
+  the key is a string representing a label and the value is a list containing
+  properties as strings. If the list of properties is empty, an index will be
+  created only on the label. If the list is not empty, indexes on the properties
+  belonging to that label will be created. To create indexes on both the label
+  and properties, add an empty string to the list of properties, for example,
+  `["", "prop1", "prop2", ...]`.
+- `unique_constraints: (mgp.Map, required)`: Requires a map of key-value pairs
+  where the key is a string representing a label and the value is a list of
+  lists containing properties as strings. List of lists is required since unique
+  constraints can be created on a combination of multiple properties.
+- `existence_constraints: (mgp.Map, optional)`: Requires a map of key-value
+  pairs where the key is a string representing a label and the value is a list
+  containing properties as strings. For each property, one existence constraint
+  is created.
+- `drop_existing: (bool, optional, default=true)`: If true, all existing indices
+  and constraints will be dropped. If the user asserts indexes or constraints
+  that already exist, they won't be dropped and re-created.
+
+{<h3> Output: </h3>}
+
+- `action: string` - The modification made to an index or a constraint.
+- `label: string` - Label used for modifying index or constraint.
+- `key: string` - Properties used for modifying index or constraint. When a
+  label index is modified, an empty string is returned. When a unique constraint
+  is modified, where key ia a list of properties a stringified list is returned.
+- `keys: List[string]` - List of properties used to modify indexes or constraints.
+- `unique: bool` - When `true` the record referres to unique constraint, when
+  `false` it reffers to existence constraint and indices.
+
+{<h3> Usage: </h3>}
+
+Create initial indices and constraints in the database, using the following queries:
+
+```
+CREATE INDEX ON :Entity;
+CREATE CONSTRAINT ON (p:Person) ASSERT EXISTS (p.address);
+CREATE CONSTRAINT ON (p:Person) ASSERT p.id IS UNIQUE;
+```
+
+The following query will modify indexes and constraints by creating an index on
+the `:Person` label, and a label-property index on `:Person(id)` property. Also,
+a unique constraints will be created on `(Person.name, Person.surname)` and
+`(Person.id)`. The index on the `:Entity` label will be dropped along with
+the existence constraint on `:Person(id)` property.
+
+```cypher
+CALL schema.assert({Person: ["", "id"]}, {Person: [["name", "surname"], ["id"]]}, {}, true) 
+YIELD action, key, keys, label, unique
+RETURN action, key, keys, label, unique;
+```
+
+Results:
+
+```plaintext
++-----------------------------------------------------------------------------+
+| action     | key               | keys                | label       | unique |
++-----------------------------------------------------------------------------+
+| "Created"  | ""                | []                  | "Person"    | false  |
++-----------------------------------------------------------------------------+
+| "Created"  | "id"              | ["id"]              | "Person"    | false  |
++-----------------------------------------------------------------------------+
+| "Dropped"  | ""                | []                  | "Entity"    | false  |
++-----------------------------------------------------------------------------+
+| "Dropped"  | "address"         | ["address"]         | "Person"    | false  |
++-----------------------------------------------------------------------------+
+| "Created"  | "[name, surname]" | ["name", "surname"] | "Person"    | true   |
++-----------------------------------------------------------------------------+
+| "Kept"     | "id"              | ["id"]              | "Person"    | true   |
++-----------------------------------------------------------------------------+
+```
+
+## Example
 
 Create a graph using the following query:
 
