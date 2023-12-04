@@ -37,7 +37,7 @@ services:
       - mg_log:/var/log/memgraph
       - mg_etc:/etc/memgraph
     env_file:
-      - /.env
+      - /path_to/.env  # Replace this with the actual path to your .env file
     entrypoint: ["/usr/bin/supervisord"]
 volumes:
   mg_lib:
