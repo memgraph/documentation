@@ -167,7 +167,7 @@ For all the other questions and help, fell free to join our
 
 ### Can I try out Memgraph Enterprise before making a decision?
 
-Yes, Memgraph offers a free q30-day Memgraph Enterprise Trial. Send a request
+Yes, Memgraph offers a free 30-day Memgraph Enterprise Trial. Send a request
 via [the
 form](https://webforms.pipedrive.com/f/1sUK9YYKJnygcFEDI0SOpSGB2YBK2nP8xdjAiwnhEVXXohYvodHTPAzB1o4bZ8Tuz).
 

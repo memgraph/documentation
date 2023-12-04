@@ -3,110 +3,157 @@ title: PHP quick start
 description: Get to grips with Memgraph operations via PHP. Our detailed guide navigates you to proficient use of PHP for graph computing needs.
 ---
 
-import { Callout } from 'nextra/components'
+import { Callout } from "nextra/components";
+import { Steps } from "nextra/components";
+import CodeSnippet from '/components/code-snippet/CodeSnippet'
 
-#  PHP quick start
+# PHP client guide
 
-At the end of this guide, you will have created a simple PHP **`Hello, World!`**
-program that connects to the Memgraph database and executes simple queries.
+Learn how to create a PHP application that connects to the Memgraph database and executes simple queries.
 
-## Prerequisites
+Community-contributed library [PHP Bolt](https://github.com/neo4j-php/Bolt) by Michal Štefaňák is the most commonly used to connect to Memgraph with PHP via Bolt protocol. 
+Memgraph and Neo4j both support Bolt protocol and Cypher queries, which means that same client can be used to connect to both databases.
+This is very convenient if switching between the two databases is needed. 
 
-To follow this guide, you will need:
+## Quickstart
 
-- A **running Memgraph instance**. If you need to set up Memgraph, take a look
-  at the [Installation guide](/getting-started/install-memgraph).
-- A basic understanding of graph databases and the property graph model.
-- **Composer**, a tool for dependency management in PHP. Instructions on how to
-  install Composer can be found [here](https://getcomposer.org/doc/00-intro.md).
+The following guide will demonstrate how to start Memgraph, connect to it, seed the database with data, and run simple read and write queries with the PHP Bolt client.
 
-<Callout type="info">
+The necessary prerequisites that should be installed in your local environment are:
 
-We recommend using the **[Bolt driver](https://github.com/neo4j-php/Bolt)** for
-PHP.
+- [PHP >= 7.4](https://www.php.net/manual/en/install.php)
+- [Composer](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos), a tool for dependency management in PHP.
+- [Docker](https://docs.docker.com/get-docker/)
 
-</Callout>
+<Steps>
 
-## Basic Setup
+### Run Memgraph
 
-We'll be using a very simple **PHP script** in combination with **Composer** to
-demonstrate how to connect to a running Memgraph instance.
+Start by running Memgraph in the background. The easiest way to install and run Memgraph is by using Docker. Start the container with the following command:
 
-Let's jump in and connect a simple program to Memgraph.
+<CodeSnippet code="docker run -p 7687:7687 -p 7444:7444 -p 3000:3000 --name memgraph  memgraph/memgraph-platform" page="client-libraries/php"/>
 
-**1.** Create a new directory for your application, for example `/MyApp` and
-position yourself in it.<br /> **2.** Create a `index.php` file and add the
-following code to it:
+The command above will start [Memgraph Platform](/getting-started/install-memgraph/docker#install-memgraph-platform), which includes [Memgraph database](/getting-started/install-memgraph/docker#other-available-docker-images), [Memgraph Lab](/data-visualization#quick-start) and [Memgraph MAGE](/advanced-algorithms#quick-start). Memgraph uses Bolt protocol to communicate with the client using the exposed 7687 port.
+Memgraph Lab is a web application you can use to visualize the data. It's accessible at [http://localhost:3000](http://localhost:3000) if Memgraph Platform is running correctly. The 7444 port enables Memgraph Lab to access and preview the logs, which is why both of these ports need to be exposed.
+
+For more information, visit the getting started guide on [how to run Memgraph with Docker](/getting-started/install-memgraph/docker).
+
+### Create a directory
+
+Next, create a new directory for your application, for example `hello-memgraph` and
+position yourself in it.
+
+```bash
+mkdir hello-memgraph
+cd hello-memgraph
+```
+
+### Create PHP script
+
+Create `index.php` file and add the following code to it:
 
 ```php
 <?php
-require_once __DIR__ . '/vendor/autoload.php';
+require_once(__DIR__."/vendor/autoload.php");
 
 // Create a connection class and specify target host and port, default is localhost.
 $conn = new \Bolt\connection\Socket();
 // Create a new Bolt instance and provide connection object.
 $bolt = new \Bolt\Bolt($conn);
 // Set available Bolt versions for Memgraph.
-$bolt->setProtocolVersions(4.1, 4, 3);
+$bolt->setProtocolVersions(5.2);
 // Build and get protocol version instance which creates connection and executes handshake.
 $protocol = $bolt->build();
 // Login to database with credentials.
-$protocol->hello(\Bolt\helpers\Auth::basic('username', 'password'));
-
+$protocol->hello();
+$protocol->logon(\Bolt\helpers\Auth::basic('', ''));
+ 
 // Pipeline two messages. One to execute query with parameters and second to pull records.
 $protocol
     ->run('CREATE (a:Greeting) SET a.message = $message RETURN id(a) AS nodeId, a.message AS message', ['message' => 'Hello, World!'])
     ->pull();
-
+ 
 // Server responses are waiting to be fetched through iterator.
 $rows = iterator_to_array($protocol->getResponses(), false);
 // Get content from requested record.
 $row = $rows[1]->getContent();
-
+ 
 echo 'Node ' . $row[0] . ' says: ' . $row[1];
+?>
 ```
 
-If you need SSL connection you have to replace `Socket` instance with `StreamSocket` and enable SSL with additional method.
+<Callout type="info">
+In the example above Bolt protocol version 5.2 is used. When you're connecting to Memgraph with lower versions of Bolt protocol, use arguments for authentication in the `hello()` procedure, instead of using `logon()`.
 
 ```php
-$conn = new \Bolt\connection\StreamSocket('URI or IP', 7687);
-$conn->setSslContextOptions([
-    'verify_peer' => true
-]);
+$bolt = new \Bolt\Bolt($conn);
+$bolt->setProtocolVersions(4.3, 4.1, 4.2);
+$protocol->hello(\Bolt\helpers\Auth::basic('', ''));
 ```
+</Callout>
 
-If you want to connect to Memgraph Cloud you have to set these parameters.
+### Install the PHP library
 
-```php
-$conn = new \Bolt\connection\StreamSocket('URI or IP', 7687);
-$conn->setSslContextOptions([
-    'peer_name' => 'Memgraph DB',
-    'allow_self_signed' => true
-]);
-```
-
-**3.** Run a composer command to get the required library:
+Make sure you are located in the `hello-memgraph` folder in the terminal. 
+Then, run a composer command to get the required library:
 
 ```sh
-composer require stefanak-michal/memgraph-bolt-wrapper
+composer require stefanak-michal/bolt
 ```
 
-It will auto create `composer.json` file.
+That command will create `composer.json` file.
 
-**4.** Start the application with the following command:
+<Callout type="info">
+To use Bolt protocol version 5.2 with Memgraph, install PHP Bolt library version >= 6.1.3.
+</Callout>
 
-```
+### Run the application
+
+To run the application, run the following command in terminal:
+
+```sh 
 php -S localhost:4000
 ```
 
 Open you browser, enter `localhost:4000` as URL and you should see an output similar to the following:
 
 ```
-Node 1 says: Hello, World!
+Node 0 says: Hello, World!
 ```
 
-## Where to next?
+<Callout type="info">
+Another way of running your application is by adding a script in the `composer.json` file:
 
-Check out the [PHP Bolt driver repository](https://github.com/neo4j-php/Bolt) to learn more about using the PHP Bolt library.
+```json
+{
+    "require": {
+        "stefanak-michal/bolt": "6.1.3"
+    }, 
+    "scripts": {
+        "start": "php -S localhost:4000"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    }
+}
+```
 
-You can simplify usage of this library with wrapper [Memgraph Bolt wrapper](https://github.com/stefanak-michal/memgraph-bolt-wrapper).
+With the above update of the `composer.json` file, it is enough to run `composer run start` to run the application. 
+</Callout>
+
+### Visualize data
+
+To visualize objects created in the database with the `index.php` script, head over to [http://localhost:3000/](http://localhost:3000/) and run `MATCH (n) RETURN n;` in the _Query Execution_ tab.
+That query will visualize the created node. By clicking on a node, you can explore different properties.
+
+![php-quick-start](/pages/client-libraries/php/php-visualization.png)
+
+### Next steps
+
+This guide makes a good starting point when building PHP applications. Check out the [PHP Bolt driver repository](https://github.com/neo4j-php/Bolt) to learn more about using the PHP Bolt library.
+
+You can simplify the usage of this library with the [Memgraph Bolt wrapper](https://github.com/stefanak-michal/memgraph-bolt-wrapper).
+
+</Steps>
