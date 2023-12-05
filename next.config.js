@@ -2696,6 +2696,21 @@ module.exports = withNextra({
         destination: 'https://memgraph.github.io/gqlalchemy/under-the-hood/python-graph-translators/',
         permanent: true
       },
+      {
+        source: '/gqlalchemy/how-to-guides/query-builder/create-nodes-relationships',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/query-builder/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/query-builder/return-results',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/query-builder/',
+        permanent: true
+      },
+      {
+        source: '/gqlalchemy/how-to-guides/ogm/map-nodes-and-relationships',
+        destination: 'https://memgraph.github.io/gqlalchemy/how-to-guides/ogm/',
+        permanent: true
+      },
       //END GQLAlchemy redirects
       //START 404 links redirects
       {
@@ -2839,6 +2854,11 @@ module.exports = withNextra({
         permanent: true
       },
       {
+        source: '/memgraph/2.4.0/connect-to-memgraph/drivers',
+        destination: '/client-libraries',
+        permanent: true
+      },
+      {
         source: '/memgraph/2.4.2/tutorials/understanding-music-with-modules',
         destination: '/advanced-algorithms/utilize-networkx',
         permanent: true
@@ -2868,6 +2888,31 @@ module.exports = withNextra({
         destination: '/getting-started/install-memgraph',
         permanent: true
       },
+      {
+        source: '/mage/query-modules/python/pagerank',
+        destination: '/advanced-algorithms/available-algorithms/pagerank',
+        permanent: true
+      },
+      {
+        source: '/v0.12.0/faq',
+        destination: '/help-center/faq',
+        permanent: true
+      },
+      {
+        source: '/assets/images/font-awesome-locate-icon-442ffab31aeb6947abcbb224a144d7f8.png',
+        destination: '/pages/data-visualization/style-your-graphs-in-memgraph-lab/font-awesome-locate-icon.png',
+        permanent: true
+      },
+      {
+        source: '/assets/images/font-awesome-node-style-c64d6fdff1db0392288d6c3e41420819.png',
+        destination: '/pages/data-visualization/style-your-graphs-in-memgraph-lab/font-awesome-node-style.png',
+        permanent: true
+      },
+      {
+        source: '/assets/images/memgraph_lab_query_modules-e5619e8b4b458425c680c0ce3cefb22c.png',
+        destination: '/pages/custom-query-modules/memgraph_lab_query_modules.png',
+        permanent: true
+      },
       //END 404 links redirects
       {
         source: '/configuration/exposing-system-metrics',
@@ -2883,7 +2928,21 @@ module.exports = withNextra({
         source: '/memgraph/next/reference-guide/exposing-system-metrics',
         destination: '/configuration/monitoring-server',
         permanent: true
-      }                   
+      },
+      {
+        source: '/advanced-algorithms/available-algorithms/schema',
+        destination: '/querying/functions#schema',
+        permanent: true
+      },       
+      {
+        source: '/advanced-algorithms/available-algorithms/convert',
+        destination: '/querying/functions#conversion-functions',
+        permanent: true
+      },      {
+        source: '/querying/functions#schema',
+        destination: '/querying/schema',
+        permanent: true
+      }                       
     ];
   },
 });

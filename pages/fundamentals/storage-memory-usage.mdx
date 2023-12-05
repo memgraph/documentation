@@ -29,6 +29,13 @@ Memgraph supports three different storage modes:
 
 ![](/pages/fundamentals/storage-memory-usage/storage-modes.png)
 
+### Start Memgraph with a specific storage mode
+
+By default, an empty instance will start using in-memory transactional storage
+mode. To start Memgraph in the ON_DISK_TRANSACTIONAL or IN_MEMORY_ANALYTICAL
+storage node, change the `--storage-mode` [configuration
+flag](/configuration/configuration-settings) accordingly. 
+
 ### Switch storage modes
 
 You can switch between in-memory modes within a session using the following query:
@@ -60,18 +67,23 @@ STORAGE MODE ON_DISK_TRANSACTIONAL;
 
 It is forbidden to change the storage mode from `ON_DISK_TRANSACTIONAL` to any
 of the in-memory storage modes while there is data in the database as it might
-not fit into the RAM. To change the storage mode to any of the in-memory storages,
-empty the instance and restart it. An empty database will start in the default
-storage mode (in-memory transactional).
+not fit into the RAM. To change the storage mode to any of the in-memory
+storages, empty the instance and restart it. An empty database will start in the
+default storage mode (in-memory transactional) or the storage mode defined by
+the `--storage-mode` [configuration
+flag](/configuration/configuration-settings).
 
 If you are running the Memgraph Enterprise Edition, you need to have
 [`STORAGE_MODE` permission](/configuration/security) to change the storage
 mode.
 
-An empty instance will always restart using in-memory transactional storage mode.
-Upon restart, a non-empty instance in the on-disk storage mode will not change
-storage mode, but the instance in an in-memory analytical storage mode will revert
-to the default in-memory transactional storage mode.
+By default, an empty instance will start using in-memory transactional storage
+mode. Non-empty database using in-memory transactional or analytical storage
+mode will restart in transactional storage mode. This behavior can be changed
+using the `--storage-mode` [configuration
+flag](/configuration/configuration-settings). But, regardless of what the flag
+is set to, a non-empty instance in the on-disk storage mode cannot change
+storage mode even upon restart. 
 
 ### Check storage mode
 
@@ -88,7 +100,7 @@ periodic snapshots are created automatically, and you can also create snapshots
 manually.
 
 In the `IN_MEMORY_TRANSACTIONAL` mode, Memgraph creates a
-[`Delta`](#delta-memory-layout) object each time data is changed. Deltas are the
+`Delta` object each time data is changed. Deltas are the
 backbone upon which Memgraph provides atomicity, consistency, isolation, and
 durability - ACID. By using `Deltas`, Memgraph creates
 [write-ahead-logs](/configuration/data-durability-and-backup#write-ahead-logging)
@@ -117,7 +129,7 @@ Manual snapshots are created by running the `CREATE SNAPSHOT;` query.
 In the transactional storage mode, Memgraph is fully [ACID
 compliant](/configuration/data-durability-and-backup) which could cause memory
 spikes during data import because each time data is changed Memgraph creates
-[`Delta`](#delta-memory-layout) objects to provides atomicity, consistency,
+`Delta` objects to provides atomicity, consistency,
 isolation, and durability
 
 But `Deltas` also require a lot of memory (104B per change), especially when
@@ -154,14 +166,15 @@ flag](/configuration/configuration-settings#storage)
 In Memgraph, snapshots are created periodically or manually with `CREATE
 SNAPSHOT;` Cypher query. 
 
-In the analytical storage mode, WAL files and periodic snapshots are **not created**. 
+In the analytical storage mode, WAL files and periodic snapshots are **not
+created**. 
 
 Before switching back to the in-memory transactional storage mode create a
 snapshot manually. In the in-memory analytical storage mode, Memgraph guarantees
 that creating a snapshot is **the only** transaction present in the system, and
 all the other transactions will wait until the snapshot is created to ensure its
 validity. Once Memgraph switches to the in-memory transactional mode, it will
-restore from the snapshot file and create a WAL for all new updates, if not
+restore data from the snapshot file and create a WAL for all new updates, if not
 otherwise instructed by the [config
 file](/configuration/configuration-settings#storage).
 
@@ -188,7 +201,7 @@ operations that require indexes. In both cases, Memgraph's custom
 
 Concurrent execution of transactions is supported differently for on-disk
 storage than for in-memory. The in-memory storage mode relies on
-[`Delta`](#delta-memory-layout) objects which store the exact versions of data
+`Delta` objects which store the exact versions of data
 at the specific moment in time. Therefore, the in-memory storage mode uses a
 pessimistic approach and immediately checks whether there is a conflict between
 two transactions.
@@ -247,18 +260,27 @@ Below is the format in which data is serialized to the disk.
 
 Vertex format for main disk storage:
 Key - `label1, label2, ... | vertex gid | commit_timestamp`
-Value - `property1, property2`
+Value - `properties`
 
 Edge format for the main disk storage:
-Key - `from vertex gid | to vertex gid | 0 | edge type | edge gid | commit_timestamp`
-Value - `property1, property2`
-`0` is a placeholder for edge direction in future.
+Key - `edge gid`
+Value - `src_vertex_gid | dst_vertex_gid | edge_type | properties`
+
+To achieve fast expansions, we also store connectivity index for outcoming and incoming edges on disk:
+Outcoming connectivity index:
+Key - `src_vertex_gid`
+Value - `out_edge_gid1, out_edge_gid2, ...`
+
+Incoming connectivity index:
+Key - `dst_vertex_gid`
+Value - `in_edge_gid1, in_edge_gid2, ...`
+
 
 Format for label index on disk:
 
 Key - `indexing label | vertex gid | commit_timestamp`
 
-Value - `label1_id, label2_id, ... | property1, property2, ...`
+Value - `label1_id, label2_id, ... | properties`
 
 Value does not contain `indexing label`.
 
@@ -266,7 +288,7 @@ Format for label-property index on disk:
 
 Key - `indexing label | indexing property | vertex gid | commit_timestamp`
 
-Value - `label1_id, label2_id, ... | property1, property2, ...`
+Value - `label1_id, label2_id, ... | properties`
 
 Value does not contain `indexing label`.
 
@@ -355,8 +377,15 @@ the in-memory transactional storage mode, use the following formula:
 
 $\texttt{StorageRAMUsage} = \texttt{NumberOfVertices} \times 260\text{B} + \texttt{NumberOfEdges} \times 180\text{B}$
 
+
+<Callout>
+
+You can also use the [Storage memory calculator](https://memgraph.com/enterprise#ram-calculator).
+
+</Callout>
+
 Let's test this formula on the [Marvel Comic Universe Social Network
-dataset](http://download.memgraph.com/datasets/marvel-cinematic-universe/cypherl/dataset.cypherl.gz),
+dataset](https://download.memgraph.com/datasets/marvel-cinematic-universe/cypherl/dataset.cypherl.gz),
 which is also available as a dataset inside Memgraph Lab and contains 21,723
 vertices and 682,943 edges.
 
@@ -572,12 +601,13 @@ Default values are:
 
 ### Control query memory usage
 
-Query execution also uses up RAM. In some cases, intermediate results are
-aggregated to return valid query results and the query execution memory can end
-up using a large amount of RAM. Keep in mind that query execution memory
-monotonically grows in size during the execution, and it's freed once the query
-execution is done. A general rule of thumb is to have double the RAM than what
-the actual dataset is occupying.
+Query execution also uses up RAM. All allocations inside query are counted
+from intermediary results to allocations made while creating nodes and relationships.
+In some cases, intermediate results are aggregated to return valid query results 
+and the query execution memory can end up using a large amount of RAM.
+Keep in mind that query execution memory monotonically grows in size during
+the execution, and it's freed once the query execution is done. 
+A general rule of thumb is to have double the RAM than what the actual dataset is occupying. 
 
 Each Cypher query can include the following clause at the end:
 
@@ -645,10 +675,10 @@ SHOW STORAGE INFO;
 | "vertex_count"                 | 2677                           |
 | "edge_count"                   | 11967                          |
 | "average_degree"               | 8.94061                        |
-| "memory_usage"                 | 578465792                      |
-| "disk_usage"                   | 4131103                        |
-| "memory_allocated"             | 17041304                       |
-| "allocation_limit"             | 13195796480                    |
+| "memory_usage"                 | "44.32MiB"                     |
+| "disk_usage"                   | "133.63KiB"                    |
+| "memory_allocated"             | "6.74MiB"                      |
+| "allocation_limit"             | "15.28GiB"                     |
 | "global_isolation_level"       | "SNAPSHOT_ISOLATION"           |
 | "session_isolation_level"      | ""                             |
 | "next_session_isolation_level" | ""                             |
@@ -691,3 +721,33 @@ FREE MEMORY;
 
 This query tries to clean up as much unused memory as possible without affecting
 currently running transactions.
+
+## Virtual memory
+
+Memgraph uses a [`jemalloc`](https://jemalloc.net/) allocator to handle all
+allocations and to track allocations happening in the system.
+
+The default operating system limits on `mmap` counts are likely to be too low,
+which may result in out-of-memory exceptions.
+
+To find out the current `mmap` count of a running Memgraph process use the
+following command, where `$PID` is the process ID of the running Memgraph
+process:
+
+```bash
+wc -l /proc/$PID/maps
+```
+
+On Linux, you can increase the limits by running the following command as
+`root`:
+
+```bash
+sysctl -w vm.max_map_count=262144
+```
+
+To increase this value permanently, update the `vm.max_map_count` setting in
+*/etc/sysctl.conf*. To verify, reboot the system and run `sysctl
+vm.max_map_count`.
+
+The RPM and Debian packages will configure this setting automatically so you
+don't need to do any more configurations.

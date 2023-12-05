@@ -1,0 +1,157 @@
+---
+title: GraphQL quick start
+description: Learn to work with Memgraph using GraphQL. Our documentation takes you through each step in detail to deliver exceptional graph solutions.
+---
+
+import { Callout } from "nextra/components";
+import { Steps } from 'nextra/components'
+import CodeSnippet from '/components/code-snippet/CodeSnippet'
+
+# GraphQL quick start
+
+At the end of this guide, you will have created a simple GraphQL
+application that connects to the Memgraph database and executes simple
+queries against it.
+
+## Quickstart
+
+We'll be using a simple Node.js application using the Neo4j GraphQL Library to connect
+to a running Memgraph instance and execute GraphQL queries against the database.
+
+Necessary prerequisites that should be installed in your local environment are:
+
+- [The Neo4j GraphQL Library](https://neo4j.com/docs/graphql/current/).
+- The [npm](https://www.npmjs.com/) package manager.
+- The [Node.js](https://nodejs.org/en) runtime environment.
+- A utility that can be used to host the GraphQL schema, e.g. [Apollo Server](https://www.apollographql.com/docs/apollo-server/).
+
+<Steps>
+
+### Run Memgraph
+
+The easiest way to start Memgraph is by running Memgraph Platform Docker image
+with the following command:
+
+<CodeSnippet code="docker run -p 7687:7687 -p 7444:7444 -p 3000:3000 --name memgraph memgraph/memgraph-platform" page="client-libraries/graphql"/>
+
+The command above will start [Memgraph Platform](/getting-started/install-memgraph/docker#install-memgraph-platform),
+which includes [Memgraph database](/getting-started/install-memgraph/docker#other-available-docker-images),
+[Memgraph Lab](/data-visualization#quick-start) and [Memgraph MAGE](/advanced-algorithms#quick-start).
+Memgraph uses Bolt protocol to communicate with the client using the exposed
+7687 port. Memgraph Lab is a web application you can use to visualize the data.
+It's accessible at http://localhost:3000 if Memgraph Platform is running
+correctly. The 7444 port enables Memgraph Lab to access and preview the logs,
+which is why both of these ports need to be exposed.
+
+For more information visit the getting started guide on
+[how to run Memgraph with Docker](/getting-started/install-memgraph/docker).
+
+
+### Create a work directory
+
+Next, create a directory for your project and positioning yourself in it:
+
+```
+mkdir graphql-example
+cd graphql-example
+```
+
+### Initialize the Node.js project
+
+Initialize the project using the following code:
+
+```
+npm init es6 --yes
+```
+
+### Setup the Neo4j GraphQL Library
+
+Install the library and its dependencies by running the following command:
+
+```
+npm install @neo4j/graphql graphql neo4j-driver @apollo/server
+```
+
+### Create the application file
+
+The application file will be used to setup the Neo4j GraphQL Library and connect to the running Memgraph instance.
+
+Create the file and add the content below.
+
+```
+touch index.js
+```
+
+```js
+const { Neo4jGraphQL } = require("@neo4j/graphql");
+const { ApolloServer, gql } = require("apollo-server");
+const neo4j = require("neo4j-driver");
+
+const typeDefs = gql`
+type Post {
+    id: ID! @id
+    content: String!
+    creator: User! @relationship(type: "HAS_POST", direction: IN)
+}
+
+type User {
+    id: ID! @id
+    name: String
+    posts: [Post!]! @relationship(type: "HAS_POST", direction: OUT)
+}
+`;
+
+const driver = neo4j.driver(
+    "bolt://localhost:7687",
+    neo4j.auth.basic("", "")
+);
+
+const neoSchema = new Neo4jGraphQL({
+    typeDefs, driver,
+    config: {
+        driverConfig: {
+            database: "memgraph",
+        },
+    }
+});
+
+neoSchema.getSchema().then((schema) => {
+  const server = new ApolloServer({
+      schema,
+  });
+
+  server.listen().then(({ url }) => {
+      console.log(`🚀 Server ready at ${url}`);
+  });
+})
+```
+
+The example above shows that the data schema must be explicitly defined. The GraphQL server can only process queries that operate on data conforming to the specified schemas. In this example, the schema defines a graph, where the nodes labeled as `User` or `Post` may be connected with a `HAS_POST` relationship. 
+
+To set up a GraphQL client against a running Memgraph instance, you have to specify the GraphQL schema, set up the used drivers, and specify Memgraph as the used database. Specifying the used database is especially important because the default database name in the `driverConfig` is not compatible with Memgraph.
+
+### Run the application
+
+Run the application using the following code:
+
+```
+node index.js
+```
+
+### Interact with Memgraph
+
+You are now ready to interact with Memgraph using GraphQL queries through **localhost(127.0.0.1):4000**.
+
+</Steps>
+
+## Current limitations
+
+Memgraph currently supports CRUD operations using GraphQL. That means that the entities inside
+the database can be updated and basic traversals can be done, but more complicated operations
+are currently not supported through GraphQL.
+
+GraphQL APIs need to be aware of the shape of data they are working with which is abstracted
+into the concept of GraphQL schemas. Currently this has to be specified in the Node.js
+application file explicitly. In terms of a property graph, this means the labels and properties
+of nodes and relationships. The Neo4j GraphQL Library has support for automatic graph
+introspection, Memgraph currently does not support this feature.

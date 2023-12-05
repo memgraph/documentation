@@ -27,19 +27,20 @@ SHOW STORAGE INFO;
 
 The result will contain the following fields:
 
-| Field            | Description                                                                                                                                  |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| vertex_count     | Number of vertices stored                                                                                                                    |
-| edge_count       | Number of edges stored                                                                                                                       |
-| average_degree   | Average number of relationships of a single node                                                                                                            |
-| memory_usage     | Amount of RAM used reported by the OS (in bytes)                                                                                             |
-| disk_usage       | Amount of disk space used by the data directory (in bytes)                                                                                   |
-| memory_allocated | Amount of bytes allocated by the instance.<br/>For more info, check out the [memory control](/fundamentals/storage-memory-usage).               |
-| allocation_limit | Current allocation limit in bytes set for this instance.<br/>For more info, check out the [memory control](/fundamentals/storage-memory-usage). |
-| global_isolation_level | Current `global` isolation level.<br/>For more info, check out the [isolation levels](/fundamentals/transactions). |
-| session_isolation_level | Current `session` isolation level. |
-| next_session_isolation_level | Current `next` isolation level. |
-| storage_mode | Current storage mode.<br/>For more info, check out the [storage modes](/fundamentals/storage-memory-usage). |
+| Field                        | Description                                                                                                                                                                                   |
+|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| vertex_count                 | The number of stored nodes (vertices).                                                                                                                                                        |
+| edge_count                   | The number of stored relationships (edges).                                                                                                                                                   |
+| average_degree               | The average number of relationships of a single node.                                                                                                                                         |
+| memory_res                   | The non-swapped physical RAM memory a task has used, reported by the OS (in B, KiB, MiB, GiB or TiB).                                                                                                                       |
+| disk_usage                   | The amount of disk space used by the data directory (in B, KiB, MiB, GiB or TiB).                                                                                                             |
+| memory_tracked               | The amount of RAM allocated in the system and tracked by Memgraph (in B, KiB, MiB, GiB or TiB).<br/>For more info, check out [memory control](/fundamentals/storage-memory-usage).        |
+| vm_max_map_count             | The number of memory-mapped areas that the kernel allows a process to have. If it is unknown, returns -1. </br> For more info, check out [virtual memory section of the docs](/fundamentals/storage-memory-usage#virtual-memory).                                    |
+| allocation_limit             | The current allocation limit set for this instance (in B, KiB, MiB, GiB or TiB).<br/>For more info, check out the [memory control](/fundamentals/storage-memory-usage#control-memory-usage).                       |
+| global_isolation_level       | The current `global` isolation level.<br/>For more info, check out [isolation levels](/fundamentals/transactions#isolation-levels).                                                       |
+| session_isolation_level      | The current `session` isolation level.                                                                                                                                                        |
+| next_session_isolation_level | The current `next` isolation level.                                                                                                                                                           |
+| storage_mode                 | The current storage mode.<br/>For more info, check out [storage modes](/fundamentals/storage-memory-usage#storage-modes).                                                                 |
 
 ## Build information
 
@@ -50,6 +51,6 @@ the current instance:
 SHOW BUILD INFO;
 ```
 
-| Field            | Description                                                                                                                                  |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| build_type     | The optimization level the instance was built with.                                                                                                                    |
+| Field      | Description                                         |
+|------------|-----------------------------------------------------|
+| build_type | The optimization level the instance was built with. |
