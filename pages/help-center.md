@@ -26,6 +26,8 @@ or graph community there to help!
   - request information not present in the documentation
   - ask any other kind of technical question.
 
+📱[**Book a call**](https://memgraph.com/office-hours) and learn more about Memgraph capabilities to integrate it into your current stack as fast as possible.
+
 ## Community
 
 If you want to be a part of Memgraph's fast-growing community, join us on our
