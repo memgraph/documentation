@@ -26,8 +26,6 @@ or graph community there to help!
   - request information not present in the documentation
   - ask any other kind of technical question.
 
-📧 Email us at [**tech@memgraph.com**](mailto:tech@memgraph.com).
-
 ## Community
 
 If you want to be a part of Memgraph's fast-growing community, join us on our
