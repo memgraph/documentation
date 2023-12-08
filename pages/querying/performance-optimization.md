@@ -157,7 +157,7 @@ match.
 An example of selecting an index with USING INDEX: 
 ```
 USING INDEX :Person(name)
-MATCH (n:Person {name: 'John'})
+MATCH (n:Person {name: 'John', gender: 'male'})
 RETURN n;
 ```
 
