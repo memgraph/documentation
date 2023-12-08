@@ -1,5 +1,5 @@
 ---
-title: Differences in implementation
+title: Differences in Cypher implementation
 description: Compare and contrast different Cypher implementations in Memgraph. Comprehensive documentation to level up your graph computing expertise.
 ---
 
@@ -60,17 +60,3 @@ In other cases, Memgraph does not yet support patterns in functions, e.g. `size(
 Most of the time, the same functionalities can be expressed differently in Memgraph
 using `OPTIONAL` expansions, function calls, etc.
 
-# Optimistic vs. pessimistic approaches
-
-In database management systems, there are two approaches to handling potential
-conflicts. The optimistic approach checks for conflicts only during the commit.
-If a conflict occurs, the transaction is rolled back. On the other hand, the
-pessimistic approach entails making additional checks to prevent conflicts from
-occuring in the first place.
-
-The difference between the two approaches is relevant in several areas of
-Memgraph’s operation: concurrency control and constraint checking.
-
-In constraint checking, Memgraph takes the optimistic approach. Multi-query
-transactions will be committed as long as the database adheres to the
-constraints upon the execution of the final query in the transaction.
