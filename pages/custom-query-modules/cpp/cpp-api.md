@@ -226,7 +226,7 @@ explicit RecordFactory(mgp_result *result)
 Adds a new result record.
 
 ```cpp
-  const Record NewRecord() const
+  Record NewRecord() const
 ```
 
 ##### SetErrorMessage
@@ -234,7 +234,7 @@ Adds a new result record.
 Sets the given error message.
 
 ```cpp
-  void SetErrorMessage(const std::string_view error_msg) const
+  void SetErrorMessage(std::string_view error_msg) const
 ```
 
 ```cpp
@@ -387,15 +387,15 @@ Sets a return value of given type.
 ```
 
 ```cpp
-  void SetValue(const LocalTime value)
+  void SetValue(const LocalTime &value)
 ```
 
 ```cpp
-  void SetValue(const LocalDateTime value)
+  void SetValue(const LocalDateTime &value)
 ```
 
 ```cpp
-  void SetValue(const Duration value)
+  void SetValue(const Duration &value)
 ```
 
 ##### SetErrorMessage
@@ -403,7 +403,7 @@ Sets a return value of given type.
 Sets the given error message.
 
 ```cpp
-  void SetErrorMessage(const std::string_view error_msg) const
+  void SetErrorMessage(std::string_view error_msg) const
 ```
 
 ```cpp
@@ -481,7 +481,7 @@ GraphRelationships Relationships() const
 Returns the graph node with the given ID.
 
 ```cpp
-Node GetNodeById(const Id node_id) const
+Node GetNodeById(Id node_id) const
 ```
 
 ##### ContainsNode
@@ -489,7 +489,7 @@ Node GetNodeById(const Id node_id) const
 Returns whether the graph contains a node with the given ID.
 
 ```cpp
-bool ContainsNode(const Id node_id) const
+bool ContainsNode(Id node_id) const
 ```
 
 Returns whether the graph contains the given node.
@@ -501,7 +501,7 @@ bool ContainsNode(const Node &node) const
 ##### ContainsRelationship
 
 ```cpp
-bool ContainsRelationship(const Id relationship_id) const
+bool ContainsRelationship(Id relationship_id) const
 ```
 
 ```cpp
@@ -545,7 +545,7 @@ void DetachDeleteNode(const Node &node)
 Creates a relationship of type `type` between nodes `from` and `to` and adds it to the graph.
 
 ```cpp
-Relationship CreateRelationship(const Node &from, const Node &to, const std::string_view type)
+Relationship CreateRelationship(const Node &from, const Node &to, std::string_view type)
 ```
 
 ##### DeleteRelationship
@@ -749,7 +749,7 @@ Relationships OutRelationships() const
 Adds a label to the node.
 
 ```cpp
-void AddLabel(const std::string_view label)
+void AddLabel(std::string_view label)
 ```
 
 ##### RemoveLabel
@@ -757,7 +757,7 @@ void AddLabel(const std::string_view label)
 Removes a label from a node.
 
 ```cpp
-void RemoveLabel(const std::string_view label)
+void RemoveLabel(std::string_view label)
 ```
 
 ##### InDegree
@@ -781,7 +781,7 @@ size_t OutDegree() const
 Returns the node's string representation, which has this format: "(id: `node_id`, labels: `node_labels`, properties: `node_properties_map`)".
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 #### Operators
@@ -796,7 +796,7 @@ const std::string ToString() const
 Returns the value of the node’s `property_name` property.
 
 ```cpp
-const Value operator[](std::string_view property_name) const
+Value operator[](std::string_view property_name) const
 ```
 
 ### Relationship
@@ -909,7 +909,7 @@ Returns the relationship's string representation, which has this format:
 "(`node_from.ToString()`)-(type: `relationship_type`, id: `relationship_id`, properties: `relationship_properties_map`)->(`node_to.ToString()`)".
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 #### Operators
@@ -924,7 +924,7 @@ const std::string ToString() const
 Returns the value of the relationship’s `property_name` property.
 
 ```cpp
-const Value operator[](std::string_view property_name) const
+Value operator[](std::string_view property_name) const
 ```
 
 Object is hashable using
@@ -1145,7 +1145,7 @@ Returns the date's string representation, which has this format: "`year`-`month`
 
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 
@@ -1170,7 +1170,7 @@ Duration operator-(const Date &other) const
 Returns the value of the relationship’s `property_name` property.
 
 ```cpp
-const Value operator[](std::string_view property_name) const
+Value operator[](std::string_view property_name) const
 ```
 
 Object is hashable using
@@ -1281,7 +1281,7 @@ Returns the object's string representation, which has this format: "`hour`:`minu
 
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 
@@ -1438,7 +1438,7 @@ Returns the object's string representation, which has this format: "`year`-`mont
 
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 
@@ -1518,7 +1518,7 @@ Returns the duration's string representation, which has this format: "`microseco
 
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 #### Operators
@@ -1623,7 +1623,7 @@ Returns the path's string representation, which has nearly the same format as `R
 
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 
@@ -1668,7 +1668,7 @@ explicit List(std::vector<Value> &&values)
 
 Creates a List from the given initializer_list.
 ```cpp
-explicit List(const std::initializer_list<Value> list)
+explicit List(std::initializer_list<Value> list)
 ```
 
 Copy and move constructors:
@@ -1745,7 +1745,7 @@ void AppendExtend(Value &&value)
 Returns the list's string representation, which has this format: "[`element.ToString()`, `element.ToString()`...]".
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 
@@ -1761,7 +1761,7 @@ const std::string ToString() const
 Returns the value at the given `index`.
 
 ```cpp
-const Value operator[](size_t index) const
+Value operator[](size_t index) const
 ```
 
 Object is hashable using
@@ -1795,7 +1795,7 @@ explicit Map(std::map<std::string_view, Value> &&items)
 
 Creates a Map from the given initializer_list (map items correspond to initializer list pairs).
 ```cpp
-Map(const std::initializer_list<std::pair<std::string_view, Value>> items)
+Map(std::initializer_list<std::pair<std::string_view, Value>> items)
 ```
 
 Copy and move constructors:
@@ -1845,7 +1845,7 @@ bool Empty() const
 Returns the value at the given `key`.
 
 ```cpp
-Value const At(std::string_view key) const
+Value At(std::string_view key) const
 ```
 
 ##### Insert
@@ -1890,7 +1890,7 @@ void Erase(std::string_view key);
 Returns the map's string representation, which has this format: "{`key1` : `value1.ToString()`, `key2`: `value2.ToString()`...}".
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 ##### KeyExists
 
@@ -1912,7 +1912,7 @@ bool KeyExists(std::string_view key) const;
 Returns the value at the given `key`.
 
 ```cpp
-const Value operator[](std::string_view key) const
+Value operator[](std::string_view key) const
 ```
 
 Object is hashable using
@@ -1961,11 +1961,11 @@ explicit Value()
 
 Basic type constructors:
 ```cpp
-explicit Value(const bool value)
-explicit Value(const int64_t value)
-explicit Value(const double value)
+explicit Value(bool value)
+explicit Value(int64_t value)
+explicit Value(double value)
 explicit Value(const char *value)
-explicit Value(const std::string_view value)
+explicit Value(std::string_view value)
 ```
 
 Container type constructors:
@@ -2062,47 +2062,47 @@ std::string_view ValueString()
 ```
 
 ```cpp
-const List ValueList() const
+List ValueList() const
 List ValueList()
 ```
 
 ```cpp
-const Map ValueMap() const
+Map ValueMap() const
 Map ValueMap()
 ```
 
 ```cpp
-const Node ValueNode() const
+Node ValueNode() const
 Node ValueNode()
 ```
 
 ```cpp
-const Relationship ValueRelationship() const
+Relationship ValueRelationship() const
 Relationship ValueRelationship()
 ```
 
 ```cpp
-const Path ValuePath() const
+Path ValuePath() const
 Path ValuePath()
 ```
 
 ```cpp
-const Date ValueDate() const
+Date ValueDate() const
 Date ValueDate()
 ```
 
 ```cpp
-const LocalTime ValueLocalTime() const
+LocalTime ValueLocalTime() const
 LocalTime ValueLocalTime()
 ```
 
 ```cpp
-const LocalDateTime ValueLocalDateTime() const
+LocalDateTime ValueLocalDateTime() const
 LocalDateTime ValueLocalDateTime()
 ```
 
 ```cpp
-const Duration ValueDuration() const
+Duration ValueDuration() const
 Duration ValueDuration()
 ```
 
@@ -2191,7 +2191,7 @@ Returns the value's string representation. It does this by finding the type of t
 | `Duration`      | Returns `Duration.ToString()`.                                       |
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 #### Operators
