@@ -1,5 +1,5 @@
 ---
-title: Differences in Cypher implementations
+title: Differences in Cypher implementation
 description: Compare and contrast different Cypher implementations in Memgraph. Comprehensive documentation to level up your graph computing expertise.
 ---
 
@@ -59,3 +59,4 @@ Patterns in expressions are supported in Memgraph in particular functions, like 
 In other cases, Memgraph does not yet support patterns in functions, e.g. `size((n)-->())`.
 Most of the time, the same functionalities can be expressed differently in Memgraph
 using `OPTIONAL` expansions, function calls, etc.
+
