@@ -356,7 +356,7 @@ When the relationship from the previous query is reversed, with the person
 named Alison being the anchor node, the returned results are:
 
 ```cypher
-MATCH  (p1:Person)-[r:FRIENDS_WITH]->(p2:Person {name:'Alison'})
+MATCH (p1:Person)<-[r:FRIENDS_WITH]-(p2:Person {name:'Alison'})
 RETURN p1, r, p2;
 ```
 
