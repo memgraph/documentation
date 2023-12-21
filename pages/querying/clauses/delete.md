@@ -10,7 +10,8 @@ The `DELETE` clause is used to delete nodes and relationships from the database.
 1. [Deleting a node](#1-deleting-a-node) <br />
 2. [Deleting a node and its relationships](#2-deleting-a-node-and-its-relationships) <br />
 3. [Deleting a relationship](#3-deleting-a-relationship) <br />
-4. [Deleting everything](#4-deleting-everything)
+4. [Deleting a path](#4-deleting-a-path) <br />
+5. [Deleting everything](#4-deleting-everything)
 
 ## Dataset
 
@@ -39,7 +40,8 @@ can only be used on nodes that have no relationships.
 
 ## 2. Deleting a node and its relationships
 
-The `DELETE` clause can be used to delete a node along with all of its relationships with the keyword `DETACH`:
+The `DELETE` clause can be used to delete a node along with all of its
+relationships with the keyword `DETACH`:
 
 ```cypher
 MATCH (n:Country {name: 'United Kingdom'})
@@ -67,7 +69,45 @@ Output:
 Empty set (0.003 sec)
 ```
 
-## 4. Deleting everything
+## 4. Deleting a path
+
+The `DELETE` clause can be used to delete a path.
+
+The following query will delete all the nodes connected to the person `Anna`
+with a `:LIVING_IN` relationship, as well as all the relationships of those
+deleted nodes. 
+
+```
+MATCH p = (:Person {name:"Anna"})-[:LIVING_IN]->()
+DETACH DELETE p;
+
+MATCH (n)-[r]-(m) RETURN n,r,m;
+```
+
+Result:
+
+![Data set](/pages/querying/clauses/DELETE/living_in_path.png)
+
+The following query will delete all nodes that are 1 hop away from the node
+`Anna` and all their relationships, leaving only the `France` node: 
+
+```
+MATCH p = (:Person {name:"Anna"})-->()
+DETACH DELETE p;
+
+MATCH (n)
+RETURN (n);
+```
+
+The following query will delete all nodes that are 2 hop away from the node
+`Anna` and all their relationships, leaving an empty database: 
+
+```
+MATCH p = (:Person {name:"Anna"})-->()--()
+DETACH DELETE p;
+```
+
+## 5. Deleting everything
 
 To delete all nodes and relationships in a graph, use the following query:
 
