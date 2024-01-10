@@ -100,7 +100,7 @@ const Footer = () => (
       </div>
     </div>
     <div className="flex flex-row text-[11px] text-[#646265] font-normal dark:text-[#E6E6E6]">
-      Copyright © 2023 Memgraph
+      Copyright © {new Date().getFullYear()} Memgraph
     </div>
   </footer>
 );

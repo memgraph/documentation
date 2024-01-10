@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { useConfig } from 'nextra-theme-docs';
 import { DocsThemeConfig } from "nextra-theme-docs";
 import Footer from "./components/Footer";
+import Docsearch from './components/docsearch';
 
 const config: DocsThemeConfig = {
   logo: (
@@ -72,6 +73,13 @@ const config: DocsThemeConfig = {
     return {
       titleTemplate: "%s",
     };
+  },
+  search: {
+    component: <Docsearch />,
+    placeholder: 'Search...',
+    emptyResult: 'No results found.',
+    loading: 'Searching...',
+    error: 'An error occurred while searching.',
   },
 };
 
