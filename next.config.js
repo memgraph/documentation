@@ -2913,6 +2913,26 @@ module.exports = withNextra({
         destination: '/pages/custom-query-modules/memgraph_lab_query_modules.png',
         permanent: true
       },
+      {
+        source: '/memgraph/next/how-to-guides/constraints/uniqueness-constraint',
+        destination: '/fundamentals/constraints#uniqueness-constraint',
+        permanent: true
+      },
+      {
+        source: '/memgraph/1.5.0/getting-started/connecting-applications/python',
+        destination: '/client-libraries/python',
+        permanent: true
+      },
+      {
+        source: '/memgraph-lab/how_to_install_memgraph_lab_on_macos)',
+        destination: '/data-visualization/install-and-connect',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.1.0/getting-started',
+        destination: '/getting-started',
+        permanent: true
+      },      
       //END 404 links redirects
       {
         source: '/configuration/exposing-system-metrics',
