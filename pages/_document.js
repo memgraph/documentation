@@ -12,17 +12,12 @@ class MyDocument extends Document {
               data-project-color="#8C0081"
               data-project-logo="https://avatars.githubusercontent.com/u/17707542?s=200&v=4"
               data-search-mode-enabled="true"
-              data-modal-override-open-class="docs-search"
+              data-modal-override-open-class="nextra-search"
             ></script>
           </Head>
           <body>
             <Main />
             <NextScript />
-            <script
-              src="https://cdn.jsdelivr.net/npm/docsearch.js@2/dist/cdn/docsearch.min.js"
-              async
-              defer
-            />
           </body>
         </Html>
       );
