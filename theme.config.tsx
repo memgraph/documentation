@@ -6,7 +6,7 @@ import Footer from "./components/Footer";
 
 const config: DocsThemeConfig = {
   search: {
-    placeholder: "Ask AI or search the docs...", // Set your desired placeholder text here
+    placeholder: "Ask AI or search the docs...",
   },
   logo: (
     <>
