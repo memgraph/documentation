@@ -40,13 +40,13 @@ data takes up space.
 ## [Telemetry](/fundamentals/telemetry)
 
 Telemetry is an automated process that collects data at a remote point, and
-Memgraph it is used for the soul purpose of improving the product by focusing
+Memgraph it is used for the sole purpose of improving the product by focusing
 on areas that we believe are important to you.
 
 ## [Transactions](/fundamentals/transactions)
 
 All Cypher queries are run within transactions. Check how to create explicit
-transaction to run multiple queries within one transaction, manage running
+transactions to run multiple queries within one transaction, manage running
 transactions as well as isolation levels available in Memgraph.
 
 ## [Triggers](/fundamentals/triggers)
