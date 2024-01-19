@@ -335,6 +335,79 @@ There are also two variations of the files, files with a header, and files witho
 
 ____
 
+
+## Import data from a single CSV file containing both nodes and relationships
+
+This example will show how to use set of Cypher queries to import data into
+Memgraph from a single CSV file containing both nodes and relationships. This
+file has header row.
+
+The `people_friendship.csv` file is structured to contain both people and their relationships:
+
+  - `type`: Indicates the type of record. It has two possible values: `PERSON` for individual records and `IS_FRIEND` for relationships.
+  - `id`: Unique identifier for a person. This is filled only for `PERSON` records.
+  - `name`: Name of the person. This is also filled only for `PERSON` records.
+  - `id_from` and `id_to`: Used to denote relationships. For `IS_FRIEND` records, `id_from` is the ID of the person from whom the friendship originates, and `id_to` is the ID of the friend.
+
+This structure allows representation of both nodes (persons) and their relationships (friendships) within a single CSV file.
+
+<Steps>
+
+ {<h3>Download the file</h3>}
+
+- [`people_friendship.csv`](https://public-assets.memgraph.com/import-data/load-csv-cypher/all-data-one-file/people_friendship.csv). The file contains the following data:
+
+```csv
+type,id,name,id_from,id_to
+PERSON,100,Daniel,,
+PERSON,101,Alex,,
+PERSON,102,Sarah,,
+PERSON,103,Mia,,
+PERSON,104,Lucy,,
+IS_FRIEND,,,100,101
+IS_FRIEND,,,100,102
+IS_FRIEND,,,100,103
+IS_FRIEND,,,101,103
+IS_FRIEND,,,102,104
+```
+
+{<h3>Import nodes</h3>}
+
+First, import the individual records (people) from the CSV file. Only rows with non-empty `id` and `name` columns are processed.
+
+```cypher
+LOAD CSV FROM "/path-to/people_friendship.csv" WITH HEADER AS row
+WITH row WHERE row.type = 'PERSON'
+CREATE (:Person {id: row.id, name: row.name});
+```
+
+{<h3>Create indexes</h3>}
+Create an index on the `id` property of `:Person` nodes to enhance the performance of the relationship import process.
+
+```cypher
+CREATE INDEX ON :Person(id);
+```
+
+{<h3>Import relationships</h3>}
+Finally, import the relationships from the CSV file, focusing on rows where `id_from` and `id_to` are not empty.
+
+```cypher
+LOAD CSV FROM "/path-to/people_friendship.csv" WITH HEADER AS row
+WITH row WHERE row.type = 'IS_FRIEND'
+MATCH (p1:Person {id: row.id_from}), (p2:Person {id: row.id_to})
+CREATE (p1)-[:IS_FRIENDS_WITH]->(p2);
+```
+
+  {<h3>Final result</h3>}
+  Run the following query to see how the imported data looks as a graph:
+
+  ```
+  MATCH p=()-[]-() RETURN p;
+  ```
+  ![](/pages/data-migration/csv/load_csv_one_file_for_nodes_and_relationships.png)
+
+</Steps>
+
 ## Import multiple CSV files with distinct graph objects
 
 In this example, the data is split across four files, each file contains nodes
