@@ -16,6 +16,7 @@ To see how to implement query modules in C++, take a look at
 If you install any C++ modules after running Memgraph, you’ll need to [load
 them into Memgraph](/custom-query-modules/manage-query-modules#loading-query-modules) or restart
 Memgraph in order to use them.
+
 ## Functions and procedures
 
 With this API it’s possible to extend your Cypher queries with **functions** and **procedures** with
@@ -131,26 +132,31 @@ and (if optional) default value.
 #### Constructors
 
 Creates a non-optional parameter with the given `name` and `type`.
+
 ```cpp
 Parameter(std::string_view name, Type type)
 ```
 
 Creates an optional Boolean parameter with the given `name` and `default_value`.
+
 ```cpp
 Parameter(std::string_view name, Type type, bool default_value)
 ```
 
 Creates an optional integer parameter with the given `name` and `default_value`.
+
 ```cpp
 Parameter(std::string_view name, Type type, int default_value)
 ```
 
 Creates an optional floating-point parameter with the given `name` and `default_value`.
+
 ```cpp
 Parameter(std::string_view name, Type type, double default_value)
 ```
 
 Creates an optional string parameter with the given `name` and `default_value`.
+
 ```cpp
 Parameter(std::string_view name, Type type, std::string_view default_value)
 Parameter(std::string_view name, Type type, const char *default_value)
@@ -158,12 +164,14 @@ Parameter(std::string_view name, Type type, const char *default_value)
 
 Creates a non-optional list parameter with the given `name` and `item_type`.
 The `list_type` parameter is organized as follows: `{Type::List, Type::[ITEM_TYPE]}`.
+
 ```cpp
 Parameter(std::string_view name, std::pair<Type, Type> list_type)
 ```
 
 Creates an optional list parameter with the given `name`, `item_type`, and `default_value`.
 The `list_type` parameter is organized as follows: `{Type::List, Type::[ITEM_TYPE]}`.
+
 ```cpp
 Parameter(std::string_view name, std::pair<Type, Type> list_type, Value default_value)
 ```
@@ -185,12 +193,14 @@ Represents a procedure/function return value. Values are defined by their name a
 #### Constructors
 
 Creates a return value with the given `name` and `type`.
+
 ```cpp
 Return(std::string_view name, Type type)
 ```
 
 Creates a return value with the given `name` and `list_type`.
 The `list_type` parameter is organized as follows: `{Type::List, Type::[ITEM_TYPE]}`.
+
 ```cpp
 Return(std::string_view name, std::pair<Type, Type> list_type)
 ```
@@ -205,7 +215,7 @@ Return(std::string_view name, std::pair<Type, Type> list_type)
 
 ### RecordFactory
 
-Factory class for [`Record`](#Record).
+Factory class for [`Record`](#record).
 
 #### Constructors
 
@@ -220,13 +230,12 @@ explicit RecordFactory(mgp_result *result)
 | `NewRecord`       | Adds a new result record.     |
 | `SetErrorMessage` | Sets the given error message. |
 
-
 ##### NewRecord
 
 Adds a new result record.
 
 ```cpp
-  const Record NewRecord() const
+  Record NewRecord() const
 ```
 
 ##### SetErrorMessage
@@ -234,7 +243,7 @@ Adds a new result record.
 Sets the given error message.
 
 ```cpp
-  void SetErrorMessage(const std::string_view error_msg) const
+  void SetErrorMessage(std::string_view error_msg) const
 ```
 
 ```cpp
@@ -317,6 +326,7 @@ Inserts a value of given type under field `field_name`.
 ```cpp
   void Insert(const char *field_name, const Duration value)
 ```
+
 ```cpp
   void Insert(const char *field_name, const Value &value)
 ```
@@ -387,15 +397,15 @@ Sets a return value of given type.
 ```
 
 ```cpp
-  void SetValue(const LocalTime value)
+  void SetValue(const LocalTime &value)
 ```
 
 ```cpp
-  void SetValue(const LocalDateTime value)
+  void SetValue(const LocalDateTime &value)
 ```
 
 ```cpp
-  void SetValue(const Duration value)
+  void SetValue(const Duration &value)
 ```
 
 ##### SetErrorMessage
@@ -403,7 +413,7 @@ Sets a return value of given type.
 Sets the given error message.
 
 ```cpp
-  void SetErrorMessage(const std::string_view error_msg) const
+  void SetErrorMessage(std::string_view error_msg) const
 ```
 
 ```cpp
@@ -435,6 +445,7 @@ explicit Graph(mgp_graph *graph)
 | `ContainsNode`         | Returns whether the graph contains the given node (accepts node or its ID).                   |
 | `ContainsRelationship` | Returns whether the graph contains the given relationship (accepts relationship or its ID).   |
 | `IsMutable`            | Returns whether the graph is mutable.                                                         |
+| `IsTransactional`      | Returns whether the graph is in a transactional storage mode.                                 |
 | `CreateNode`           | Creates a node and adds it to the graph.                                                      |
 | `DeleteNode`           | Deletes a node from the graph.                                                                |
 | `DetachDeleteNode`     | Deletes a node and all its incident edges from the graph.                                     |
@@ -481,7 +492,7 @@ GraphRelationships Relationships() const
 Returns the graph node with the given ID.
 
 ```cpp
-Node GetNodeById(const Id node_id) const
+Node GetNodeById(Id node_id) const
 ```
 
 ##### ContainsNode
@@ -489,7 +500,7 @@ Node GetNodeById(const Id node_id) const
 Returns whether the graph contains a node with the given ID.
 
 ```cpp
-bool ContainsNode(const Id node_id) const
+bool ContainsNode(Id node_id) const
 ```
 
 Returns whether the graph contains the given node.
@@ -501,7 +512,7 @@ bool ContainsNode(const Node &node) const
 ##### ContainsRelationship
 
 ```cpp
-bool ContainsRelationship(const Id relationship_id) const
+bool ContainsRelationship(Id relationship_id) const
 ```
 
 ```cpp
@@ -514,6 +525,14 @@ Returns whether the graph is mutable.
 
 ```cpp
 bool IsMutable() const
+```
+
+##### IsTransactional
+
+Returns whether the graph is in a transactional storage mode.
+
+```cpp
+bool IsTransactional() const
 ```
 
 ##### CreateNode
@@ -545,7 +564,7 @@ void DetachDeleteNode(const Node &node)
 Creates a relationship of type `type` between nodes `from` and `to` and adds it to the graph.
 
 ```cpp
-Relationship CreateRelationship(const Node &from, const Node &to, const std::string_view type)
+Relationship CreateRelationship(const Node &from, const Node &to, std::string_view type)
 ```
 
 ##### DeleteRelationship
@@ -633,12 +652,14 @@ Represents a node (vertex) of the Memgraph graph.
 #### Constructors
 
 Creates a Node from the copy of the given `mgp_vertex`.
+
 ```cpp
 explicit Node(mgp_vertex *ptr)
 explicit Node(const mgp_vertex *const_ptr)
 ```
 
 Copy and move constructors:
+
 ```cpp
 Node(const Node &other) noexcept
 Node(Node &&other) noexcept
@@ -648,6 +669,7 @@ Node(Node &&other) noexcept
 
 | Name               | Description                                                         |
 |--------------------|---------------------------------------------------------------------|
+| `IsDeleted`        | Returns whether the node has been deleted.                          |
 | `Id`               | Returns the node’s ID.                                              |
 | `Labels`           | Returns an iterable & indexable structure of the node’s labels.     |
 | `HasLabel`         | Returns whether the node has the given `label`.                     |
@@ -663,6 +685,14 @@ Node(Node &&other) noexcept
 | `InDegree`         | Get the in degree of the node.                                      |
 | `OutDegree`        | Get the out degree of the node.                                     |
 | `ToString`         | Returns the node's string representation.                           |
+
+##### IsDeleted
+
+Returns whether the node has been deleted.
+
+```cpp
+bool IsDeleted() const
+```
 
 ##### Id
 
@@ -749,7 +779,7 @@ Relationships OutRelationships() const
 Adds a label to the node.
 
 ```cpp
-void AddLabel(const std::string_view label)
+void AddLabel(std::string_view label)
 ```
 
 ##### RemoveLabel
@@ -757,7 +787,7 @@ void AddLabel(const std::string_view label)
 Removes a label from a node.
 
 ```cpp
-void RemoveLabel(const std::string_view label)
+void RemoveLabel(std::string_view label)
 ```
 
 ##### InDegree
@@ -781,7 +811,7 @@ size_t OutDegree() const
 Returns the node's string representation, which has this format: "(id: `node_id`, labels: `node_labels`, properties: `node_properties_map`)".
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 #### Operators
@@ -796,7 +826,7 @@ const std::string ToString() const
 Returns the value of the node’s `property_name` property.
 
 ```cpp
-const Value operator[](std::string_view property_name) const
+Value operator[](std::string_view property_name) const
 ```
 
 ### Relationship
@@ -806,12 +836,14 @@ Represents a relationship (edge) of the Memgraph graph.
 #### Constructors
 
 Creates a Relationship from the copy of the given `mgp_edge`.
+
 ```cpp
 explicit Relationship(mgp_edge *ptr)
 explicit Relationship(const mgp_edge *const_ptr)
 ```
 
 Copy and move constructors:
+
 ```cpp
 Relationship(const Relationship &other) noexcept
 Relationship(Relationship &&other) noexcept
@@ -821,6 +853,7 @@ Relationship(Relationship &&other) noexcept
 
 | Name               | Description                                                                 |
 | ------------------ | --------------------------------------------------------------------------- |
+| `IsDeleted`        | Returns whether the relationship has been deleted.                          |
 | `Id`               | Returns the relationship’s ID.                                              |
 | `Type`             | Returns the relationship’s type.                                            |
 | `Properties`       | Returns an iterable & indexable structure of the relationship’s properties. |
@@ -831,6 +864,14 @@ Relationship(Relationship &&other) noexcept
 | `From`             | Returns the relationship’s source node.                                     |
 | `To`               | Returns the relationship’s destination node.                                |
 | `ToString`         | Returns the relationship’s string representation.                           |
+
+##### IsDeleted
+
+Returns whether the relationship has been deleted.
+
+```cpp
+bool IsDeleted() const
+```
 
 ##### Id
 
@@ -855,6 +896,7 @@ Returns an iterable & indexable structure of the relationship’s properties.
 ```cpp
 std::unordered_map<std::string, mgp::Value> Properties() const
 ```
+
 ##### GetProperty
 
 Gets value of the relationship's property.
@@ -909,7 +951,7 @@ Returns the relationship's string representation, which has this format:
 "(`node_from.ToString()`)-(type: `relationship_type`, id: `relationship_id`, properties: `relationship_properties_map`)->(`node_to.ToString()`)".
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 #### Operators
@@ -924,10 +966,11 @@ const std::string ToString() const
 Returns the value of the relationship’s `property_name` property.
 
 ```cpp
-const Value operator[](std::string_view property_name) const
+Value operator[](std::string_view property_name) const
 ```
 
 Object is hashable using
+
 ```cpp
 std::hash<mgp::Relationship>
 ```
@@ -1006,7 +1049,6 @@ int64_t AsInt() const
 | --------------------------------------------- | -------------------- |
 | `operator==`<br/>`operator!=`<br/>`operator<` | comparison operators |
 
-
 ### Labels
 
 Represents a view of node labels.
@@ -1018,6 +1060,7 @@ explicit Labels(mgp_vertex *node_ptr)
 ```
 
 Copy and move constructors:
+
 ```cpp
 Labels(const Labels &other) noexcept
 Labels(Labels &&other) noexcept
@@ -1044,7 +1087,6 @@ Returns the number of the labels, i.e. the size of their list.
 size_t Size() const
 ```
 
-
 #### Operators
 
 | Name         | Description                                   |
@@ -1066,6 +1108,7 @@ Represents a date with a year, month, and day.
 #### Constructors
 
 Creates a Date object from the copy of the given `mgp_date`.
+
 ```cpp
 explicit Date(mgp_date *ptr)
 explicit Date(const mgp_date *const_ptr)
@@ -1073,16 +1116,19 @@ explicit Date(const mgp_date *const_ptr)
 
 Creates a Date object from the given string representing a date in the ISO 8601 format
 (`YYYY-MM-DD`, `YYYYMMDD`, or `YYYY-MM`).
+
 ```cpp
 explicit Date(std::string_view string)
 ```
 
 Creates a Date object with the given `year`, `month`, and `day` properties.
+
 ```cpp
 Date(int year, int month, int day)
 ```
 
 Copy and move constructors:
+
 ```cpp
 Date(const Date &other) noexcept
 Date(Date &&other) noexcept
@@ -1143,11 +1189,9 @@ int64_t Timestamp() const
 
 Returns the date's string representation, which has this format: "`year`-`month`-`day`".
 
-
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
-
 
 #### Operators
 
@@ -1161,6 +1205,7 @@ const std::string ToString() const
 ```cpp
 Date operator-(const Duration &dur) const
 ```
+
 ```cpp
 Duration operator-(const Date &other) const
 ```
@@ -1170,10 +1215,11 @@ Duration operator-(const Date &other) const
 Returns the value of the relationship’s `property_name` property.
 
 ```cpp
-const Value operator[](std::string_view property_name) const
+Value operator[](std::string_view property_name) const
 ```
 
 Object is hashable using
+
 ```cpp
 std::hash<mgp::Date>
 ```
@@ -1185,6 +1231,7 @@ Represents a time within the day without timezone information.
 #### Constructors
 
 Creates a LocalTime object from the copy of the given `mgp_local_time`.
+
 ```cpp
 explicit LocalTime(mgp_local_time *ptr)
 explicit LocalTime(const mgp_local_time *const_ptr)
@@ -1192,16 +1239,19 @@ explicit LocalTime(const mgp_local_time *const_ptr)
 
 Creates a LocalTime object from the given string representing a date in the ISO 8601 format
 (`[T]hh:mm:ss`, `[T]hh:mm`, `[T]hhmmss`, `[T]hhmm`, or `[T]hh`).
+
 ```cpp
 explicit LocalTime(std::string_view string)
 ```
 
 Creates a LocalTime object with the given `hour`, `minute`, `second`, `millisecond`, and `microsecond` properties.
+
 ```cpp
 LocalTime(int hour, int minute, int second, int millisecond, int microsecond)
 ```
 
 Copy and move constructors:
+
 ```cpp
 LocalTime(const LocalTime &other) noexcept
 LocalTime(LocalTime &&other) noexcept
@@ -1275,15 +1325,14 @@ Returns the object’s timestamp (microseconds since Unix epoch).
 ```cpp
 int64_t Timestamp() const
 ```
+
 ##### ToString
 
 Returns the object's string representation, which has this format: "`hour`:`minute`:`second`,`microsecond milisecond`".
 
-
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
-
 
 #### Operators
 
@@ -1297,11 +1346,13 @@ const std::string ToString() const
 ```cpp
 LocalTime operator-(const Duration &dur) const
 ```
+
 ```cpp
 Duration operator-(const LocalDateTime &other) const
 ```
 
 Object is hashable using
+
 ```cpp
 std::hash<mgp::LocalTime>
 ```
@@ -1313,6 +1364,7 @@ Temporal type representing a date and a local time.
 #### Constructors
 
 Creates a LocalDateTime object from the copy of the given `mgp_local_date_time`.
+
 ```cpp
 explicit LocalDateTime(mgp_local_date_time *ptr)
 explicit LocalDateTime(const mgp_local_date_time *const_ptr)
@@ -1320,17 +1372,20 @@ explicit LocalDateTime(const mgp_local_date_time *const_ptr)
 
 Creates a LocalDateTime object from the given string representing a date in the ISO 8601 format
 (`YYYY-MM-DDThh:mm:ss`, `YYYY-MM-DDThh:mm`, `YYYYMMDDThhmmss`, `YYYYMMDDThhmm`, or `YYYYMMDDThh`).
+
 ```cpp
 explicit LocalDateTime(std::string_view string)
 ```
 
 Creates a LocalDateTime object with the given `year`, `month`, `day`, `hour`, `minute`, `second`, `millisecond`,
 and `microsecond` properties.
+
 ```cpp
 LocalDateTime(int year, int month, int day, int hour, int minute, int second, int millisecond, int microsecond)
 ```
 
 Copy and move constructors:
+
 ```cpp
 LocalDateTime(const LocalDateTime &other) noexcept
 LocalDateTime(LocalDateTime &&other) noexcept
@@ -1436,11 +1491,9 @@ int64_t Timestamp() const
 
 Returns the object's string representation, which has this format: "`year`-`month`-`day`T`hour`:`minute`:`second`,`microsecond milisecond`".
 
-
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
-
 
 #### Operators
 
@@ -1454,11 +1507,13 @@ const std::string ToString() const
 ```cpp
 LocalDateTime operator-(const Duration &dur) const
 ```
+
 ```cpp
 Duration operator-(const LocalDateTime &other) const
 ```
 
 Object is hashable using
+
 ```cpp
 std::hash<mgp::LocalDateTime>
 ```
@@ -1470,6 +1525,7 @@ Represents a period of time in Memgraph.
 #### Constructors
 
 Creates a Duration object from the copy of the given `mgp_duration`.
+
 ```cpp
 explicit Duration(mgp_duration *ptr)
 explicit Duration(const mgp_duration *const_ptr)
@@ -1478,21 +1534,25 @@ explicit Duration(const mgp_duration *const_ptr)
 Creates a Duration object from the given string in the following format: `P[nD]T[nH][nM][nS]`, where (1)
 `n` stands for a number, (2) capital letters are used as a separator, (3) each field in `[]` is optional,
 and (4) only the last field may be a non-integer.
+
 ```cpp
 explicit Duration(std::string_view string)
 ```
 
 Creates a Duration object from the given number of microseconds.
+
 ```cpp
 explicit Duration(int64_t microseconds)
 ```
 
 Creates a Duration object with the given `day`, `hour`, `minute`, `second`, `millisecond`, and `microsecond` properties.
+
 ```cpp
 Duration(double day, double hour, double minute, double second, double millisecond, double microsecond)
 ```
 
 Copy and move constructors:
+
 ```cpp
 Duration(const Duration &other) noexcept
 Duration(Duration &&other) noexcept
@@ -1512,13 +1572,13 @@ Returns the duration as microseconds.
 ```cpp
 int64_t Microseconds() const
 ```
+
 ##### ToString
 
 Returns the duration's string representation, which has this format: "`microseconds` ms".
 
-
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 #### Operators
@@ -1533,11 +1593,13 @@ const std::string ToString() const
 ```cpp
 Duration operator-(const Duration &other) const
 ```
+
 ```cpp
 Duration operator-() const
 ```
 
 Object is hashable using
+
 ```cpp
 std::hash<mgp::Duration>
 ```
@@ -1550,17 +1612,20 @@ and end points of a path necessarily being nodes.
 #### Constructors
 
 Creates a Path from the copy of the given `mgp_path`.
+
 ```cpp
 explicit Path(mgp_path *ptr)
 explicit Path(const mgp_path *const_ptr)
 ```
 
 Creates a Path starting with the given `start_node`.
+
 ```cpp
 explicit Path(const Node &start_node)
 ```
 
 Copy and move constructors:
+
 ```cpp
 Path(const Path &other) noexcept
 Path(Path &&other) noexcept
@@ -1570,12 +1635,21 @@ Path(Path &&other) noexcept
 
 | Name                | Description                                                                                           |
 | ------------------- | ----------------------------------------------------------------------------------------------------- |
+| `ContainsDeleted`   | Returns whether the path contains any deleted nodes or relationships.                                 |
 | `Length`            | Returns the path length (number of relationships).                                                    |
 | `GetNodeAt`         | Returns the node at the given `index`.  The `index` must be less than or equal to length of the path. |
 | `GetRelationshipAt` | Returns the relationship at the given `index`. The `index` must be less than length of the path.      |
 | `Expand`            | Adds a relationship continuing from the last node on the path.                                        |
 | `Pop`               | Removes the last node and the last relationship from the path.                                        |
 | `ToString`          | Returns the path's string representation.                                                             |
+
+##### ContainsDeleted
+
+Returns whether the path contains any deleted nodes or relationships.
+
+```cpp
+bool ContainsDeleted() const
+```
 
 ##### Length
 
@@ -1621,11 +1695,9 @@ void Pop()
 
 Returns the path's string representation, which has nearly the same format as `Relationship.ToString()`, the difference being that `Path.ToString()` can have multiple nodes and relationships in its string representation, for example: "`(node)-(relationship)->(node)-(relationship)->(node)`...".
 
-
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
-
 
 #### Operators
 
@@ -1634,6 +1706,7 @@ const std::string ToString() const
 | `operator==`<br/>`operator!=` | comparison operators |
 
 Object is hashable using
+
 ```cpp
 std::hash<mgp::Path>
 ```
@@ -1645,33 +1718,39 @@ A list containing any number of values of any supported type.
 #### Constructors
 
 Creates a List from the copy of the given `mgp_list`.
+
 ```cpp
 explicit List(mgp_list *ptr)
 explicit List(const mgp_list *const_ptr)
 ```
 
 Creates an empty List.
+
 ```cpp
 explicit List()
 ```
 
 Creates a List with the given `capacity`.
+
 ```cpp
 explicit List(size_t capacity)
 ```
 
 Creates a List from the given vector.
+
 ```cpp
 explicit List(const std::vector<Value> &values)
 explicit List(std::vector<Value> &&values)
 ```
 
 Creates a List from the given initializer_list.
+
 ```cpp
-explicit List(const std::initializer_list<Value> list)
+explicit List(std::initializer_list<Value> list)
 ```
 
 Copy and move constructors:
+
 ```cpp
 List(const List &other) noexcept
 List(List &&other) noexcept
@@ -1687,12 +1766,21 @@ List(List &&other) noexcept
 
 | Name                                      | Description                                           |
 | ----------------------------------------- | ----------------------------------------------------- |
+| `ContainsDeleted`                         | Returns whether the list contains any deleted values (`Node`, `Relationship`, or containers holding them). |
 | `Size`                                    | Returns the size of the list.                         |
 | `Empty`                                   | Returns whether the list is empty.                    |
 | `Append`                                  | Appends the given `value` to the list.                |
 | `AppendExtend`                            | Extends the list and appends the given `value` to it. |
 | `begin`<br/>`end`<br/>`cbegin`<br/>`cend` | Returns the beginning/end of the `List` iterator.     |
 | `ToString`                                | Returns the list's string representation.             |
+
+##### ContainsDeleted
+
+Returns whether the path contains any deleted values (`Node`, `Relationship`, or containers holding them).
+
+```cpp
+bool ContainsDeleted() const
+```
 
 ##### Size
 
@@ -1745,9 +1833,8 @@ void AppendExtend(Value &&value)
 Returns the list's string representation, which has this format: "[`element.ToString()`, `element.ToString()`...]".
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
-
 
 #### Operators
 
@@ -1761,10 +1848,11 @@ const std::string ToString() const
 Returns the value at the given `index`.
 
 ```cpp
-const Value operator[](size_t index) const
+Value operator[](size_t index) const
 ```
 
 Object is hashable using
+
 ```cpp
 std::hash<mgp::List>
 ```
@@ -1772,33 +1860,38 @@ std::hash<mgp::List>
 ### Map
 
 A map of key-value pairs where keys are strings, and values can be of any supported type.
-The pairs are represented as [MapItems](#MapItem).
+The pairs are represented as [MapItems](#mapitem).
 
 #### Constructors
 
 Creates a Map from the copy of the given `mgp_map`.
+
 ```cpp
 explicit Map(mgp_map *ptr)
 explicit Map(const mgp_map *const_ptr)
 ```
 
 Creates an empty Map.
+
 ```cpp
 explicit Map()
 ```
 
 Creates a Map from the given STL map.
+
 ```cpp
 explicit Map(const std::map<std::string_view, Value> &items)
 explicit Map(std::map<std::string_view, Value> &&items)
 ```
 
 Creates a Map from the given initializer_list (map items correspond to initializer list pairs).
+
 ```cpp
-Map(const std::initializer_list<std::pair<std::string_view, Value>> items)
+Map(std::initializer_list<std::pair<std::string_view, Value>> items)
 ```
 
 Copy and move constructors:
+
 ```cpp
 Map(const Map &other) noexcept
 Map(Map &&other) noexcept
@@ -1814,6 +1907,7 @@ Map(Map &&other) noexcept
 
 | Name                                      | Description                                        |
 | ----------------------------------------- | -------------------------------------------------- |
+| `ContainsDeleted`                         | Returns whether the map contains any deleted values (`Node`, `Relationship`, or containers holding them). |
 | `Size`                                    | Returns the size of the map.                       |
 | `Empty`                                   | Returns whether the map is empty.                  |
 | `At`                                      | Returns the value at the given `key`.              |
@@ -1823,6 +1917,14 @@ Map(Map &&other) noexcept
 | `begin`<br/>`end`<br/>`cbegin`<br/>`cend` | Returns the beginning/end of the `Map` iterator.   |
 | `ToString`                                | Returns the map's string representation.           |
 | `KeyExists`                               | Checks if the key exists in a map.                 |
+
+##### ContainsDeleted
+
+Returns whether the path contains any deleted values (`Node`, `Relationship`, or containers holding them).
+
+```cpp
+bool ContainsDeleted() const
+```
 
 ##### Size
 
@@ -1845,7 +1947,7 @@ bool Empty() const
 Returns the value at the given `key`.
 
 ```cpp
-Value const At(std::string_view key) const
+Value At(std::string_view key) const
 ```
 
 ##### Insert
@@ -1855,6 +1957,7 @@ Inserts the given `key`-`value` pair into the map. The `value` is copied.
 ```cpp
 void Insert(std::string_view key, const Value &value)
 ```
+
 Inserts the given `key`-`value` pair into the map. Takes ownership of `value` by moving it.
 The behavior of accessing `value` after performing this operation is undefined.
 
@@ -1870,6 +1973,7 @@ The `value` is copied.
 ```cpp
 void Update(std::string_view key, const Value &value)
 ```
+
 Updates the `key`-`value` pair in the map. If the key doesn't exist, the value gets inserted.
 The `value` is copied. Takes the ownership of `value` by moving it.
 The behavior of accessing `value` after performing this operation is undefined.
@@ -1885,13 +1989,15 @@ Erases the element associated with the key from the map, if it doesn't exist not
 ```cpp
 void Erase(std::string_view key);
 ```
+
 ##### ToString
 
 Returns the map's string representation, which has this format: "{`key1` : `value1.ToString()`, `key2`: `value2.ToString()`...}".
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
+
 ##### KeyExists
 
 Returns `true` if key is present in the map, otherwise `false`.
@@ -1912,10 +2018,11 @@ bool KeyExists(std::string_view key) const;
 Returns the value at the given `key`.
 
 ```cpp
-const Value operator[](std::string_view key) const
+Value operator[](std::string_view key) const
 ```
 
 Object is hashable using
+
 ```cpp
 std::hash<mgp::Map>
 ```
@@ -1938,6 +2045,7 @@ Auxiliary data structure representing key-value pairs where keys are strings, an
 | `operator==`<br/>`operator!=`<br/>`operator<` | comparison operators |
 
 Object is hashable using
+
 ```cpp
 std::hash<mgp::MapItem>
 ```
@@ -1950,25 +2058,29 @@ The data types are described [in the reference guide](/fundamentals/data-types).
 #### Constructors
 
 Creates a Value from the copy of the given `mgp_value`.
+
 ```cpp
 explicit Value(mgp_value *ptr)
 ```
 
 Creates a null Value.
+
 ```cpp
 explicit Value()
 ```
 
 Basic type constructors:
+
 ```cpp
-explicit Value(const bool value)
-explicit Value(const int64_t value)
-explicit Value(const double value)
+explicit Value(bool value)
+explicit Value(int64_t value)
+explicit Value(double value)
 explicit Value(const char *value)
-explicit Value(const std::string_view value)
+explicit Value(std::string_view value)
 ```
 
 Container type constructors:
+
 ```cpp
 explicit Value(const List &value)
 explicit Value(List &&value)
@@ -1977,6 +2089,7 @@ explicit Value(Map &&value)
 ```
 
 Graph element type constructors:
+
 ```cpp
 explicit Value(const Node &value)
 explicit Value(Node &&value)
@@ -1987,6 +2100,7 @@ explicit Value(Path &&value)
 ```
 
 Temporal type constructors:
+
 ```cpp
 explicit Value(const Date &value)
 explicit Value(Date &&value)
@@ -1999,6 +2113,7 @@ explicit Value(Duration &&value)
 ```
 
 Copy and move constructors:
+
 ```cpp
 Value(const Value &other) noexcept
 Value(Value &&other) noexcept
@@ -2062,47 +2177,47 @@ std::string_view ValueString()
 ```
 
 ```cpp
-const List ValueList() const
+List ValueList() const
 List ValueList()
 ```
 
 ```cpp
-const Map ValueMap() const
+Map ValueMap() const
 Map ValueMap()
 ```
 
 ```cpp
-const Node ValueNode() const
+Node ValueNode() const
 Node ValueNode()
 ```
 
 ```cpp
-const Relationship ValueRelationship() const
+Relationship ValueRelationship() const
 Relationship ValueRelationship()
 ```
 
 ```cpp
-const Path ValuePath() const
+Path ValuePath() const
 Path ValuePath()
 ```
 
 ```cpp
-const Date ValueDate() const
+Date ValueDate() const
 Date ValueDate()
 ```
 
 ```cpp
-const LocalTime ValueLocalTime() const
+LocalTime ValueLocalTime() const
 LocalTime ValueLocalTime()
 ```
 
 ```cpp
-const LocalDateTime ValueLocalDateTime() const
+LocalDateTime ValueLocalDateTime() const
 LocalDateTime ValueLocalDateTime()
 ```
 
 ```cpp
-const Duration ValueDuration() const
+Duration ValueDuration() const
 Duration ValueDuration()
 ```
 
@@ -2191,7 +2306,7 @@ Returns the value's string representation. It does this by finding the type of t
 | `Duration`      | Returns `Duration.ToString()`.                                       |
 
 ```cpp
-const std::string ToString() const
+std::string ToString() const
 ```
 
 #### Operators
@@ -2200,8 +2315,8 @@ const std::string ToString() const
 | ----------------------------- | -------------------- |
 | `operator==`<br/>`operator!=` <br/> `operator<` | comparison operators |
 
-
 Object is hashable using
+
 ```cpp
 std::hash<mgp::Value>
 ```

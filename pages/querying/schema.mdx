@@ -7,13 +7,72 @@ import { Callout } from 'nextra/components'
 
 # Schema
 
-The `schema` procedures return information about the database schema.
+Some queries are designed to retrieve information about the structure of the data within the database, for example, node labels and properties associated, as well as relationship types and properties.
+
+## Schema-related queries
+
+To use schema-associated queries start Memgraph with the `--storage-enable-schema-metadata` [configuration flag](/configuration/configuration-settings#storage) set to `True`. The flag facilitates the utilization of a specialized cache designed to store specific metadata related to the database.   
+
+### Information about node labels
+
+The `SHOW NODE_LABELS INFO;` query provides a list of node labels that currently exist in the database or have existed at some point.
+
+If the database contains the following data:
+
+```cypher
+CREATE (:Dog {name: "Rex", age: 5})-[l:LOVES {how_much: "very"}]->(:Human:Owner {name: "Carl", age: 90});
+```
+
+The `SHOW NODE_LABELS INFO;` will return all the labels:
+
+```cypher
+SHOW NODE_LABELS INFO;
+```
+
+Result:
+
+```plaintext
++-------------+
+| node labels |
++-------------+
+| "Owner"     |
+| "Human"     |
+| "Dog"       |
++-------------+
+```
+
+### Information about relationship types
+
+The `SHOW EDGE_TYPES INFO;` query provides a list of relationship types that currently exist in the database or have existed at some point.
+
+If the database contains the following data:
+
+```cypher
+CREATE (:Dog {name: "Rex", age: 5})-[l:LOVES {how_much: "very"}]->(:Human:Owner {name: "Carl", age: 90});
+```
+
+The `SHOW EDGE_TYPES INFO;` will return all the types:
+
+```cypher
+SHOW EDGE_TYPES INFO;
+```
+Result:
+
+```plaintext
++------------+
+| edge types |
++------------+
+| "LOVES"    |
++------------+
+```
+
+## Schema-related procedures
 
 <Callout type="info">
 You can execute these procedures on [graph projections, subgraphs or portions of the graph using the `project` function](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph).
 </Callout>
 
-{<h2><code> schema.node_type_properties() </code> </h2>}
+### node_type_properties()
 
 The `schema.node_type_properties()` procedure returns schema information about nodes and their properties in the graph.
 
@@ -21,36 +80,119 @@ The `schema.node_type_properties()` procedure returns schema information about n
 
 - `nodeType: string` ➡ Concatenated node labels separated by a `:`.
 - `nodeLabels: List[string]` ➡ A list of node labels.
-- `mandatory: boolean` ➡ A boolean which is `True` if a node has properties, `False` if a node has no properties.
+- `mandatory: boolean` ➡  Returns `True` if a given node label is associated with only one property and `False` otherwise.
 - `propertyName: string` ➡  Property name.
-- `propertyTypes: List[string]` ➡ Property type.
+- `propertyTypes: string` ➡ Property type.
 
 {<h3> Usage: </h3>}
 
+To get the information about nodes and properties, run the following query:
+
 ```cypher
-CALL schema.node_type_properties() 
-YIELD nodeType, nodeLabels, mandatory, propertyName, propertyTypes; 
+CALL schema.node_type_properties()
+YIELD nodeType, nodeLabels, mandatory, propertyName, propertyTypes;
 ```
 
-{<h2><code> schema.rel_type_properties() </code> </h2>}
+### rel_type_properties()
 
 This `schema.rel_type_properties()` procedure returns schema information about relationships and their properties in the graph.
 
 {<h3> Output: </h3>}
 
 - `relType: string` ➡ The type of the relationship.
-- `mandatory: boolean` ➡ A boolean which is `True` if the relationship has properties, `False` if the relationship has no properties.
+- `mandatory: boolean` ➡ Returns `True` if a given relationship type is associated with only one property and `False` otherwise.
 - `propertyName: string` ➡ Property name.
-- `propertyTypes: List[string]` ➡ Property type.
+- `propertyTypes: string` ➡ Property type.
 
 {<h3> Usage: </h3>}
 
+
+To get the information about relationships and properties, run the following query:
+
 ```cypher
-CALL schema.rel_type_properties() 
-YIELD relType, mandatory, propertyName, propertyTypes; 
+CALL schema.rel_type_properties()
+YIELD relType, mandatory, propertyName, propertyTypes;
 ```
 
-{<h2>Example: </h2>}
+### assert()
+
+The `schema.assert()` is used to ensure indices and constraints exist in Memgraph.
+
+{<h3> Input: </h3>}
+
+- `indices_map: (mgp.Map, required)`: Requires a map of key-value pairs where
+  the key is a string representing a label and the value is a list containing
+  properties as strings. If the list of properties is empty, an index will be
+  created only on the label. If the list is not empty, indexes on the properties
+  belonging to that label will be created. To create indexes on both the label
+  and properties, add an empty string to the list of properties, for example,
+  `["", "prop1", "prop2", ...]`.
+- `unique_constraints: (mgp.Map, required)`: Requires a map of key-value pairs
+  where the key is a string representing a label and the value is a list of
+  lists containing properties as strings. List of lists is required since unique
+  constraints can be created on a combination of multiple properties.
+- `existence_constraints: (mgp.Map, optional)`: Requires a map of key-value
+  pairs where the key is a string representing a label and the value is a list
+  containing properties as strings. For each property, one existence constraint
+  is created.
+- `drop_existing: (bool, optional, default=true)`: If true, all existing indices
+  and constraints will be dropped. If the user asserts indexes or constraints
+  that already exist, they won't be dropped and re-created.
+
+{<h3> Output: </h3>}
+
+- `action: string` - The modification made to an index or a constraint.
+- `label: string` - Label used for modifying index or constraint.
+- `key: string` - Properties used for modifying index or constraint. When a
+  label index is modified, an empty string is returned. When a unique constraint
+  is modified, where key ia a list of properties a stringified list is returned.
+- `keys: List[string]` - List of properties used to modify indexes or constraints.
+- `unique: bool` - When `true` the record referres to unique constraint, when
+  `false` it reffers to existence constraint and indices.
+
+{<h3> Usage: </h3>}
+
+Create initial indices and constraints in the database, using the following queries:
+
+```
+CREATE INDEX ON :Entity;
+CREATE CONSTRAINT ON (p:Person) ASSERT EXISTS (p.address);
+CREATE CONSTRAINT ON (p:Person) ASSERT p.id IS UNIQUE;
+```
+
+The following query will modify indexes and constraints by creating an index on
+the `:Person` label, and a label-property index on `:Person(id)` property. Also,
+a unique constraints will be created on `(Person.name, Person.surname)` and
+`(Person.id)`. The index on the `:Entity` label will be dropped along with
+the existence constraint on `:Person(id)` property.
+
+```cypher
+CALL schema.assert({Person: ["", "id"]}, {Person: [["name", "surname"], ["id"]]}, {}, true) 
+YIELD action, key, keys, label, unique
+RETURN action, key, keys, label, unique;
+```
+
+Results:
+
+```plaintext
++-----------------------------------------------------------------------------+
+| action     | key               | keys                | label       | unique |
++-----------------------------------------------------------------------------+
+| "Created"  | ""                | []                  | "Person"    | false  |
++-----------------------------------------------------------------------------+
+| "Created"  | "id"              | ["id"]              | "Person"    | false  |
++-----------------------------------------------------------------------------+
+| "Dropped"  | ""                | []                  | "Entity"    | false  |
++-----------------------------------------------------------------------------+
+| "Dropped"  | "address"         | ["address"]         | "Person"    | false  |
++-----------------------------------------------------------------------------+
+| "Created"  | "[name, surname]" | ["name", "surname"] | "Person"    | true   |
++-----------------------------------------------------------------------------+
+| "Kept"     | "id"              | ["id"]              | "Person"    | true   |
++-----------------------------------------------------------------------------+
+```
+
+### Example
 
 Create a graph using the following query:
 
@@ -63,53 +205,42 @@ CREATE (:Bird)-[f:FLIES_TO]->(:Sky);
 Call the procedure to get information about the nodes:
 
 ```cypher
-CALL schema.node_type_properties() 
-YIELD nodeType, nodeLabels, mandatory, propertyName, propertyTypes; 
+CALL schema.node_type_properties()
+YIELD nodeType, nodeLabels, mandatory, propertyName, propertyTypes;
 ```
 
 Result:
 
 ```plaintext
-+------------------------------------------------------------------------------------------+
-|nodeType              | nodeLabels            | mandatory | propertyName  | propertyTypes |
-+------------------------------------------------------------------------------------------+
-|:`Dog`                | ["Dog"]               | true      | age           | ["Int"]       |
-+------------------------------------------------------------------------------------------+
-|:`Dog`                | ["Dog"]               | true      | name          | ["String"]    |
-+------------------------------------------------------------------------------------------+
-|:`Human`:`Owner`      | ["Human", "Owner"]    | true      | age           | ["Int"]       |
-+------------------------------------------------------------------------------------------+
-|:`Human`:`Owner`      | ["Human", "Owner"]    | true      | name          | ["String"]    |
-+------------------------------------------------------------------------------------------+
-|:`Dog`                | ["Dog"]               | false     |               |               |
-+------------------------------------------------------------------------------------------+
-|:`Park`               | ["Park"]              | false     |               |               |
-+------------------------------------------------------------------------------------------+
-|:`Bird`               | ["Bird"]              | false     |               |               |
-+------------------------------------------------------------------------------------------+
-|:`Sky`                | ["Sky"]               | false     |               |               |
-+------------------------------------------------------------------------------------------+
++--------------------+--------------------+--------------------+--------------------+--------------------+
+| nodeType           | nodeLabels         | mandatory          | propertyName       | propertyTypes      |
++--------------------+--------------------+--------------------+--------------------+--------------------+
+| ":`Sky`"           | ["Sky"]            | false              | ""                 | ""                 |
+| ":`Park`"          | ["Park"]           | false              | ""                 | ""                 |
+| ":`Human`:`Owner`" | ["Human", "Owner"] | false              | "age"              | "Int"              |
+| ":`Human`:`Owner`" | ["Human", "Owner"] | false              | "name"             | "String"           |
+| ":`Bird`"          | ["Bird"]           | false              | ""                 | ""                 |
+| ":`Dog`"           | ["Dog"]            | false              | "age"              | "Int"              |
+| ":`Dog`"           | ["Dog"]            | false              | "name"             | "String"           |
++--------------------+--------------------+--------------------+--------------------+--------------------+
 ```
 
 Call the procedure to get information about the relationships:
 
 ```cypher
-CALL schema.rel_type_properties() 
+CALL schema.rel_type_properties()
 YIELD relType, mandatory, propertyName, propertyTypes;
 ```
 
 Results:
 
 ```plaintext
-+-------------------------------------------------------------------+
-| relType               | mandatory | propertyName  | propertyTypes |
-+-------------------------------------------------------------------+
-| :`LOVES`              | true      | how_much      | ["String"]    |
-+-------------------------------------------------------------------+
-| :`RUNS_AND_PLAYS_IN`  | true      | duration      | ["String"]    |
-+-------------------------------------------------------------------+
-| :`RUNS_AND_PLAYS_IN`  | true      | speed         | ["Int"]       |
-+-------------------------------------------------------------------+
-| :`FLIES_TO`           | false     |               |               |
-+-------------------------------------------------------------------+
++------------------------+------------------------+------------------------+------------------------+
+| relType                | mandatory              | propertyName           | propertyTypes          |
++------------------------+------------------------+------------------------+------------------------+
+| ":`FLIES_TO`"          | false                  | ""                     | ""                     |
+| ":`RUNS_AND_PLAYS_IN`" | false                  | "duration"             | "String"               |
+| ":`RUNS_AND_PLAYS_IN`" | false                  | "speed"                | "Int"                  |
+| ":`LOVES`"             | true                   | "how_much"             | "String"               |
++------------------------+------------------------+------------------------+------------------------+
 ```

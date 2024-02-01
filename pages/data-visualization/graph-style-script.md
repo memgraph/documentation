@@ -576,7 +576,7 @@ all styling possibilities.
 
 Graph Style Script has a large number of built-in functions that can help you
 with achieving the right style for your graph. Take a look at the [list of GSS
-built-in functions]/data-visualization/graph-style-script/built-in-elements).
+built-in functions](/data-visualization/graph-style-script/built-in-elements).
 
 ### Built-in colors
 

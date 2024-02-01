@@ -11,6 +11,8 @@ class MyDocument extends Document {
               data-project-name="Memgraph"
               data-project-color="#8C0081"
               data-project-logo="https://avatars.githubusercontent.com/u/17707542?s=200&v=4"
+              data-search-mode-enabled="true"
+              data-modal-override-open-class="nextra-search"
             ></script>
           </Head>
           <body>
@@ -20,6 +22,6 @@ class MyDocument extends Document {
         </Html>
       );
     }
-  }
+}
   
-  export default MyDocument;
+export default MyDocument;
