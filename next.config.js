@@ -6,9 +6,24 @@ const withNextra = require('nextra')({
 })
 
 module.exports = withNextra({
-	trailingSlash: false,
-	basePath: '/docs',
-	assetPrefix: '/docs',
+  // Headers configuration for disabling cache
+  async headers() {
+    return [
+      {
+        // Applies to all paths
+        source: "/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, max-age=0",
+          },
+        ],
+      },
+    ];
+  },
+  trailingSlash: false,
+  basePath: '/docs',
+  assetPrefix: '/docs',
   async redirects() {
     return [
       {
