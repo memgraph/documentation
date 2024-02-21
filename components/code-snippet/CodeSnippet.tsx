@@ -14,8 +14,8 @@ export default function CodeSnippet(props: { code: string; page: string, os: str
   const [copyIconUrl, setCopyIconUrl] = useState("/docs/copy-icon.svg"); 
   const [copiedIconUrl, setCopiedIconUrl] = useState("/docs/copied-icon.svg"); 
   const { theme } = useTheme();
-  let idCopy = "copy-text-".concat(props.os);
-  let idCopied = "copied-text-".concat(props.os);
+  let idCopy = "copy-text-".concat(props.page).concat(props.os);
+  let idCopied = "copied-text-".concat(props.page).concat(props.os);
 
   useEffect(() => {
     if (theme === "light") {
