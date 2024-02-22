@@ -267,7 +267,7 @@ SHOW STORAGE INFO;
 STORAGE MODE IN_MEMORY_ANALYTICAL;
 ```
 
-### 4. Import nodes into Memgraph
+### 5. Import nodes into Memgraph
 
 As we already mentioned, graph databases do not use tables to store data, but
 nodes with relationships that connect them. If you take a look at the data model
@@ -334,7 +334,7 @@ If you click on each node, you can see its properties. The nodes are still not
 connected to each other, so let's focus on that by importing the rest of the CSV
 files.
 
-### 5. Import relationships into Memgraph
+### 6. Import relationships into Memgraph
 
 We've imported CSV files containing data about customers, purchases and
 products. In our graph database, they are represented as nodes. Now we need to
@@ -374,7 +374,7 @@ SET o.quantity = ToInteger(row.quantity);
 
 ![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_lab_overview.png)
 
-### 6. Data model and updating the schema
+### 7. Data model and updating the schema
 
 The data model in a graph database now looks like this:
 
