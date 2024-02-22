@@ -29,7 +29,7 @@ all coordinators are using to ensure consistenty of cluster's state. Replication
 specifying `--coordinator-server-port` flag. This port is used for RPC network communication that happens between coordinators and replication
 instance. When started by default replication instance is MAIN. All replication instances should be started with flag `--restore-replication-state-at-startup`
 so that its role (main or replica) is restored on restart. Coordinator will ensure that no data inconsistency can happen during and after instance's
-restart. Si
+restart. Currently all replicas should be SYNC replicas to avoid branching from happening. We plan to add support for ASYNC replicas in 2.16.
 Once all instances are started, the user can start registering replication instances.
 
 ### Register instance
@@ -162,4 +162,69 @@ Distributed system can fail in various ways. The logic is implemented in a way t
 failures and independent machine failures. That's why there are parameters controlling frequency of health checks from coordinator to replication
 instances and the time needed to realize the instance is down.
 
-Look at the code...
+## Example
+
+This example will show how to setup highly-available cluster in Memgraph using a single coordinator.
+
+### 1. Start all instances
+
+TODO: Change to docker run
+i.) Start coordinator:
+```plaintext
+./memgraph --bolt-port=7687 --log-level=TRACE --data-directory=/tmp/mg_data_coord1 --log-file=/tmp/coord1.log --also-log-to-stderr --raft-server-id=1 --raft-server-port=10111 --experimental-enabled=high-availability
+```
+
+ii.) Start instance1:
+```plaintext
+ ./memgraph --bolt-port=7688 --log-level=TRACE --data-directory=/tmp/mg_data_instance1 --log-file=/tmp/instance1.log --also-log-to-stderr --coordinator-server-port=10011 --experimental-enabled=high-availability
+```
+
+iii.) Start instance2:
+```plaintext
+ ./memgraph --bolt-port=7689 --log-level=TRACE --data-directory=/tmp/mg_data_instance2 --log-file=/tmp/instance2.log --also-log-to-stderr --coordinator-server-port=10012 --experimental-enabled=high-availability
+```
+
+iv.) Start instance3:
+```plaintext
+ ./memgraph --bolt-port=7690 --log-level=TRACE --data-directory=/tmp/mg_data_instance3 --log-file=/tmp/instance3.log --also-log-to-stderr --coordinator-server-port=10013 --experimental-enabled=high-availability
+```
+
+### 2. Register instances
+
+i.) Start communication with the coordinator with any Memgraph client on port 7687.
+```plaintext
+mgconsole --port=7687
+```
+ii.) Register all 3 instances as part of the cluster:
+```plaintext
+REGISTER INSTANCE instance_1 ON '127.0.0.1:10011' WITH '127.0.0.1:10001';
+REGISTER INSTANCE instance_2 ON '127.0.0.1:10012' WITH '127.0.0.1:10002';
+REGISTER INSTANCE instance_3 ON '127.0.0.1:10013' WITH '127.0.0.1:10003';
+```
+
+iii.) Set instance_3 as main:
+```plaintext
+SET INSTANCE instance_3 TO MAIN;
+```
+
+iv.) Check cluster state with `SHOW INSTANCES`;
+
+| instance_name | raft_socket_address | coordinator_socket_address | alive | role        |
+| ------------- | ------------------- | -------------------------- | ----- | ----------- |
+| coordinator_1 | 127.0.0.1:10111     | ""                         | True  | coordinator |
+| instance_1    | ""                  | 127.0.0.1:10011            | True  | replica     |
+| instance_2    | ""                  | 127.0.0.1:10012            | True  | replica     |
+| instance_3    | ""                  | 127.0.0.1:10013            | True  | main        |
+
+
+### 3. Check automatic failover
+
+Let's say that the current main instance is down because of some reason. After `--instance-down-timeout-sec` seconds, coordinator will realize
+that and automatically promote first alive replica to become new main. The output of running `SHOW INSTANCES` could then look like:
+
+| instance_name | raft_socket_address | coordinator_socket_address | alive | role        |
+| ------------- | ------------------- | -------------------------- | ----- | ----------- |
+| coordinator_1 | 127.0.0.1:10111     | ""                         | True  | coordinator |
+| instance_1    | ""                  | 127.0.0.1:10011            | True  | main        |
+| instance_2    | ""                  | 127.0.0.1:10012            | True  | replica     |
+| instance_3    | ""                  | 127.0.0.1:10013            | False | unknown     |
