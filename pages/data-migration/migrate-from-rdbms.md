@@ -213,6 +213,60 @@ the **Query Editor** to import data into Memgraph.
 
 ![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_lab_query.png)
 
+### 4. Gain speed with indexes and analytical storage mode
+
+Although the dataset imported in this tutorial is quite small, one day you might
+want to import really big datasets with billions of nodes and relationships and
+you will require all the extra speed you can get. 
+
+To gain speed you can [create indexes](/fundamentals/indexes) on the `id`
+properties used to connect nodes with relationships.
+
+**To create indexes, run:**
+
+```cypher
+CREATE INDEX ON :Customer(id);
+CREATE INDEX ON :Purchase(id);
+CREATE INDEX ON :Product(id);
+CREATE INDEX ON :CustomerPurchase(id);
+CREATE INDEX ON :ProductPurchase(id);
+```
+
+You can also change the [storage mode](/fundamentals/storage-memory-usage) from
+`IN_MEMORY_TRANSACTIONAL` to `IN_MEMORY_ANALYTICAL`. This will disable the
+creation of durability files (snapshots and WAL files) and you will no longer
+have any ACID guarantees. Other transactions will be able to see the changes of
+ongoing transactions. Also, transaction will be able to see the changes they are
+doing. This means that the transactions can be committed in random orders, and
+the updates to the data, in the end, might not be correct. 
+
+But, if you import on one thread, batch of data after a batch of data, there
+should be absolutely no issues, and you will gain 6 times faster import with 6
+times less memory consumption.
+
+After import you can switch back to the `IN_MEMORY_TRANSACTIONAL` storage mode or
+continue running analytics queries (only read queries) in the
+`IN_MEMORY_ANALYTICAL` mode to continue benefiting from low memory consumption. 
+
+To switch between modes, run the following queries on a running instance:
+
+```cypher
+STORAGE MODE IN_MEMORY_ANALYTICAL;
+STORAGE MODE IN_MEMORY_TRANSACTIONAL;
+```
+
+To check the current storage mode, run: 
+
+```cypher
+SHOW STORAGE INFO;
+```
+
+**Change the storage mode to analytical before import.**
+
+```cypher
+STORAGE MODE IN_MEMORY_ANALYTICAL;
+```
+
 ### 4. Import nodes into Memgraph
 
 As we already mentioned, graph databases do not use tables to store data, but
