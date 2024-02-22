@@ -105,16 +105,21 @@ What is the core operation? -> Automatic failover.
 
 
 ## Failover
+
+### Single coordinator
 Currently failover is operated from point of single coordinator. Coordinator is not suppose to fail. If coordinator fails best solution
 is to register each instance again, and set old instance which was MAIN as MAIN.
 
-Every --instance-health-check-frequency-sec seconds, coordinator contacts each instance to establish if it is alive or down. 
+
+### Failover procedure
+Every --instance-health-check-frequency-sec seconds, coordinator contacts each instance. 
 Instance is not considered to be down for --instance-down-timeout-sec. Expectation currently is to set --instance-health-check-frequency-sec
 to be less than --instance-down-timeout-sec and for --instance-down-timeout-sec to be multiplier of --instance-health-check-frequency-sec with coefficiient N.
 We suggest for multiplier coefficient to be N>=2.
 
 Once instance is down, in case it is REPLICA coordinator will try to contact it again every --instance-health-check-frequency-sec. REPLICA
-always returns as REPLICA.
+always returns as REPLICA. MAIN can return as MAIN if failover doesn't succeed in the meantime or if it comes back up faster
+than --instance-down-timeout-sec timeout which is set.
 
 If instance is MAIN, at that point failover starts. From alive replicas coordinator chooses new potential MAIN. 
 Coordinator first contacts each replica which is alive to stop listening to the old MAIN and to start
@@ -129,9 +134,24 @@ the new MAIN.
 
 Coordinator tracks at all times which instance was last MAIN. 
 
+### Old MAIN getting back to cluster
 If at certain point new MAIN dies while old MAIN is still not demoted to REPLICA, it could happen that both instances get back up as MAIN.
 Old MAIN will get demoted to REPLICA, while new MAIN will stay as MAIN or also be demoted to REPLICA, depending on fact whether 
 failover has suceeded or not.
+
+### Demoting MAIN to REPLICA
+When MAIN is demoted to REPLICA it can happen that main gets demoted, but setting now new REPLICA to listen to the current MAIN fails. If
+that happens, coordinator will retry every --instance-health-check-frequency-sec to set up REPLICA to start listening to the current MAIN.
+
+
+### Replication concerns
+
+If at some point it happens that MAIN goes down, but REPLICA which is chosen as new MAIN has less up to date data than other 
+REPLICAs, failover won't succeed as from MAINs perspective it cannot become new MAIN as it has some other instance which is more up to date
+and therefore diverged from new MAIN.
+At that point, best solution is to UNREGISTER instance which has less up to date data, let failover succeed and set instance back in cluster.
+Other option is to drop data from instance which is more up to date, by shutting it down and deleting snapshots and WAL directories in 
+--data-directory.
 
 
 MAIN
