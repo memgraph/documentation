@@ -5,7 +5,14 @@ description: Dive into the documentation page for Memgraph and learn how to conf
 
 import { Callout } from 'nextra/components'
 
-# High availability
+# High availability (Enterprise)
+
+<Callout type="warning">
+
+Memgraph 2.15 introduced high availability enterprise feature which is only enabled if used with `--experimental-enabled=high-availability'/
+
+</Callout>
+
 
 Cluster is considered highly available if at any point there is some instance which can respond to user query. Our high availability 
 relies on replication. The cluster is consisted of main instance on which user can execute write queries, replica instances
@@ -20,7 +27,10 @@ You can start coordinator instance by specifying `--raft-server-id` and `--raft-
 queries related to high availability so you cannot execute any data-oriented query on it. Raft server port is used for RAFT protocol which
 all coordinators are using to ensure consistenty of cluster's state. Replication instance is distinguished from coordinator instance by
 specifying `--coordinator-server-port` flag. This port is used for RPC network communication that happens between coordinators and replication
-instance. When started by default replication instance is MAIN. Once all instances are started, the user can start registering replication instances.
+instance. When started by default replication instance is MAIN. All replication instances should be started with flag `--restore-replication-state-at-startup`
+so that its role (main or replica) is restored on restart. Coordinator will ensure that no data inconsistency can happen during and after instance's
+restart. Si
+Once all instances are started, the user can start registering replication instances.
 
 ### Register instance
 
@@ -90,3 +100,66 @@ TODO: fico `--instance-get-uuid-frequency-sec`
 ## Achieving high availability
 
 What is the core operation? -> Automatic failover.
+
+
+## Failover
+Currently failover is operated from point of single coordinator. Coordinator is not suppose to fail. If coordinator fails best solution
+is to register each instance again, and set old instance which was MAIN as MAIN.
+
+Every --instance-health-check-frequency-sec seconds, coordinator contacts each instance to establish if it is alive or down. 
+Instance is not considered to be down for --instance-down-timeout-sec. Expectation currently is to set --instance-health-check-frequency-sec
+to be less than --instance-down-timeout-sec and for --instance-down-timeout-sec to be multiplier of --instance-health-check-frequency-sec with coefficiient N.
+We suggest for multiplier coefficient to be N>=2.
+
+Once instance is down, in case it is REPLICA coordinator will try to contact it again every --instance-health-check-frequency-sec. REPLICA
+always returns as REPLICA.
+
+If instance is MAIN, at that point failover starts.
+From alive replicas coordinator chooses new potential MAIN. 
+Coordinator first contacts each replica which is alive to stop listening to the old MAIN. And to start
+listening to the potential new MAIN. Once each alive replica acknowlages that it stopped listening to the old MAIN,
+coordinator sends RPC request to the potential new MAIN which is still in REPLICA state, to promote itself to MAIN instance.
+In RPC request new potential MAIN gets UUID which replicas are ready to listen to.
+
+Once old MAIN gets back up, RPC request is sent to demote main to replica, and new RPC request is sent for REPLICA to start listening to 
+the new MAIN.
+
+Coordinator tracks at all times which instance was last MAIN. 
+
+If at certain point new MAIN dies while old MAIN is still not demoted to REPLICA, it could happen that both instances get back up as MAIN.
+Old MAIN will get demoted to REPLICA, while new MAIN will stay as MAIN or also be demoted to REPLICA, depending on fact whether 
+failover has suceeded or not.
+
+
+MAIN
+
+3. Failover logic:
+- single-coordinator
+- whole logic, callbackovi kako to funkcionira
+
+
+- diverged from main -> user has to manually solve it if happens
+- idempotentno demotanje u repliku 
+
+
+- replica can talk only with a single main, possible that cannot talk with any instance for a short time.. -> to avoid inconsitencies :checmark:
+- choosing replica currently simple :Checkmark: 
+
+
+## Instances' restart
+
+TODO: Write somewhere that you should use `--replication-state-at-startup`
+
+In 2.15 release, we assume there is a single coordinator instance which cannot fail. Replication instance can fail both as main and as replica.
+When instance which was replica comes back, it won't accept updates from any instance until coordinator updates its responsible peer. This should
+happen automatically when coordinator's ping to the instance passes. When main instance comes back, any writing to the main instance will be forbidden 
+until ping from coordinator passes. When the coordinator realizes that the once-main instance is alive, it will choose between enabling writing on old main
+or demoting it to replica. The choice depends on whether there was any other main instance chosen between old main's failure and restart.
+
+## Handling errors
+
+Distributed system can fail in various ways. The logic is implemented in a way that Memgraph instance will be resilient to occasional network
+failures and independent machine failures. That's why there are parameters controlling frequency of health checks from coordinator to replication
+instances and the time needed to realize the instance is down.
+
+Look at the code...
