@@ -124,7 +124,7 @@ Empty set (0.001 sec)
 
 ### How to lower memory consumption
 
-The action of matching nodes and then deleting relationships attached to them can consume a lot of memory on larger datasets (>1M) due to the accumulation of `Deltas`, which store changes to the graph objects. To avoid that and drop the database most efficiently, first delete all the relationships and then all the nodes. To delete the relationships, repeat the below query as long as the number of deleted relationships is 100.000. 
+Matching nodes and then deleting relationships attached to them can consume a lot of memory in larger datasets (>1M). This is due to the accumulation of `Deltas`, which store changes to the graph objects. To avoid this and efficiently drop the database, first delete all relationships and then all nodes. To delete the relationships, execute the query below repeatedly until the number of deleted relationships is 100,000. 
 
 ```cypher
 MATCH ()-[r]->()
@@ -134,7 +134,7 @@ DELETE r
 RETURN count(r) AS num_deleted;
 ```
 
-After you deleted all relationships, run the following query as long as the number of deleted nodes is 100.000 to delete all nodes:
+After deleting all relationships, run the following query repeatedly until the number of deleted nodes is 100,000 to delete all nodes:
 
 ```cypher
 MATCH (n)
@@ -144,7 +144,7 @@ DELETE n
 RETURN count(n) AS num_deleted;
 ```
 
-If the deletion still consumes too much memory, try lowering the batch size for limit. 
+If the deletion still consumes too much memory, consider lowering the batch size limit. 
 
 ## Dataset queries
 
