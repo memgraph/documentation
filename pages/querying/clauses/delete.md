@@ -54,30 +54,6 @@ Output:
 Empty set (0.001 sec)
 ```
 
-### How to lower memory consumption
-
-The action of matching nodes and then deleting relationships attached to them can consume a lot of memory on larger datasets (>1M) due to the accumulation of `Deltas`, which store changes to the graph objects. To avoid that and drop the database most efficiently, first delete all the relationships and then all the nodes. To delete the relationships, repeat the below query as long as the number of deleted relationships is 100.000. 
-
-```cypher
-MATCH ()-[r]->()
-WITH r
-LIMIT 100000
-DELETE r
-RETURN count(r) AS num_deleted;
-```
-
-After you deleted all relationships, run the following query as long as the number of deleted nodes is 100.000 to delete all nodes:
-
-```cypher
-MATCH (n)
-WITH n
-LIMIT 100000
-DELETE n
-RETURN count(n) AS num_deleted;
-```
-
-If the deletion still consumes too much memory, try lowering the batch size for limit. 
-
 ## 3. Deleting a relationship
 
 The `DELETE` clause can be used to delete a relationship:
@@ -145,6 +121,30 @@ Output:
 ```nocopy
 Empty set (0.001 sec)
 ```
+
+### How to lower memory consumption
+
+The action of matching nodes and then deleting relationships attached to them can consume a lot of memory on larger datasets (>1M) due to the accumulation of `Deltas`, which store changes to the graph objects. To avoid that and drop the database most efficiently, first delete all the relationships and then all the nodes. To delete the relationships, repeat the below query as long as the number of deleted relationships is 100.000. 
+
+```cypher
+MATCH ()-[r]->()
+WITH r
+LIMIT 100000
+DELETE r
+RETURN count(r) AS num_deleted;
+```
+
+After you deleted all relationships, run the following query as long as the number of deleted nodes is 100.000 to delete all nodes:
+
+```cypher
+MATCH (n)
+WITH n
+LIMIT 100000
+DELETE n
+RETURN count(n) AS num_deleted;
+```
+
+If the deletion still consumes too much memory, try lowering the batch size for limit. 
 
 ## Dataset queries
 
