@@ -11,7 +11,7 @@ The `DELETE` clause is used to delete nodes and relationships from the database.
 2. [Deleting a node and its relationships](#2-deleting-a-node-and-its-relationships) <br />
 3. [Deleting a relationship](#3-deleting-a-relationship) <br />
 4. [Deleting a path](#4-deleting-a-path) <br />
-5. [Deleting everything](#4-deleting-everything)
+5. [Deleting everything](#5-deleting-everything)
 
 ## Dataset
 
