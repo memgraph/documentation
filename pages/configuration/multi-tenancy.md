@@ -55,10 +55,11 @@ Users interact with multi-tenant features through specialized Cypher queries:
 4. `USE DATABASE name`: Switches focus to a specific database (disabled during
    transactions).
 5. `GRANT DATABASE name TO user`: Grants a user access to a specified database.
-6. `REVOKE DATABASE name FROM user`: Revokes a user's access to a specified
-   database.
-7. `SET MAIN DATABASE name FOR user`: Sets a user's default (landing) database.
-8. `SHOW DATABASE PRIVILEGES FOR user`: Lists a user's database access rights.
+6. `DENY DATABASE name FROM user`: Denies a user's access to a specified
+7. `REVOKE DATABASE name FROM user`: Removes database from user's authentication 
+   context
+8. `SET MAIN DATABASE name FOR user`: Sets a user's default (landing) database.
+9. `SHOW DATABASE PRIVILEGES FOR user`: Lists a user's database access rights.
 
 ### User's main database
 
@@ -75,7 +76,8 @@ global set of privileges, but currently, per-database privileges cannot be
 granted.
 
 Access to all databases can be granted or revoked using wildcards:
-`GRANT DATABASE * TO user;` or `REVOKE DATABASE * FROM user;`.
+`GRANT DATABASE * TO user;`, `DENY DATABASE * TO user;` or 
+`REVOKE DATABASE * FROM user;`.
 
 ### Additional multi-tenant privileges
 
