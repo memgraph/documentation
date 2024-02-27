@@ -275,7 +275,8 @@ You can use Memgraph Lab, a visual user interface that enables you to:
 Replication can impact performance in several ways. 
 
 When using SYNC replica, the replication is done at time of commit. This means
-that each commit takes longer, as the data needs to be replication before the
+that each commit takes longer, as the data needs to be replicated before the
+
 commit has been finalized.
 
 A single replica can receive only one package at a time. Meaning that 
