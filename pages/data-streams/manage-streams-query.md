@@ -30,7 +30,7 @@ To create a transformation module, you need to:
 3. Load the file into Memgraph either on startup (automatically) or by running a
    `CALL mg.load_all();` query.
 
-If you are using Docker to run Memgraph, check [how to transfer the file into the container](/getting-started/install-memgraph/docker#copy-files-from-and-to-a-docker-container). 
+If you are using Docker to run Memgraph, check [how to transfer the file into the container](/getting-started/first-steps-with-docker#copy-files-from-and-to-a-docker-container. 
 
 If you are using Memgraph Lab you can [create transformation module within the
 application](/data-streams/transformation-modules#creating-transformation-modules-within-memgraph-lab). 
