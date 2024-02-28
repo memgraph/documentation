@@ -36,7 +36,7 @@ queries related to high availability so you cannot execute any data-oriented que
 all coordinators are using to ensure consistenty of cluster's state. Replication instance is distinguished from coordinator instance by
 specifying `--coordinator-server-port` flag. This port is used for RPC network communication that happens between coordinators and replication
 instance. When started by default replication instance is MAIN. All replication instances should be started with flag `--restore-replication-state-at-startup`
-so that its role (MAIN or replica) is restored on restart. Coordinator will ensure that no data inconsistency can happen during and after instance's
+so that its role (MAIN or REPLICA) is restored on restart. Coordinator will ensure that no data inconsistency can happen during and after instance's
 restart. Currently all replicas should be SYNC replicas to avoid branching from happening. We plan to add support for ASYNC replicas in 2.16.
 Once all instances are started, the user can start registering replication instances.
 
@@ -46,8 +46,8 @@ Register instance query will result in several actions:
 1. Coordinator instance will connect to replication instance 
 2. Coordinator instance will start pinging replication instance every `--instance-health-check-frequency-sec` seconds to check 
 the status of replication instance.
-3. Replication instance will be demoted from MAIN to replica.
-4. Replication instance will by default by replica in sync with MAIN which will start replication server on replicationSocketAddress specified in the query.
+3. Replication instance will be demoted from MAIN to REPLICA.
+4. Replication instance will by default by REPLICA in sync with MAIN which will start replication server on replicationSocketAddress specified in the query.
 
 Both coordinator and replication socket address need to be unique.
 
@@ -80,13 +80,13 @@ UNREGISTER INSTANCE instanceName;
 At the moment of registration, the instance which you want to unregister must not be MAIN because unregistering MAIN could lead to cluster which
 is in inconsistent state. 
 
-The instance requested to be unregistered will also be unregistered from the current MAIN's replica set.
+The instance requested to be unregistered will also be unregistered from the current MAIN's REPLICA set.
 
 ### Show instances
 
 You can check the state of the whole cluster using `SHOW INSTANCES` query. The query will show what instances are visible in the cluster,
 which raft port are they using (single coordinator for now), which coordinator port are they using, are they considered alive from coordinator's
-perspective and which role do they have (are they MAIN, replica, coordinator or unknown if not alive).
+perspective and which role do they have (are they MAIN, REPLICA, coordinator or unknown if not alive).
 
 ```plaintext
 SHOW INSTANCES;
@@ -104,7 +104,7 @@ server used for communication of coordinator instances. Flag `--instance-health-
 check status of replication instance to update its status. Flag `--instance-down-timeout-sec` gives user the ability to control how much time should
 pass before coordinator starts considering instance to be down. We advise user to consider instance to be down only if several consecutive pings
 failed because a single ping can fail because of a million reasons. There is additional flag `--instance-get-uuid-frequency-sec` which sets 
-how often should coordinator check on replica instances if it follows correct MAIN instance. It can happen that replica dies and gets back up,
+how often should coordinator check on REPLICA instances if it follows correct MAIN instance. It can happen that REPLICA dies and gets back up,
 before coordinator notices that. In that case REPLICA will not  follow MAIN for `--instance-get-uuid-frequency-sec` seconds. We advise to set 
 the flag to more than `--instance-down-timeout-sec`, as we should first confirm instance was down, and not that we had some networking issue.
 
@@ -132,14 +132,14 @@ always returns as REPLICA. MAIN can return as MAIN if failover doesn't succeed i
 than `--instance-down-timeout-sec` timeout which is set.
 
 If instance is MAIN, at that point failover starts. From alive replicas coordinator chooses new potential MAIN. 
-Coordinator first contacts each replica which is alive to stop listening to the old MAIN and to start
-listening to the potential new MAIN. Once each alive replica acknowlages that it stopped listening to the old MAIN,
+Coordinator first contacts each REPLICA which is alive to stop listening to the old MAIN and to start
+listening to the potential new MAIN. Once each alive REPLICA acknowlages that it stopped listening to the old MAIN,
 coordinator sends RPC request to the potential new MAIN which is still in REPLICA state, to promote itself to MAIN instance and
 sends all instances from cluster to which new MAIN will replicate data. If instance is down at the moment, new MAIN will establish 
 connection at later point when it comes back up, and recover it to correct state.
 In RPC request new potential MAIN gets UUID which replicas are ready to listen to.
 
-Once old MAIN gets back up, RPC request is sent to demote MAIN to replica, and new RPC request is sent for REPLICA to start listening to 
+Once old MAIN gets back up, RPC request is sent to demote MAIN to REPLICA, and new RPC request is sent for REPLICA to start listening to 
 the new MAIN.
 
 Coordinator tracks at all times which instance was last MAIN. 
@@ -175,18 +175,18 @@ MAIN
 - idempotentno demotanje u repliku 
 
 
-- replica can talk only with a single main, possible that cannot talk with any instance for a short time.. -> to avoid inconsitencies :checmark:
-- choosing replica currently simple :Checkmark: 
+- REPLICA can talk only with a single main, possible that cannot talk with any instance for a short time.. -> to avoid inconsitencies :checmark:
+- choosing REPLICA currently simple :Checkmark: 
 
 
 ## Instances' restart
 
 
-In 2.15 release, we assume there is a single coordinator instance which cannot fail. Replication instance can fail both as MAIN and as replica.
-When instance which was replica comes back, it won't accept updates from any instance until coordinator updates its responsible peer. This should
+In 2.15 release, we assume there is a single coordinator instance which cannot fail. Replication instance can fail both as MAIN and as REPLICA.
+When instance which was REPLICA comes back, it won't accept updates from any instance until coordinator updates its responsible peer. This should
 happen automatically when coordinator's ping to the instance passes. When MAIN instance comes back, any writing to the MAIN instance will be forbidden 
 until ping from coordinator passes. When the coordinator realizes that the once-MAIN instance is alive, it will choose between enabling writing on old MAIN
-or demoting it to replica. The choice depends on whether there was any other MAIN instance chosen between old MAIN's failure and restart.
+or demoting it to REPLICA. The choice depends on whether there was any other MAIN instance chosen between old MAIN's failure and restart.
 
 Since instance can die and get back up, use `--replication-state-at-startup=true` to restore last replication state. With this config we will restore instance in 
 state it was last and everything should function normally from that point. In case this flag is not set, every instance will restart as MAIN and that case is not handled.
@@ -254,7 +254,7 @@ iv.) Connect to coordinator and check cluster state with `SHOW INSTANCES`;
 ### 3. Check automatic failover
 
 Let's say that the current MAIN instance is down because of some reason. After `--instance-down-timeout-sec` seconds, coordinator will realize
-that and automatically promote first alive replica to become new MAIN. The output of running `SHOW INSTANCES` could then look like:
+that and automatically promote first alive REPLICA to become new MAIN. The output of running `SHOW INSTANCES` could then look like:
 
 | instance_name | raft_socket_address | coordinator_socket_address | alive | role        |
 | ------------- | ------------------- | -------------------------- | ----- | ----------- |
