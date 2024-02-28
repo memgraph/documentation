@@ -55,8 +55,7 @@ Once all instances are registered, one replication instance should be promoted t
 SET INSTANCE instanceName to MAIN;
 ```
 
-This query will register all other instances as replicas to the new main. 
-TODO: What will happen if some instance is unavailable now fico?
+This query will register all other instances as replicas to the new main. If one of the instances is unavailable, setting instance to MAIN will not succeed.
 
 If there is already main instance in the cluster, this query will fail. 
 
@@ -96,8 +95,11 @@ Flags `--raft-server-id` and `--raft-server-port` need to be unique and specifie
 server used for communication of coordinator instances. Flag `--instance-health-check-frequency-sec` specifies how often should leader coordinator
 check status of replication instance to update its status. Flag `--instance-down-timeout-sec` gives user the ability to control how much time should
 pass before coordinator starts considering instance to be down. We advise user to consider instance to be down only if several consecutive pings
-failed because a single ping can fail because of a million reasons.
-TODO: fico `--instance-get-uuid-frequency-sec`
+failed because a single ping can fail because of a million reasons. There is additional flag `--instance-get-uuid-frequency-sec` which sets 
+how often should coordinator check on replica instances if it follows correct MAIN instance. It can happen that replica dies and gets back up,
+before coordinator notices that. In that case REPLICA will not  follow MAIN for `--instance-get-uuid-frequency-sec` seconds. We advise to set 
+the flag to more than `--instance-down-timeout-sec`, as we should first confirm instance was down, and not that we had some networking issue.
+
 
 ## Achieving high availability
 
@@ -171,13 +173,15 @@ MAIN
 
 ## Instances' restart
 
-TODO: Write somewhere that you should use `--replication-state-at-startup`
 
 In 2.15 release, we assume there is a single coordinator instance which cannot fail. Replication instance can fail both as main and as replica.
 When instance which was replica comes back, it won't accept updates from any instance until coordinator updates its responsible peer. This should
 happen automatically when coordinator's ping to the instance passes. When main instance comes back, any writing to the main instance will be forbidden 
 until ping from coordinator passes. When the coordinator realizes that the once-main instance is alive, it will choose between enabling writing on old main
 or demoting it to replica. The choice depends on whether there was any other main instance chosen between old main's failure and restart.
+
+Since instance can die and get back up, use `--replication-state-at-startup=true` to restore last replication state. With this config we will restore instance in 
+state it was last and everything should function normally from that point. In case this flag is not set, every instance will restart as MAIN and that case is not handled.
 
 ## Handling errors
 
@@ -193,22 +197,22 @@ This example will show how to setup highly-available cluster in Memgraph using a
 
 i.) Start coordinator:
 ```plaintext
-./memgraph --bolt-port=7687 --log-level=TRACE --data-directory=/tmp/mg_data_coord1 --log-file=/tmp/coord1.log --also-log-to-stderr --raft-server-id=1 --raft-server-port=10111 --experimental-enabled=high-availability
+docker run  --name coord1 --rm -p 7687:7687 -p 7444:7444 memgraph/memgraph-mage --bolt-port=7687 --log-level=TRACE --data-directory=/tmp/mg_data_coord1 --log-file=/tmp/coord1.log --also-log-to-stderr --raft-server-id=1 --raft-server-port=10111 --experimental-enabled=high-availability
 ```
 
 ii.) Start instance1:
 ```plaintext
- ./memgraph --bolt-port=7688 --log-level=TRACE --data-directory=/tmp/mg_data_instance1 --log-file=/tmp/instance1.log --also-log-to-stderr --replication-restore-state-on-startup --coordinator-server-port=10011 --experimental-enabled=high-availability
+docker run  --name instance1 --rm -p 7688:7688 -p 7445:7444 memgraph/memgraph-mage --bolt-port=7688 --log-level=TRACE --data-directory=/tmp/mg_data_instance1 --log-file=/tmp/instance1.log --also-log-to-stderr --replication-restore-state-on-startup --coordinator-server-port=10011 --experimental-enabled=high-availability
 ```
 
 iii.) Start instance2:
 ```plaintext
- ./memgraph --bolt-port=7689 --log-level=TRACE --data-directory=/tmp/mg_data_instance2 --log-file=/tmp/instance2.log --also-log-to-stderr --replication-restore-state-on-startup --coordinator-server-port=10012 --experimental-enabled=high-availability
+docker run --name instance1 --rm -p 7689:7689 -p 7446:7444 memgraph/memgraph-mage --bolt-port=7689 --log-level=TRACE --data-directory=/tmp/mg_data_instance2 --log-file=/tmp/instance2.log --also-log-to-stderr --replication-restore-state-on-startup --coordinator-server-port=10012 --experimental-enabled=high-availability
 ```
 
 iv.) Start instance3:
 ```plaintext
- ./memgraph --bolt-port=7690 --log-level=TRACE --data-directory=/tmp/mg_data_instance3 --log-file=/tmp/instance3.log --also-log-to-stderr --replication-restore-state-on-startup --coordinator-server-port=10013 --experimental-enabled=high-availability
+docker run --name instance1 --rm -p 7690:7690  -p 7447:7444 memgraph/memgraph-mage --bolt-port=7690 --log-level=TRACE --data-directory=/tmp/mg_data_instance3 --log-file=/tmp/instance3.log --also-log-to-stderr --replication-restore-state-on-startup --coordinator-server-port=10013 --experimental-enabled=high-availability
 ```
 
 ### 2. Register instances
@@ -229,7 +233,7 @@ iii.) Set instance_3 as main:
 SET INSTANCE instance_3 TO MAIN;
 ```
 
-iv.) Check cluster state with `SHOW INSTANCES`;
+iv.) Connect to coordinator and check cluster state with `SHOW INSTANCES`;
 
 | instance_name | raft_socket_address | coordinator_socket_address | alive | role        |
 | ------------- | ------------------- | -------------------------- | ----- | ----------- |
