@@ -15,7 +15,7 @@ listed the [benefits of graph
 databases](https://memgraph.com/blog/the-benefits-of-using-a-graph-database-instead-of-sql).<br/>
 In summary, instead of tables, graph databases use nodes connected by
 relationships. Graph databases are an excellent choice if the data is highly
-connected, you need to retrieve it often and the data model is not set in stone.
+connected, you need to retrieve it often, and the data model is not set in stone.
 So if you need a quick and reliable database in which you can quickly and
 effortlessly change the data model and properties, a graph database is the way
 to go.
@@ -28,7 +28,7 @@ To follow along, you will need:
   platform that includes **Memgraph**, a visual user interface **Memgraph Lab**,
   command-line interface **mgconsole** and **MAGE**, a graph algorithms and
   modules library.<br/>
-  To install Memgraph Platform and set it up, please follow the [Docker
+  To install the Memgraph Platform and set it up, please follow the [Docker
   installation instructions](/getting-started).
 - (optional) A running relational database either with your own schema and data
   or you can use the schema we used and populate the tables
@@ -56,13 +56,13 @@ export the **Customer** table, right-click on the table name and select the
 
 ![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_export_wizard.png)
 
-Click **Next** and on the second step of the Wizard do the following:
+Click **Next**, and on the second step of the Wizard, do the following:
 
 1.  Define the **File Path**. Usually, you can choose any location, but for this
-    tutorial place the files in the root and name the file the same as the
+    tutorial, place the files in the root and name the file the same as the
     table.
 2.  Select the **csv** format if it isn't already selected.
-3.  Select comma as a **Field Separator**.
+3.  Select a comma as a **Field Separator**.
 4.  Leave the **Line Separator** as **LF**.
 5.  Delete the quotations from the **Enclose Strings** option and leave it
     empty.
@@ -90,7 +90,7 @@ id,name,email
 **Exporting data by running a query**
 
 You can also export data by writing a query, but the data can be exported only
-to a specific location you can learn by running the following query:
+to a specific location, you can learn by running the following query:
 
 ```sql
 SHOW VARIABLES LIKE "secure_file_priv";
@@ -121,9 +121,9 @@ FIELDS TERMINATED BY ','
 LINES TERMINATED BY '\r\n';
 ```
 
-In the first line we defined the headings, and then selected fields from a table
+In the first line, we defined the headings, and then selected fields from a table
 that will be exported to a specified field. We also defined the comma sign as a
-fields terminator and lines will be terminated by `\r\n`.
+field terminator, and lines will be terminated by `\r\n`.
 
 **Exported CSV files**
 
@@ -134,7 +134,7 @@ Below are the CSV files we exported from our relational database. Feel free to
 download them, place them in the root directory and use them for the rest of
 this tutorial.
 
-To place the files in the root directory you need Admin rights on your computer.
+To place the files in the root directory, you need Admin rights on your computer.
 
 - [`customer.csv`](https://public-assets.memgraph.com/tutorials/rdbms-migration-to-memgraph/customer.csv)
 - [`customerpurchase.csv`](https://public-assets.memgraph.com/tutorials/rdbms-migration-to-memgraph/customerpurchase.csv)
@@ -169,9 +169,9 @@ docker cp source.csv <CONTAINER ID>:/destination.csv
 ```
 
 On my computer, the CVS files we need are located in the root directory of the
-Windows 10 OS, and the CONTAINER ID is `bbbc43620e5c`.
+Windows 10 OS and the CONTAINER ID is `bbbc43620e5c`.
 
-First I place myself in the root directory:
+First, I place myself in the root directory:
 
 ```terminal
 cd C:\
@@ -185,14 +185,14 @@ example of copying the `customer.csv` file:
 docker cp customer.csv bbbc:/customer.csv
 ```
 
-To check if the files have indeed been copied run the following command but be
+To check if the files have indeed been copied, run the following command but be
 sure to replace the CONTAINER ID:
 
 ```terminal
 docker exec -it bbbc bash
 ```
 
-And then use the `ls` command to list all the files and directories in
+Then use the `ls` command to list all the files and directories in
 the container's root. You should be able to see the CSV files we just copied to
 the container.
 
@@ -208,7 +208,7 @@ If you installed Memgraph Platform correctly, you should be able to access
 Memgraph Lab in your browser by visiting
 [`http://localhost:3000/`](http://localhost:3000) and connect to the database.
 
-Place yourself in the **Query** section where we will write queries in
+Place yourself in the **Query** section, where we will write queries in
 the **Query Editor** to import data into Memgraph.
 
 ![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_lab_query.png)
@@ -234,17 +234,17 @@ CREATE INDEX ON :ProductPurchase(id);
 
 You can also change the [storage mode](/fundamentals/storage-memory-usage) from
 `IN_MEMORY_TRANSACTIONAL` to `IN_MEMORY_ANALYTICAL`. This will disable the
-creation of durability files (snapshots and WAL files) and you will no longer
-have any ACID guarantees. Other transactions will be able to see the changes of
-ongoing transactions. Also, transaction will be able to see the changes they are
-doing. This means that the transactions can be committed in random orders, and
+creation of durability files (snapshots and WAL files), and you will no longer
+have any ACID guarantees. Other transactions will be able to see the changes in
+ongoing transactions. Also, transactions will be able to see the changes they are
+making. This means that the transactions can be committed in random orders, and
 the updates to the data, in the end, might not be correct. 
 
-But, if you import on one thread, batch of data after a batch of data, there
+But, if you import on one thread, batch of data after batch of data, there
 should be absolutely no issues, and you will gain 6 times faster import with 6
 times less memory consumption.
 
-After import you can switch back to the `IN_MEMORY_TRANSACTIONAL` storage mode or
+After import, you can switch back to the `IN_MEMORY_TRANSACTIONAL` storage mode or
 continue running analytics queries (only read queries) in the
 `IN_MEMORY_ANALYTICAL` mode to continue benefiting from low memory consumption. 
 
@@ -271,10 +271,10 @@ STORAGE MODE IN_MEMORY_ANALYTICAL;
 
 As we already mentioned, graph databases do not use tables to store data, but
 nodes with relationships that connect them. If you take a look at the data model
-we were using in the relational database we can describe it with a single
+we were using in the relational database, we can describe it with a single
 sentence: "Customers make purchases of product."
 
-Nodes would be the customers, purchases and products while the relationship
+Nodes would be the customers, purchases and products, while the relationship
 between them is that customers MAKE purchases (`customerpurchase` table) OF
 product (`productpurchase` table).
 
@@ -287,7 +287,7 @@ WITH HEADER AS row
 CREATE (n:nodeName {property1_memgraph_name: row.property1_relational_name, property2_memgraph_name: row.property2_relational_name});
 ```
 
-So first we need to define the source file path and set the `HEADER` option to
+First we need to define the source file path and set the `HEADER` option to
 `WITH` because our CSV file has headers. The clause will parse each `row` and
 create nodes with properties. This is the clause to create `customer` nodes.
 Copy it and paste it in the **Query Editor** in **Memgraph Lab**, then click
@@ -360,7 +360,7 @@ SET m.id = row.id;
 
 Running this query made 12 new relationships between customers and purchases.
 Let's now create relationships between products and purchases. Notice how we
-defined the quantity data type as integer. Once this last query is run, you
+defined the quantity data type as an integer. Once this last query is run, you
 should have 24 nodes and 29 relationships (edges).
 
 ```cypher
@@ -380,7 +380,7 @@ The data model in a graph database now looks like this:
 
 ![](/pages/data-migration/migrate-from-rdbms/migrate_relational_database_graph_data_model.png)
 
-If you decided you want to add a property to any of the nodes or relationships
+If you decide you want to add a property to any of the nodes or relationships
 you can do so at any point without disrupting the schema.
 
 Let's add the `city` property to customer 4:
@@ -399,7 +399,7 @@ MATCH (c:Customer {id: "4"})
 RETURN c
 ```
 
-As the last step of this tutorial let's check all the nodes and relationships
+As the last step of this tutorial, let's check all the nodes and relationships
 we've imported into Memgraph by running the following query:
 
 ```cypher
