@@ -10,10 +10,12 @@ declare global {
   }
 }
 
-export default function CodeSnippet(props: { code: string; page: string }) {
+export default function CodeSnippet(props: { code: string; page: string, os: string }) {
   const [copyIconUrl, setCopyIconUrl] = useState("/docs/copy-icon.svg"); 
   const [copiedIconUrl, setCopiedIconUrl] = useState("/docs/copied-icon.svg"); 
   const { theme } = useTheme();
+  let idCopy = "copy-text-".concat(props.page).concat(props.os);
+  let idCopied = "copied-text-".concat(props.page).concat(props.os);
 
   useEffect(() => {
     if (theme === "light") {
@@ -30,12 +32,13 @@ export default function CodeSnippet(props: { code: string; page: string }) {
     global.window.analytics.track("Docker Run Copied", {
       source: "docs",
       page: props.page,
+      os: props.os
     });
-    document.getElementById("copy-text")?.classList.add("hidden");
-    document.getElementById("copied-text")?.classList.remove("hidden");
+    document.getElementById(idCopy)?.classList.add("hidden");
+    document.getElementById(idCopied)?.classList.remove("hidden");
     setTimeout(() => {
-      document.getElementById("copied-text")?.classList.add("hidden");
-      document.getElementById("copy-text")?.classList.remove("hidden");
+      document.getElementById(idCopied)?.classList.add("hidden");
+      document.getElementById(idCopy)?.classList.remove("hidden");
     }, 2000);
   };
   return (
@@ -50,7 +53,7 @@ export default function CodeSnippet(props: { code: string; page: string }) {
         <Image
           alt="copy"
           src={copyIconUrl}
-          id="copy-text"
+          id={idCopy}
           className="cursor-pointer"
           width={30}
           height={30}
@@ -58,7 +61,7 @@ export default function CodeSnippet(props: { code: string; page: string }) {
         <Image
           alt="copied"
           src={copiedIconUrl}
-          id="copied-text"
+          id={idCopied}
           className="hidden"
           width={30}
           height={30}

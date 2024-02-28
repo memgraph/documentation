@@ -272,8 +272,13 @@ You can use Memgraph Lab, a visual user interface that enables you to:
 
 ### Does replication affect performance?
 
-Replication should not in any way affect the performance of your database
-instance.
+Replication can impact performance in several ways. 
+
+When using SYNC replica, the replication is done at the time of commit. This means
+that each commit takes longer, as the data needs to be replicated before the commit has been finalized.
+
+A single replica can receive only one package at a time. Meaning that 
+replication is a bottleneck for highly parallel workflows.
 
 ### How can I check storage information?
 
