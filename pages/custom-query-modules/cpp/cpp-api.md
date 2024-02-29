@@ -2354,6 +2354,54 @@ Additionally, operator<< is overloaded for Type enum, and usage of this operator
 std::ostream &operator<<(std::ostream &os, const mgp::Type &type)
 ```
 
+## Database internals API
+
+This section covers the C++ API methods for interfacing with the database other
+than with the graph itself.
+
+### Text search
+
+#### SearchTextIndex
+
+Search the named text index for the given query and get a list of the nodes
+whose text-indexed properties match the given query.
+
+```cpp
+List SearchTextIndex(
+    mgp_graph *memgraph_graph,
+    std::string_view index_name,
+    std::string_view search_query,
+    text_search_mode search_mode);
+```
+
+##### Input
+
+- `memgraph_graph`: the graph
+- `index_name`: the name of the given text index
+- `search_query`: the query with which to search the text index
+- `search_mode`: one of `SPECIFIED_PROPERTIES`, `REGEX`, and `ALL_PROPERTIES`
+
+#### AggregateOverTextIndex
+
+Aggregate over the results of the search over the named text index and get a
+JSON-formatted string with the results of the aggregation.
+
+```cpp
+List AggregateOverTextIndex(
+    mgp_graph *memgraph_graph,
+    std::string_view index_name,
+    std::string_view search_query,
+    std::string_view aggregation_query);
+```
+
+##### Input
+
+- `memgraph_graph`: the graph
+- `index_name`: the name of the given text index
+- `search_query`: the query with which to search the text index
+- `aggregation_query`: the query (JSON-format) with which to aggregate over
+  search results
+
 ## Exceptions
 
 During operation, the following exceptions may be thrown.
@@ -2376,3 +2424,4 @@ During operation, the following exceptions may be thrown.
 | `ImmutableObjectException`    | Object you are trying to change is immutable!   |
 | `ValueConversionException`    | Error in value conversion!                      |
 | `SerializationException`      | Error in serialization!                         |
+| `TextSearchException`         | various (reports text search utility issues)    |
