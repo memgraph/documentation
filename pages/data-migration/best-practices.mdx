@@ -1,0 +1,475 @@
+---
+title: Import best practices
+description: Learn which is the shortest path to import data into Memgraph.
+---
+
+import { Card, Cards } from 'nextra/components'
+
+# Import best practices
+
+In most cases, the shortest path to import data into Memgraph is from a CSV file
+using the LOAD CSV clause. This is the best approach, regardless of whether you
+are migrating from a relational or a graph database.
+
+Memgraph uses Cypher as the query language, so if the database you are replacing
+with Memgraph allows you to export a set of Cypher queries in a file, you can
+use the file to import data directly into Memgraph. To achieve the best
+performance, execute queries programmatically. This approach is also useful when
+integrating Memgraph into a much larger system where you also need to implement
+an import process.
+
+## Power up your import
+
+### First, create indexes
+In Memgraph, indexes are not created in advance and creating constraints does
+not imply index creation. By creating label or label-property indexes,
+relationships between nodes will be created much faster and consequently speed
+up data import. A good rule of thumb is to create indexes for the label or label
+and property being matched in Cypher queries. For example, in the following
+queries:
+
+```cypher
+CREATE (:Person {id: 1});
+CREATE (:Person {id: 2});
+
+MATCH (p1:Person {id: 1}), (p2:Person {id:2})
+CREATE (p1)-[:IS_FRIENDS_WITH]->(p2);
+```
+
+It makes sense to create a label-property index `:Person(id)` for faster
+matching and relationship creation. The best practice is to create and use an
+index on properties containing many distinct (ideally unique) integer values,
+such as identification numbers. Choosing the right data to create indexes on is
+important, as indexing all the content will not improve the database speed.
+Indexing won't bring any improvements on a low-cardinality property such as
+gender.
+
+Be aware that creating a label-property index will not create a label index. If
+there is a need to optimize queries that fetch nodes by label, create a label
+index, too. 
+
+There are some downsides to indexing too. Each index requires extra storage
+(takes up memory), which can greatly impact a large dataset. Besides that,
+indexes slow down write operations to the database because the structures in the
+index are dynamically updated on modifications or insertions of new nodes. That
+means you should avoid creating indexes on properties that are being updated
+frequently.
+
+<div className="flex justify-left">
+<Cards>
+<Card
+title="Read more about indexing"
+href="/fundamentals/indexes"
+/>
+</Cards>
+</div>
+
+### Use in-memory analytical storage mode
+
+Memgraph supports three storage modes: in-memory transactional, in-memory
+analytical and on-disk transactional. **To speed up import, use in-memory
+analytical storage mode**. On a larger scale, if you stick with the default
+in-memory transactional storage mode, you’ll experience slower import time and
+spend more resources during data import.  
+
+Data import is faster in in-memory analytical storage mode because `Delta`
+objects are disabled there, which ensures there is no memory overhead. The
+`Delta` objects track all changes, and that requires a lot of memory in case of
+frequent updates. Not having `Deltas` when importing data, speeds up the process
+significantly. The `Delta` objects are crucial to ensure durability and
+atomicity, so once you’re done with the data import, you might consider
+switching back to the in-memory transactional mode, which favors
+strongly-consistent ACID transactions.
+
+<div className="flex justify-left">
+<Cards>
+<Card
+title="Read more about implications"
+href="/fundamentals/storage-memory-usage#implications"
+/>
+</Cards>
+</div>
+
+## LOAD CSV best practices
+
+**The `LOAD CSV` clause best performs when run in batches in parallel in
+in-memory analytical storage mode with properly set indexes.** If you have data
+up to a few millions of nodes and relationships, it is good enough to run a
+simple `LOAD CSV` query without the need to batch and parallelize it, resulting
+in import via single thread/core on your machine. When [migrating from a
+relational database](/data-migration/migrate-from-rdbms), export the tables as
+CSV files, [model the graph](/docs/fundamentals/graph-modeling) and create `LOAD
+CSV` queries. When migrating from a graph database, you can also [export the
+graph into CSV
+files](/data-migration/migrate-from-neo4j#exporting-data-from-neo4j) and run
+`LOAD CSV` queries to import the data. 
+
+Batching the CSV file enables you to run multiple `LOAD CSV` commands in
+parallel, which utilizes multiple hardware cores. Consider batching the CSV
+files if you have more than 10 million graph objects.
+
+The ideal scenario is storing nodes and relationships in separate CSV
+files. The preparation work for batching includes splitting
+those files into smaller CSV files. The size of each CSV file (batch) depends on
+your hardware specifications and the total amount of data you are trying to
+import.
+
+From a hardware perspective, if you have a 32-core CPU, it makes sense to split
+CSV file into 32 or more batches to fully utilize your machine.
+If you have fewer files, you won't put all threads to work, and consequently, you
+won't achieve the best import speed.  
+
+From the dataset perspective, it makes sense not to have too large files since
+loading a file with 10 billion graph properties can create significant memory
+overhead. 
+
+To use CSV batching, Memgraph needs to be in the in-memory analytical storage
+mode, since [`SerializationError`](#how-to-handle-a-serializationerror) will
+interrupt the process otherwise. 
+
+### Example of batched parallel import with `LOAD CSV` in Python
+
+After the files have been correctly split, and [Memgraph is
+running](/getting-started), the import process can start. If you're running
+Memgraph with Docker, you need to first [copy the CSV
+files](/getting-started/first-steps-with-docker#copy-files-from-and-to-a-docker-container)
+into the container where Memgraph is runing. Based on the paths of the files,
+you can generate the queries, each using a different file from the total pool of
+files.
+
+```python
+target_nodes_directory = Path(__file__).parents[3].joinpath(f"datasets/graph500/{size}/csv_node_chunks")
+    for file in target_nodes_directory.glob("*.csv"):
+        subprocess.run(["docker", "cp", str(file), f"memgraph:/usr/lib/memgraph/{file.name}"], check=True)
+        
+queries = []
+for file in target_nodes_directory.glob("*.csv"):
+    queries.append(f"LOAD CSV FROM '/usr/lib/memgraph/{file.name}' WITH HEADER AS row CREATE (n:Node {{id: row.id}})")
+```
+
+Once the files and queries are in place, you can start with the concurrent query
+execution using multiprocessing. By running the query in separate processes and
+opening a new connection to the database in each process, you are 
+running `LOAD CSV` in parallel. Keep in mind that the number of processes
+running depends on your hardware availability. Generally, it should be close to
+the number of threads on the machine. 
+
+Here is the code that spans ten different processes, each running a separate CSV
+file via separate sessions and in parallel:
+
+```python
+with multiprocessing.Pool(10) as pool:
+        results = pool.starmap(execute_single_csv_file, [(q, ) for q in queries])
+
+
+#Rest of the code...
+
+def execute_single_csv_file(query):
+    driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
+    time_start = time.time()
+    with driver.session() as session:
+        session.run(query)
+    time_end = time.time()
+    return time_end - time_start
+
+```
+
+Multiprocessing, rather than multithreading, was used in the example above
+because of the Global Interpreter Lock (GIL) in Python. The example above can
+**import one million nodes or relationships per second**, depending on the
+hardware and the number of node or relationship properties. 
+
+## Cypher queries best practices
+
+If large dataset files are not in the CSV format, any type of dataset file can
+be easily transformed into Cypher queries that can create the graph based on the
+dataset files. It is the most flexible way to import any type of data into
+Memgraph, but it requires a bit of work.
+
+For start the dataset file needs to be read in the programming language of
+choice, and they should be split into the nodes and edges files. 
+
+For the sake of example let’s assume the dataset file describing relationships
+looks like following: 
+
+```
+// Relationships.txt
+2 1
+3 1
+4 1
+6 1
+29 1
+43 1
+44 1
+51 1
+53 1
+87 1
+```
+
+Each line describes the two nodes ids, that represent and adjacent RELATIONSHIP
+type between them. 
+
+The key is to transform the chunk of edges to list, that will be passed to a
+single query as an argument. Here is the example: 
+
+```python
+#Code for reading the lines omitted 
+create_relationships.append({"a": int(node_source), "b": int(node_sink)})
+if len(create_relationships) == CHUNK_SIZE:
+                    print("Chunk size reached - adding to chunks ...", len(create_relationships))
+                    chunks.append(create_relationships)
+                    create_relationships = []
+```
+
+The big file of relationships is being chunked into the list between 10K and
+100K elements. The exact number of elements should depend on available hardware. 
+
+After that each edge pair is in the list, can be expanded into the query with
+UNWIND command: 
+
+```python
+query = """
+    WITH $batch AS nodes
+    UNWIND nodes AS node
+    MATCH (a:Node {id: node.a}), (b:Node {id: node.b}) CREATE (a)-[:RELATIONSHIP]->(b)
+    """
+```
+
+This part is important since you are running a single query and single
+transaction to create 10k or 100k edges. Running batch of CREATE statements will
+be a magnitude slower than using `UNWIND` 
+
+Each chunk of edges in this case can then be run in parallel. To leverage
+parallel execution, each chunk is started as a separate process, here is the
+example:
+
+```python
+with multiprocessing.Pool(10) as pool:
+            results = pool.starmap(process_chunk, [(query, chunk) for chunk in chunks])
+```
+
+As described above, because Python GIL it is better to use the separate process
+then threads. 
+
+Depending of the storage mode Memgraph is running the following steps will
+differ a bit. The fastest way and less resources intensive is the
+IN_MEMORY_ANALYTICAL .  It is also a recommended for running a import via
+Cypher. 
+
+If you are running Cypher import in analytical mode, your function for executing
+chunk of nodes or edges looks like following: 
+
+```python
+def process_chunk(query, create_list):
+    print("Processing chunk...")
+    time_start = time.time()
+    driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
+    with driver.session() as session:
+        session.run(query, {"batch": create_list})
+    time_end = time.time()
+    node_chunk_execution_time = time_end - time_start
+    print("Node chunk execution time: ", node_chunk_execution_time)
+    return node_chunk_execution_time
+```
+
+Notice the individual batch being passed to the query. 
+
+If you are running Cypher import in the IN_MEMORY_TRANSACTIONAL mode and using
+Memgraph Python driver (Pymgclient or GQL alchemy),  the execution of the node
+queries won’t differ compared to process_chunk described above.  But the
+execution of relationship creation queries can run into SerializationError
+described above. If errors happens, the chunk just need to be retried after
+certain period of time, here is the example:
+
+
+```python
+def execute_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1):
+    conn = mgclient.connect(host='127.0.0.1', port=7687)
+    cursor = conn.cursor()
+    time_start = time.time()
+    for attempt in range(max_retries):
+        try:
+            cursor.execute(query, {"batch": create_list})
+            conn.commit()
+            break
+        except Exception as e:
+            wait_time = initial_wait_time * (backoff_factor ** attempt)
+            print(f"Commit failed on attempt {attempt+1}. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+    else:
+        print("Max retries reached. Commit failed.")
+        conn.close()
+        return time.time() - time_start
+    time_end = time.time()
+    conn.close()
+    return time_end - time_start
+```
+
+So the execute needs to be in the try except block due to possible exception
+from SerializationError. If that error happens it should be retried, but with
+the backoff_factor starting based on the initial_wait_time in seconds
+
+The important part to consider here is the, inital_wait_time and backoff_factor
+. Initial time should not be to big, approximately the duration of the batch
+commit. The backoff_factor should be small and increase slowly since the
+conflicts can occur very often . It should never be logarithmic since it will
+fire of to minutes quite fast. 
+
+The dataset structure will highly influence the probability of having a
+SerializationError during edge import. Since Nodes are separate entites, this
+error won’t pop during the node import process. But each Relationship connects
+the two nodes together, if you have a supernode (connected to a lot of other
+nodes)  in the dataset that  means parallel writes will conflict on the
+supernode during relationship write. The more connected the node is, the more
+serial the performance will be with more conflicts. 
+
+If you have a file with Cypher queries from another graph database, you can
+tweak it to fit Memgraph’s Cypher syntax and import it into Memgraph. Here is an
+example of how to do that with the Neo4j Cypher file.
+
+## How to handle a `SerializationError`
+
+If you're importing data concurrently in the in-memory transactional storage
+mode, you can expect `SerializationError` to occur. This happens because your
+code tries to concurrently update the same graph object which is locked while
+being created or updated. This error is expected and it happens because of ACID
+guarantees in in-memory transactional storage. **There are two most common
+approaches to handle `SerializationError`**:
+
+**1. Switch to in-memory analytical storage mode**
+
+You won't experience `SerializationError` in the in-memory analytical storage
+mode. Still, it is important you ensure that there are no concurrent
+transactions updating the same graph object. During import, you can ensure this
+by first importing nodes and then relationships. On node import it is ideal to
+have `CREATE` queries so if you run such queries concurrently, none of them
+updates the same graph object. It is important not to mix concurrent import of
+nodes and relationships in this storage mode. If you do that, a relationship can
+end up not being created, because its start and end nodes which you’re trying to
+match might not yet be created.
+
+
+**2. Catch the error and retry the transaction with backoff**
+
+If you can't switch to in-memory analytical storage mode and can't avoid
+concurrent updates to the same graph objects, then you'll have to retry the
+transactions which throw the `SerializationError`. 
+
+
+```python
+def execute_single_transaction_query(
+    query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1
+):
+    conn = mgclient.connect(host="127.0.0.1", port=7687)
+    cursor = conn.cursor()
+    time_start = time.time()
+    for attempt in range(max_retries):
+        try:
+            cursor.execute(query, {"batch": create_list})
+            conn.commit()
+            break
+        except Exception as e:
+            wait_time = initial_wait_time * (backoff_factor**attempt)
+            print(
+                f"Commit failed on attempt {attempt+1}. Retrying in {wait_time} seconds..."
+            )
+            time.sleep(wait_time)
+    else:
+        print("Max retries reached. Commit failed.")
+        conn.close()
+        return time.time() - time_start
+    time_end = time.time()
+    conn.close()
+    return time_end - time_start
+```
+
+## I have both CSV and Cypher queries. Which should I use?
+
+The LOAD CSV with batches and running on multi-core machine will yield a much
+better performance and will use less resources then the process of loading via
+the Cypher queries. The process of loading data should require less effort via
+LOAD CSV.
+
+On the other hand, if you want to parse and change your data in any way, before
+it reaches Memgraph, it is much easier to do it in the programming language then
+to process all CSV files based on some rules. Cypher provides a bit more
+flexibility in expressing what you want, but it comes at the cost of slower
+performance and more effort. 
+
+## What to do with other data types?
+
+Other common data types are also used to migrate data from one system to
+another, such as JSON, Parquet, ORC or IPC/Feather/Arrow files. Memgraph offers
+out-of-the-box solutions for those types of data, but for the fastest import,
+using the LOAD CSV clause or Cypher queries is still recommended. Besides
+storing data in files, you might also have data coming in from a streaming data
+platform, such as Kafka, RedPanda or Pulsar. In that case, Memgraph has built-in
+consumers to ingest the data properly and uses procedures called transformations
+to convert incoming data into a Cypher query that will create data in Memgraph.
+
+## Do I lose my data if I restart the database?
+
+Although Memgraph is an in-memory database, the data is persistent and durable.
+This means data will not be lost upon reboot. Memgraph uses two mechanisms to
+ensure the durability of stored data and make disaster recovery possible:
+
+- write-ahead logging (WAL)
+- periodic snapshot creation
+
+Each database modification is recorded in a log file before being written to the
+database. Therefore, the log file contains all steps needed to reconstruct the
+DB’s most recent state. Memgraph also periodically takes snapshots during
+runtime to write the entire data storage to the drive. On startup, the database
+state is recovered from the most recent snapshot file. The timestamp of the
+snapshot is compared with the latest update recorded in the WAL file and, if the
+snapshot is less recent, the state of the DB will be completely recovered using
+the WAL file. If you are using Memgraph with Docker, be sure to specify a volume
+for data persistence.
+
+These files are stored on disk, which is why you’ll notice memory used on your
+disk as well. If the disk storage seems too high, that might be because, by
+default, Memgraph stores the three most recent snapshots, defined with
+`--storage-snapshot-retention-count` flag. The snapshots are created every 300
+seconds, meaning that with an extra large dataset (in terabytes of RAM), it is
+possible that one snapshot is still being created when another one just started
+creating. To avoid that, configure `--storage-snapshot-interval-sec` setting to
+a large enough number.
+
+
+## How to efficiently delete everything?
+
+Matching nodes and then deleting relationships attached to them can consume a
+lot of memory in larger datasets (>1M). This is due to the accumulation of
+Deltas, which store changes to the graph objects. To avoid this and efficiently
+drop the database, first delete all relationships and then all nodes. To delete
+the relationships, execute the query below repeatedly until the number of
+deleted relationships is 100,000.
+
+```cypher
+MATCH ()-[r]->()
+WITH r
+LIMIT 100000
+DELETE r
+RETURN count(r) AS num_deleted;
+```
+
+After deleting all relationships, run the following query repeatedly until the
+number of deleted nodes is 100,000 to delete all nodes:
+
+```cyoher
+MATCH (n)
+WITH n
+LIMIT 100000
+DELETE n
+RETURN count(n) AS num_deleted;
+```
+
+If the deletion still consumes too much memory, consider lowering the batch size
+limit. If you notice memory still being to high, it can be due to the high value
+of the `--storage-gc-cycle-sec` flag. That means that Memgraph's garbage
+collector potentially still didn't deallocate unused objects and free the
+memory. You can free up memory by running the `FREE MEMORY` query.
+
+
+
+
