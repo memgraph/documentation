@@ -11,7 +11,7 @@ The `DELETE` clause is used to delete nodes and relationships from the database.
 2. [Deleting a node and its relationships](#2-deleting-a-node-and-its-relationships) <br />
 3. [Deleting a relationship](#3-deleting-a-relationship) <br />
 4. [Deleting a path](#4-deleting-a-path) <br />
-5. [Deleting everything](#4-deleting-everything)
+5. [Deleting everything](#5-deleting-everything)
 
 ## Dataset
 
@@ -121,6 +121,30 @@ Output:
 ```nocopy
 Empty set (0.001 sec)
 ```
+
+### How to lower memory consumption
+
+Matching nodes and then deleting relationships attached to them can consume a lot of memory in larger datasets (>1M). This is due to the accumulation of `Deltas`, which store changes to the graph objects. To avoid this and efficiently drop the database, first delete all relationships and then all nodes. To delete the relationships, execute the query below repeatedly until the number of deleted relationships is 100,000. 
+
+```cypher
+MATCH ()-[r]->()
+WITH r
+LIMIT 100000
+DELETE r
+RETURN count(r) AS num_deleted;
+```
+
+After deleting all relationships, run the following query repeatedly until the number of deleted nodes is 100,000 to delete all nodes:
+
+```cypher
+MATCH (n)
+WITH n
+LIMIT 100000
+DELETE n
+RETURN count(n) AS num_deleted;
+```
+
+If the deletion still consumes too much memory, consider lowering the batch size limit. 
 
 ## Dataset queries
 
