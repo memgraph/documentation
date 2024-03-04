@@ -76,3 +76,9 @@ Get information about the running instance.
 
 Memgraph uses SSL (Secure Sockets Layer) protocol for establishing an
 authenticated and encrypted connection to a database instance.
+
+## [System configuration](/configuration/system-configuration)
+
+Improving Memgraph's efficiency may occasionally require fine-tuning settings at
+the operating system level. Such modifications are directly related to the rules
+that control resource distribution and the management of processes.
