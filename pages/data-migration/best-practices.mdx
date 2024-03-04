@@ -197,11 +197,11 @@ be easily transformed into Cypher queries that can create the graph based on the
 dataset files. It is the most flexible way to import any type of data into
 Memgraph, but it requires a bit of work.
 
-For start the dataset file needs to be read in the programming language of
+To start, the dataset file needs to be read in the programming language of
 choice, and they should be split into the nodes and edges files. 
 
-For the sake of example let’s assume the dataset file describing relationships
-looks like following: 
+For the sake of example, let’s assume the dataset file describing relationships
+looks like the following: 
 
 ```
 // Relationships.txt
@@ -217,11 +217,12 @@ looks like following:
 87 1
 ```
 
-Each line describes the two nodes ids, that represent and adjacent RELATIONSHIP
+
+Each line describes the two node ids that represent an adjacent relationship
 type between them. 
 
-The key is to transform the chunk of edges to list, that will be passed to a
-single query as an argument. Here is the example: 
+The key is to transform the chunk of relationships into a list that will be
+passed to a single query as an argument. Here is an example: 
 
 ```python
 #Code for reading the lines omitted 
@@ -235,8 +236,8 @@ if len(create_relationships) == CHUNK_SIZE:
 The big file of relationships is being chunked into the list between 10K and
 100K elements. The exact number of elements should depend on available hardware. 
 
-After that each edge pair is in the list, can be expanded into the query with
-`UNWIND` command: 
+After that, each relationship pair is in the list and can be expanded into the
+query with `UNWIND` command: 
 
 ```python
 query = """
@@ -246,30 +247,29 @@ query = """
     """
 ```
 
-This part is important since you are running a single query and single
-transaction to create 10k or 100k edges. Running batch of CREATE statements in a single transaction will
-be a magnitude slower than using `UNWIND`, even worse if you are running a single transaction
-for each CREATE statement. 
+This part is important since you run a single query and transaction to create
+10K or 100K relationships. Running a batch of `CREATE` statements in a single
+transaction will be much slower than using `UNWIND`, and it is even worse if you
+run a single transaction for each `CREATE` statement. 
 
-Each chunk of edges in this case can then be run in parallel. To leverage
-parallel execution, each chunk is started as a separate process, here is the
-example:
+Each chunk of relationships, in this case, can then be run in parallel. To do
+that, you should run each chunk as a separate process. Here is an example:
 
 ```python
 with multiprocessing.Pool(10) as pool:
             results = pool.starmap(process_chunk, [(query, chunk) for chunk in chunks])
 ```
 
-As described above, because Python GIL it is better to use the separate process
-then threads. 
+Multiprocessing, rather than multithreading, was used in the example above
+because of the Global Interpreter Lock (GIL) in Python. 
 
-Depending of the storage mode Memgraph is running the following steps will
-differ a bit. The fastest way and less resources intensive is the
-`IN_MEMORY_ANALYTICAL` .  It is also a recommended for running a import via
-Cypher. 
+Depending on the storage mode in which Memgraph is running, the following steps
+will differ a bit. **The fastest and least resource-intensive way is the in-memory
+analytical storage mode. It is also recommended for running an import via
+Cypher.** 
 
-If you are running Cypher import in analytical mode, your function for executing
-chunk of nodes or edges looks like following: 
+If you are running Cypher import in in-memory analytical mode, your function for
+executing chunk of nodes or relationships looks like following: 
 
 ```python
 def process_chunk(query, create_list):
@@ -286,55 +286,12 @@ def process_chunk(query, create_list):
 
 Notice the individual batch being passed to the query. 
 
-If you are running Cypher import in the `IN_MEMORY_ANALYTICAL` mode and using
-Memgraph Python driver (Pymgclient or GQL alchemy),  the execution of the node
-queries won’t differ compared to `process_chunk` described above.  But if 
-Memgraph is `IN_MEMORY_TRANSACTIONAL` mode, the execution of relationship 
-creation queries can run into [`SerializationError`](#how-to-handle-a-serializationerror).
-If errors happens, the chunk just need to be retried after certain period of time, here is the example:
-
-
-```python
-def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1, jitter_factor=0.1):
-    session = GraphDatabase.driver("bolt://localhost:7687", auth=("", "")).session()
-    time_start = time.time()
-    for attempt in range(max_retries):
-        try:
-            with session.begin_transaction() as tx:
-                tx.run(query, {"batch": create_list})
-                tx.commit()
-                break
-        except TransientError as te:
-            jitter = jitter_factor * backoff_factor * random.random() 
-            wait_time = initial_wait_time * (backoff_factor ** attempt) + jitter
-            print(f"Commit failed on attempt {attempt+1}. Retrying in {wait_time} seconds...")
-            time.sleep(wait_time)
-        except Exception as e:
-            print(f"Failed to execute transaction: {e}")
-            break;
-    session.close()
-    time_end = time.time()
-    return time_end - time_start
-```
-
-So the execute needs to be in the `try-except` block due to possible exception
-from `SerializationError`. If that error happens it should be retried, but with
-the `backoff_factor` starting based on the `initial_wait_time` in seconds
-
-The important part to consider here is the, `inital_wait_time` and `backoff_factor`. 
-Initial time should not be to big, approximately the duration of the batch
-commit. The `backoff_factor` should be small and increase slowly since the
-conflicts can occur very often. It should never be logarithmic since it will
-fire of to minutes quite fast. The `jitter` is added to avoid the retries at the similar time.
-
-
-The dataset structure will highly influence the probability of having a
-`SerializationError` during edge import. Since Nodes are separate entites, this
-error won’t pop during the node import process. But each Relationship connects
-the two nodes together, if you have a supernode (connected to a lot of other
-nodes)  in the dataset that  means parallel writes will conflict on the
-supernode during relationship write. The more connected the node is, the more
-serial the performance will be with more conflicts. 
+If you are running Cypher import in the in-memory analytical mode and using
+Memgraph Python driver (pymgclient or GQLAlchemy), the execution of the node
+queries won’t differ compared to the `process_chunk` described above. On the
+other side, if Memgraph is in in-memory transactional mode, the execution of
+relationship creation queries can run into
+[`SerializationError`](#how-to-handle-a-serializationerror).
 
 If you have a file with Cypher queries from another graph database, you can
 tweak it to fit Memgraph’s Cypher syntax and import it into Memgraph. Here is an
@@ -346,7 +303,17 @@ If you're importing data concurrently in the in-memory transactional storage
 mode, you can expect `SerializationError` to occur. This happens because your
 code tries to concurrently update the same graph object which is locked while
 being created or updated. This error is expected and it happens because of ACID
-guarantees in in-memory transactional storage. **There are two most common
+guarantees in in-memory transactional storage. 
+
+The dataset structure will highly influence the probability of having a
+`SerializationError` during relationships import. Since nodes are separate
+entities, this error won’t appear during node import. On the other hand, each
+relationship connects two nodes, so if you have a supernode (a node connected to
+many other nodes in the dataset), parallel relationship writing on the supernode
+will cause conflicts. The more connected the node is, the more serial the
+performance will be with more conflicts. 
+
+**There are two most common
 approaches to handle `SerializationError`**:
 
 **1. Switch to in-memory analytical storage mode**
@@ -368,7 +335,6 @@ If you can't switch to in-memory analytical storage mode and can't avoid
 concurrent updates to the same graph objects, then you'll have to retry the
 transactions which throw the `SerializationError`. 
 
-
 ```python
 def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1, jitter_factor=0.1):
     session = GraphDatabase.driver("bolt://localhost:7687", auth=("", "")).session()
@@ -391,9 +357,25 @@ def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, 
     time_end = time.time()
     return time_end - time_start
 ```
-Also, the code above is using and [explicit transaction](../client-libraries/python.mdx#explicit-transactions), which is necessary for handling the conflicts. They 
-can also be handled with the [managed transactions](../client-libraries/python.mdx#managed-transactions).
- [Implict (autocomit)](../client-libraries/python.mdx#implicit-transactions) transactions are not recommended for handing the conflicts.
+
+The execute needs to be in the `try-except` block due to possible exceptions
+from `SerializationError`. If that error happens, the transaction run should be
+retried, but with the `backoff_factor` starting based on the `initial_wait_time`
+in seconds.
+
+The important arguments to consider here are the `inital_wait_time` and
+`backoff_factor.` The initial time should not be too long, approximately the
+duration of the batch commit. The `backoff_factor` should be small and increase
+slowly since conflicts can occur frequently. It should never be logarithmic
+since it will fire up to minutes quickly. The `jitter` is added to avoid the
+retries at a similar time.
+
+The code snippet above is using an [explicit
+transaction](../client-libraries/python.mdx#explicit-transactions), which is
+ necessary for handling the conflicts. They can also be handled with the
+ [managed transactions](../client-libraries/python.mdx#managed-transactions).
+ [Implict (autocomit)](../client-libraries/python.mdx#implicit-transactions)
+ transactions are not recommended for handing the conflicts.
  
 ## I have both CSV and Cypher queries. Which should I use?
 
