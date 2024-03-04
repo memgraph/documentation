@@ -50,16 +50,16 @@ Users interact with multi-tenant features through specialized Cypher queries:
 
 1. `CREATE DATABASE name`: Creates a new database.
 2. `DROP DATABASE name`: Deletes a specified database.
-3. `SHOW DATABASES`: Lists all active databases, indicating the currently
-   selected one.
-4. `USE DATABASE name`: Switches focus to a specific database (disabled during
+3. `SHOW DATABASE`: Shows the current used database. It will return `NULL` if there is not one.
+4. `SHOW DATABASES`: Shows only the existing set of multitenant databases.
+5. `USE DATABASE name`: Switches focus to a specific database (disabled during
    transactions).
-5. `GRANT DATABASE name TO user`: Grants a user access to a specified database.
-6. `DENY DATABASE name FROM user`: Denies a user's access to a specified
-7. `REVOKE DATABASE name FROM user`: Removes database from user's authentication 
+6. `GRANT DATABASE name TO user`: Grants a user access to a specified database.
+7. `DENY DATABASE name FROM user`: Denies a user's access to a specified
+8. `REVOKE DATABASE name FROM user`: Removes database from user's authentication 
    context
-8. `SET MAIN DATABASE name FOR user`: Sets a user's default (landing) database.
-9. `SHOW DATABASE PRIVILEGES FOR user`: Lists a user's database access rights.
+9. `SET MAIN DATABASE name FOR user`: Sets a user's default (landing) database.
+10. `SHOW DATABASE PRIVILEGES FOR user`: Lists a user's database access rights.
 
 ### User's main database
 
