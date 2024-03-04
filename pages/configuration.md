@@ -63,6 +63,11 @@ Memgraph comes with a couple of queries that allow you to safely make a backup
 of the files containing its data. Memgraph supports replication and allows you
 to create a cluster of nodes running Memgraph instances.
 
+## [Experimental Replication](/configuration/experimental-replication)
+
+When distributing data across several instances, Memgraph uses replication. This
+has now been expanded to include not only user data but system data as well. 
+
 ## [Security](/configuration/security)
 
 Memgraph comes with the option of granting, denying, or revoking a certain set
