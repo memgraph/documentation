@@ -14,9 +14,9 @@ are migrating from a relational or a graph database.
 Memgraph uses Cypher as the query language, so if the database you are replacing
 with Memgraph allows you to export a set of Cypher queries in a file, you can
 use the file to import data directly into Memgraph. To achieve the best
-performance, execute queries programmatically. This approach is also useful when
-integrating Memgraph into a much larger system where you also need to implement
-an import process.
+performance in terms of speed, execute queries programmatically from a client. 
+This approach is also useful when integrating Memgraph into a much larger system where you 
+also need to implement an import process.
 
 ## Power up your import
 
@@ -49,7 +49,7 @@ there is a need to optimize queries that fetch nodes by label, create a label
 index, too. 
 
 There are some downsides to indexing too. Each index requires extra storage
-(takes up memory), which can greatly impact a large dataset. Besides that,
+(takes up RAM memory), which can greatly impact a large dataset. Besides that,
 indexes slow down write operations to the database because the structures in the
 index are dynamically updated on modifications or insertions of new nodes. That
 means you should avoid creating indexes on properties that are being updated
@@ -66,20 +66,26 @@ href="/fundamentals/indexes"
 
 ### Use in-memory analytical storage mode
 
-Memgraph supports three storage modes: in-memory transactional, in-memory
-analytical and on-disk transactional. **To speed up import, use in-memory
-analytical storage mode**. On a larger scale, if you stick with the default
-in-memory transactional storage mode, you’ll experience slower import time and
-spend more resources during data import.  
+Memgraph supports three storage modes: `IN_MEMORY_TRANSACTIONAL`, `IN_MEMORY_ANALYTICAL` and `ON_DISK_TRANSACTIONAL`
+**To speed up import, use in-memory analytical storage mode**. 
 
 Data import is faster in in-memory analytical storage mode because `Delta`
 objects are disabled there, which ensures there is no memory overhead. The
 `Delta` objects track all changes, and that requires a lot of memory in case of
 frequent updates. Not having `Deltas` when importing data, speeds up the process
-significantly. The `Delta` objects are crucial to ensure durability and
-atomicity, so once you’re done with the data import, you might consider
+significantly. 
+
+The `Delta` objects are crucial to ensure atomicity, consistency, isolation and
+durability. If you are follwing instuctions, your import process does not need to depend on ACID properties, 
+and it is safe to use in-memory analytical storage mode, even in concurrent import scenarios.  
+
+Once you’re done with the data import process, if you have write enabled workloads you should consider
 switching back to the in-memory transactional mode, which favors
-strongly-consistent ACID transactions.
+strongly-consistent ACID transactions. On a larger scale import, if you stick with the default
+in-memory transactional storage mode, you’ll experience slower import time and
+spend more resources during data import because of `Delta` objects. 
+
+TODO(@antejavor): Do we need a link to estimates in possible performance numbers? 
 
 <div className="flex justify-left">
 <Cards>
@@ -105,32 +111,33 @@ files](/data-migration/migrate-from-neo4j#exporting-data-from-neo4j) and run
 `LOAD CSV` queries to import the data. 
 
 Batching the CSV file enables you to run multiple `LOAD CSV` commands in
-parallel, which utilizes multiple hardware cores. Consider batching the CSV
+parallel, which utilizes hardware cores. You should consider batching the CSV
 files if you have more than 10 million graph objects.
 
-The ideal scenario is storing nodes and relationships in separate CSV
+You need to store nodes and relationships in separate CSV
 files. The preparation work for batching includes splitting
 those files into smaller CSV files. The size of each CSV file (batch) depends on
 your hardware specifications and the total amount of data you are trying to
-import.
+import. 
+
+From the data perspective, if you have 100 milion nodes, it make sense to split the nodes into batches of 10 or 5 milion nodes per batch. 
+You want to avoid having too large files, since loading a single file with 100 milion nodes can create significant memory overhead in multiple scenarios.
 
 From a hardware perspective, if you have a 32-core CPU, it makes sense to split
 CSV file into 32 or more batches to fully utilize your machine.
 If you have fewer files, you won't put all threads to work, and consequently, you
 won't achieve the best import speed.  
 
-From the dataset perspective, it makes sense not to have too large files since
-loading a file with 10 billion graph properties can create significant memory
-overhead. 
-
 To use CSV batching, Memgraph needs to be in the in-memory analytical storage
 mode, since [`SerializationError`](#how-to-handle-a-serializationerror) will
-interrupt the process otherwise. 
+interrupt the process otherwise. If you are running Memgraph in the `IN_MEMORY_TRANSACTIONAL` mode, 
+you will be able to utilize just a single core, and the import process will be much slower and it will 
+use more memory because of `Delta` object explanied in [section above](#use-in-memory-analytical-storage-mode).
 
 ### Example of batched parallel import with `LOAD CSV` in Python
 
-After the files have been correctly split, and [Memgraph is
-running](/getting-started), the import process can start. If you're running
+Assuming that the files have been correctly split, and [Memgraph is
+running](/getting-started) in `IN_MEMORY_ANALYTICAL` mode, the import process can start. If you're running
 Memgraph with Docker, you need to first [copy the CSV
 files](/getting-started/first-steps-with-docker#copy-files-from-and-to-a-docker-container)
 into the container where Memgraph is runing. Based on the paths of the files,
@@ -152,7 +159,8 @@ execution using multiprocessing. By running the query in separate processes and
 opening a new connection to the database in each process, you are 
 running `LOAD CSV` in parallel. Keep in mind that the number of processes
 running depends on your hardware availability. Generally, it should be close to
-the number of threads on the machine. 
+the number of threads on the machine. Going above that number will not bring any perormance 
+improvents, and it can even slow down the import process. 
 
 Here is the code that spans ten different processes, each running a separate CSV
 file via separate sessions and in parallel:
@@ -177,7 +185,10 @@ def execute_single_csv_file(query):
 Multiprocessing, rather than multithreading, was used in the example above
 because of the Global Interpreter Lock (GIL) in Python. The example above can
 **import one million nodes or relationships per second**, depending on the
-hardware and the number of node or relationship properties. 
+hardware, graph structure and the number of node or relationship properties. 
+
+**The important factor is that first all nodes needs to be imported. After the last 
+file with nodes is imported, the relationships can be imported in the same way.**
 
 ## Cypher queries best practices
 
@@ -225,7 +236,7 @@ The big file of relationships is being chunked into the list between 10K and
 100K elements. The exact number of elements should depend on available hardware. 
 
 After that each edge pair is in the list, can be expanded into the query with
-UNWIND command: 
+`UNWIND` command: 
 
 ```python
 query = """
@@ -236,8 +247,9 @@ query = """
 ```
 
 This part is important since you are running a single query and single
-transaction to create 10k or 100k edges. Running batch of CREATE statements will
-be a magnitude slower than using `UNWIND` 
+transaction to create 10k or 100k edges. Running batch of CREATE statements in a single transaction will
+be a magnitude slower than using `UNWIND`, even worse if you are running a single transaction
+for each CREATE statement. 
 
 Each chunk of edges in this case can then be run in parallel. To leverage
 parallel execution, each chunk is started as a separate process, here is the
@@ -253,7 +265,7 @@ then threads.
 
 Depending of the storage mode Memgraph is running the following steps will
 differ a bit. The fastest way and less resources intensive is the
-IN_MEMORY_ANALYTICAL .  It is also a recommended for running a import via
+`IN_MEMORY_ANALYTICAL` .  It is also a recommended for running a import via
 Cypher. 
 
 If you are running Cypher import in analytical mode, your function for executing
@@ -274,49 +286,50 @@ def process_chunk(query, create_list):
 
 Notice the individual batch being passed to the query. 
 
-If you are running Cypher import in the IN_MEMORY_TRANSACTIONAL mode and using
+If you are running Cypher import in the `IN_MEMORY_ANALYTICAL` mode and using
 Memgraph Python driver (Pymgclient or GQL alchemy),  the execution of the node
-queries won’t differ compared to process_chunk described above.  But the
-execution of relationship creation queries can run into SerializationError
-described above. If errors happens, the chunk just need to be retried after
-certain period of time, here is the example:
+queries won’t differ compared to `process_chunk` described above.  But if 
+Memgraph is `IN_MEMORY_TRANSACTIONAL` mode, the execution of relationship 
+creation queries can run into [`SerializationError`](#how-to-handle-a-serializationerror).
+If errors happens, the chunk just need to be retried after certain period of time, here is the example:
 
 
 ```python
-def execute_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1):
-    conn = mgclient.connect(host='127.0.0.1', port=7687)
-    cursor = conn.cursor()
+def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1, jitter_factor=0.1):
+    session = GraphDatabase.driver("bolt://localhost:7687", auth=("", "")).session()
     time_start = time.time()
     for attempt in range(max_retries):
         try:
-            cursor.execute(query, {"batch": create_list})
-            conn.commit()
-            break
-        except Exception as e:
-            wait_time = initial_wait_time * (backoff_factor ** attempt)
+            with session.begin_transaction() as tx:
+                tx.run(query, {"batch": create_list})
+                tx.commit()
+                break
+        except TransientError as te:
+            jitter = jitter_factor * backoff_factor * random.random() 
+            wait_time = initial_wait_time * (backoff_factor ** attempt) + jitter
             print(f"Commit failed on attempt {attempt+1}. Retrying in {wait_time} seconds...")
             time.sleep(wait_time)
-    else:
-        print("Max retries reached. Commit failed.")
-        conn.close()
-        return time.time() - time_start
+        except Exception as e:
+            print(f"Failed to execute transaction: {e}")
+            break;
+    session.close()
     time_end = time.time()
-    conn.close()
     return time_end - time_start
 ```
 
-So the execute needs to be in the try except block due to possible exception
-from SerializationError. If that error happens it should be retried, but with
-the backoff_factor starting based on the initial_wait_time in seconds
+So the execute needs to be in the `try-except` block due to possible exception
+from `SerializationError`. If that error happens it should be retried, but with
+the `backoff_factor` starting based on the `initial_wait_time` in seconds
 
-The important part to consider here is the, inital_wait_time and backoff_factor
-. Initial time should not be to big, approximately the duration of the batch
-commit. The backoff_factor should be small and increase slowly since the
-conflicts can occur very often . It should never be logarithmic since it will
-fire of to minutes quite fast. 
+The important part to consider here is the, `inital_wait_time` and `backoff_factor`. 
+Initial time should not be to big, approximately the duration of the batch
+commit. The `backoff_factor` should be small and increase slowly since the
+conflicts can occur very often. It should never be logarithmic since it will
+fire of to minutes quite fast. The `jitter` is added to avoid the retries at the similar time.
+
 
 The dataset structure will highly influence the probability of having a
-SerializationError during edge import. Since Nodes are separate entites, this
+`SerializationError` during edge import. Since Nodes are separate entites, this
 error won’t pop during the node import process. But each Relationship connects
 the two nodes together, if you have a supernode (connected to a lot of other
 nodes)  in the dataset that  means parallel writes will conflict on the
@@ -357,32 +370,31 @@ transactions which throw the `SerializationError`.
 
 
 ```python
-def execute_single_transaction_query(
-    query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1
-):
-    conn = mgclient.connect(host="127.0.0.1", port=7687)
-    cursor = conn.cursor()
+def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1, jitter_factor=0.1):
+    session = GraphDatabase.driver("bolt://localhost:7687", auth=("", "")).session()
     time_start = time.time()
     for attempt in range(max_retries):
         try:
-            cursor.execute(query, {"batch": create_list})
-            conn.commit()
-            break
-        except Exception as e:
-            wait_time = initial_wait_time * (backoff_factor**attempt)
-            print(
-                f"Commit failed on attempt {attempt+1}. Retrying in {wait_time} seconds..."
-            )
+            with session.begin_transaction() as tx:
+                tx.run(query, {"batch": create_list})
+                tx.commit()
+                break
+        except TransientError as te:
+            jitter = jitter_factor * backoff_factor * random.random() 
+            wait_time = initial_wait_time * (backoff_factor ** attempt) + jitter
+            print(f"Commit failed on attempt {attempt+1}. Retrying in {wait_time} seconds...")
             time.sleep(wait_time)
-    else:
-        print("Max retries reached. Commit failed.")
-        conn.close()
-        return time.time() - time_start
+        except Exception as e:
+            print(f"Failed to execute transaction: {e}")
+            break;
+    session.close()
     time_end = time.time()
-    conn.close()
     return time_end - time_start
 ```
-
+Also, the code above is using and [explicit transaction](../client-libraries/python.mdx#explicit-transactions), which is necessary for handling the conflicts. They 
+can also be handled with the [managed transactions](../client-libraries/python.mdx#managed-transactions).
+ [Implict (autocomit)](../client-libraries/python.mdx#implicit-transactions) transactions are not recommended for handing the conflicts.
+ 
 ## I have both CSV and Cypher queries. Which should I use?
 
 The LOAD CSV with batches and running on multi-core machine will yield a much
