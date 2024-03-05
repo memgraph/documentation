@@ -25,8 +25,8 @@ modifications of data model and properties, a graph database is the way to go.
 
 To follow along, you will need:
 
-- Installed **Memgraph Platform**, a streaming graph application platform that 
-includes **Memgraph**, a visual user interface **Memgraph Lab** and **MAGE**, an 
+- **Memgraph Platform** which includes **Memgraph**, a visual user interface **Memgraph Lab** and **MAGE**, an 
+
 advanced graph algorithms and modules library.
 <br/>
 To install Memgraph Platform and set it up, please follow the [getting started 
