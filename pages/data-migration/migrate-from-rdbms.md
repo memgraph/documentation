@@ -77,15 +77,15 @@ When opened in a text editor or a spreadsheet program, the data from the
 **customer** table should look like this:
 
 ```csv
-id, name, email
-1, Amos Burton, amos.burton@mail.em
-2, Chrisjen Avasarala, cavasarala@mail.em
-3, James Holden, james.holden@mail.em
-4, Alex Kamal, akamal@post.com
-5, Camina Drummer, cdrummer@post.com
-6, Marco Inaros, marco.inaros@post.com
-7, Naomi Nagata, naomi.nagata@post.com
-8, Julie Mao, jmao@post.com
+id,name,email
+1,Amos Burton,amos.burton@mail.em
+2,Chrisjen Avasarala,cavasarala@mail.em
+3,James Holden,james.holden@mail.em
+4,Alex Kamal,akamal@post.com
+5,Camina Drummer,cdrummer@post.com
+6,Marco Inaros,marco.inaros@post.com
+7,Naomi Nagata,naomi.nagata@post.com
+8,Julie Mao,jmao@post.com
 ```
 
 #### Exporting data by running a query
@@ -239,6 +239,8 @@ data, in the end, might not be correct.
 <br/>
 
 But, if you import on one thread, batch of data after batch of data, there should be absolutely no issues, and you will gain 6 times faster import with 6 times less memory consumption.
+
+If this approach is still too slow for your dataset size, consider importing nodes and then relationships concurrently.
 <br/>
 
 After import, you can switch back to the `IN_MEMORY_TRANSACTIONAL` storage mode or continue running analytics queries (only read queries) in the `IN_MEMORY_ANALYTICAL` mode to continue benefiting from low memory consumption.
