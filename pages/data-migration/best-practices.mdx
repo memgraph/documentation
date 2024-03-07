@@ -147,6 +147,16 @@ use more memory because of `Delta` object explanied in [section above](#use-in-m
 
 ### Example of batched parallel import with `LOAD CSV` in Python
 
+<Cards>
+<div className="w-[200px]">
+  <Card
+    icon={<GitHub />}
+    title="Source"
+    href="https://github.com/memgraph/best-practices/blob/main/import/csv/neo4jpy"
+  />
+</div>
+</Cards>
+
 Assuming that the files have been correctly split, and [Memgraph is
 running](/getting-started) in `IN_MEMORY_ANALYTICAL` mode, the import process can start. If you're running
 Memgraph with Docker, you need to first [copy the CSV
@@ -157,9 +167,9 @@ files.
 
 ```python
 target_nodes_directory = Path(__file__).parents[3].joinpath(f"datasets/graph500/{size}/csv_node_chunks")
-    for file in target_nodes_directory.glob("*.csv"):
-        subprocess.run(["docker", "cp", str(file), f"memgraph:/usr/lib/memgraph/{file.name}"], check=True)
-        
+for file in target_nodes_directory.glob("*.csv"):
+    subprocess.run(["docker", "cp", str(file), f"memgraph:/usr/lib/memgraph/{file.name}"], check=True)
+
 queries = []
 for file in target_nodes_directory.glob("*.csv"):
     queries.append(f"LOAD CSV FROM '/usr/lib/memgraph/{file.name}' WITH HEADER AS row CREATE (n:Node {{id: row.id}})")
@@ -178,19 +188,19 @@ file via separate sessions and in parallel:
 
 ```python
 with multiprocessing.Pool(10) as pool:
-        results = pool.starmap(execute_single_csv_file, [(q, ) for q in queries])
+    pool.starmap(execute_csv_chunk, [(q, ) for q in queries])
 
 
 #Rest of the code...
 
-def execute_single_csv_file(query):
-    driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
-    time_start = time.time()
-    with driver.session() as session:
-        session.run(query)
-    time_end = time.time()
-    return time_end - time_start
-
+def execute_csv_chunk(query):
+    try:
+        driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
+        with driver.session() as session:
+            session.run(query)
+    except:
+        print("Failed to execute transaction")
+        raise e
 ```
 
 Multiprocessing, rather than multithreading, was used in the example above
@@ -202,6 +212,16 @@ hardware, graph structure and the number of node or relationship properties.
 file with nodes is imported, the relationships can be imported in the same way.**
 
 ## Cypher queries best practices
+
+<Cards>
+<div className="w-[200px]">
+  <Card
+    icon={<GitHub />}
+    title="Source"
+    href="https://github.com/memgraph/best-practices/tree/main/import/cypher"
+  />
+</div>
+</Cards>
 
 If large dataset files are not in the CSV format, any type of dataset file can
 be easily transformed into Cypher queries that can create the graph based on the
@@ -239,9 +259,9 @@ passed to a single query as an argument. Here is an example:
 #Code for reading the lines omitted 
 create_relationships.append({"a": int(node_source), "b": int(node_sink)})
 if len(create_relationships) == CHUNK_SIZE:
-                    print("Chunk size reached - adding to chunks ...", len(create_relationships))
-                    chunks.append(create_relationships)
-                    create_relationships = []
+    print("Chunk size reached - adding to chunks ...", len(create_relationships))
+    chunks.append(create_relationships)
+    create_relationships = []
 ```
 
 The big file of relationships is being chunked into the list between 10K and
@@ -268,7 +288,7 @@ that, you should run each chunk as a separate process. Here is an example:
 
 ```python
 with multiprocessing.Pool(10) as pool:
-            results = pool.starmap(process_chunk, [(query, chunk) for chunk in chunks])
+    pool.starmap(process_chunk, [(query, chunk) for chunk in chunks])
 ```
 
 Multiprocessing, rather than multithreading, was used in the example above
@@ -283,16 +303,11 @@ If you are running Cypher import in `IN_MEMORY_ANALYTICAL` mode, your function f
 executing chunk of nodes or relationships looks like following: 
 
 ```python
-def process_chunk(query, create_list):
-    print("Processing chunk...")
-    time_start = time.time()
-    driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
-    with driver.session() as session:
-        session.run(query, {"batch": create_list})
-    time_end = time.time()
-    node_chunk_execution_time = time_end - time_start
-    print("Node chunk execution time: ", node_chunk_execution_time)
-    return node_chunk_execution_time
+def process_chunk_managed_API(query, create_list):
+    driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
+    with driver.session(max_transaction_retry_time=180.0, initial_retry_delay=0.2, retry_delay_multiplier=1.1, retry_delay_jitter_factor=0.1) as session:
+        session.execute_write(lambda tx: tx.run(query, {"batch": create_list}))
+    driver.close()
 ```
 
 Notice the individual batch being passed to the query. 
@@ -350,9 +365,8 @@ concurrent updates to the same graph objects, then you'll have to retry the
 transactions which throw the `SerializationError`. 
 
 ```python
-def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1, jitter_factor=0.1):
-    session = GraphDatabase.driver("bolt://localhost:7687", auth=("", "")).session()
-    time_start = time.time()
+def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1, jitter=0.1):
+    session = GraphDatabase.driver(HOST_PORT, auth=("", "")).session()
     for attempt in range(max_retries):
         try:
             with session.begin_transaction() as tx:
@@ -360,16 +374,14 @@ def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, 
                 tx.commit()
                 break
         except TransientError as te:
-            jitter = jitter_factor * backoff_factor * random.random() 
+            jitter = random.uniform(0, jitter) * initial_wait_time 
             wait_time = initial_wait_time * (backoff_factor ** attempt) + jitter
             print(f"Commit failed on attempt {attempt+1}. Retrying in {wait_time} seconds...")
             time.sleep(wait_time)
         except Exception as e:
             print(f"Failed to execute transaction: {e}")
-            break;
-    session.close()
-    time_end = time.time()
-    return time_end - time_start
+            session.close()
+            raise e
 ```
 
 The execute needs to be in the `try-except` block due to possible exceptions
