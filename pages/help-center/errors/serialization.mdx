@@ -1,52 +1,102 @@
 ---
-title: Serialization errors
-description: Learn about serialization errors as well as troubleshooting best practices for serialization errors in our all-in-one documentation page at Memgraph. 
+title: Conflicting transaction and serialization error
+description: Learn about conflicting transaction and serialization errors as well as troubleshooting best practices for serialization errors in our all-in-one documentation page at Memgraph. 
 ---
 
 import { Callout } from 'nextra/components'
 
-# Serialization error
+# Conflicting transaction and serialization error
 
 <Callout type="info">
 If you are encountering issues with serialization errors, we're here to help. Join the conversation on <a href="https://www.discord.gg/memgraph" target="_blank">Discord</a> for support.
 </Callout>
 
-## Error
+## Error messages
 
 1. [Unable to commit due to serialization error.](#error-1)
+2. [Cannot resolve conflicting transactions.](#error-1)
 
-## Unable to commit due to serialization error [#error-1]
+## Understand the conflicting transaction and serialization error [#error-1]
 
-Serialization errors usually occur when there are concurrent data imports and
+Conflicting transaction and serializations is in a sense the same error, that 
+usually occur when there are concurrent data imports and
 transactions try to work on the same data points at the same time. This
 situation can occur in both testing and production environments. It's important
-your code anticipates and handles these errors. A common scenario that triggers
-a serialization error is when two nodes in a graph are being updated by two
-different transactions attempting to add edges between them at the same moment.
-If both transactions try to add an edge at the same time, it can lead to a
-serialization error. While some client drivers may handle serialization errors
-by retrying transactions, developers should not solely rely on this mechanism.
-Always include comprehensive error handling in your application to address cases
-where the error persists beyond the retry logic. For more detailed guidance on
-client-specific implementations, please refer to the respective client/driver
-documentation.
+your code anticipates and handles these errors. 
+
+A common scenario that triggers error is when two nodes in a graph are being updated by two
+different transactions attempting to add edges between them at the same moment, changing a propery, label etc. 
+The same applies to edges as well. In essence it is a write-write conflict.
+For example, if both transactions try to add an edge at the same time to 
+identical node, the error will happen. 
 
 To address these problems, consider the following strategies:
 
-- **Retry the transaction:** Some clients, e.g. Go client, have built-in logic
-  to automatically retry transactions that fail due to serialization errors.
+
+- **Retry the transaction:** The basic approach wold be to retry the transaction
+  that failed. This can be done by catching the error and then retrying the
+  transaction. This is a simple and effective way to handle the error.
+
+  Here is a simple example of how to do it in Python via Neo4j client:
+
+  ```python
+  def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1, jitter=0.1):
+    session = GraphDatabase.driver("bolt://localhost:7687", auth=("", "")).session()
+    for attempt in range(max_retries):
+        try:
+            with session.begin_transaction() as tx:
+                tx.run(query, {"batch": create_list})
+                tx.commit()
+                break
+        except TransientError as te:
+            jitter = random.uniform(0, jitter) * initial_wait_time 
+            wait_time = initial_wait_time * (backoff_factor ** attempt) + jitter
+            print(f"Commit failed on attempt {attempt+1}. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+        except Exception as e:
+            print(f"Failed to execute transaction: {e}")
+            session.close()
+            raise e
+  ```
+
+  Keep in mind that ajusting the `max_retries`, `initial_wait_time`, `backoff_factor` and `jitter` is important to avoid overloading the system with retries. 
+  For more information on how to handle retries, please refer to the respective client documentation.
+
+
+- **Understand the client you are using**: Neo4j clients in managed tranasaction, 
+  have built-in logic to automatically retry transactions that fail due to serialization errors.
   There's typically a timeout associated with these retries, after which the
   client will forward the error to the application code. It is important for
   developers to be aware of this and implement additional error handling as
   needed.
-- **Avoid conflicts:** Implement application-level logic to prevent concurrent
-  transactions from modifying the same data points. This strategy can
-  significantly reduce the likelihood of encountering serialization errors.
+
+  Here is an example of Managed API in Python Neo4j Driver:
+
+  ```python
+  def process_chunk_managed_API(query, create_list):
+    driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
+    with driver.session(max_transaction_retry_time=180.0, initial_retry_delay=0.2, retry_delay_multiplier=1.1, retry_delay_jitter_factor=0.1) as session:
+        session.execute_write(lambda tx: tx.run(query, {"batch": create_list}))
+    driver.close()
+  ```
+
+
+- **Avoid conflicts**: This can be done by
+  implementing application-level logic to prevent concurrent transactions from
+  modifying the same data points. This strategy can significantly reduce the
+  likelihood of encountering errors. It will also lead to better performance 
+  since system is not spending time on resolving conflict
 
 Handling serialization errors effectively is essential for maintaining a smooth
 user experience and ensuring the reliability of your application. Implementing
 robust error handling and conflict avoidance mechanisms can mitigate the impact
 of these errors.
+
+While some client drivers may handle serialization errors by retrying transactions, 
+developers should not solely rely on this mechanism. Always include comprehensive error  
+handling in your application to address cases where the error persists beyond the retry logic. 
+For more detailed guidance on client-specific implementations, please refer to the respective client
+documentations.
 
 <Callout type="info">
 If you weren't able to find the error, please submit it through a <a href="https://support.memgraph.com"
