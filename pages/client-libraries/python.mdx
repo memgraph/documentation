@@ -645,64 +645,127 @@ The `Session.run()` method is most commonly used for `LOAD CSV` clause to preven
 
 #### Concurrent transactions
 
-It is possible to run concurrent transactions with Python's `asyncio` library through `AsyncGraphDatabase` client.
-The code is not that different from the synchronous version, except that you must use await on all async calls, and define as async all functions that should be awaited.
+It is possible to run concurrent transactions with Python's client by leveraging threads or processes. 
+Using threads could cause your code to be partially locked because of [Global interpreter lock (GIL)](https://wiki.python.org/moin/GlobalInterpreterLock), 
+resulting in slow execution. Hence, it is always better to run your workloads in separate processes, 
+where each process will have its own interpreter and memory space, avoiding GIL issues. To leverage multiple concurrent processes, you can use Python's `multiprocessing` module.
 
-The following example shows how to use the client with the `execute_query()` method:
+Here is an example of how to run concurrent transactions with `multiprocessing` module:
 
-```python
-import asyncio
-from neo4j import AsyncGraphDatabase
+```Python
+import multiprocessing
+from neo4j import GraphDatabase
+
+HOST_PORT = "bolt://localhost:7687"
+
+def process_chunk(query, create_list):
+    try: 
+        driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
+        with driver.session() as session:
+            session.run(query, {"batch": create_list})
+        driver.close()
+    except Exception as e:
+        print("Failed to execute chunk: ", e)
+        raise e
 
 
-URI = "bolt://localhost:7687"
-AUTH = ("", "")
+query = """
+WITH $batch AS nodes
+UNWIND nodes AS node
+CREATE (n:Node {id:node.id})
+"""
 
-
-async def main():
-    async with AsyncGraphDatabase.driver(URI, auth=AUTH) as client:
-        records, summary, keys = await client.execute_query(
-            "MATCH (u:User) RETURN u.name AS name", database_="memgraph"
-        )
-        names = [record["name"] for record in records]
-        print(names)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+chunks = [[{"id": i} for i in range(1000)] for _ in range(10)]
+with multiprocessing.Pool(10) as pool:
+    pool.starmap(process_chunk, [(query, chunk) for chunk in chunks])
 ```
 
-The following example shows how to use the client with transaction functions:
-
-```python
-import asyncio
-from neo4j import AsyncGraphDatabase
-
-
-URI = "bolt://localhost:7687"
-AUTH = ("", "")
+Each process will execute a query that contains a chunk of nodes.  
+You can control the number of concurrent transactions and processes by specifying the number of processes in the `multiprocessing.Pool` constructor.
+Each transaction will be a separate connection to the database and will be executed in parallel on a different process. 
+This number should align with your system's capabilities. 
+If you have 32 cores, you can run 32 processes, but if you have only four cores, it would be more efficient to run only four processes.
 
 
-async def main():
-    async with AsyncGraphDatabase.driver(URI, auth=AUTH) as client:
-        async with client.session(database="memgraph") as session:
-            records = await session.execute_read(get_users)
-            print(records)
+Running transactions in parallel can be very efficient, but it can lead to conflicting transactions. The typical scenario is when two transactions try to update the same node simultaneously, or add 
+a relationship to the same node. It is a write-write conflict between transactions. In this case, the first transaction will pass, and one of the transactions will fail, and you will need to handle the error and retry the transaction. 
 
+If you are running transactions in parallel, you should avoid [implicit transactions](#implicit-transactions) because you can't control the execution process, and there are no retries.
 
-async def get_users(tx):
-    result = await tx.run("MATCH (u:User) RETURN u.name AS name")
-    records = await result.values()
-    return records
+You can use the [managed transactions](#managed-transactions) or [explicit transactions](#explicit-transactions) to handle the conflicting transactions. Explicit API provides full control of the process, and it is recommended for production use and handling conflicts. 
 
+Here is an example of how to handle conflicting transactions in explicit API:
 
-if __name__ == "__main__":
-    asyncio.run(main())
+```Python
+def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1, jitter=0.1):
+    session = GraphDatabase.driver(HOST_PORT, auth=("", "")).session()
+    for attempt in range(max_retries):
+        try:
+            with session.begin_transaction() as tx:
+                tx.run(query, {"batch": create_list})
+                tx.commit()
+                break
+        except TransientError as te:
+            jitter = random.uniform(0, jitter) * initial_wait_time 
+            wait_time = initial_wait_time * (backoff_factor ** attempt) + jitter
+            print(f"Commit failed on attempt {attempt+1}. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+        except Exception as e:
+            print(f"Failed to execute transaction: {e}")
+            session.close()
+            raise e
 ```
+
+In the example above, we are using the `begin_transaction()` method to start a transaction, and then we are running the query inside the transaction. If the transaction fails with a `Transient error,` the transaction will be retried using the retry strategy. Otherwise, another error occurred, and the transaction should be aborted. 
+
+The essential aspects of the retry strategy are the following arguments: 
+
+- `max_retries` - the maximum number of retries before the transaction will be aborted with a timeout error. This number should be set based on the expected number of conflicts and the time that the transaction will be running.
+if the commit takes a second and you have 120 retries, that means that the transaction will be running for 2 minutes + waiting time.
+- `initial_wait_time` - the time that the transaction will wait before the first retry. The first time a transaction fails with conflict, it will wait for `initial_wait_time` seconds before the first retry.
+- `backoff_factor` - the factor by which the retry delay will be multiplied after each retry. This number should not be too high because it can lead to long-running transactions; if commits are small and fast, avoid exponential backoff.
+- `jitter` - the factor by which the retry delay will be randomized after each retry. If there are a lot of transactions running in parallel, it is recommended to use jitter to avoid the thundering herd problem.
+
+
+If you use managed transactions, you can configure the retry scenario to use the `session` configuration. Here is an example: 
+
+```Python
+import multiprocessing
+from neo4j import GraphDatabase
+
+HOST_PORT = "bolt://localhost:7687"
+
+def process_chunk_managed_API(query, create_list):
+    driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
+    with driver.session(max_transaction_retry_time=180.0, initial_retry_delay=0.2, retry_delay_multiplier=1.1, retry_delay_jitter_factor=0.1) as session:
+        session.execute_write(lambda tx: tx.run(query, {"batch": create_list}))
+    driver.close()
+
+query = """
+WITH $batch AS nodes
+UNWIND nodes AS node
+MATCH (a:Node {id: node.a}), (b:Node {id: node.b}) CREATE (a)-[:RELATIONSHIP]->(b)
+"""
+
+chunks = [[{"a": i, "b": i+1} for i in range(1000)] for _ in range(10)]
+with multiprocessing.Pool(10) as pool:
+    pool.starmap(process_chunk_managed_API, [(query, chunk) for chunk in chunks])
+
+```
+
+In this case, the `TransientError` will be retried using the retry strategy that is configured in the `session` object. You do not need to handle the retry logic; it is handled by the driver in the background.
+
+The essential configuration arguments are the following:
+
+- `max_transaction_retry_time` is the maximum time that the transaction will be retried; after that, it will be aborted with a timeout error. 
+- `initial_retry_delay` is the time that the transaction will wait before the first retry. 
+- `retry_delay_multiplier` is the factor by which the retry delay will be multiplied after each retry.
+- `retry_delay_jitter_factor` is the factor by which the retry delay will be randomized after each retry. 
+
 
 <Callout type="info">
 
-If you encounter serialization errors while using Python client, we recommend
+If you are still struggling with conflicts and serialization errors while using a Python client, we recommend
 referring to our [Serialization errors](/help-center/errors/serialization) page
 for detailed guidance on troubleshooting and best practices. 
 
