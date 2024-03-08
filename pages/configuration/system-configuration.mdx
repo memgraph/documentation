@@ -1,87 +1,116 @@
 ---
-title: System configuration
+title: System Configuration
 description: Explore the documentation page for Memgraph and get insights into system configuration options.
 ---
 
 import { Callout } from 'nextra/components'
 import { Steps } from 'nextra/components'
 
-# System Configuration
+# System configuration
 
 Enhancing Memgraph's performance can sometimes involve optimizing operating
-system-level configurations. These adjustments primarily pertain to the settings
+system-level configurations. These adjustments primarily relate to the settings
 governing resource allocation and process management.
 
-## Adjusting fs.file-max
+## Handle numerous open files simultaneously
 
 The `fs.file-max` parameter in Linux sets the maximum number of file handles
-that the Linux kernel will allocate. Adjusting this is crucial when the system
-needs to handle numerous open files simultaneously. To adjust this parameter do the following: 
+that the Linux kernel will allocate. This adjustment is important when the
+system needs to handle numerous open files simultaneously. To adjust this
+parameter, do the following:
 
 <Steps>
 
 {<h3>Open `/etc/sysctl.conf` in a text editor</h3>}
-You need root privileges to edit this file, which is used for configuring kernel
-parameters at runtime.
+You need root privileges to
+edit this file, which is used for configuring kernel parameters at runtime.
+
 
 {<h3>Set the file handle limit</h3>}
-Add the line `fs.file-max=100000` to `sysctl.conf`. 
+Add the line `fs.file-max=100000` to
+`sysctl.conf`. 
 
 {<h3>Apply the changes</h3>}
-Save your changes and exit the text editor. Run `sudo sysctl -p` to immediately
-apply the changes without rebooting.
+Save your changes and exit the text editor. Run
+`sudo sysctl -p` to apply the changes immediately without rebooting.
 
 {<h3>Verify the changes</h3>}
-Run `sysctl fs.file-max` to check that the new value has been applied. It should
-return `100000`.
+Run `sysctl fs.file-max` to check that the new
+value has been applied. It should return `100000`.
 
 </Steps>
 
 ## Increasing memory map areas
 
-The `vm.max_map_count` parameter determines the maximum number of memory map
-areas a process can have. Run `sudo sysctl -w vm.max_map_count=262144` to
-immediately increase the memory map area limit to 262,144. This change takes
-effect right away but lasts only until the next reboot.
+If users are working on a larger scale, there is a possibility that a
+transaction is hanging because Memgraph tries to allocate memory and it couldn’t
+as it was out of virtual memory space. User can adjust the `vm.max_map_count`
+parameter to define the maximum number of memory map areas a process can have. 
 
-If you want a change that persists across system reboots, follow these steps:
+### Immediate adjustment
+
+Run `sudo sysctl -w vm.max_map_count=262144` to immediately increase the memory
+map area limit to 262,144. This change takes effect right away but lasts only
+until the next reboot.
+
+### Persistent adjustment
 
 <Steps>
 
 {<h3>Edit `/etc/sysctl.conf`</h3>}
-Add `vm.max_map_count=262144` to `/etc/sysctl.conf`. Root privileges are
-required for editing.
+Add `vm.max_map_count=262144` to
+`/etc/sysctl.conf`. Root privileges are required for editing.
 
 {<h3>Apply the changes</h3>}
-Save your changes and run `sudo sysctl -p` to apply them right away.
+Save your changes and run `sudo sysctl -p` to apply
+them right away.
 
 {<h3>Verify the changes</h3>}
-Run `sysctl vm.max_map_count` to ensure the new value is in effect. It should
-return `262144`.
+Run `sysctl vm.max_map_count` to ensure the new
+value is in effect. It should return `262144`.
 
 </Steps>
 
-## Setting the process stack size
+## Addressing stack overflow issues
 
-For systems running resource-intensive applications, it might be necessary to
-increase the stack size for a process. By default, the Linux stack size is set
-to 8MB. Increasing this limit can help in managing larger transactions and
-workloads.
+Stack overflow issues may occur due to a large query in Memgraph. To address
+these issues, there are two possible approaches:
 
-### Steps to set the process stack size:
+1. [Increase the stack size](#increase-the-stack-size)
+2. [Split the query into smaller chunks](#split-the-query-into-smaller-chunks)
 
-<Callout type="info">
+### Increase the stack size
 
-If you are using Docker you can set the process stack size when you run the
-Docker container. Just add `--ulimit stack=8277716992:8277716992` to your Docker
-run command, e.g. `docker run --rm -it --name memgraph --ulimit
-stack=8277716992:8277716992 -p 7687:7687 -p 7444:7444 memgraph/memgraph`
+#### With Docker
 
-</Callout>
+<Steps>
+{<h3>Run Docker image</h3>}
+
+Run the Memgraph using:
+
+```bash
+docker run --rm -it --name memgraph --ulimit stack=33554432:33554432 -p 7687:7687 -p 7444:7444 memgraph/memgraph
+```
+Replace `33554432` with the required stack size in bytes.
+
+{<h3>Verify the changes</h3>}
+To check the new stack size limits, run:
+
+```bash
+docker exec memgraph sh -c "ulimit -a | grep stack"
+```
+
+This command should return `stack(kbytes) 32768`, confirming that the new stack size limits
+have been applied. This value is equivalent of 32MB
+
+
+</Steps>
+
+#### Without Docker
 
 <Steps>
 
-{<h3>Open `/etc/security/limits.conf` in a text editor</h3>}
+{<h3>Open /etc/security/limits.conf in a text editor</h3>}
 You need root privileges to edit this file. This file is used to set user or
 group-specific soft and hard limits for various system resources.
 
@@ -90,24 +119,41 @@ Add the following lines to set both the soft and hard stack size limits for the
 user:
 
 ```
-memgraph soft stack 8087482
-memgraph hard stack 8087482
+memgraph soft stack 32768
+memgraph hard stack 32768
 ```
 
-The values `8087482` represent the stack size in kilobytes, equivalent to 8GB.
+The value `32768` represents the stack size in kilobytes, equivalent to 32MB.
 
 {<h3>Apply the changes</h3>}
 Save your changes and exit the text editor. For the changes to take effect, the
 user may need to log out and then log back in.
 
-### Verify the changes
+{<h3>Verify the changes</h3>}
 To check the new stack size limits, switch to the user account and run:
 
 ```
 ulimit -s
 ```
 
-This command should return `8087482`, confirming that the new stack size limits
+This command should return `32768`, confirming that the new stack size limits
 have been applied.
 
 </Steps>
+
+### Split the query into smaller chunks
+
+To avoid stack overflow, divide your large query into smaller parts. This
+approach requires careful handling of variables and node references across
+queries. For creating edges between nodes created in separate queries, use the
+`MATCH` clause to reference nodes from previous queries:
+
+```cypher
+// First Query
+CREATE (a:Node {id: 1});
+// Second Query
+MATCH (a:Node {id: 1})
+CREATE (b:Node {id: 2}), (a)-[:RELATES_TO]->(b);
+```
+This method reduces the stack size required for each query, potentially avoiding
+the stack overflow issue.
