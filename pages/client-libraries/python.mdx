@@ -681,18 +681,28 @@ with multiprocessing.Pool(10) as pool:
 ```
 
 Each process will execute a query that contains a chunk of nodes.  
-You can control the number of concurrent transactions and processes by specifying the number of processes in the `multiprocessing.Pool` constructor.
-Each transaction will be a separate connection to the database and will be executed in parallel on a different process. 
-This number should align with your system's capabilities. 
-If you have 32 cores, you can run 32 processes, but if you have only four cores, it would be more efficient to run only four processes.
+You can control the number of concurrent transactions and processes by
+specifying the number of processes in the `multiprocessing.Pool` constructor.
+Each transaction will be a separate connection to the database and will be
+executed in parallel on a different process. This number should align with your
+system's capabilities. If you have 32 cores, you can run 32 processes, but if
+you have only four cores, it would be more efficient to run only four processes.
 
+Running transactions in parallel can be very efficient, but it can lead to
+conflicting transactions. The typical scenario is when two transactions try to
+update the same node simultaneously, or add a relationship to the same node. It
+is a write-write conflict between transactions. In this case, the first
+transaction will pass, and one of the transactions will fail, and you will need
+to handle the error and retry the transaction. 
 
-Running transactions in parallel can be very efficient, but it can lead to conflicting transactions. The typical scenario is when two transactions try to update the same node simultaneously, or add 
-a relationship to the same node. It is a write-write conflict between transactions. In this case, the first transaction will pass, and one of the transactions will fail, and you will need to handle the error and retry the transaction. 
+If you are running transactions in parallel, you should avoid [implicit
+transactions](#implicit-transactions) because you can't control the execution
+process, and there are no retries.
 
-If you are running transactions in parallel, you should avoid [implicit transactions](#implicit-transactions) because you can't control the execution process, and there are no retries.
-
-You can use the [managed transactions](#managed-transactions) or [explicit transactions](#explicit-transactions) to handle the conflicting transactions. Explicit API provides full control of the process, and it is recommended for production use and handling conflicts. 
+You can use the [managed transactions](#managed-transactions) or [explicit
+transactions](#explicit-transactions) to handle the conflicting transactions.
+Explicit API provides full control of the process, and it is recommended for
+production use and handling conflicts. 
 
 Here is an example of how to handle conflicting transactions in explicit API:
 
@@ -716,16 +726,29 @@ def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, 
             raise e
 ```
 
-In the example above, we are using the `begin_transaction()` method to start a transaction, and then we are running the query inside the transaction. If the transaction fails with a `TransientError,` the transaction will be retried using the retry strategy. Otherwise, another error occurred, and the transaction should be aborted. 
+In the example above, we are using the `begin_transaction()` method to start a
+transaction, and then we are running the query inside the transaction. If the
+transaction fails with a `TransientError,` the transaction will be retried using
+the retry strategy. Otherwise, another error occurred, and the transaction
+should be aborted. 
 
 The essential aspects of the retry strategy are the following arguments: 
 
-- `max_retries` - the maximum number of retries before the transaction will be aborted with a timeout error. This number should be set based on the expected number of conflicts and the time that the transaction will be running.
-If the commit takes a second and you have 120 retries, the transaction will be running for 2 minutes + waiting time.
-- `initial_wait_time` - the time that the transaction will wait before the first retry. The first time a transaction fails with conflict, it will wait for `initial_wait_time` seconds before the first retry.
-- `backoff_factor` - the factor by which the retry delay will be multiplied after each retry. This number should not be too high because it can lead to long-running transactions; if commits are small and fast, avoid exponential backoff.
-- `jitter` - the factor by which the retry delay will be randomized after each retry. If there are a lot of transactions running in parallel, it is recommended to use `jitter` to avoid the thundering herd problem.
-
+- `max_retries` - the maximum number of retries before the transaction will be
+aborted with a timeout error. This number should be set based on the expected
+number of conflicts and the time that the transaction will be running. If the
+commit takes a second and you have 120 retries, the transaction will be running
+for 2 minutes + waiting time.
+- `initial_wait_time` - the time that the transaction will wait before the first
+  retry. The first time a transaction fails with conflict, it will wait for
+  `initial_wait_time` seconds before the first retry.
+- `backoff_factor` - the factor by which the retry delay will be multiplied
+  after each retry. This number should not be too high because it can lead to
+  long-running transactions; if commits are small and fast, avoid exponential
+  backoff.
+- `jitter` - the factor by which the retry delay will be randomized after each
+  retry. If there are a lot of transactions running in parallel, it is
+  recommended to use `jitter` to avoid the thundering herd problem.
 
 If you use managed transactions, you can configure the retry scenario to use the `session` configuration. Here is an example: 
 
@@ -757,11 +780,14 @@ In this case, the `TransientError` will be retried using the retry strategy that
 
 The essential configuration arguments are the following:
 
-- `max_transaction_retry_time` - the maximum time the transaction will be retried; after that, it will be aborted with a timeout error. 
-- `initial_retry_delay` - the time that the transaction will wait before the first retry. 
-- `retry_delay_multiplier` - the factor by which the retry delay will be multiplied after each retry.
-- `retry_delay_jitter_factor` - the factor by which the retry delay will be randomized after each retry. 
-
+- `max_transaction_retry_time` - the maximum time the transaction will be
+  retried; after that, it will be aborted with a timeout error. 
+- `initial_retry_delay` - the time that the transaction will wait before the
+  first retry. 
+- `retry_delay_multiplier` - the factor by which the retry delay will be
+  multiplied after each retry.
+- `retry_delay_jitter_factor` - the factor by which the retry delay will be
+  randomized after each retry. 
 
 <Callout type="info">
 
