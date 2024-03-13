@@ -2418,22 +2418,23 @@ List AggregateOverTextIndex(
 
 During operation, the following exceptions may be thrown.
 
-| Exception                     | Message                                         |
-| ----------------------------- | ----------------------------------------------- |
-| `ValueException`              | various (handles unknown/unexpected types)      |
-| `NotFoundException`           | Node with ID [ID] not found!                    |
-| `NotEnoughMemoryException`    | Not enough memory!                              |
-| `UnknownException`            | Unknown exception!                              |
-| `AllocationException`         | Could not allocate memory!                      |
-| `InsufficientBufferException` | Buffer is not sufficient to process procedure!  |
-| `IndexException`              | Index value out of bounds!                      |
-| `OutOfRangeException`         | Index out of range!                             |
-| `LogicException`              | Logic exception, check the procedure signature! |
-| `DeletedObjectException`      | Object is deleted!                              |
-| `InvalidArgumentException`    | Invalid argument!                               |
-| `InvalidIDException`          | Invalid ID!                                     |
-| `KeyAlreadyExistsException`   | Key you are trying to set already exists!       |
-| `ImmutableObjectException`    | Object you are trying to change is immutable!   |
-| `ValueConversionException`    | Error in value conversion!                      |
-| `SerializationException`      | Error in serialization!                         |
-| `TextSearchException`         | various (reports text search utility issues)    |
+| Exception                      | Message                                                  |
+| ------------------------------ | -------------------------------------------------------- |
+| `ValueException`               | various (handles unknown/unexpected types)               |
+| `NotFoundException`            | Node with ID [ID] not found!                             |
+| `NotEnoughMemoryException`     | Not enough memory!                                       |
+| `UnknownException`             | Unknown exception!                                       |
+| `AllocationException`          | Could not allocate memory!                               |
+| `InsufficientBufferException`  | Buffer is not sufficient to process procedure!           |
+| `IndexException`               | Index value out of bounds!                               |
+| `OutOfRangeException`          | Index out of range!                                      |
+| `LogicException`               | Logic exception, check the procedure signature!          |
+| `DeletedObjectException`       | Object is deleted!                                       |
+| `InvalidArgumentException`     | Invalid argument!                                        |
+| `InvalidIDException`           | Invalid ID!                                              |
+| `KeyAlreadyExistsException`    | Key you are trying to set already exists!                |
+| `ImmutableObjectException`     | Object you are trying to change is immutable!            |
+| `ValueConversionException`     | Error in value conversion!                               |
+| `SerializationException`       | Error in serialization!                                  |
+| `TextSearchException`          | various (indicates issues with the text search utility)  |
+
