@@ -290,7 +290,7 @@ number of stored nodes and relationships and memory usage.
 
 By default, Memgraph saves the log at `/var/log/memgraph/memgraph.log`.
 Accessing logs depends on how you've started Memgraph, so check the
-[documentation about accessing logs](/configuration/configuration-settings).
+[documentation about accessing logs](/configuration/logs#access-logs).
 
 You can check the logs using Memgraph Lab (the visual interface). Memgraph Lab
 listens to logs on the 7444 port. You can also use this web socket port 7444 and
