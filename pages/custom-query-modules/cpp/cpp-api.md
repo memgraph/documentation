@@ -2356,8 +2356,7 @@ std::ostream &operator<<(std::ostream &os, const mgp::Type &type)
 
 ## Database internals API
 
-This section covers the C++ API methods for interfacing with the database other
-than with the graph itself.
+This section describes C++ API methods for database operations beyond graph manipulation.
 
 ### Text search
 
