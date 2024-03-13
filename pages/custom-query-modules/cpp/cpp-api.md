@@ -3,6 +3,8 @@ title: Query modules C++ API
 description: Get your hands on the API documentation for mgp.hpp, covering declarations of every function in the C++ API for implementing query modules.
 ---
 
+import { Callout } from 'nextra/components'
+
 # Query modules C++ API
 
 This is the API documentation for `mgp.hpp`, which contains declarations of all
@@ -2359,6 +2361,17 @@ std::ostream &operator<<(std::ostream &os, const mgp::Type &type)
 This section describes C++ API methods for database operations beyond graph manipulation.
 
 ### Text search
+
+<Callout type="warning">
+
+Text search is an experimental feature introduced in Memgraph 2.15.1. Refer to
+the [text search page](/configuration/text-search) for an overview of its
+capabilities.
+
+To use text search, start memgraph with the `--experimental-enabled=text-search`
+flag.
+
+</Callout>
 
 #### SearchTextIndex
 
