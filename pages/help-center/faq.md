@@ -40,7 +40,7 @@ require real-time processing and high scalability.
 
 In relational databases, complex data relationships arise when data from
 different tables is related or somehow interconnected. Because data is spread
-across multiple tables, querying it requires hopping from one table to anther and
+across multiple tables, querying it requires hopping from one table to another and
 joining it with slow and resource-intensive join operations.
 
 The complexity of join operations can increase exponentially as the number of
