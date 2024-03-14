@@ -145,7 +145,8 @@ There are three official Docker images for Memgraph:
 - `memgraph/memgraph` - the most basic MemgraphDB instance used to run a
   database instance and a command-line interface.
 - `memgraph/lab` - the image contains a web interface of [Memgraph
-  Lab](https://memgraph.com/docs/data-visualization), a visualization
+  Lab](/data-visualization), a visualization
+
   software that helps you explore data stored in Memgraph
 - `memgraph/memgraph-mage` - the image contains a MemgraphDB instance and the
   command-line interface together with all the newest graph algorithms and
@@ -154,12 +155,14 @@ There are three official Docker images for Memgraph:
 The MAGE graph algorithm library also includes [NVIDIA
 cuGraph](https://github.com/rapidsai/cugraph) GPU-powered graph algorithms. To
 use them, you need a specific kind of `memgraph-mage` image, so check the
-[documentation](https://memgraph.com/docs/advanced-algorithms/install-mage) or
+[documentation](/advanced-algorithms/install-mage) or
+
 [DockerHub](https://hub.docker.com/r/memgraph/memgraph-mage/tags?page=1&name=cugraph)
 for tags.
 
 The easiest way to install Memgraph is to run [Memgraph
-Platform](https://memgraph.com/docs/getting-started) which will run
+Platform](/getting-started) which will run
+
 `memgraph/memgraph-mage` and `memgraph/lab` Docker images thus installing all
 the tools in the Memgraph ecosystem.
 
