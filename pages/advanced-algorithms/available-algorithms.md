@@ -11,7 +11,7 @@ number of advanced algorithms available in Memgraph.
 Some algorithms are built in, and others are available in the [MAGE graph
 library](/advanced-algorithms/install-mage).
 
-## Built-in algorithms
+## Deep path traversal algorithms
 
 | Algorithms                                                                                      | Lang | Description                                                                                                                                                                                                                                    |
 |-------------------------------------------------------------------------------------------------|------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
