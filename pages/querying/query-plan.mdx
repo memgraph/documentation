@@ -1,0 +1,341 @@
+---
+title: Query plan
+description: Understand how to read and interpret the query plan
+---
+
+import { Callout } from "nextra/components";
+
+
+# Query plan
+
+Cypher is a declarative language. This means that you specify what you want to retrieve, but not how to retrieve it. This 
+means the Memgraph Query engine is responsible for figuring out the best way to execute the Cypher query.
+
+In order to do this, each Cypher query is translated into a query plan.
+Query plans are a way to understand how the Memgraph query engine will execute 
+a query. Query engine can do a lot of optimizations, but also it can make mistakes. Hence, 
+the query plan is a useful tool to understand query execution and to identify potential performance issues.
+
+## Query plan structure
+
+The users just intreact with the Cyher to tune the Query plan structure. Query plan is a internal tree-like data 
+structure describing a pipeline of operations  which will be performed on the database in order to yield the results for a given query. 
+Every node within a plan is known as a *logical operator* and describes a particular operation.
+
+Because a plan represents a pipeline, the logical operators are iteratively
+executed as data passes from one logical operator to the other. Every logical
+operator *pulls* data from the logical operator(s) preceding it, processes it
+and passes it onto the logical operator next in the pipeline for further
+processing.
+
+Query plan can be obtained by prefixing the query with [`EXPLAIN`](./clauses/explain.md) or [`PROFILE`](./clauses/profile.md) clauses.
+
+Here is the basic example of a produced query plan for the simple query:
+
+```cypher
+EXPLAIN MATCH (n) RETURN n;
+```
+```
++----------------+
+| QUERY PLAN     |
++----------------+
+|  * Produce {n} |
+|  * ScanAll (n) |
+|  * Once        |
++----------------+
+```
+<Callout type="info">
+Query plan should be read from the bottom to the top.
+</Callout>
+
+The output of the query using the `EXPLAIN` clause is a representation of the produced plan. Every
+logical operator within the plan starts with an asterisk character (`*`) and is
+followed by its name (and sometimes additional information). The execution of
+the query proceeds iteratively (generating one entry of the result set at a
+time), with data flowing from the bottom-most logical operator(s) (the start of
+the pipeline) to the top-most logical operator(s) (the end of the pipeline).
+
+In the example above, the resulting plan is a pipeline of 3 logical operators.
+`Once` is the identity logical operator which does nothing and is always found
+at the start of the pipeline; `ScanAll` is a logical operator which iteratively
+produces all of the nodes in the graph; and `Produce` is a logical operator
+which takes data produced by another logical operator and produces data for the
+query's result set.
+
+A simple example showcasing the fully general tree structure of the plan could
+be:
+
+```cypher
+EXPLAIN MERGE (n) RETURN n;
+```
+
+```
++------------------+
+| QUERY PLAN       |
++------------------+
+|  * Produce {n}   |
+|  * Accumulate    |
+|  * Merge         |
+|  |\ On Match     |
+|  | * ScanAll (n) |
+|  | * Once        |
+|  |\ On Create    |
+|  | * CreateNode  |
+|  | * Once        |
+|  * Once          |
++------------------+
+```
+
+Starting from the bottom and skiping `Once`, the `Merge` logical operator (constructed as a result of the `MERGE` construct)
+can take input from two operators, `On Match` or `On Create`. The `On Match` and `On Create` branches are
+"pulled from" only if a match was found or if a new vertex has to be created. Each branch again has its own pipeline of logical operators, that starts with `Once`,
+and it is being read from the bottom to the top.
+
+The more complicated example showcases the tree-like structure of the plan with `Merge` would be this: 
+
+
+```cypher
+EXPLAIN MERGE (p:Person {name: 'Angela'})
+ON MATCH SET p.found = TRUE
+ON CREATE SET p.notFound = TRUE
+RETURN p.name, p.notFound, p.found;
+```
+
+```
++------------------------------------------+
+| QUERY PLAN                               |
++------------------------------------------+
+|  * Produce {p.name, p.notFound, p.found} |
+|  * Accumulate                            |
+|  * Merge                                 |
+|  |\ On Match                             |
+|  | * SetProperty                         |
+|  | * Filter (p :Person), {p.name}        |
+|  | * ScanAll (p)                         |
+|  | * Once                                |
+|  |\ On Create                            |
+|  | * SetProperty                         |
+|  | * CreateNode                          |
+|  | * Once                                |
+|  * Once                                  |
++------------------------------------------+
+```
+
+
+In this examples each of the branches of the `Merge` operator has its own pipeline of logical operators.
+The `On Match` branch has a `Filter` operator, which filters the nodes based on the label and property, 
+and `SetProperty` operator, which sets the property on the node. The `On Create` branch has a `CreateNode` operator,
+which creates a new node, and `SetProperty` operator, which sets the property on the node.
+
+
+
+## Query plan operators 
+
+Each of the mentioned operators in the query plan represents a particular operation that will be performed on the data. 
+
+The following table list all the operators currently supported by Memgraph:
+
+| Operator                      | Description                                                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `Accumulate`                    | Accumulates the input it received.                                                                                       |
+| `Aggregate`                     | Aggregates the input it received.                                                                                        |
+| `Apply`                         | Joins the returned symbols from two branches of execution.                                                               |
+| `CallProcedure`                 | Calls a procedure.                                                                                                       |
+| `Cartesian`                     | Applies the Cartesian product (the set of all possible ordered combinations consisting of one member from each of those sets) on the input it received. |
+| `ConstructNamedPath`            | Creates a path.                                                                                                          |
+| `CreateNode`                    | Creates a node.                                                                                                          |
+| `CreateExpand`                  | Creates edges and  new nodes to connect with existing nodes.                                                             |
+| `Delete`                        | Deletes nodes and edges.                                                                                                 |
+| `EdgeUniquenessFilter`          | Filters unique edges.                                                                                                    |
+| `EmptyResult`                   | Discards results from the previous operator.                                                                             |
+| `EvaluatePatternFilter`         | Part of the filter operator that contains a sub-branch which yields either true or false.                                |
+| `Expand`                        | Expands the node by finding the node's relationships.                                                                    |
+| `ExpandVariable`                | Performs a node expansion of a variable number of relationships                                                          |
+| `Filter`                        | Filters the input it received.                                                                                           |
+| `Foreach`                       | Iterates over a list and applies one or more update clauses.                                                             |
+| `HashJoin`                      | Performs a hash join of the input from its two input branches.                                                           |
+| `IndexedJoin`                   | Performs an indexed join of the input from its two input branches.                                                       |
+| `Limit`                         | Limits certain rows from the pull chain.                                                                                 |
+| `LoadCsv`                       | Loads CSV file in order to import files into the database.                                                               |
+| `Merge`                         | Applies merge on the input it received.                                                                                  |
+| `Once`                          | Forms the beginning of an operator chain with "only once" semantics. The operator will return false on subsequent pulls. |
+| `Optional`                      | Performs optional matching.                                                                                              |
+| `OrderBy`                       | Orders the input it received.                                                                                            |
+| `Produce`                       | Produces results.                                                                                                        |
+| `RemoveLabels`                  | Removes a variable number of node labels.                                                                                |
+| `RemoveProperty`                | Removes a node or relationship property.                                                                                 |
+| `ScanAll`                       | Produces all nodes in the database.                                                                                      |
+| `ScanAllById`                   | Produces nodes with a certain index.                                                                                     |
+| `ScanAllByLabel`                | Produces nodes with a certain label.                                                                                     |
+| `ScanAllByLabelProperty`        | Produces nodes with a certain label and property.                                                                        |
+| `ScanAllByLabelPropertyRange`   | Produces nodes with a certain label and property value within the given range (both inclusive and exclusive).            |
+| `ScanAllByLabelPropertyValue`   | Produces nodes with a certain label and property value.                                                                  |
+| `SetLabels`                     | Sets node labels of variable length.                                                                                     |
+| `SetProperty`                   | Sets a node or relationship property.                                                                                    |
+| `SetProperties`                 | Sets a list of node or relationship properties.                                                                          |
+| `Skip`                          | Skips certain rows from the pull chain.                                                                                  |
+| `Unwind`                        | Unwinds an expression to multiple records.                                                                               |
+| `Distinct`                      | Applies a distinct filter on the input it received.                                                                      |
+
+Some of the operators are always present and bolierplate operators, such as `Once` and `Produce`. 
+
+`Once` is the operator that represent the first operator in the query plan and it is always present. It is used to signal the start of the query plan and to 
+signal the start of the operator chain in second branch. 
+
+`Produce` is the operator that represent the last operator in the query plan and it is always present. It is used to signal the end of the query plan and connected to usage
+of the `RETURN` clause in the query.  Here is an example of the query plan with `Once` and `Produce` operators:
+
+```cypher
+EXPLAIN RETURN 0;
+```
+
+```
++------------------+
+| QUERY PLAN       |
++------------------+
+| " * Produce {0}" |
+| " * Once"        |
++------------------+
+```
+
+`ScanAll` is the operator that represents the operator that produces all nodes in the database. This means that it will touch every node in the graph and it will 
+pass that data to the next operator in the query plan. This operator is used when there is no filtering on the nodes, and it an expensive operator to use on large graphs.
+For details on how to optimize the query plan execution, read the [performance guide](./performance-optimization.md).
+
+```cypher
+EXPLAIN MATCH (n) RETURN n;
+```
+```
++----------------+
+| QUERY PLAN     |
++----------------+
+|  * Produce {n} |
+|  * ScanAll (n) |
+|  * Once        |
++----------------+
+```
+
+`Filter` is the operator that filters the input it received. This operator is used when there is a filtering on the nodes and relationship properties or labels. 
+Typically, the `MATCH` clause arguments are used to filter the nodes and relationships, based on the arguments the filter is applied. 
+
+Here is an example for nodes filtering:
+
+```cypher
+EXPLAIN MATCH (n {id:1}) RETURN n;
+```
+```
++--------------------+
+| QUERY PLAN         |
++--------------------+
+| " * Produce {n}"   |
+| " * Filter {n.id}" |
+| " * ScanAll (n)"   |
+| " * Once"          |
++--------------------+
+
+```
+
+Here is an example for relationships filtering based on the relationship properties:
+
+```cypher
+EXPLAIN MATCH (p)-[r{id:1}]->(t) RETURN r;
+```
+```
++--------------------------+
+| QUERY PLAN               |
++--------------------------+
+| " * Produce {r}"         |
+| " * Filter {r.id}"       |
+| " * Expand (t)<-[r]-(p)" |
+| " * ScanAll (t)"         |
+| " * Once"                |
++--------------------------+
+```
+
+In the example above, the `Expand` operator is used to expand from the `t` node to the `p` node. The `Expand` operator is used to find connected nodes based on the relationship, type and direction. 
+It is and equivalent to the graph traversals/hops. The similar filter is `ExpandVariable` operator, which is used to perform a node expansion of several traversals or hops from the starting node.
+
+Here is an example of the `ExpandVariable` operator:
+
+```cypher
+EXPLAIN MATCH (p)-[*1..2]-(t) RETURN p, t;
+```
+```
++-------------------------------------+
+| QUERY PLAN                          |
++-------------------------------------+
+| " * Produce {p, t}"                 |
+| " * ExpandVariable (t)-[anon1]-(p)" |
+| " * ScanAll (t)"                    |
+| " * Once"                           |
++-------------------------------------+
+```
+`anon1` in this case means the relationship is anonymous and it is not named in the query, hence it can be anyrelationship between the nodes `p` and `t`, that is two traversals or hops away. 
+
+
+`ScanAll` and `Filter` operators can be replaced with the `ScanAllByLabel`, `ScanAllByLabelProperty`, `ScanAllByLabelPropertyRange`, `ScanAllByLabelPropertyValue` operators, which are used to produce nodes with a certain label and property,
+and are typcially indexed. Here is a pratical example: 
+
+```cypher
+EXPLAIN MATCH (n:Transfer{year:1992}) RETURN n;
+```
+```
++-------------------------------------+
+| QUERY PLAN                          |
++-------------------------------------+
+| " * Produce {n}"                    |
+| " * Filter (n :Transfer), {n.year}" |
+| " * ScanAll (n)"                    |
+| " * Once"                           |
++-------------------------------------+
+```
+
+If you create and index on `:Transfer` label, the `ScanAll` operator will be replaced with the `ScanAllByLabel` operator, which is used to produce nodes with a certain label, minimizing search. 
+
+CREATE INDEX ON :Transfer;
+
+Now the same query, has a different query plan: 
+
+```cypher
+CREATE INDEX ON :Transfer;
+EXPLAIN MATCH (n:Transfer{year:1992}) RETURN n;
+```
+```
++-----------------------------------+
+| QUERY PLAN                        |
++-----------------------------------+
+| " * Produce {n}"                  |
+| " * Filter {n.year}"              |
+| " * ScanAllByLabel (n :Transfer)" |
+| " * Once"                         |
++-----------------------------------+
+```
+Adding a label propery index will optimize the query plan and the query execution, and replace the `ScanAll` operator with the `ScanAllByLabelPropertyValue` operator.
+```cypher
+CREATE INDEX ON :Transfer(year);
+EXPLAIN MATCH (n:Transfer{year:1992}) RETURN n;
+
+```
+
+```
++-------------------------------------------------------+
+| QUERY PLAN                                            |
++-------------------------------------------------------+
+| " * Produce {n}"                                      |
+| " * ScanAllByLabelPropertyValue (n :Transfer {year})" |
+| " * Once"                                             |
++-------------------------------------------------------+
+```
+
+Indexes and constraints influence how the query plan is being generated, for details on how to optimize the query plan execution, read the [performance guide](./performance-optimization.md)
+
+
+## Query plan catching
+
+As described in the [Memgraph query engine](...) there are multiple steps involved in running a query, that involve parsing, planning, and execution.
+
+The planning step is where the optimal query plan is produced. 
+
+
+
+## Query plan configurations
