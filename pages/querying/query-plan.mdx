@@ -183,7 +183,7 @@ Some of the operators are always present and bolierplate operators, such as `Onc
 signal the start of the operator chain in second branch. 
 
 `Produce` is the operator that represent the last operator in the query plan and it is always present. It is used to signal the end of the query plan and connected to usage
-of the `RETURN` clause in the query.  Here is an example of the query plan with `Once` and `Produce` operators:
+of the `RETURN` clause in the query, if there is nothing to return the `EmptyResult` will be part of the qury plan.  Here is an example of the query plan with `Once` and `Produce` operators:
 
 ```cypher
 EXPLAIN RETURN 0;
@@ -332,10 +332,65 @@ Indexes and constraints influence how the query plan is being generated, for det
 
 ## Query plan catching
 
-As described in the [Memgraph query engine](...) there are multiple steps involved in running a query, that involve parsing, planning, and execution.
+As described in the [Memgraph query engine](...) there are multiple steps involved in running a query, that involve parsing, planning, and execution. 
 
-The planning step is where the optimal query plan is produced. 
+The query plan is produced in the planning step, and it is used to optimize the query execution. The optimal query plan is the fastest and least reasource intensive
+plan that can be produced for the given query by the query engine. In order speed up query execution, the query plan is being cached for later use.
 
+Let's imagine that you have multiple create queries: 
+
+```cypher
+CREATE (n:Node {id: 123}); 
+CREATE (n:Node {id: 154}); 
+CREATE (n:Node {id: 322}); 
+...
+```
+Each of the queries will have the similar query plan that looks like this: 
+```
++------------------+
+| QUERY PLAN       |
++------------------+
+| " * EmptyResult" |
+| " * CreateNode"  |
+| " * Once"        |
++------------------+
+```
+
+But each query string is different. To create a single query plan for each of the queries, the query parser will automaticly strip the literals and replace them with placeholder values, 
+so each concecutive query can reuse the query plan. 
+
+In order to improve and insure performance of the query, using the query parameters is better option: 
+
+```cypher
+CREATE (n:Node {id: $id}); 
+CREATE (n:Node {id: $id});
+CREATE (n:Node {id: $id});
+...
+```
+This will also produce a single query plan for all the queries. 
+
+
+
+To validate the query plan caching, you can use the `PROFILE` clause to see if the query plan is being reused by comparing the execution time. 
+
+```cypher
+//Query 1
+Additional execution time info:
+  Query COST estimate: 0
+  Query PARSING time: 0.00170783 sec
+  Query PLAN EXECUTION time: 9.8768e-05 sec
+  Query PLANNING time: 0.001479502 sec
+
+//Query 2
+Additional execution time info:
+  Query COST estimate: 0
+  Query PARSING time: 8.0453e-05 sec
+  Query PLAN EXECUTION time: 7.1126e-05 sec
+  Query PLANNING time: 7.6255e-05 sec
+
+```
+
+As you can see in the example above the the Query PlANNING time and is significantly lower for the second query, which means that the query plan is being reused.
 
 
 ## Query plan configurations
