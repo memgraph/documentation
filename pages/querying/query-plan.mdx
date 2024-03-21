@@ -272,7 +272,6 @@ EXPLAIN MATCH (p)-[*1..2]-(t) RETURN p, t;
 ```
 `anon1` in this case means the relationship is anonymous and it is not named in the query, hence it can be anyrelationship between the nodes `p` and `t`, that is two traversals or hops away. 
 
-
 `ScanAll` and `Filter` operators can be replaced with the `ScanAllByLabel`, `ScanAllByLabelProperty`, `ScanAllByLabelPropertyRange`, `ScanAllByLabelPropertyValue` operators, which are used to produce nodes with a certain label and property,
 and are typcially indexed. Here is a pratical example: 
 
@@ -311,6 +310,7 @@ EXPLAIN MATCH (n:Transfer{year:1992}) RETURN n;
 +-----------------------------------+
 ```
 Adding a label propery index will optimize the query plan and the query execution, and replace the `ScanAll` operator with the `ScanAllByLabelPropertyValue` operator.
+
 ```cypher
 CREATE INDEX ON :Transfer(year);
 EXPLAIN MATCH (n:Transfer{year:1992}) RETURN n;
@@ -327,15 +327,17 @@ EXPLAIN MATCH (n:Transfer{year:1992}) RETURN n;
 +-------------------------------------------------------+
 ```
 
-Indexes and constraints influence how the query plan is being generated, for details on how to optimize the query plan execution, read the [performance guide](./performance-optimization.md)
+Indexes, constraints and datset cardinality statistics can influence how the query plan is being generated, 
+for details on how to optimize the query plan execution, read the [performance guide](./performance-optimization.md)
 
 
 ## Query plan catching
 
-As described in the [Memgraph query engine](...) there are multiple steps involved in running a query, that involve parsing, planning, and execution. 
+There are multiple steps involved in running a query, that involve parsing, planning, and execution. 
 
 The query plan is produced in the planning step, and it is used to optimize the query execution. The optimal query plan is the fastest and least reasource intensive
-plan that can be produced for the given query by the query engine. In order speed up query execution, the query plan is being cached for later use.
+plan that can be produced for the given query by the query engine. In order speed up query execution, the query plan is being cached for later use, it does not need to be 
+calculated for each query execution.
 
 Let's imagine that you have multiple create queries: 
 
@@ -359,7 +361,7 @@ Each of the queries will have the similar query plan that looks like this:
 But each query string is different. To create a single query plan for each of the queries, the query parser will automaticly strip the literals and replace them with placeholder values, 
 so each concecutive query can reuse the query plan. 
 
-In order to improve and insure performance of the query, using the query parameters is better option: 
+The same can be achived with using a query parameters, to ensure that the query plan is being reused, use parametrized queries like this: 
 
 ```cypher
 CREATE (n:Node {id: $id}); 
@@ -367,7 +369,7 @@ CREATE (n:Node {id: $id});
 CREATE (n:Node {id: $id});
 ...
 ```
-This will also produce a single query plan for all the queries. 
+The example above now has a single string for different queries, and the query plan will be reused. 
 
 
 
@@ -393,4 +395,92 @@ Additional execution time info:
 As you can see in the example above the the Query PlANNING time and is significantly lower for the second query, which means that the query plan is being reused.
 
 
+<Callout type="warning">
+The query plan caching is not supported for the [custom Query modules](../custom-query-modules.mdx).
+</Callout>
+
+Currently if you are using the [custom Query modules](../custom-query-modules.mdx), the query plan caching is not supported, and the query plan will be re-generated for each query executed. 
+Since the custom query modules are dynamic and can change, the query plan could reference the old version of the query module, and produce incorrect results. 
+
+
+Adding an index to the database will invalidate the query plan cache storage. The query plan cache is invalidated when the schema of the database changes, such as adding or removing an index, or adding or removing a constraint.
+The reason for this is that the query plan is being optimized based on the schema of the database, and if the schema changes, the query plan could produce inefficent and outdated results. Hence it is necessary to invalidate the query plan cache, and re-grenarete the 
+query plans on execution of the query.
+
+
+<Callout type="warning">
+The query plan cache is also invalidated when database schema changes, such as adding or removing an index, or adding or removing a constraint.
+</Callout>
+
+
+The query plan cache is also invalidated when the database is restarted, there is currently no persistent storage for the query plan cache.
+
+
 ## Query plan configurations
+
+
+Behavior of the query plan can be influenced by the [database configuration](../configuration/configuration-settings.mdx#Query) parameters on database startup. 
+
+
+`--cartesian-product-enabled=true` - This parameter enables or disables the Cartesian product operator. The Cartesian product operator is used to apply the Cartesian product on the input it received. This means if 
+you match two nodes, the Cartesian product operator will produce all possible combinations of the nodes. This is a very expensive operation and it should be used with caution. Default value is set to `true`.
+
+Here is an example of the query plan with the `--cartesian-product-enabled=true` parameter:
+
+```cypher
+EXPLAIN MATCH (n), (m) RETURN n, m;
+```
+```
++------------------------+
+| QUERY PLAN             |
++------------------------+
+| " * Produce {n, m}"    |
+| " * Cartesian {m : n}" |
+| " |\\ "                |
+| " | * ScanAll (n)"     |
+| " | * Once"            |
+| " * ScanAll (m)"       |
+| " * Once"              |
+
++---------------------------+---------------------------+
+| n                         | m                         |
++---------------------------+---------------------------+
+| (:Person {name: "John"})  | (:Person {name: "John"})  |
+| (:Person {name: "John"})  | (:Person {name: "Stan"})  |
+| (:Person {name: "John"})  | (:Person {name: "Peter"}) |
+| (:Person {name: "Stan"})  | (:Person {name: "John"})  |
+| (:Person {name: "Stan"})  | (:Person {name: "Stan"})  |
+| (:Person {name: "Stan"})  | (:Person {name: "Peter"}) |
+| (:Person {name: "Peter"}) | (:Person {name: "John"})  |
+| (:Person {name: "Peter"}) | (:Person {name: "Stan"})  |
+| (:Person {name: "Peter"}) | (:Person {name: "Peter"}) |
++---------------------------+---------------------------+
+```
+
+In the database are three nodes, John, Stan and Peter, and the query is to match all nodes and return them, for each `n` node, the Cartesian product operator will produce all possible combinations of the `m` nodes.
+
+
+`--query-cost-planner=true` - This parameter enables or disables the query cost planner. The query
+ cost planner is used to estimate the cost of the query execution, and it integral pice of finding the optimal query plan.
+ More complex queries will have multiple query plans that can yield semantically equivalend results. Based on the underlying cardinality of the data,
+ the query cost planner will estimate the cost of the query execution and choose the optimal query plan. If query cost planner is not working, the first viable 
+ plan will be used. Default value is set to `true`
+
+
+`--query-max-plans=1000` - This parameter sets the maximum number of query plans that can be generated for a single query.
+ The query engine will generate multiple query plans for a single query, and the query cost planner will choose the optimal query plan. This is 
+ an upper limit on the number of query plans that can be generated for a single query. Default value is set to `1000`
+
+
+`--query-plan-cache-max-size=1000` - This parameter sets the maximum number of query plans that can be stored in the query plan cache.
+ The query plan cache is used to store the query plans for later use, so they do not need to be recalculated for each query execution.
+ Default value is set to `1000`
+
+
+ `--query-vertex-count-to-expand-existing=10` - Depeding on the configuration in graph, the query engine will decide to use regular `Expand` operator or indexed lookup `ScanAllByLabel` operator 
+ for a scenario where the number of nodes to expand is less than the `query-vertex-count-to-expand-existing` parameter. Default value is set to `10`. 
+
+
+`--query-execution-timeout-sec=600` - This parameter sets the maximum time in seconds that a query can run before it is terminated. Default value is set to `600` seconds.
+
+
