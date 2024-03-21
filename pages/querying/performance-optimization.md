@@ -27,24 +27,6 @@ When improving your query performance one of the most important aspects is [`PRO
 clause. The  profile clause will return the detail information of the execution and how the [query plan ](./query-plan.mdx)
 is interacting with data.
 
-For every logical operator the following info is provided:
-
-- `OPERATOR` &mdash; the name of the operator, just like in the output of an
-  `EXPLAIN` query. Here is the [full list of operators](./query-plan#query-plan-operators). 
-  Each operator is usually based on the Cypher clauses used in the query.  
-
-- `ACTUAL HITS` &mdash; the number of times a particular logical operator was
-  pulled from. This is similar to the number of objects being passed in the query. 
-  The lower the number the better performance of the query will be, since the query will
-  touch and pass less data in pipeline. 
-
-- `RELATIVE TIME` &mdash; the amount of time that was spent processing a
-  particular logical operator, relative to the execution of the whole plan. This 
-  will give you the information were the bottleneck in the query is. 
-
-- `ABSOLUTE TIME` &mdash; the amount of time that was spent processing a
-  particular logical operator. This is wall time, gives you idea how operators
-  spend wall time performing some operators. 
 
 A simple example to illustrate the output:
 
@@ -64,6 +46,28 @@ PROFILE MATCH (n :Node)-[:Edge]-(m :Node) WHERE n.prop = 42 RETURN *;
 | * Once                                  | 2             |   0.562844 %  |   0.000312 ms |
 +-----------------------------------------+---------------+---------------+---------------+
 ```
+
+
+For every logical operator the following info is provided:
+
+- `OPERATOR` &mdash; the name of the operator, just like in the output of an
+  `EXPLAIN` query.
+  Here is the [full list of operators](./query-plan#query-plan-operators). 
+  Each operator is usually based on the Cypher clauses used in the query.  
+
+- `ACTUAL HITS` &mdash; the number of times a particular operator was pulled from. 
+  This is similar to the number of objects being passed in the query. 
+  The lower the number the better performance of the query will be, since the query will
+  touch and pass less data in pipeline.  
+
+- `RELATIVE TIME` &mdash; the amount of time that was spent processing a
+  particular logical operator, relative to the execution of the whole plan. 
+  This will give you the information were the bottleneck in the query is. 
+
+- `ABSOLUTE TIME` &mdash; the amount of time that was spent processing a
+  particular logical operator. 
+  This is wall time, gives you idea how operators spend wall time performing some operations. 
+
 
 ## Indexing queries
 
@@ -190,12 +194,7 @@ memgraph> PROFILE MERGE (p:Player{name:"Pele"}) RETURN p;
 | "| * Once"                                      | 1                                               | "  0.074641 %"                                  | "  0.000043 ms"                                 |
 | "* Once"                                        | 2                                               | "  0.093301 %"                                  | "  0.000054 ms"                                 |
 +-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
-``
-
-
-
-
-
+```
 
 
 ## Analyze graph

@@ -12,10 +12,53 @@ Cypher is a declarative language. This means that you specify what you want to r
 the steps on how to retrieve it. This means the Memgraph Query engine is responsible for 
 determining the best way to execute the Cypher query.
 
+## Memgraph query engine
+
+**The Memgraph query engine** is responsible for dealing with every Cypher query that comes to Memgraph. 
+It does not matter if the query comes from Memgraph LAB, clients, or my console. 
+
+The Cypher query is just a statement in the text that needs to be converted into 
+the query plan for the database to understand and execute. But there are several steps in between.
+
+Here is a rough breakdown of what happens to the query: 
+
+1. The query is being sent to the database as a raw string. 
+2. The query parser analyses the query. 
+3. The query planner constructs an optimal execution plan for the query and catches it.
+4. The optimal query plan is passed on and executed. 
+5. Query results are returned.
+
+First, you need to write your Cypher query. That step assumes an understanding of the syntax of the Cypher. 
+Memgraph is Query engine  is based on the openCypher defined in the full [reference guide](https://s3.amazonaws.com/artifacts.opencypher.org/openCypher9.pdf). 
+There is a plethora of examples and help written on that topic. 
+
+Once the query is written, let’s assume that it is: 
+```cypher
+MATCH (n:Node {id:1) RETURN n;
+```
+It is sent to the database, and the first step is the **query parser**. Query parser will first run the lexical 
+and syntactic analysis of the query. This involves checking that statements and query string structure, making 
+sure it is properly written and constructed from available vocabular
+
+Consider following example: 
+```cypher
+MATC (n:Node {id:1) RETURN n;
+```
+The query parser will return an error because the `MATCH` keyword is misspelled.
+```
+line 1:1 mismatched input 'MATC' expecting {ADD, ANALYZE, CALL, CHECK, CLEAR,...
+```
+If the query is properly written, the first step is to look for cached query plan based on the same query.
+If the query plan is found in cache, it is being used for the query execution.
+
+If not, the query is being stripped of literals and replaced with normalised values for caching purpose, more on that in the [Query plan caching](#query-plan-caching) section.
+
+
 To find the best way, Memgraph converts each Cypher query is into a query plan. Query plans are a way to 
 understand how the Memgraph query engine will execute a query. Memgraph query engine can do many 
 optimizations in the background but also make mistakes. Hence, the query plan is a valuable tool 
 to understand query execution and identify potential performance issues.
+
 
 ## Query plan structure
 
@@ -363,7 +406,18 @@ read the [performance guide](./performance-optimization.md)
 There are multiple steps involved in running a query, including parsing, planning, and execution. 
 
 The query plan is produced in the planning step, and it is used to optimize the
-query execution. The optimal query plan is the fastest and least resource-intensive
+query execution. 
+
+Each part of the query is a basis for generating a unique query plan. 
+If the query has multiple `MATCH` ,`OPTIONAL MATCH`  and `MERGE`  Cypher clauses, the query planner will use different 
+parts as starting points for running a query, while keeping the query semantics the same. Having more query parts with mentioned 
+clauses will cause query planner to generate multiple query plans, each of them being unique variation of combinations. 
+
+The set of unique plans is then evaluated based on the cost estimation. 
+The optimal plan is the one with the lowest cost of all unique plans. The cost is being calculated based on the 
+operator cardinality and on the preset coefficient of the runtime performance of that operator.
+
+The optimal query plan is the fastest and least resource-intensive
 plan that can be produced for the query given by the query engine. In order to speed up 
 query execution, the query plan is being cached for later use; it does not need to be 
 calculated for each query execution.
@@ -388,9 +442,13 @@ Each of the queries will have a similar query plan that looks like this:
 ```
 
 But each query string is different, to create a single query plan for each of the queries, the query parser will automatically strip the literals and replace them with placeholder values, 
-so each consecutive query can reuse the query plan. 
+so each consecutive query can reuse the query plan. Instead of computing the query plan for each query, the query plan can use the normalised version of the query in both cases such as: 
 
-TODO: Example
+```cypher
+CREATE (n:Node {id: 0})
+```
+
+The values are replaced and the proper value is seeded to the end of the query plan, this way only the structure of the query is being taken into consideration for caching and query can be cached if parameters are not used
 
 The same can be achieved by using query parameters. To ensure that the query plan is being reused, use parametrized queries like this:  
 
