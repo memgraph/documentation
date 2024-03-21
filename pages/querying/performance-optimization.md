@@ -5,6 +5,199 @@ description: Optimize your graph computing performance with Memgraph. Access tip
 
 # Performance optimization
 
+If you are experiencing slow query performance, there are multiple things you can do to 
+improve performance of your Cypher queries performance in Memgraph. Most of the things is based on 
+improving the [query plan](./query-plan.mdx) and writing your queries in optimized manner. 
+
+## Profiling the query execution time 
+
+Before diving into the details of the query execution optimization and plan, it is important to note that 
+maybe the query performance is slow in the parsing or planning phase. To make sure that is not the case, 
+you can run your slow query and use [query execution summary](../getting-started/cli#query-execution-time).
+Here we are concerned with `PLANE EXECUTION time` part of the Query execution summary.  
+
+Depending on the tool you are using, Memgraph LAB includes Query execution summary by default in the UI. If you are 
+using clients, there is an execution summary object in every result that should contain this information. 
+Take a look at [specific client guides](../client-libraries.mdx) for this details. 
+
+
+## Profiling queries
+
+When improving your query performance one of the most important aspects is [`PROFILE`](./clauses/profile.md) 
+clause. The  profile clause will return the detail information of the execution and how the [query plan ](./query-plan.mdx)
+is interacting with data.
+
+For every logical operator the following info is provided:
+
+- `OPERATOR` &mdash; the name of the operator, just like in the output of an
+  `EXPLAIN` query. Here is the [full list of operators](./query-plan#query-plan-operators). 
+  Each operator is usually based on the Cypher clauses used in the query.  
+
+- `ACTUAL HITS` &mdash; the number of times a particular logical operator was
+  pulled from. This is similar to the number of objects being passed in the query. 
+  The lower the number the better performance of the query will be, since the query will
+  touch and pass less data in pipeline. 
+
+- `RELATIVE TIME` &mdash; the amount of time that was spent processing a
+  particular logical operator, relative to the execution of the whole plan. This 
+  will give you the information were the bottleneck in the query is. 
+
+- `ABSOLUTE TIME` &mdash; the amount of time that was spent processing a
+  particular logical operator. This is wall time, gives you idea how operators
+  spend wall time performing some operators. 
+
+A simple example to illustrate the output:
+
+```cypher
+PROFILE MATCH (n :Node)-[:Edge]-(m :Node) WHERE n.prop = 42 RETURN *;
+```
+
+```plaintext
++-----------------------------------------+---------------+---------------+---------------+
+| OPERATOR                                | ACTUAL HITS   | RELATIVE TIME | ABSOLUTE TIME |
++-----------------------------------------+---------------+---------------+---------------+
+| * Produce {m, n}                        | 1             |   7.134628 %  |   0.003949 ms |
+| * Filter (n :Node), {n.prop}            | 1             |  12.734765 %  |   0.007049 ms |
+| * Expand (m)-[anon1:Edge]-(n)           | 1             |   5.181460 %  |   0.002868 ms |
+| * ScanAll (n)                           | 1             |   3.325061 %  |   0.001840 ms |
+| * ScanAll (m)                           | 1             |  71.061241 %  |   0.039334 ms |
+| * Once                                  | 2             |   0.562844 %  |   0.000312 ms |
++-----------------------------------------+---------------+---------------+---------------+
+```
+
+## Indexing queries
+
+It is important to note that indexing in a database is depended on the actual dataset stored 
+in the database. The general rule is that the properties that have high cardinality, should be used 
+as indexes. If you index a low cardinality propery, such as gender or boolean, you won't get 
+a lot performance benifits, on top of that you will have higher memory usage and 
+slowdown of write operations. 
+
+
+By applying an index you are changing a the process how the query plan is being construted and 
+executed. 
+
+
+Here is a simple query: 
+
+```txt
+memgraph> PROFILE MATCH (n) RETURN n;
++-----------------+-----------------+-----------------+-----------------+
+| OPERATOR        | ACTUAL HITS     | RELATIVE TIME   | ABSOLUTE TIME   |
++-----------------+-----------------+-----------------+-----------------+
+| "* Produce {n}" | 14578           | " 61.518812 %"  | "  4.702500 ms" |
+| "* ScanAll (n)" | 14578           | " 38.477807 %"  | "  2.941245 ms" |
+| "* Once"        | 2               | "  0.003382 %"  | "  0.000258 ms" |
++-----------------+-----------------+-----------------+-----------------+
+```
+So the `MATCH (n)` will take all the nodes from the database and pass it to the next operator in query 
+plan. The total number of nodes in the dataset is 14577, and the `ScanAll` operator will take all the nodes
+from the database, and pace it forward to next operator. 
+
+But this is intended operation to run full database node return. In general, your queries should not contain
+`ScanALL` operators. 
+
+Take a look at the following query: 
+
+```txt
+memgraph> PROFILE  MATCH (n:Transfer {year:1992} ) RETURN n;
++------------------------------------+------------------------------------+------------------------------------+------------------------------------+
+| OPERATOR                           | ACTUAL HITS                        | RELATIVE TIME                      | ABSOLUTE TIME                      |
++------------------------------------+------------------------------------+------------------------------------+------------------------------------+
+| "* Produce {n}"                    | 148                                | "  0.451183 %"                     | "  0.033538 ms"                    |
+| "* Filter (n :Transfer), {n.year}" | 148                                | " 81.888209 %"                     | "  6.087073 ms"                    |
+| "* ScanAll (n)"                    | 14578                              | " 17.658844 %"                     | "  1.312651 ms"                    |
+| "* Once"                           | 2                                  | "  0.001765 %"                     | "  0.000131 ms"                    |
++------------------------------------+------------------------------------+------------------------------------+------------------------------------+
+```
+This time we want to find the `:Transfer` node with the specific year property, and the `Filter` is applied to filter the results from `ScanALL`, again all nodes from the graph. 
+
+The first optimization step would be to create a [label index](../fundamentals/indexes#label-index). This would allow the query to search just for a specifc set of nodes.  
+
+Here is the example: 
+```
+CREATE INDEX ON :Transfer;
+
+memgraph> PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
++----------------------------------+----------------------------------+----------------------------------+----------------------------------+
+| OPERATOR                         | ACTUAL HITS                      | RELATIVE TIME                    | ABSOLUTE TIME                    |
++----------------------------------+----------------------------------+----------------------------------+----------------------------------+
+| "* Produce {n}"                  | 148                              | "  0.626076 %"                   | "  0.029781 ms"                  |
+| "* Filter {n.year}"              | 148                              | " 76.729111 %"                   | "  3.649770 ms"                  |
+| "* ScanAllByLabel (n :Transfer)" | 9438                             | " 22.641831 %"                   | "  1.077003 ms"                  |
+| "* Once"                         | 2                                | "  0.002982 %"                   | "  0.000142 ms"                  |
++----------------------------------+----------------------------------+----------------------------------+----------------------------------+
+```
+
+Several things have changed, the most import is that we are now running `ScanAllByLabel` operator insted of `ScanALL` that will search nodes based on labels, and actual search space will be reduced. Next, notice the `ACTUAL HITS` got down from 14k to 9k nodes. This also did split the total execution time into the half, notice the `ABSOLUTE TIME`. It is not just the actual faster operator, but the data inside the query plan pipeline is significantly reduced, and this has significant influence on the performance of the next operator in line, `Filter` in this case. 
+
+`Filter` still needs to applied on the actual bigger chunk of nodes, by introducing the [label propery index](../fundamentals/indexes#label-propery-index) the search spaces can be limited even further. 
+
+
+Here is an example: 
+
+```
+CREATE INDEX ON :Transfer(year); 
+memgraph> PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
++-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
+| OPERATOR                                        | ACTUAL HITS                                     | RELATIVE TIME                                   | ABSOLUTE TIME                                   |
++-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
+| "* Produce {n}"                                 | 148                                             | " 21.446945 %"                                  | "  0.016885 ms"                                 |
+| "* ScanAllByLabelPropertyValue (n :Transfer ... | 148                                             | " 78.488746 %"                                  | "  0.061794 ms"                                 |
+| "* Once"                                        | 2                                               | "  0.064309 %"                                  | "  0.000051 ms"                                 |
++-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
+```
+
+Again the `ScanAllByLabel` operator was replaced with the more efficent operator `ScanAllByLabelPropertyValue` operator. Ideally, you would like to have the most scan operators of this type. The `ACTUAL` hits got down from 9k nodes, to just 148 nodes. `ABSOLUTE TIME` went from 8 miliseconds in the inital version, to less the milisecond.  
+
+The `MERGE` query also depend on the scan operators, to fetch if the nodes exist in the database. If you do not have proper indexes set, the operation looks like this: 
+```
+memgraph> PROFILE MERGE (p:Player{name:"Pele"}) RETURN p;
++------------------------------------+------------------------------------+------------------------------------+------------------------------------+
+| OPERATOR                           | ACTUAL HITS                        | RELATIVE TIME                      | ABSOLUTE TIME                      |
++------------------------------------+------------------------------------+------------------------------------+------------------------------------+
+| "* Produce {p}"                    | 2                                  | "  0.056228 %"                     | "  0.003810 ms"                    |
+| "* Accumulate"                     | 2                                  | "  0.133913 %"                     | "  0.009075 ms"                    |
+| "* Merge"                          | 2                                  | "  0.148710 %"                     | "  0.010078 ms"                    |
+| "|\\"                              | ""                                 | ""                                 | ""                                 |
+| "| * Filter (p :Player), {p.name}" | 1                                  | " 80.885717 %"                     | "  5.481341 ms"                    |
+| "| * ScanAll (p)"                  | 14578                              | " 18.324421 %"                     | "  1.241782 ms"                    |
+| "| * Once"                         | 2                                  | "  0.001332 %"                     | "  0.000090 ms"                    |
+| "|\\"                              | ""                                 | ""                                 | ""                                 |
+| "| * CreateNode"                   | 1                                  | "  0.447608 %"                     | "  0.030333 ms"                    |
+| "| * Once"                         | 1                                  | "  0.000740 %"                     | "  0.000050 ms"                    |
+| "* Once"                           | 2                                  | "  0.001332 %"                     | "  0.000090 ms"                    |
++------------------------------------+------------------------------------+------------------------------------+------------------------------------+
+```
+
+Again the `ScanAll` operator is taking all the nodes and filtering them. If you take a closer look into `RELATIVE TIME`, it is the 80% of the total cost of the query. 
+
+Adding a label-propery index, changes the execution of this query: 
+
+```
+memgraph> PROFILE MERGE (p:Player{name:"Pele"}) RETURN p;
++-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
+| OPERATOR                                        | ACTUAL HITS                                     | RELATIVE TIME                                   | ABSOLUTE TIME                                   |
++-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
+| "* Produce {p}"                                 | 2                                               | "  5.598059 %"                                  | "  0.003245 ms"                                 |
+| "* Accumulate"                                  | 2                                               | "  3.769360 %"                                  | "  0.002185 ms"                                 |
+| "* Merge"                                       | 2                                               | " 10.785594 %"                                  | "  0.006253 ms"                                 |
+| "|\\"                                           | ""                                              | ""                                              | ""                                              |
+| "| * ScanAllByLabelPropertyValue (p :Player ... | 1                                               | " 14.312372 %"                                  | "  0.008297 ms"                                 |
+| "| * Once"                                      | 2                                               | "  0.130621 %"                                  | "  0.000076 ms"                                 |
+| "|\\"                                           | ""                                              | ""                                              | ""                                              |
+| "| * CreateNode"                                | 1                                               | " 65.236052 %"                                  | "  0.037818 ms"                                 |
+| "| * Once"                                      | 1                                               | "  0.074641 %"                                  | "  0.000043 ms"                                 |
+| "* Once"                                        | 2                                               | "  0.093301 %"                                  | "  0.000054 ms"                                 |
++-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
+``
+
+
+
+
+
+
+
 ## Analyze graph
 
 The `ANALYZE GRAPH` will check and calculate certain properties of a graph so
@@ -169,195 +362,3 @@ choice may cause queries to perform poorly.
 
 </Callout>
 
-
-## Inspecting queries
-
-Before a Cypher query is executed, it is converted into an internal form
-suitable for execution, known as a *plan*. A plan is a tree-like data structure
-describing a pipeline of operations which will be performed on the database in
-order to yield the results for a given query. Every node within a plan is known
-as a *logical operator* and describes a particular operation.
-
-Because a plan represents a pipeline, the logical operators are iteratively
-executed as data passes from one logical operator to the other. Every logical
-operator *pulls* data from the logical operator(s) preceding it, processes it
-and passes it onto the logical operator next in the pipeline for further
-processing.
-
-Using the `EXPLAIN` clause, it is possible for the user to inspect the
-produced plan and gain insight into the execution of a query.
-
-### Operators
-
-| Operator                      | Description                                                                                                                |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `Accumulate`                    | Accumulates the input it received.                                                                                       |
-| `Aggregate`                     | Aggregates the input it received.                                                                                        |
-| `Apply`                         | Joins the returned symbols from two branches of execution.                                                               |
-| `CallProcedure`                 | Calls a procedure.                                                                                                       |
-| `Cartesian`                     | Applies the Cartesian product (the set of all possible ordered combinations consisting of one member from each of those sets) on the input it received. |
-| `ConstructNamedPath`            | Creates a path.                                                                                                          |
-| `CreateNode`                    | Creates a node.                                                                                                          |
-| `CreateExpand`                  | Creates edges and  new nodes to connect with existing nodes.                                                             |
-| `Delete`                        | Deletes nodes and edges.                                                                                                 |
-| `EdgeUniquenessFilter`          | Filters unique edges.                                                                                                    |
-| `EmptyResult`                   | Discards results from the previous operator.                 |
-| `EvaluatePatternFilter`         | Part of the filter operator that contains a sub-branch which yields either true or false.                                |
-| `Expand`                        | Expands the node by finding the node's relationships.                                                                    |
-| `ExpandVariable`                | Performs a node expansion of a variable number of relationships                                                          |
-| `Filter`                        | Filters the input it received.                                                                                           |
-| `Foreach`                       | Iterates over a list and applies one or more update clauses.                                                             |
-| `HashJoin`                      | Performs a hash join of the input from its two input branches.                                                           |
-| `IndexedJoin`                   | Performs an indexed join of the input from its two input branches.                                                       |
-| `Limit`                         | Limits certain rows from the pull chain.                                                                                 |
-| `LoadCsv`                       | Loads CSV file in order to import files into the database.                                                               |
-| `Merge`                         | Applies merge on the input it received.                                                                                  |
-| `Once`                          | Forms the beginning of an operator chain with "only once" semantics. The operator will return false on subsequent pulls. |
-| `Optional`                      | Performs optional matching.                                                     |
-| `OrderBy`                       | Orders the input it received.                                                                                            |
-| `Produce`                       | Produces results.                                                                                                        |
-| `RemoveLabels`                  | Removes a variable number of node labels.                                                                                |
-| `RemoveProperty`                | Removes a node or relationship property.                                                                                 |
-| `ScanAll`                       | Produces all nodes in the database.                                                                                      |
-| `ScanAllById`                   | Produces nodes with a certain index.                                                                                     |
-| `ScanAllByLabel`                | Produces nodes with a certain label.                                                                                     |
-| `ScanAllByLabelProperty`        | Produces nodes with a certain label and property.                                                                        |
-| `ScanAllByLabelPropertyRange`   | Produces nodes with a certain label and property value within the given range (both inclusive and exclusive).            |
-| `ScanAllByLabelPropertyValue`   | Produces nodes with a certain label and property value.                                                                  |
-| `SetLabels`                     | Sets node labels of variable length.                                                                                     |
-| `SetProperty`                   | Sets a node or relationship property.                                                                                    |
-| `SetProperties`                 | Sets a list of node or relationship properties.                                                                          |
-| `Skip`                          | Skips certain rows from the pull chain.                                                                                  |
-| `Unwind`                        | Unwinds an expression to multiple records.                                                                               |
-| `Distinct`                      | Applies a distinct filter on the input it received.                                                                      |
-
-### Example plans
-
-As an example, let's inspect the plan produced for a simple query:
-
-```cypher
-EXPLAIN MATCH (n) RETURN n;
-```
-
-```
-+----------------+
-| QUERY PLAN     |
-+----------------+
-|  * Produce {n} |
-|  * ScanAll (n) |
-|  * Once        |
-+----------------+
-```
-
-The output of the query using the `EXPLAIN` clause is a representation of the produced plan. Every
-logical operator within the plan starts with an asterisk character (`*`) and is
-followed by its name (and sometimes additional information). The execution of
-the query proceeds iteratively (generating one entry of the result set at a
-time), with data flowing from the bottom-most logical operator(s) (the start of
-the pipeline) to the top-most logical operator(s) (the end of the pipeline).
-
-In the example above, the resulting plan is a pipeline of 3 logical operators.
-`Once` is the identity logical operator which does nothing and is always found
-at the start of the pipeline; `ScanAll` is a logical operator which iteratively
-produces all of the nodes in the graph; and `Produce` is a logical operator
-which takes data produced by another logical operator and produces data for the
-query's result set.
-
-A slightly more complicated example would be:
-
-```cypher
-EXPLAIN MATCH (n :Node)-[:Edge]-(m :Node) WHERE n.prop = 42 RETURN *;
-```
-
-```
-+------------------------------------------+
-| QUERY PLAN                               |
-+------------------------------------------+
-|  * Produce {m, n}                        |
-|  * Filter (n :Node), {n.prop}            |
-|  * Expand (m)-[anon1:Edge]-(n)           |
-|  * ScanAllByLabel (n :Node)              |
-|  * ScanAllByLabel (m :Node)              |
-|  * Once                                  |
-+------------------------------------------+
-```
-
-In this example, the `Filter` logical operator is used to filter the matched
-nodes because of the `WHERE n.prop = 42` construct. The `Expand` logical
-operator is used to find an edge between two nodes, in this case `m` and `n`
-which were matched previously using the `ScanAllByLabel` logical operator (a
-variant of the `ScanAll` logical operator mentioned previously).
-
-The execution of the query proceeds iteratively as follows. First, two vertices
-of type `:Node` are found as the result of the two scans. Then, we try to find a
-path that consists of the two vertices and an edge between them. If a path is
-found, it is further filtered based on a property of one of the vertices.
-Finally, if the path satisfied the filter, its two vertices are added to the
-query's result set.
-
-A simple example showcasing the fully general tree structure of the plan could
-be:
-
-```cypher
-EXPLAIN MERGE (n) RETURN n;
-```
-
-```
-+------------------+
-| QUERY PLAN       |
-+------------------+
-|  * Produce {n}   |
-|  * Accumulate    |
-|  * Merge         |
-|  |\ On Match     |
-|  | * ScanAll (n) |
-|  | * Once        |
-|  |\ On Create    |
-|  | * CreateNode  |
-|  | * Once        |
-|  * Once          |
-+------------------+
-```
-
-The `Merge` logical operator (constructed as a result of the `MERGE` construct)
-can take input from up to 3 places. The `On Match` and `On Create` branches are
-"pulled from" only if a match was found or if a new vertex has to be created,
-respectively.
-
-## Profiling queries
-
-Along with inspecting a query's plan as described in the [Inspecting
-queries](/querying/performance-optimization) guide, it is also possible to profile the
-execution of a query and get a detailed report on how the query's plan behaved.
-For every logical operator the following info is provided:
-
-- `OPERATOR` &mdash; the name of the operator, just like in the output of an
-  `EXPLAIN` query.
-
-- `ACTUAL HITS` &mdash; the number of times a particular logical operator was
-  pulled from.
-
-- `RELATIVE TIME` &mdash; the amount of time that was spent processing a
-  particular logical operator, relative to the execution of the whole plan.
-
-- `ABSOLUTE TIME` &mdash; the amount of time that was spent processing a
-  particular logical operator.
-
-A simple example to illustrate the output:
-
-```cypher
-PROFILE MATCH (n :Node)-[:Edge]-(m :Node) WHERE n.prop = 42 RETURN *;
-```
-
-```plaintext
-+-----------------------------------------+---------------+---------------+---------------+
-| OPERATOR                                | ACTUAL HITS   | RELATIVE TIME | ABSOLUTE TIME |
-+-----------------------------------------+---------------+---------------+---------------+
-| * Produce {m, n}                        | 1             |   7.134628 %  |   0.003949 ms |
-| * Filter (n :Node), {n.prop}            | 1             |  12.734765 %  |   0.007049 ms |
-| * Expand (m)-[anon1:Edge]-(n)           | 1             |   5.181460 %  |   0.002868 ms |
-| * ScanAll (n)                           | 1             |   3.325061 %  |   0.001840 ms |
-| * ScanAll (m)                           | 1             |  71.061241 %  |   0.039334 ms |
-| * Once                                  | 2             |   0.562844 %  |   0.000312 ms |
-+-----------------------------------------+---------------+---------------+---------------+
-```
