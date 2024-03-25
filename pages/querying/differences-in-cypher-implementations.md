@@ -60,3 +60,8 @@ In other cases, Memgraph does not yet support patterns in functions, e.g. `size(
 Most of the time, the same functionalities can be expressed differently in Memgraph
 using `OPTIONAL` expansions, function calls, etc.
 
+## DROP GRAPH
+
+Memgraph supports the `DROP GRAPH` query which deletes all the data, along with all the indices, constraints,
+triggers, and streams, in an efficient manner. 
+
