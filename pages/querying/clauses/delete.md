@@ -11,7 +11,8 @@ The `DELETE` clause is used to delete nodes and relationships from the database.
 2. [Deleting a node and its relationships](#2-deleting-a-node-and-its-relationships) <br />
 3. [Deleting a relationship](#3-deleting-a-relationship) <br />
 4. [Deleting a path](#4-deleting-a-path) <br />
-5. [Deleting everything](#5-deleting-everything)
+5. [Deleting everything](#5-deleting-everything) <br />
+6. [DROP GRAPH](#6-drop-graph)
 
 ## Dataset
 
@@ -145,6 +146,22 @@ RETURN count(n) AS num_deleted;
 ```
 
 If the deletion still consumes too much memory, consider lowering the batch size limit. 
+
+## 6. DROP GRAPH
+
+In the analytical mode, the fastest way to delete everything in your current database is
+by issuing the following query:
+
+```cypher
+DROP GRAPH;
+```
+
+The query allows the user to delete all the data, along with all the indices, constraints, triggers, and streams, in a 
+very efficient manner.
+For this query to succeed, the user must ensure that Memgraph is operating in the `IN_MEMORY_ANALYTICAL`
+storage mode. The user must also ensure that `DROP GRAPH` is the only transaction running at the time of issuing the command.
+If any other Cypher query is running when `DROP GRAPH` starts to execute, it will prevent this command from running until all
+the other queries are finished.
 
 ## Dataset queries
 
