@@ -14,10 +14,10 @@ improving the [query plan](./query-plan.mdx) and writing your queries optimally.
 Before diving into the details of the query execution optimization and plan, it is important to note that 
 the query performance may be slow in the parsing or planning phase. To ensure that is not the case, 
 you can run your slow query and use [query execution summary](../getting-started/cli#query-execution-time).
-Here, the focus is on the `PLANE EXECUTION time` part of the Query execution summary.  
+Here, the focus is on the `PLAN EXECUTION time` part of the Query execution summary.  
 
 Depending on the tool you are using, Memgraph LAB includes a Query execution summary by default in the UI. If you are 
-Using client libraries, execution summary objects are included in the results.  
+using client libraries, execution summary objects are included in the results.  
 Take a look at [specific client guides](../client-libraries.mdx) for these details. 
 
 
@@ -116,7 +116,7 @@ memgraph> PROFILE  MATCH (n:Transfer {year:1992} ) RETURN n;
 +------------------------------------+------------------------------------+------------------------------------+------------------------------------+
 ```
 
-This time, the goal is to find the `:Transfer` node with the specific year property, and the `Filter` is applied to filter the results from `ScanALL,` again all nodes from the graph. 
+This time, the goal is to find the `:Transfer` node with the specific `year` property, and the `Filter` is applied to filter the results from `ScanAll,` again all nodes from the graph. 
 
 The first optimization step would be to create a [label index](../fundamentals/indexes#label-index). This would allow the query to search just for a specific set of nodes.  
 
@@ -136,9 +136,9 @@ memgraph> PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
 +----------------------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
-Several things have changed, the most important thing is that the query plan is now using the `ScanAllByLabel` operator instead of `ScanALL`, which will search nodes based on labels, and the actual search space will be reduced. Next, notice the `ACTUAL HITS` got down from 14k to 9k nodes. This also did split the total execution time into half, notice the `ABSOLUTE TIME`. It is not just the actual faster operator, but the data inside the query plan pipeline is significantly reduced, and this has a significant influence on the performance of the next operator in line, `Filter` in this case. In general, less operators and lower actual hits lead to less data in query plan pipline, and faster execution time of query plan. 
+Several things have changed, the most important thing is that the query plan is now using the `ScanAllByLabel` operator instead of `ScanAll`, which will search nodes based on labels, and the actual search space will be reduced. Next, notice the `ACTUAL HITS` got down from 14k to 9k nodes. This also did split the total execution time into half, notice the `ABSOLUTE TIME`. It is not just the actual faster operator, but the data inside the query plan pipeline is significantly reduced, and this has a significant influence on the performance of the next operator in line, `Filter` in this case. In general, less operators and lower actual hits lead to less data in query plan pipline, and faster execution time of query plan. 
 
-`Filter` still needs to be applied on the actual bigger chunk of nodes. The search spaces can be limited even further by introducing the [label properly index](../fundamentals/indexes#label-propery-index). 
+`Filter` still needs to be applied on the actual bigger chunk of nodes. The search spaces can be limited even further by introducing the [label-property index](../fundamentals/indexes#label-propery-index). 
 
 
 Here is an example: 
@@ -205,7 +205,7 @@ There is no more `Filter` operator that took 80% of the cost of the query. Now, 
 ## Cyphermorphism
 
 
-When writing longer query chains, try to keep them compact as possible. 
+When writing longer query chains, try to keep them as compact as possible. 
 
 Here is an example of longer query chains: 
 
@@ -229,7 +229,7 @@ Your goal should be  *cyphermorphism*, i.e., ensure different relationships in t
 If you want a chained query, it should be written that way. Notice how the `EdgeUniquenessFilter` was applied, meaning the relationships `r1` and `r2`
 need to be unique, and that means the data in the query pipeline is unique, and there are no duplicated nodes and relationships. 
 
-The query engine treats the following tripplet syntaxt  `(start node, edge, end node)` the same way: 
+The query engine treats the following triplet syntax `(start node, edge, end node)` the same way: 
 
 ```
 EXPLAIN MATCH (n)-[r1]-(m), (m)-[r2]-(l) RETURN *;
