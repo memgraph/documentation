@@ -227,7 +227,7 @@ EXPLAIN MATCH (n)-[r1]-(m)-[r2]-(l) RETURN *;
 
 Your goal should be  *cyphermorphism*, i.e., ensure unique relationships are result of the `MATCH` operations.  Based on cyphermorphism there cannot be relationship `r1` that is the same as `r2` since they are in a different part of the chain pattern. 
 
-If you want a chained query were specific patter exist, it should be written that way. Notice how the `EdgeUniquenessFilter` was applied in this , meaning the relationships `r1` and `r2`
+If you want a chained query where a specific pattern exists, it should be written that way. Notice how the `EdgeUniquenessFilter` was applied in this, meaning the relationships `r1` and `r2`
 need to be unique, and that means the data in the query pipeline is unique, and there are no duplicated nodes and relationships. 
 
 The query engine treats the following triplet syntax `(start node, edge, end node)` the same way: 
