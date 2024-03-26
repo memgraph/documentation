@@ -116,7 +116,7 @@ memgraph> PROFILE  MATCH (n:Transfer {year:1992} ) RETURN n;
 +------------------------------------+------------------------------------+------------------------------------+------------------------------------+
 ```
 
-This time, the goal is to find the `:Transfer` node with the specific `year` property, and the `Filter` is applied to filter the results from `ScanAll,` again all nodes from the graph. 
+In this example, the goal is to find the `:Transfer` node with the specific `year` property, and the `Filter` is applied to filter the results from `ScanAll,` again the filter is applied on the all nodes in the graph that are being produced by `ScanALL` operator. 
 
 The first optimization step would be to create a [label index](../fundamentals/indexes#label-index). This would allow the query to search just for a specific set of nodes.  
 
@@ -225,8 +225,9 @@ EXPLAIN MATCH (n)-[r1]-(m)-[r2]-(l) RETURN *;
 
 ```
 
-Your goal should be  *cyphermorphism*, i.e., ensure different relationships in the search pattern of a single MATCH map to different relationships in the graph. 
-If you want a chained query, it should be written that way. Notice how the `EdgeUniquenessFilter` was applied, meaning the relationships `r1` and `r2`
+Your goal should be  *cyphermorphism*, i.e., ensure unique relationships are result of the `MATCH` operations.  Based on cyphermorphism there cannot be relationship `r1` that is the same as `r2` since they are in a different part of the chain pattern. 
+
+If you want a chained query were specific patter exist, it should be written that way. Notice how the `EdgeUniquenessFilter` was applied in this , meaning the relationships `r1` and `r2`
 need to be unique, and that means the data in the query pipeline is unique, and there are no duplicated nodes and relationships. 
 
 The query engine treats the following triplet syntax `(start node, edge, end node)` the same way: 
@@ -245,7 +246,7 @@ EXPLAIN MATCH (n)-[r1]-(m), (m)-[r2]-(l) RETURN *;
 +-------------------------------------+
 ```
 
-But if you are using the following syntax, it is different: 
+But if you are using the following syntax with multiple `MATCH` statements, it is different: 
 
 ```
 EXPLAIN MATCH (n)-[r1]-(m)  MATCH (m)-[r2]-(l) RETURN *;
@@ -261,10 +262,10 @@ EXPLAIN MATCH (n)-[r1]-(m)  MATCH (m)-[r2]-(l) RETURN *;
 
 ```
 
-During writing of a Cypher query, some clauses will split your query into multiple logical query parts, which means the `MATCH` 
-statements are different, and there is no uniqueness filter applied there since they are logically separated. 
+During parsing of a Cypher query, some clauses will cause the splitting of your query into multiple logical query parts, which means that multiple `MATCH` 
+statements are considered independent, and there is no uniqueness filter applied there since they are logically separated query parts. 
 
-Here is the visualization: 
+Here is the visualization of the process: 
 ```
 MATCH (n) CREATE (m) WITH m MATCH (l)-[]-(m) RETURN l
 |                          |                        |
@@ -273,12 +274,14 @@ MATCH (n) CREATE (m) WITH m MATCH (l)-[]-(m) RETURN l
 |-------------------- single query -----------------|
 ```
 
+The part 1 and part 2 are similar to separate queries, that share a common `m` variable. 
+
 The clauses that cause a query split are `MATCH,` `MERGE,` `OPTIONAL MATCH,` `WITH`, and `UNION.` This will 
 lead to wrong results and more duplicated data in the query pipeline, which leads to poor performance. 
 
 ## Index hinting
 
-When executing a query, Memgraph needs to decide where in the query graph to
+When executing a query, Memgraph query planner needs to decide where in the query it should
 start matching. To get the optimal match, it checks the MATCH clause conditions
 and finds the index that's likely to be the best choice, if there are multiple indexes
 to choose from.
