@@ -26,7 +26,234 @@ Indexing best practices in general + index hinting + analyze graph as strategies
 Be careful what you return. 
 
 ## Fast deep-path traversals
-deep-path (built-in) algos best practices
+
+In contrast to other graph databases, Memgraph deep-path traversals efficiently 
+handle complex graph queries, as these algorithms have been built into Memgraph's 
+core. This eliminates the need for the overhead of business logic on the 
+application side.
+
+### Available built-in algorithms
+There are four built-in deep path traversal algorithms: Depth-first search (DFS), 
+Breadth-first search (BFS), Weighted Shortest Path and All Shortest Paths.
+Below are provided basic examples and usages of these algorithms. For more 
+detailed explanation, visit the 
+[documentation](/advanced-algorithms/built-in-graph-algorithms). 
+
+#### Depth-first search 
+The DFS algorithm starts at the root node and explores each neighboring node as 
+far as possible. The moment it reaches a dead-end, it backtracks until it finds 
+a new, undiscovered node, then traverses from that node to find more undiscovered 
+nodes. In that way, the algorithm visits each node in the graph.
+
+The following query will show all the paths from node `n` to node `m`:
+
+```cypher
+MATCH path=(n {id: 0})-[*]->(m {id: 8})
+RETURN path;
+```
+
+**When to use DFS?** <br/>
+DFS returns all of the found paths between given nodes and is the most suitable 
+for determining **path existance** between two nodes in a graph. If the output of
+the algorithm is null, there are no available paths between the nodes. If the output
+is not null, the DFS algorithm is going to provide all possible paths as a result.
+
+
+#### Breadth-first search
+In BFS, traversal starts from a single node, and the order of visited nodes is 
+decided based on nodes' breadth (distance from the source node). This means that 
+when a certain node is visited, it can be safely assumed that all nodes that are 
+fewer relationships away from the source node have already been visited, resulting 
+in the shortest path from the source node to the newly visited node.
+
+The following query will show the shortest path between nodes `n` and `m`:
+
+```cypher
+MATCH path=(n {id: 0})-[*BFS]->(m {id: 8})
+RETURN path;
+```
+
+**When to use BFS?** <br/>
+BFS is ideal for finding the **shortest path** between two nodes in an unweighted 
+graph or between the start node and any other node in the graph. Since it traverses 
+all nodes at a given depth before moving to the next level, it ensures that the 
+shortest path is found.
+
+
+#### Weighted shortest path
+In graph theory, the weighted shortest path problem is the problem of finding a 
+path between two nodes in a graph such that the sum of the weights of relationships 
+connecting nodes, or the sum of the weight of some node property on the path, is 
+minimized.
+
+To find the weighted shortest path between nodes based on the value of the 
+`total_USD` node property, traversing only across `CLOSE_TO` relationships and 
+return the result as a graph, use the following query:
+
+```cypher
+MATCH path=(n {id: 0})-[:CLOSE_TO *WSHORTEST (r, n | n.total_USD)]-(m {id: 15})
+RETURN path;
+```
+
+**When to use weighted shortest?** <br/>
+Use a weighted shortest path algorithm when you need to find the **shortest path** 
+between two nodes in a graph with **weighted** edges. This is particularly useful 
+in scenarios where the cost or distance between nodes varies, such as road networks 
+(where edges represent distances or travel times) or communication networks 
+(where edges represent latency or cost).
+
+When the goal is to **optimize** a specific metric along the path (e.g., minimizing 
+cost, maximizing profit), a weighted shortest path algorithm can help find the path 
+that optimizes that metric.
+
+
+#### All shortest paths
+Finding all shortest paths is an expansion of the weighted shortest paths problem. 
+The goal of finding the shortest path is obtaining any minimum sum of weights on 
+the path from one node to the other. However, there could be multiple 
+similar-weighted paths, and this algorithm fetches them all.
+
+The following query searches for all shortest paths with a default weight equal to 1:
+
+```cypher
+MATCH path=(n {id: 0})-[:CloseTo *ALLSHORTEST (r, n | 1)]-(m {id: 15})
+RETURN path;
+```
+
+**When to use all shortest?** <br/>
+Use an all shortest paths algorithm when you need to find all shortest paths between 
+nodes in a graph with weighted edges. This is useful when you need to analyze the 
+network structure or when there may be multiple identical shortest paths between 
+pairs of nodes with minimum cost.
+
+<br/>
+
+<Cards>
+    <Card
+    title="Read more about built-in algorithms"
+    href="/advanced-algorithms/built-in-graph-algorithms"
+    />
+</Cards>
+
+
+### Optimizing graph traversals
+Deep path traversal algorithms play a crucial role in exploring and analyzing 
+graph data. In Memgraph, a powerful graph database management system, optimizing 
+these algorithms can significantly enhance performance when dealing with 
+large-scale graph structures. 
+
+Let's dive into some strategies for optimizing traversal algorithms in Memgraph, 
+along with providing examples using Cypher queries.
+
+For example, let's take a following unoptimized query that traverses through the 
+European transportation network. Using the BFS algorithm, we'll find all of the cities 
+London is connected to with the shortest road path available. In other words, we'll 
+find all shortest paths from the starting node with the `name` property being `London` 
+to all of the nodes in the dataset. 
+
+```cypher
+MATCH path=(:City {name: 'London'})-[*BFS]->(:City)
+RETURN path;
+```
+
+This query returns nodes representing cities London is connected to with the 
+transportation network. 
+
+When running a query and filtering by certain property, **avoid** using subsequent 
+filtering using the `WHERE` clause and rather filter in-line.
+
+For example, the query above could be written in the similar, but inefficient, manner:
+
+```cypher
+MATCH path=(n)-[*BFS]->(m)
+WHERE n:City AND n.name = 'London' AND m:City 
+RETURN path;
+```
+
+By not using the inline filtering, the database first scans all nodes and then additionaly
+applies filter using the `WHERE` clause, causing longer scanning time and slower 
+performance.
+
+Even though the first example is more optimized, since we didn't provide any restrictions 
+and filtering, 
+the algorithm might take long to traverse through graph which can lead to slower 
+performance on a larger scale datasets.
+ 
+
+#### Filtering by relationship type
+
+Unlike other graph databases, Memgraph supports inline filtering, enabling efficient 
+traversal through graph structures. This approach allows for precise control over 
+how relationships are traversed, including filtering by type and the direction
+of relationship, avoiding subsequent filtering using the `WHERE` clause.
+
+Let's take the same example from above, but this time limiting traversal across 
+roads only, eliminating other types of transportation. In other words, we'll provide
+relationship type filter to the previously used query and limit it only to traverse
+through the relationship type `ROAD`.
+
+```cypher
+MATCH path=(:City {name: 'London'})-[r:ROAD *BFS]->(:City)
+RETURN path;
+```
+
+This way, Memgraph eliminates traversing through unnecessary relationships, shortening
+the execution time. 
+
+
+#### Filtering by property value 
+Traversal algorithms allow an expression filter that determines if an expansion 
+is allowed over a certain relationship or node property value. 
+
+Let's take the same example from above, but this time limiting traversal through 
+the European roads only. We want to apply filter to the relationship property
+`continent` and set the value to exactly `Europe`. 
+
+```cypher
+MATCH path=(:City {name: 'London'})-[r:ROAD *BFS (r, n | r.continent = 'Europe')]->(:City)
+RETURN path;
+
+```
+
+This way, Memgraph eliminates traversing through unnecessary relationships and 
+property values, shortening the execution time even more. 
+
+
+#### Creating indexes
+Creating indexes on relevant properties can drastically speed up traversal queries 
+by shortening the database scanning time. In Memgraph, indexes can be created 
+using Cypher queries like:
+
+```cypher
+CREATE INDEX ON :Node(property)
+```
+
+This query creates an index on the property of nodes, enabling faster lookups 
+during algorithm traversals.
+
+<Cards>
+    <Card
+    title="Read more about indexing"
+    href="/fundamentals/indexes"
+    />
+</Cards>
+
+
+#### Constraining path length
+By constraining the length of the path, the algorithm won't do unnecessary scanning
+and return results after finding results with the maximum number of hops.
+
+The following query will only return the results if the path is equal to or shorter
+than 2 hops:
+
+```cypher
+MATCH path=(:City {name: 'London'})-[r:ROAD *BFS ..2 (r, n | r.continent = 'Europe')]->(:City)
+RETURN path;
+```
+
+By knowing the schema of your dataset and filtering and limiting the wanted results, 
+you can achieve much more optimized way of using the traversal algorithms
+
 
 ## Most common pitfalls
 Examples from Mrma's video
