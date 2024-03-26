@@ -262,8 +262,7 @@ EXPLAIN MATCH (n)-[r1]-(m)  MATCH (m)-[r2]-(l) RETURN *;
 
 ```
 
-During parsing of a Cypher query, some clauses will cause the splitting of your query into multiple logical query parts, which means that multiple `MATCH` 
-statements are considered independent, and there is no uniqueness filter applied there since they are logically separated query parts. 
+During parsing of a Cypher query, some clauses, such as multiple `MATCH` statements, split the query into multiple logical query parts. They are considered independent, so no uniqueness filter is applied.
 
 Here is the visualization of the process: 
 ```
