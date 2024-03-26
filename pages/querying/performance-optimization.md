@@ -6,27 +6,26 @@ description: Optimize your graph computing performance with Memgraph. Access tip
 # Performance optimization
 
 If you are experiencing slow query performance, there are multiple things you can do to 
-improve performance of your Cypher queries performance in Memgraph. Most of the things is based on 
-improving the [query plan](./query-plan.mdx) and writing your queries in optimized manner. 
+improve your Cypher query performance in Memgraph. Most things are based on 
+improving the [query plan](./query-plan.mdx) and writing your queries optimally. 
 
 ## Profiling the query execution time 
 
 Before diving into the details of the query execution optimization and plan, it is important to note that 
-maybe the query performance is slow in the parsing or planning phase. To make sure that is not the case, 
+the query performance may be slow in the parsing or planning phase. To ensure that is not the case, 
 you can run your slow query and use [query execution summary](../getting-started/cli#query-execution-time).
-Here we are concerned with `PLANE EXECUTION time` part of the Query execution summary.  
+Here, the focus is on the `PLANE EXECUTION time` part of the Query execution summary.  
 
-Depending on the tool you are using, Memgraph LAB includes Query execution summary by default in the UI. If you are 
-using clients, there is an execution summary object in every result that should contain this information. 
-Take a look at [specific client guides](../client-libraries.mdx) for this details. 
+Depending on the tool you are using, Memgraph LAB includes a Query execution summary by default in the UI. If you are 
+Using client libraries, execution summary objects are included in the results.  
+Take a look at [specific client guides](../client-libraries.mdx) for these details. 
 
 
 ## Profiling queries
 
-When improving your query performance one of the most important aspects is [`PROFILE`](./clauses/profile.md) 
-clause. The  profile clause will return the detail information of the execution and how the [query plan ](./query-plan.mdx)
+When improving your query performance, one of the most important aspects is [`PROFILE`](./clauses/profile.md) 
+clause. The  profile clause will return detail information about the execution and how the [query plan ](./query-plan.mdx)
 is interacting with data.
-
 
 A simple example to illustrate the output:
 
@@ -48,7 +47,8 @@ PROFILE MATCH (n :Node)-[:Edge]-(m :Node) WHERE n.prop = 42 RETURN *;
 ```
 
 
-For every logical operator the following info is provided:
+For every logical operator, the following info is provided:
+
 
 - `OPERATOR` &mdash; the name of the operator, just like in the output of an
   `EXPLAIN` query.
@@ -57,28 +57,28 @@ For every logical operator the following info is provided:
 
 - `ACTUAL HITS` &mdash; the number of times a particular operator was pulled from. 
   This is similar to the number of objects being passed in the query. 
-  The lower the number the better performance of the query will be, since the query will
-  touch and pass less data in pipeline.  
+  The lower the number, the better the performance of the query will be since the query will
+  touch and pass less data in the pipeline.  
 
 - `RELATIVE TIME` &mdash; the amount of time that was spent processing a
-  particular logical operator, relative to the execution of the whole plan. 
-  This will give you the information were the bottleneck in the query is. 
+  particular logical operator relative to the execution of the whole plan. 
+  This will give you the information on where the bottleneck in the query is. 
 
 - `ABSOLUTE TIME` &mdash; the amount of time that was spent processing a
   particular logical operator. 
-  This is wall time, gives you idea how operators spend wall time performing some operations. 
+  This is wall time, which gives you an idea of how operators spend wall time performing some operations.
 
 
 ## Indexing queries
 
-It is important to note that indexing in a database is depended on the actual dataset stored 
-in the database. The general rule is that the properties that have high cardinality, should be used 
-as indexes. If you index a low cardinality propery, such as gender or boolean, you won't get 
-a lot performance benifits, on top of that you will have higher memory usage and 
-slowdown of write operations. 
+It is important to note that indexing in a database is dependent on the actual dataset stored 
+in the database. The general rule is that the properties that have high cardinality should be used 
+as indexes. If you index a low cardinality property, such as gender or boolean, you won't get 
+a lot of performance benefits. On top of that, you will have higher memory usage and 
+slow down write operations. 
 
 
-By applying an index you are changing a the process how the query plan is being construted and 
+By applying an index, you are changing a process how the query plan is being constructed and 
 executed. 
 
 
@@ -94,11 +94,12 @@ memgraph> PROFILE MATCH (n) RETURN n;
 | "* Once"        | 2               | "  0.003382 %"  | "  0.000258 ms" |
 +-----------------+-----------------+-----------------+-----------------+
 ```
-So the `MATCH (n)` will take all the nodes from the database and pass it to the next operator in query 
-plan. The total number of nodes in the dataset is 14577, and the `ScanAll` operator will take all the nodes
-from the database, and pace it forward to next operator. 
 
-But this is intended operation to run full database node return. In general, your queries should not contain
+So, the `MATCH (n)` will take all the nodes from the database and pass it to the next operator in the query 
+plan. The total number of nodes in the dataset is 14577, and the `ScanAll` operator will take all the nodes
+from the database and pass it on to the next operator. 
+
+But this is the intended operation to run the total database node return. In general, your queries should not contain
 `ScanALL` operators. 
 
 Take a look at the following query: 
@@ -114,11 +115,13 @@ memgraph> PROFILE  MATCH (n:Transfer {year:1992} ) RETURN n;
 | "* Once"                           | 2                                  | "  0.001765 %"                     | "  0.000131 ms"                    |
 +------------------------------------+------------------------------------+------------------------------------+------------------------------------+
 ```
-This time we want to find the `:Transfer` node with the specific year property, and the `Filter` is applied to filter the results from `ScanALL`, again all nodes from the graph. 
 
-The first optimization step would be to create a [label index](../fundamentals/indexes#label-index). This would allow the query to search just for a specifc set of nodes.  
+This time, the goal is to find the `:Transfer` node with the specific year property, and the `Filter` is applied to filter the results from `ScanALL,` again all nodes from the graph. 
 
-Here is the example: 
+The first optimization step would be to create a [label index](../fundamentals/indexes#label-index). This would allow the query to search just for a specific set of nodes.  
+
+Here is an example:   
+
 ```
 CREATE INDEX ON :Transfer;
 
@@ -133,9 +136,9 @@ memgraph> PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
 +----------------------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
-Several things have changed, the most import is that we are now running `ScanAllByLabel` operator insted of `ScanALL` that will search nodes based on labels, and actual search space will be reduced. Next, notice the `ACTUAL HITS` got down from 14k to 9k nodes. This also did split the total execution time into the half, notice the `ABSOLUTE TIME`. It is not just the actual faster operator, but the data inside the query plan pipeline is significantly reduced, and this has significant influence on the performance of the next operator in line, `Filter` in this case. 
+Several things have changed, the most important thing is that the query plan is now using the `ScanAllByLabel` operator instead of `ScanALL`, which will search nodes based on labels, and the actual search space will be reduced. Next, notice the `ACTUAL HITS` got down from 14k to 9k nodes. This also did split the total execution time into half, notice the `ABSOLUTE TIME`. It is not just the actual faster operator, but the data inside the query plan pipeline is significantly reduced, and this has a significant influence on the performance of the next operator in line, `Filter` in this case. In general, less operators and lower actual hits lead to less data in query plan pipline, and faster execution time of query plan. 
 
-`Filter` still needs to applied on the actual bigger chunk of nodes, by introducing the [label propery index](../fundamentals/indexes#label-propery-index) the search spaces can be limited even further. 
+`Filter` still needs to be applied on the actual bigger chunk of nodes. The search spaces can be limited even further by introducing the [label properly index](../fundamentals/indexes#label-propery-index). 
 
 
 Here is an example: 
@@ -152,9 +155,9 @@ memgraph> PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
 +-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
 ```
 
-Again the `ScanAllByLabel` operator was replaced with the more efficent operator `ScanAllByLabelPropertyValue` operator. Ideally, you would like to have the most scan operators of this type. The `ACTUAL` hits got down from 9k nodes, to just 148 nodes. `ABSOLUTE TIME` went from 8 miliseconds in the inital version, to less the milisecond.  
+Again the `ScanAllByLabel` operator was replaced with the more efficient operator `ScanAllByLabelPropertyValue` operator. Ideally, you would like to have the most scan operators of this type. The `ACTUAL` hits got down from 9k nodes to just 148 nodes. `ABSOLUTE TIME` went from 8 milliseconds in the initial version to less than a milisecond.  
 
-The `MERGE` query also depend on the scan operators, to fetch if the nodes exist in the database. If you do not have proper indexes set, the operation looks like this: 
+The `MERGE` query also depends on the scan operators to fetch if the nodes exist in the database. If you do not have proper indexes set, the operation looks like this: 
 ```
 memgraph> PROFILE MERGE (p:Player{name:"Pele"}) RETURN p;
 +------------------------------------+------------------------------------+------------------------------------+------------------------------------+
@@ -174,9 +177,9 @@ memgraph> PROFILE MERGE (p:Player{name:"Pele"}) RETURN p;
 +------------------------------------+------------------------------------+------------------------------------+------------------------------------+
 ```
 
-Again the `ScanAll` operator is taking all the nodes and filtering them. If you take a closer look into `RELATIVE TIME`, it is the 80% of the total cost of the query. 
+Again, the `ScanAll` operator takes all the nodes and filters them. If you take a closer look at `RELATIVE TIME`, it is 80% of the total cost of the query. 
 
-Adding a label-propery index, changes the execution of this query: 
+Adding a label-property index changes the execution of this query: 
 
 ```
 memgraph> PROFILE MERGE (p:Player{name:"Pele"}) RETURN p;
@@ -196,11 +199,129 @@ memgraph> PROFILE MERGE (p:Player{name:"Pele"}) RETURN p;
 +-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
 ```
 
+There is no more `Filter` operator that took 80% of the cost of the query. Now, the actual cost comes from writing a node. 
+
+
+## Cyphermorphism
+
+
+When writing longer query chains, try to keep them compact as possible. 
+
+Here is an example of longer query chains: 
+
+```
+
+EXPLAIN MATCH (n)-[r1]-(m)-[r2]-(l) RETURN *;
++-------------------------------------+
+| QUERY PLAN                          |
++-------------------------------------+
+| " * Produce {l, m, n, r1, r2}"      |
+| " * EdgeUniquenessFilter {r2 : r1}" |
+| " * Expand (m)-[r1]-(n)"            |
+| " * Expand (l)-[r2]-(m)"            |
+| " * ScanAll (l)"                    |
+| " * Once"                           |
++-------------------------------------+
+
+```
+
+Your goal should be  *cyphermorphism*, i.e., ensure different relationships in the search pattern of a single MATCH map to different relationships in the graph. 
+If you want a chained query, it should be written that way. Notice how the `EdgeUniquenessFilter` was applied, meaning the relationships `r1` and `r2`
+need to be unique, and that means the data in the query pipeline is unique, and there are no duplicated nodes and relationships. 
+
+The query engine treats the following tripplet syntaxt  `(start node, edge, end node)` the same way: 
+
+```
+EXPLAIN MATCH (n)-[r1]-(m), (m)-[r2]-(l) RETURN *;
++-------------------------------------+
+| QUERY PLAN                          |
++-------------------------------------+
+| " * Produce {l, m, n, r1, r2}"      |
+| " * EdgeUniquenessFilter {r2 : r1}" |
+| " * Expand (m)-[r1]-(n)"            |
+| " * Expand (l)-[r2]-(m)"            |
+| " * ScanAll (l)"                    |
+| " * Once"                           |
++-------------------------------------+
+```
+
+But if you are using the following syntax, it is different: 
+
+```
+EXPLAIN MATCH (n)-[r1]-(m)  MATCH (m)-[r2]-(l) RETURN *;
++--------------------------------+
+| QUERY PLAN                     |
++--------------------------------+
+| " * Produce {l, m, n, r1, r2}" |
+| " * Expand (m)-[r1]-(n)"       |
+| " * Expand (l)-[r2]-(m)"       |
+| " * ScanAll (l)"               |
+| " * Once"                      |
++--------------------------------+
+
+```
+
+During writing of a Cypher query, some clauses will split your query into multiple logical query parts, which means the `MATCH` 
+statements are different, and there is no uniqueness filter applied there since they are logically separated. 
+
+Here is the visualization: 
+```
+MATCH (n) CREATE (m) WITH m MATCH (l)-[]-(m) RETURN l
+|                          |                        |
+|------- part 1 -----------+-------- part 2 --------|
+|                                                   |
+|-------------------- single query -----------------|
+```
+
+The clauses that cause a query split are `MATCH,` `MERGE,` `OPTIONAL MATCH,` `WITH`, and `UNION.` This will 
+lead to wrong results and more duplicated data in the query pipeline, which leads to poor performance. 
+
+## Index hinting
+
+When executing a query, Memgraph needs to decide where in the query graph to
+start matching. To get the optimal match, it checks the MATCH clause conditions
+and finds the index that's likely to be the best choice, if there are multiple indexes
+to choose from.
+
+However, the selected index might not always be the best one. Sometimes, there
+are multiple candidate indexes, and the query planner picks the suboptimal one
+from a performance point of view.
+
+You can instruct the planner to use specific index(es) (if possible) in the
+query that follows by using the syntax below:
+
+```cypher
+USING INDEX :Label, :Label2 ...;
+```
+
+```cypher
+USING INDEX :Label(Property) ...
+```
+
+It is also possible to specify multiple hints separated with comma. In that
+case, the planner will apply the first hint that is applicable for a given
+match.
+
+An example of selecting an index with USING INDEX: 
+```
+USING INDEX :Person(name)
+MATCH (n:Person {name: 'John', gender: 'male'})
+RETURN n;
+```
+
+<Callout type="warning"> 
+
+Overriding planner behavior with index hints should be used with caution, and
+only by experienced developers and/or database administrators, as poor index
+choice may cause queries to perform poorly.
+
+</Callout>
+
 
 ## Analyze graph
 
 The `ANALYZE GRAPH` will check and calculate certain properties of a graph so
-that the database can choose a more optimal index or `MERGE` transaction.
+that the database can choose a more optimal index or `MERGE` transaction. 
 
 Before the introduction of the `ANALYZE GRAPH` query, the database would choose
 an index solely based on the number of indexed nodes. But if the number of nodes
@@ -280,84 +401,3 @@ Specific labels can be specified with the construct `ON LABELS`:
 ```cypher
 ANALYZE GRAPH ON LABELS :Label1 DELETE STATISTICS;
 ```
-
-## Cartesian product
-
-Cartesian product is by default enabled in Memgraph. It enforces the usage of the `Cartesian`
-operator which can be shown when you run `EXPLAIN` or `PROFILE`, like in the query below.
-
-
-```cypher
-EXPLAIN MATCH (n:Person), (m:Employee) 
-WHERE n.age < 30 and m.years_of_experience > 5 
-RETURN n, m;
-
-```
-
-```
-+----------------------------------------------------------------------+
-| QUERY PLAN                                                           |
-+----------------------------------------------------------------------+
-| " * Produce {n, m}"                                                  |
-| " * Cartesian {m : n}"                                               |
-| " |\\ "                                                              |
-| " | * ScanAllByLabelPropertyRange (n :Person {age})"                 |
-| " | * Once"                                                          |
-| " * ScanAllByLabelPropertyRange (m :Employee {years_of_experience})" |
-| " * Once"                                                            |
-+----------------------------------------------------------------------+
-```
-
-From the query plan, we can observe that the advantage of the `Cartesian` operator is filtering both its 
-branches and therefore reduces the cardinality of the rows,
-before coming into the final operator `Produce` which streams the results.
-
-
-Known disadvantage of the `Cartesian` operator is that it quickly builds up memory if there are a lot
-
-of rows being produced from its branches. 
-
-The cartesian product can be disabled by setting the `--cartesian-product-enabled` flag to `false`, and it is
-also present as a [run-time configurable flag](/configuration/configuration-settings#during-runtime).
-
-
-## Index hinting
-
-When executing a query, Memgraph needs to decide where in the query graph to
-start matching. To get the optimal match, it checks the MATCH clause conditions
-and finds the index that's likely to be the best choice.
-
-However, the selected index might not always be the best one. Sometimes, there
-are multiple candidate indexes, and the query planner picks the suboptimal one
-from a performance point of view.
-
-You can instruct the planner to use specific index(es) (if possible) in the
-query that follows by using the syntax below:
-
-```cypher
-USING INDEX :Label, :Label2 ...;
-```
-
-```cypher
-USING INDEX :Label(Property) ...
-```
-
-It is also possible to specify multiple hints separated with comma. In that
-case, the planner will apply the first hint that is applicable for a given
-match.
-
-An example of selecting an index with USING INDEX: 
-```
-USING INDEX :Person(name)
-MATCH (n:Person {name: 'John', gender: 'male'})
-RETURN n;
-```
-
-<Callout type="warning"> 
-
-Overriding planner behavior with index hints should be used with caution, and
-only by experienced developers and/or database administrators, as poor index
-choice may cause queries to perform poorly.
-
-</Callout>
-
