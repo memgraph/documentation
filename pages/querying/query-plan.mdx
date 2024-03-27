@@ -1,0 +1,666 @@
+---
+title: Query plan
+description: Understand how to read and interpret the query plan.
+---
+
+import { Callout } from "nextra/components";
+import { Steps } from 'nextra/components'
+
+# Query plan
+
+Cypher is a declarative language, meaning that you specify what you want to
+retrieve but not the steps on how to retrieve it. [Memgraph query
+engine](#memgraph-query-engine) determines the ideal way to execute a Cypher
+query. The big part of getting to the best execution time is having a good
+[query plan structure](#query-plan-structure) consisting of [query plan
+operators](#query-plan-operators). If a query plan has already been generated for a
+certain query, [query plan caching](#query-plan-caching) will speed up the
+execution. Besides the default behavior of the query planner,
+[configuration](#query-plan-configuration) can be tweaked to achieve the best
+performance.
+
+## Memgraph query engine
+
+**Memgraph query engine** is responsible for dealing with every Cypher query
+in Memgraph. It does not matter if the query comes from Memgraph Lab,
+mgconsole, or some other client.
+
+A Cypher query is just a statement in the text that converts into a query plan
+for the database to understand and execute. There are several steps in that
+process, and here is a rough breakdown:
+
+<Steps>
+{<h3>Query run initiated</h3>} 
+Memgraph receives query as a raw string.
+{<h3>Query parsing</h3>} 
+Query parser runs lexical and syntactic analysis.
+{<h3>Query planning</h3>} 
+Query planner constructs an optimal execution plan and caches it.
+{<h3>Query execution</h3>} 
+The storage engine executes the query plan.
+{<h3>Query results returned</h3>} 
+Results are returned to the client that initiated the query.
+</Steps>
+
+First, you need to write a Cypher query. That step assumes an understanding
+of the syntax of Cypher query language. The Memgraph query engine is based on the
+openCypher defined in the full [reference
+guide](https://s3.amazonaws.com/artifacts.opencypher.org/openCypher9.pdf). There
+is a plethora of examples and help written on that topic. 
+
+{<h3>Example</h3>}
+
+Let's give an example of how the query engine transforms a raw string into an
+actual result from the database. Here is the query:
+```cypher
+MATCH (n:Node {id:1}) RETURN n;
+```
+
+The query is sent to the database, and as the first step it goes through is the **query
+parser**. The query parser will run the lexical and syntactic analysis of the
+query. That involves checking statements and query string structures, ensuring
+they are appropriately written and constructed from the available vocabulary.
+
+Here is an example of a query that would not pass lexical analysis:
+```cypher
+MATC (n:Node {id:1}) RETURN n;
+```
+
+The query parser will return an error because the `MATCH` keyword is misspelled: 
+```bash
+line 1:1 mismatched input 'MATC' expecting {ADD, ANALYZE, CALL, CHECK, CLEAR,...
+```
+
+
+If the lexical and syntactic analysis goes well, the query engine checks if there
+is a cached query plan based on the same query. 
+
+If the query plan is found in the cache, it will be used for the query execution. On
+the other side, if there is no such query plan already cached, the query will be
+stripped of literals and replaced with normalized values for caching purposes.
+You can read more about that in the [query plan caching](#query-plan-caching) section.
+
+Query planner aims to find the optimal plan that defines steps for the most
+cost-effective query execution. Memgraph query engine can do many optimizations
+in the background but also make mistakes. Hence, it is essential to get familiar
+with the [structure of a query plan](#query-plan-structure) to understand query
+execution and identify potential performance bottlenecks.
+
+## Query plan structure
+
+To change the current plan structure, Cypher queries need to be updated, or some
+of the [optimization techniques](./performance-optimization) must be applied.
+The query plan is an internal tree-like data structure describing a pipeline of
+operations performed on the database to yield the results for a given query.
+Every node within a plan is known as an [operator](#query-plan-operators) and
+describes a particular operation.
+
+Because a plan represents a pipeline, the operators are iteratively executed as
+data passes from one operator to the other. Every operator pulls data from the
+operator(s) preceding it, processes it, and passes it onto the operator next in
+the pipeline for further processing.
+
+Query plan can be obtained by prefixing any query with
+[`EXPLAIN`](./clauses/explain.md) or [`PROFILE`](./clauses/profile.md) clauses.
+
+{<h3>Example</h3>}
+
+Here is an example of a produced query plan:
+
+```cypher
+EXPLAIN MATCH (n) RETURN n;
+```
+```
++----------------+
+| QUERY PLAN     |
++----------------+
+|  * Produce {n} |
+|  * ScanAll (n) |
+|  * Once        |
++----------------+
+```
+<Callout type="info">
+The query plan should be read from the bottom to the top.
+</Callout>
+
+The output of the query using the `EXPLAIN` clause is a representation of the
+produced plan. Every operator within the plan starts with an asterisk character
+(`*`) and is followed by its name (and sometimes additional information). The
+execution of the query proceeds iteratively (generating one entry of the result
+set at a time), with data flowing from the bottom-most operator(s) (the start of
+the pipeline) to the top-most operator(s) (the end of the pipeline).
+
+The resulting plan is a pipeline of 3 operators, as shown in the example above.
+`Once` is the identity operator, which does nothing and is always found
+at the start of the pipeline, `ScanAll` is an operator which iteratively
+produces all of the nodes in the graph, and `Produce` is an operator
+which takes data produced by another operator and produces data for the
+query's result set.
+
+In this case, the `ScanAll` operator produces all nodes from the graph
+and passes them to the `Produce` operator, which returns the nodes to the
+user. This is a simple query data pipeline.
+
+Here is a query that will generate the tree structure of the plan:
+```cypher
+EXPLAIN MERGE (n) RETURN n;
+```
+
+Here is the generated plan:
+```
++------------------+
+| QUERY PLAN       |
++------------------+
+|  * Produce {n}   |
+|  * Accumulate    |
+|  * Merge         |
+|  |\ On Match     |
+|  | * ScanAll (n) |
+|  | * Once        |
+|  |\ On Create    |
+|  | * CreateNode  |
+|  | * Once        |
+|  * Once          |
++------------------+
+```
+
+Starting from the bottom and skipping `Once` operator, the `Merge` operator can
+take input from two operators - `On Match` or `On Create`. The results will be
+pulled from the `On Match` branch only if the matching node is found. On the other
+hand, the results will be pulled from the `On Create` branch only if there is
+no matching node, meaning a new node must be created. Each branch has its own
+pipeline of operators, starting with `Once` and being read from the bottom to
+the top.
+
+Here is an example of a more complex query:
+
+```cypher
+EXPLAIN MERGE (p:Person {name: 'Angela'})
+ON MATCH SET p.found = TRUE
+ON CREATE SET p.notFound = TRUE
+RETURN p.name, p.notFound, p.found;
+```
+
+A more complex query will generate a larger tree-like structure:
+```
++------------------------------------------+
+| QUERY PLAN                               |
++------------------------------------------+
+|  * Produce {p.name, p.notFound, p.found} |
+|  * Accumulate                            |
+|  * Merge                                 |
+|  |\ On Match                             |
+|  | * SetProperty                         |
+|  | * Filter (p :Person), {p.name}        |
+|  | * ScanAll (p)                         |
+|  | * Once                                |
+|  |\ On Create                            |
+|  | * SetProperty                         |
+|  | * CreateNode                          |
+|  | * Once                                |
+|  * Once                                  |
++------------------------------------------+
+```
+
+In the above example, each of the branches of the `Merge` operator has more
+operators in the pipeline. The `On Match` branch has a `Filter` operator, which
+filters the nodes based on the label and property, and a `SetProperty` operator,
+which sets the property on the node. The `On Create` branch has a `CreateNode`
+operator, which creates a new node, and a `SetProperty` operator, which sets the
+property on the node.
+
+By combining different  operators, the query engine can produce a wide variety
+of query plans that are data pipelines for executing queries and producing
+results. 
+
+## Query plan operators 
+
+Each of the mentioned operators in the query plan represents a particular operation that will be performed on the data. 
+
+The following table lists all the operators currently supported by Memgraph:
+
+| Operator                      | Description                                                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `Accumulate`                    | Accumulates the input it received.                                                                                       |
+| `Aggregate`                     | Aggregates the input it received.                                                                                        |
+| `Apply`                         | Joins the returned symbols from two branches of execution.                                                               |
+| `CallProcedure`                 | Calls a procedure.                                                                                                       |
+| `Cartesian`                     | Applies the Cartesian product (the set of all possible ordered combinations consisting of one member from each of those sets) on the input it received. |
+| `ConstructNamedPath`            | Creates a path.                                                                                                          |
+| `CreateNode`                    | Creates a node.                                                                                                          |
+| `CreateExpand`                  | Creates edges and  new nodes to connect with existing nodes.                                                             |
+| `Delete`                        | Deletes nodes and edges.                                                                                                 |
+| `EdgeUniquenessFilter`          | Filters unique edges.                                                                                                    |
+| `EmptyResult`                   | Discards results from the previous operator.                                                                             |
+| `EvaluatePatternFilter`         | Part of the filter operator that contains a sub-branch which yields either true or false.                                |
+| `Expand`                        | Expands the node by finding the node's relationships.                                                                    |
+| `ExpandVariable`                | Performs a node expansion of a variable number of relationships                                                          |
+| `Filter`                        | Filters the input it received.                                                                                           |
+| `Foreach`                       | Iterates over a list and applies one or more update clauses.                                                             |
+| `HashJoin`                      | Performs a hash join of the input from its two input branches.                                                           |
+| `IndexedJoin`                   | Performs an indexed join of the input from its two input branches.                                                       |
+| `Limit`                         | Limits certain rows from the pull chain.                                                                                 |
+| `LoadCsv`                       | Loads CSV file in order to import files into the database.                                                               |
+| `Merge`                         | Applies merge on the input it received.                                                                                  |
+| `Once`                          | Forms the beginning of an operator chain with "only once" semantics. The operator will return false on subsequent pulls. |
+| `Optional`                      | Performs optional matching.                                                                                              |
+| `OrderBy`                       | Orders the input it received.                                                                                            |
+| `Produce`                       | Produces results.                                                                                                        |
+| `RemoveLabels`                  | Removes a variable number of node labels.                                                                                |
+| `RemoveProperty`                | Removes a node or relationship property.                                                                                 |
+| `ScanAll`                       | Produces all nodes in the database.                                                                                      |
+| `ScanAllById`                   | Produces nodes with a certain index.                                                                                     |
+| `ScanAllByLabel`                | Produces nodes with a certain label.                                                                                     |
+| `ScanAllByLabelProperty`        | Produces nodes with a certain label and property.                                                                        |
+| `ScanAllByLabelPropertyRange`   | Produces nodes with a certain label and property value within the given range (both inclusive and exclusive).            |
+| `ScanAllByLabelPropertyValue`   | Produces nodes with a certain label and property value.                                                                  |
+| `SetLabels`                     | Sets node labels of variable length.                                                                                     |
+| `SetProperty`                   | Sets a node or relationship property.                                                                                    |
+| `SetProperties`                 | Sets a list of node or relationship properties.                                                                          |
+| `Skip`                          | Skips certain rows from the pull chain.                                                                                  |
+| `Unwind`                        | Unwinds an expression to multiple records.                                                                               |
+| `Distinct`                      | Applies a distinct filter on the input it received.                                                                      |
+
+
+Some operators are always present and can be considered boilerplate operators, such as `Once` and `Produce.` 
+
+`Once` is the operator that represents the first operator in the query plan, and it is always present. `Once` 
+is used to signal the start of the query plan and the start of the operator chain in other branches. 
+
+`Produce` is the operator that represents the last operator in the query plan, and it is almost always 
+present. It is used to signal the end of the query plan and is connected to the usage of the `RETURN` clause in the query.
+If nothing is returned, the `EmptyResult` will be part of the query plan instead of the `Produce` operator. 
+
+{<h3>Examples</h3>}
+
+Here is an example of a query that will have `Once` and `Produce` operators in the query plan:
+
+```cypher
+EXPLAIN RETURN 0;
+```
+
+Here is the query plan:
+```
++------------------+
+| QUERY PLAN       |
++------------------+
+| " * Produce {0}" |
+| " * Once"        |
++------------------+
+```
+
+`ScanAll` is the operator that represents the operator that produces all nodes
+in the database. This means that it will visit every node in the graph and 
+pass that data to the next operator in the query plan. This operator is
+used when there is no node filtering based on labels and properties, and it is
+expensive to use on large graphs. Learn how to avoid using it by reading
+the [performance guide](./performance-optimization).
+
+Here is the query that has `ScanAll` operator in the query plan:
+
+```cypher
+EXPLAIN MATCH (n) RETURN n;
+```
+
+Here is the query plan:
+```
++----------------+
+| QUERY PLAN     |
++----------------+
+|  * Produce {n} |
+|  * ScanAll (n) |
+|  * Once        |
++----------------+
+```
+
+`Filter` is the operator that filters the input it receives. This operator is
+used when filtering node and relationship properties or labels. Typically, the
+`MATCH` clause arguments are used to filter the nodes and relationships based on
+the arguments the filter applies automatically. 
+
+Here is an example of nodes filtering:
+```cypher
+EXPLAIN MATCH (n {id:1}) RETURN n;
+```
+
+Here is the generated query plan:
+```
++--------------------+
+| QUERY PLAN         |
++--------------------+
+| " * Produce {n}"   |
+| " * Filter {n.id}" |
+| " * ScanAll (n)"   |
+| " * Once"          |
++--------------------+
+
+```
+
+Here is an example of relationship filtering based on the relationship property:
+
+```cypher
+EXPLAIN MATCH (p)-[r {id:1}]->(t) RETURN r;
+```
+
+Here is the generated query plan:
+```
++--------------------------+
+| QUERY PLAN               |
++--------------------------+
+| " * Produce {r}"         |
+| " * Filter {r.id}"       |
+| " * Expand (t)<-[r]-(p)" |
+| " * ScanAll (t)"         |
+| " * Once"                |
++--------------------------+
+```
+
+In the example above, the `Expand` operator expands from the `t` node to the `p`
+node. The `Expand` operator finds connected nodes based on the relationship type
+and direction. It is equivalent to the graph traversals or hops. A similar
+filter is the `ExpandVariable` operator, which performs a node
+expansion of several traversals or hops from the starting node.
+
+Here is an example of the `ExpandVariable` operator:
+```cypher
+EXPLAIN MATCH (p)-[*1..2]-(t) RETURN p, t;
+```
+
+Here is the generated query:
+```
++-------------------------------------+
+| QUERY PLAN                          |
++-------------------------------------+
+| " * Produce {p, t}"                 |
+| " * ExpandVariable (t)-[anon1]-(p)" |
+| " * ScanAll (t)"                    |
+| " * Once"                           |
++-------------------------------------+
+```
+
+`anon1` in this case means the relationship is anonymous, and it is not named in the query. 
+Hence, there can be any relationship between the nodes `p` and `t`, two hops away. 
+ 
+
+`ScanAll` and `Filter` operators can be replaced with the `ScanAllByLabel`,
+`ScanAllByLabelProperty`, `ScanAllByLabelPropertyRange`,
+`ScanAllByLabelPropertyValue` operators, which are used to produce nodes with a
+specific label and property, and are typically indexed. 
+
+Here is a query: 
+```cypher
+EXPLAIN MATCH (n:Transfer {year:1992}) RETURN n;
+```
+And its generated query plan:
+```
++-------------------------------------+
+| QUERY PLAN                          |
++-------------------------------------+
+| " * Produce {n}"                    |
+| " * Filter (n :Transfer), {n.year}" |
+| " * ScanAll (n)"                    |
+| " * Once"                           |
++-------------------------------------+
+```
+
+If you create an index on the `:Transfer` label, the `ScanAll` operator will be
+replaced with the `ScanAllByLabel` operator, which is used to produce nodes with
+a specific label and thus minimizing search. 
+
+Now the same query will have a different query plan: 
+```cypher
+CREATE INDEX ON :Transfer;
+EXPLAIN MATCH (n:Transfer {year:1992}) RETURN n;
+```
+Here is a new query plan:
+```
++-----------------------------------+
+| QUERY PLAN                        |
++-----------------------------------+
+| " * Produce {n}"                  |
+| " * Filter {n.year}"              |
+| " * ScanAllByLabel (n :Transfer)" |
+| " * Once"                         |
++-----------------------------------+
+```
+
+Adding a label-property index will optimize the query plan and execution, and
+replace the `ScanAll` operator with the `ScanAllByLabelPropertyValue` operator.
+This will further optimize the existing query plan and, consequently, execution speed.
+
+Create a new label-property index and again run `EXPLAIN`:
+```cypher
+CREATE INDEX ON :Transfer(year);
+EXPLAIN MATCH (n:Transfer {year:1992}) RETURN n;
+```
+
+Here is a new query plan:
+```
++-------------------------------------------------------+
+| QUERY PLAN                                            |
++-------------------------------------------------------+
+| " * Produce {n}"                                      |
+| " * ScanAllByLabelPropertyValue (n :Transfer {year})" |
+| " * Once"                                             |
++-------------------------------------------------------+
+```
+
+
+Indexes, constraints, and data cardinality statistics can influence how the
+query plan is generated. Memgraph has [`ANALYZE
+GRAPH`](./performance-optimization#analyze-graph) and [index
+hinting](./performance-optimization#index-hinting) features that affect query
+plan generation. For details on how to optimize the query plan execution and use
+those features, read the [performance guide](./performance-optimization).
+
+
+## Query plan caching
+
+There are multiple steps involved in running a query, including parsing,
+planning, and execution. The query plan is produced in the planning step, and it
+is used to optimize the query execution. 
+
+Each part of the query is a basis for generating a unique query plan. If the
+the query has multiple `MATCH` ,`OPTIONAL MATCH`, and `MERGE`  Cypher clauses, the
+query planner will use different parts as starting points for running a query,
+while keeping the query semantics the same. Having more query parts with
+mentioned clauses will cause the query planner to generate multiple query plans,
+Each of them is a unique variation of combinations. 
+
+The set of unique plans is then evaluated based on the cost estimation. The
+optimal plan has the lowest cost of all unique plans. The cost is
+calculated based on the operator cardinality and on the preset coefficient
+of the runtime performance of that operator. 
+
+The optimal query plan is the fastest and least resource-intensive plan that can
+be produced for the query given by the query engine. In order to speed up the
+query execution, the query plan is being cached for later use and thus does not
+need to be calculated for each query execution.
+
+{<h3>Example</h3>}
+
+Let's imagine that you have multiple `CREATE` queries: 
+
+```cypher
+CREATE (n:Node {id: 123}); 
+CREATE (n:Node {id: 154}); 
+CREATE (n:Node {id: 322}); 
+```
+Although the above queries are not exactly the same, they will have the same query plan that looks like this:
+```
++------------------+
+| QUERY PLAN       |
++------------------+
+| " * EmptyResult" |
+| " * CreateNode"  |
+| " * Once"        |
++------------------+
+```
+
+The generated query plan is the same because the query parser automatically
+strips the literals and replaces them with placeholder values, so each
+consecutive query reuses the same query plan.
+
+Instead of computing the plan for each query, the query plan uses normalized
+version of the query in both cases, such as: 
+
+```cypher
+CREATE (n:Node {id: 0})
+```
+
+The values are replaced with mock values, and the real value is seeded at the end of the query
+plan. In this way, only the query structure is being considered for caching, and the query can
+be cached; although the query parameters were not used the query can be cached. 
+
+The same can be achieved by using query parameters:
+
+```cypher
+CREATE (n:Node {id: $id}); 
+CREATE (n:Node {id: $id});
+CREATE (n:Node {id: $id});
+```
+
+The query plan will be reused, because the identical string is used for all
+three queries. It is recommended to use query parameters to achieve query plan caching, 
+since the change in the type will trigger the new query plan generation, which is not the case 
+with the query parameters, and parsing of parameters is faster. 
+
+To validate query plan caching, use the [query execution time
+summary](getting-started/cli#query-execution-time). In the results of the query
+execution time summary, find out the time spent for query planning.
+
+```cypher
+//First run of the query
+Additional execution time info:
+  Query COST estimate: 0
+  Query PARSING time: 0.00170783 sec
+  Query PLAN EXECUTION time: 9.8768e-05 sec
+  Query PLANNING time: 0.001479502 sec
+
+//Second run of the query
+Additional execution time info:
+  Query COST estimate: 0
+  Query PARSING time: 8.0453e-05 sec
+  Query PLAN EXECUTION time: 7.1126e-05 sec
+  Query PLANNING time: 7.6255e-05 sec
+
+```
+
+As you can see in the example above, the query planning time is significantly
+lower for the second query, which means that the query plan is being reused.
+
+<Callout type="warning">
+**The query plan caching is not supported for the custom query modules**
+
+Currently, if you are using the [custom query modules](/custom-query-modules),
+the query plan caching is not supported, and the query plan will be re-generated
+for each query executed.  Since the custom query modules are dynamic and can
+change, the query plan could reference the old version of the query module and
+produce incorrect results. 
+</Callout>
+
+### Query plan cache cleanup
+
+The query plan cache is invalidated when the **schema of the database changes**.
+This means that any update of indexes (creation or deletion)
+invalidates query plan cache. The reason for that is that the query plan is
+being optimized based on the schema of the database, and if the schema changes,
+the query plan could produce inefficient and outdated results. Hence, it is
+necessary to invalidate the query plan cache and regenerate the query plans during
+the execution of the query.
+
+The query plan cache is also invalidated when the **database is restarted**,
+since there is currently no persistent storage for the query plan cache.
+
+
+## Query plan configuration
+
+The behavior of the query plan can be influenced by the [database
+configuration](/configuration/configuration-settings#query) parameters on
+database startup. 
+
+{<h3><code>--cartesian-product-enabled=true</code></h3>}
+
+This parameter enables or disables the Cartesian product operator. The Cartesian
+product operator is used to apply the Cartesian product to the input it
+receives. This means if you match two nodes, the Cartesian product operator will
+produce all possible combinations of the nodes. This is a costly operation, and
+it should be used with caution. The default value is set to `true`.
+
+Here is an example of the query plan that will trigger the query planner to use
+the Cartesian operator:
+
+```cypher
+MATCH (n), (m) RETURN n, m;
+```
+Let's say there are three nodes in the database labeled with `Person` with a
+property `name` with values: John, Stan and Peter. The above query matches all
+pairs of nodes and returns them. Therefore, for each `n` node, the Cartesian
+product operator will produce all possible combinations of the `m` nodes.
+Here is the result:
+```
++---------------------------+---------------------------+
+| n                         | m                         |
++---------------------------+---------------------------+
+| (:Person {name: "John"})  | (:Person {name: "John"})  |
+| (:Person {name: "John"})  | (:Person {name: "Stan"})  |
+| (:Person {name: "John"})  | (:Person {name: "Peter"}) |
+| (:Person {name: "Stan"})  | (:Person {name: "John"})  |
+| (:Person {name: "Stan"})  | (:Person {name: "Stan"})  |
+| (:Person {name: "Stan"})  | (:Person {name: "Peter"}) |
+| (:Person {name: "Peter"}) | (:Person {name: "John"})  |
+| (:Person {name: "Peter"}) | (:Person {name: "Stan"})  |
+| (:Person {name: "Peter"}) | (:Person {name: "Peter"}) |
++---------------------------+---------------------------+
+```
+Here is the query plan obtained with the `EXPLAIN` query:
+```
++------------------------+
+| QUERY PLAN             |
++------------------------+
+| " * Produce {n, m}"    |
+| " * Cartesian {m : n}" |
+| " |\\ "                |
+| " | * ScanAll (n)"     |
+| " | * Once"            |
+| " * ScanAll (m)"       |
+| " * Once"              |
++------------------------+
+```
+
+Only the left branch from the Cartesian product will be cached. If the left
+branch produces too many records, Cartesian product can cause memory overhead.
+To avoid that, you can set `--cartesian-product-enabled` to `false`.
+
+{<h3><code>--query-cost-planner=true</code></h3>}
+
+This parameter turns the query cost planner on or off. The query cost
+planner is used to estimate the cost of the query execution, and it is an
+integral part of finding the optimal query plan. More complex queries will have
+multiple query plans that can yield semantically equivalent results. Based on
+the underlying cardinality of the data, the query cost planner will estimate the
+cost of the query execution and choose the optimal query plan. If the query cost
+planner is not working, the first viable plan will be used.
+
+{<h3><code>--query-max-plans=1000</code></h3>}
+This parameter sets the maximum number of query plans that can be generated for
+a single query. The query engine will generate multiple query plans for a single
+query, and the query cost planner will choose the optimal query plan. This is an
+upper limit on the number of query plans that can be generated for a single
+query. 
+
+{<h3><code>--query-plan-cache-max-size=1000</code></h3>}
+This parameter sets the maximum number of query plans that can be stored in the
+query plan cache. The query plan cache is used to store the query plans for
+later use, so they do not need to be recalculated for each query execution.
+
+{<h3><code>--query-vertex-count-to-expand-existing=10</code></h3>} 
+Depending on the configuration in the graph, the query engine will decide to use
+regular `Expand` operator or indexed lookup `ScanAllByLabel` operator for a
+scenario where the number of nodes to expand is less than the
+`query-vertex-count-to-expand-existing` parameter. 
+
+{<h3><code>--query-execution-timeout-sec=600</code></h3>}
+This parameter sets the maximum time in seconds that a query can run before it
+is terminated. 
+
