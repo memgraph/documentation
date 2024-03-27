@@ -11,15 +11,146 @@ import GitHub from '/components/icons/GitHub'
 
 ## Take advantage of the query plan
 
+Cypher is a declarative query language, meaning you write the query to describe what data you want to 
+get, not how to get it. The Memgraph query engine is responsible for figuring out 
+the best way to get the data. The query engine finds the best way to get the data by generating a query plan, 
+which is a set of operations that need to be executed.
+
+The query plan is cost-based, which means that the query planner will try to find the most
+efficient way to execute the query. That includes finding the best way to filter the data, 
+join the data, and return the data. 
+
+If you want to see how the query plan looks for a specific query, just use the [`EXPLAIN`](./clauses/explain.md) 
+before the query, here is an example of a simple query plan:
+
+```cypher
+EXPLAIN MERGE (p:Person {name: 'Angela'})
+ON MATCH SET p.found = TRUE
+ON CREATE SET p.notFound = TRUE
+RETURN p.name, p.notFound, p.found;
++------------------------------------------+
+| QUERY PLAN                               |
++------------------------------------------+
+|  * Produce {p.name, p.notFound, p.found} |
+|  * Accumulate                            |
+|  * Merge                                 |
+|  |\ On Match                             |
+|  | * SetProperty                         |
+|  | * Filter (p :Person), {p.name}        |
+|  | * ScanAll (p)                         |
+|  | * Once                                |
+|  |\ On Create                            |
+|  | * SetProperty                         |
+|  | * CreateNode                          |
+|  | * Once                                |
+|  * Once                                  |
++------------------------------------------+
+```
+
+The query plan should be read from the bottom to the top. The data will be passed from the operator to the operator 
+until it reaches the top operator, which will return the data to the user. The data passing through the 
+operators is called the data pipeline. 
+
+In order to improve your query performance and data pipeline, you need to optimize the [query plan](./query-plan.mdx).
 
 ## How to speed up query execution
 
-### Query parametrization
+Memgraph executed queries based on the generated query plan, changing a single 
+operator in a query plan can make a significant difference in the query execution time.
 
+In order to understand the impact of each operator, you need to use the [`PROFILE`](./clauses/profile.md)
+clause before the query. Here is an example of a simple query profile:
+
+```cypher
+PROFILE MATCH (n) RETURN n;
++-----------------+-----------------+-----------------+-----------------+
+| OPERATOR        | ACTUAL HITS     | RELATIVE TIME   | ABSOLUTE TIME   |
++-----------------+-----------------+-----------------+-----------------+
+| "* Produce {n}" | 14578           | " 61.518812 %"  | "  4.702500 ms" |
+| "* ScanAll (n)" | 14578           | " 38.477807 %"  | "  2.941245 ms" |
+| "* Once"        | 2               | "  0.003382 %"  | "  0.000258 ms" |
++-----------------+-----------------+-----------------+-----------------+
+```
+
+The goal is to keep the data pipeline in the query as low as possible, which means keeping `ACTUAL HITS`, 
+as low as possible. It represents the number of rows(nodes and relationships) that are processed by each operator, in this case,
+it is 14578 nodes that have been produced.
+
+To lower the data pipeline, you need to optimize the query plan with indexing. 
 
 ### Indexing
 
-Indexing best practices in general + index hinting + analyze graph as strategies
+Creating an index on a [label](../fundamentals/indexes#label-index) and [label-property](../fundamentals/indexes#label-property-index) 
+can significantly lower the time needed to search a specific node and lower the data in the data pipeline. 
+
+Here is an example: 
+
+```
+memgraph> PROFILE  MATCH (n:Transfer {year:1992} ) RETURN n;
++------------------------------------+------------------------------------+------------------------------------+------------------------------------+
+| OPERATOR                           | ACTUAL HITS                        | RELATIVE TIME                      | ABSOLUTE TIME                      |
++------------------------------------+------------------------------------+------------------------------------+------------------------------------+
+| "* Produce {n}"                    | 148                                | "  0.451183 %"                     | "  0.033538 ms"                    |
+| "* Filter (n :Transfer), {n.year}" | 148                                | " 81.888209 %"                     | "  6.087073 ms"                    |
+| "* ScanAll (n)"                    | 14578                              | " 17.658844 %"                     | "  1.312651 ms"                    |
+| "* Once"                           | 2                                  | "  0.001765 %"                     | "  0.000131 ms"                    |
++------------------------------------+------------------------------------+------------------------------------+------------------------------------+
+
+```
+
+The `ScanAll` operator produces 14578 nodes, which the `Filter` operator then processes, taking 81% of the query time. 
+The cause of issue is that `ScanAll` is producing a data pipeline that is too big. By creating a label-property index the 
+search time will decrease, data piplene will be smaller, and the `Filter` operator won't be necessary. 
+
+Here is an example: 
+```cypher
+REATE INDEX ON :Transfer(year); 
+memgraph> PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
++-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
+| OPERATOR                                        | ACTUAL HITS                                     | RELATIVE TIME                                   | ABSOLUTE TIME                                   |
++-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
+| "* Produce {n}"                                 | 148                                             | " 21.446945 %"                                  | "  0.016885 ms"                                 |
+| "* ScanAllByLabelPropertyValue (n :Transfer ... | 148                                             | " 78.488746 %"                                  | "  0.061794 ms"                                 |
+| "* Once"                                        | 2                                               | "  0.064309 %"                                  | "  0.000051 ms"                                 |
++-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
+```
+
+The `ScanAll` operator produces 14578 nodes, which the filter operator then processes, taking 81% of the query time. However, the issue is that `ScanAll` is producing a data pipeline that is too big. By creating a label-property index the 
+search time will decrease, and the `Filter` operator won't be necessary. 
+
+For more details on how to optimize the query plan, check out the [performance optimizations](./performance-optimization#performance-optimization) page.
+
+### Query parametrization
+
+Multiple query plans will be generated for each query, but only a single plan is optimal. 
+Query planning time can be significant for complex queries because the query planner will 
+try to generate multiple versions of the query plan and choose the optimal one. 
+
+After the optimal query plan is generated, it is cached and reused for the same query. 
+
+To enable query plan caching, use the query parameters as much as possible.
+
+Here is an example of a query without query parameters:
+
+```cypher
+CREATE (n:Node {id: 123}); 
+CREATE (n:Node {id: 154}); 
+CREATE (n:Node {id: 322}); 
+```
+
+Here is an example of a query with query parameters:
+
+```cypher
+CREATE (n:Node {id: $id}); 
+CREATE (n:Node {id: $id});
+CREATE (n:Node {id: $id});
+```
+
+Memgraph query engine will try to cache the query plan without parameters, but 
+To make this work, you should use the query parameters as much as possible.
+
+For more details, take a look at the [Query plan caching](./query-plan#query-plan-caching) page.)
+
 
 ### Reduce roundtrip
 
