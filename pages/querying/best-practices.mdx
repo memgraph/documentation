@@ -8,25 +8,24 @@ import GitHub from '/components/icons/GitHub'
 
 # Querying best practices
 
-Querying Memgraph via Cypher is a commom operation that needs to be properly
-optimized This page will provide you with the best practices for querying
+Querying Memgraph via Cypher is a common operation that needs to be properly
+optimized. This page will provide you with the best practices for querying
 Memgraph and writing Cypher so the queries are executed as fast as possible with
-least amount of resources.
+the least amount of resources.
 
 ## Take advantage of the query plan
 
 Cypher is a declarative query language, meaning you write the query to describe
 **what data you want to get, not how to get it**. The Memgraph query engine is
-responsible for figuring out the best way to get the data. The query engine
-finds the best way to get the data by generating a **query plan**, which is a
-set of operations that need to be executed.
+responsible for figuring out the best way to get the data. It generates a
+**query plan**, which is a set of operations that need to be executed.
 
 The query plan is cost-based, which means that the query planner will try to
 find the most efficient way to execute the query. That includes finding the best
-way to filter and expand and return the data. 
+way to filter, expand and return the data. 
 
 If you want to see how the query plan looks for a specific query, just use the
-[`EXPLAIN`](./clauses/explain.md) before the query, here is an example of a
+[`EXPLAIN`](/querying/clauses/explain) before the query. Here is an example of a
 simple query plan:
 
 ```cypher
@@ -34,6 +33,10 @@ EXPLAIN MERGE (p:Person {name: 'Angela'})
 ON MATCH SET p.found = TRUE
 ON CREATE SET p.notFound = TRUE
 RETURN p.name, p.notFound, p.found;
+```
+
+And its output:
+```
 +------------------------------------------+
 | QUERY PLAN                               |
 +------------------------------------------+
@@ -55,18 +58,18 @@ RETURN p.name, p.notFound, p.found;
 
 **The query plan should be read from the bottom to the top**. The data will be
 passed from the operator to the operator until it reaches the top operator,
-`Produce` in this case, which will return the data to the user. The data passing
-through the operators is called the **data pipeline**. 
+`Produce` in this case, which will return the data to the user. The process of
+data passing through the operators is called the **data pipeline**. 
 
 In order to improve your query performance and data pipeline, you need to
-optimize the [query plan](./query-plan.mdx). 
+optimize the [query plan](querying/query-plan). 
 
 ## How to speed up query execution
 
-Before diving into the details of the query execution optimization and plan, it
-is important to note that the query performance may be slow in the parsing or
-planning phase. To ensure that is not the case, you can run your query and
-use [query execution summary](../getting-started/cli#query-execution-time).
+Before diving into the details of the query execution optimization, it is
+important to note that the query performance may be slow in the parsing or
+planning phase. To ensure that is not the case, you can run your query and use
+[query execution summary](/getting-started/cli#query-execution-time).
 
 ```
 Additional execution time info:
@@ -76,23 +79,23 @@ Additional execution time info:
   Query PLANNING time: 0.001479502 sec
 ```
 
-Here, the focus is on the lowering the  `PLAN EXECUTION time` part of the Query
+Here, the focus is on the lowering the `PLAN EXECUTION time` part of the Query
 execution summary. 
 
-Depending on the tool you are using, Memgraph LAB includes a Query execution
-summary by default in the UI. If you are using client libraries, execution
-summary objects are included in the results.  
-Take a look at [specific client guides](../client-libraries.mdx) for these
-details. 
+If you're using Memgraph Lab, it includes a Query execution summary by default
+in the UI. If you are using client libraries, execution summary objects are
+included in the results. Take a look at [specific client
+guides](/client-libraries) for these details. 
 
 ### Profiling queries
 
-Memgraph executed queries based on the generated query plan, changing a single 
-operator in a query plan can make a significant difference in data pipline and 
+Memgraph executes queries based on the generated query plan. Changing a single
+operator in a query plan can make a significant difference in data pipline and
 query performance.
 
-In order to understand the impact of each operator, you need to use the [`PROFILE`](./clauses/profile.md)
-clause before the query. Here is an example of a simple query profile:
+In order to understand the impact of each operator, you need to use the
+[`PROFILE`](/querying/clauses/profile) clause before the query. Here is an
+example of a simple query profile:
 
 ```cypher
 PROFILE MATCH (n) RETURN n;
@@ -105,21 +108,28 @@ PROFILE MATCH (n) RETURN n;
 +-----------------+-----------------+-----------------+-----------------+
 ```
 
-The goal is to keep the data pipeline in the query as low as possible, which means keeping `ACTUAL HITS`, 
-as low as possible. It represents the number of rows(nodes and relationships) that are processed by each operator, in this case,
-it is 14578 nodes that have been produced.
+The goal is to keep the data pipeline in the query as low as possible, which
+means keeping `ACTUAL HITS` as low as possible. It represents the number of rows
+(nodes and relationships) that are processed by each operator. In this case, it
+is 14578 nodes that have been produced.
 
 To lower the data pipeline, you need to optimize the query plan with indexing. 
 
 ### Indexing
 
-Creating an index on a [label](../fundamentals/indexes#label-index) and [label-property](../fundamentals/indexes#label-property-index) 
-can significantly lower the time needed to search a specific node and lower the data in the data pipeline. 
+Creating a [label](/fundamentals/indexes#label-index) and
+[label-property](/fundamentals/indexes#label-property-index) index can
+significantly lower the time needed to search a specific node and lower the data
+in the data pipeline. 
 
 Here is an example: 
 
+```cypher
+PROFILE  MATCH (n:Transfer {year:1992}) RETURN n;
 ```
-memgraph> PROFILE  MATCH (n:Transfer {year:1992} ) RETURN n;
+
+Here is the output:
+```
 +------------------------------------+------------------------------------+------------------------------------+------------------------------------+
 | OPERATOR                           | ACTUAL HITS                        | RELATIVE TIME                      | ABSOLUTE TIME                      |
 +------------------------------------+------------------------------------+------------------------------------+------------------------------------+
@@ -138,9 +148,14 @@ the search time will decrease, data piplene will be smaller, and the `Filter`
 operator won't be necessary. 
 
 Here is an example: 
+
 ```cypher
 CREATE INDEX ON :Transfer(year); 
-memgraph> PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
+PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
+```
+
+Here is the output:
+```
 +-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
 | OPERATOR                                        | ACTUAL HITS                                     | RELATIVE TIME                                   | ABSOLUTE TIME                                   |
 +-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
@@ -163,13 +178,12 @@ benefits. On top of that, you will have higher memory usage and slow down write
 operations. 
 
 
-By applying an index, you are changing a process how the query plan is being
-constructed and executed. 
+By applying an index, you are changing the process of how the query plan is
+being constructed and executed. 
 
+Here is an example of a simple query:
 
-Here is a simple query: 
-
-```txt
+```cypher
 memgraph> PROFILE MATCH (n) RETURN n;
 +-----------------+-----------------+-----------------+-----------------+
 | OPERATOR        | ACTUAL HITS     | RELATIVE TIME   | ABSOLUTE TIME   |
@@ -429,9 +443,12 @@ CREATE (n:Node {id: $id});
 Memgraph query engine will try to cache the query plan without parameters, but
 To make this work, you should use the query parameters as much as possible.
 
-For more details, take a look at the [Query plan
-caching](/querying/query-plan#query-plan-caching) page.)
-
+<Cards>
+    <Card
+    title="Read more about query plan caching"
+    href="/querying/query-plan#query-plan-caching"
+    />
+</Cards>
 
 ### Reduce roundtrip
 
@@ -663,9 +680,8 @@ RETURN path;
 By knowing the schema of your dataset and filtering and limiting the wanted results, 
 you can achieve much more optimized way of using the traversal algorithms.
 
-## Decreasing query memory usage
 
-### Cartesian product queries consuming too much memory
+## Decreasing Cartesian queries memory usage
 
 Cartesian product is by default enabled in Memgraph, and it enforces the usage of
 the `Cartesian` [operator](/querying/query-plan#query-plan-operators).
