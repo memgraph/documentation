@@ -2958,11 +2958,22 @@ module.exports = withNextra({
         source: '/advanced-algorithms/available-algorithms/convert',
         destination: '/querying/functions#conversion-functions',
         permanent: true
-      },      {
+      },      
+      {
         source: '/querying/functions#schema',
         destination: '/querying/schema',
         permanent: true
-      }                       
+      },
+      {
+        source: '/help-center/errors/conflicting-transactions',
+        destination: '/help-center/errors/transactions',
+        permanent: true
+      },
+      {
+        source: '/configuration/experimental-replication',
+        destination: '/configuration/replication/experimental-replication',
+        permanent: true
+      }                             
     ];
   },
 });
