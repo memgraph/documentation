@@ -23,7 +23,116 @@ Indexing best practices in general + index hinting + analyze graph as strategies
 
 ### Reduce roundtrip
 
-Be careful what you return. 
+Usually, when writing a query, you're focused on the matching part more than on
+the return part of the query. It is important to be expressive in the Cypher
+query to find what you're looking for and to make the search area smaller with
+each step to improve performance. But, the **return part of the query plays an
+important role** as well, **affects the full roundtrip** and it shouldn't be
+ignored. Each client spends some amount of time to send a query and to show the
+results. When running queries with Memgraph Lab, this time is called Lab full
+roundtrip and for each query, you can see that time along with the actual
+Memgraph execution time, which includes query parsing, planning and running.
+
+Too much time is spent on a full roundtrip when **everything** is returned as a
+query result. If you don't need all the data from the query result, **return the
+important subset of results**. Returning all paths along with node and
+relationship properties affects full roundtrip, especially if your data has many
+properties. That happens because all of the information must be fetched. If
+possible, it's always better to **return only node property** (such as `id`). If
+you're interested only in the count of returned records, **use `count()` to
+reduce the full roundtrip**. Similarly, to get the length of returned lists of
+nodes or relationships, use `size()` function.
+
+By **using projection** in the return clause, you can **avoid returning
+duplicates of nodes** and consequently reduce the full roundtrip.
+
+Let's show how that works on a couple of examples on the Game of Thrones deaths
+dataset from Memgraph Lab.
+
+Here is an example query that returns the whole path:
+```cypher
+MATCH path=(:Character { name: "Jon Snow" })-[:KILLED *bfs]->(:Character)
+RETURN path;
+```
+
+When run in Memgraph Lab, **the full roundtrip is 82 ms**. 
+
+![](/pages/querying/best-practices/query-optimization-lab-got-1.png)
+
+{<h4>Project to avoid duplicates</h4>} 
+To speed up roundtrip, projection can be used to avoid returning node
+duplicates. Here is a query that utilizes projection:
+```cypher
+MATCH path=(:Character { name: "Jon Snow" })-[:KILLED *bfs]->(:Character)
+WITH project(path) AS subgraph
+RETURN subgraph;
+```
+
+When run in Memgraph Lab, **the full roundtrip is down to 49 ms**. 
+
+![](/pages/querying/best-practices/query-optimization-lab-got-2.png)
+
+{<h4>Return a single value</h4>} 
+Here is a query that returns only the number of paths:
+```cypher
+MATCH path=(:Character { name: "Jon Snow" })-[:KILLED *bfs]->(:Character)
+RETURN count(path);
+```
+
+When run in Memgraph Lab, **the full roundtrip is down to 30 ms**. 
+
+![](/pages/querying/best-practices/query-optimization-lab-got-3.png)
+
+Similarly, `size()` and `sum()` functions can be used to speed up the full
+roundtrip:
+```cypher
+MATCH path=(:Character { name: "Jon Snow" })-[:KILLED *bfs]->(:Character)
+WITH size(nodes(path)) as nodes, size(relationships(path)) AS relationships
+RETURN sum(nodes), sum(relationships);
+```
+
+When run in Memgraph Lab, **the full roundtrip is down to 33 ms**. 
+
+![](/pages/querying/best-practices/query-optimization-lab-got-6.png)
+
+Here is an example of using both `project()` and `size()`:
+```cypher
+MATCH path=(:Character { name: "Jon Snow" })-[:KILLED *bfs]->(:Character)
+WITH project(path) as subgraph
+RETURN size(subgraph.nodes), size(subgraph.edges);
+```
+
+When run in Memgraph Lab, **the full roundtrip is down to 31 ms**. 
+
+![](/pages/querying/best-practices/query-optimization-lab-got-7.png)
+
+{<h4>Return only a property</h4>} 
+
+Here is a query that extracts nodes' internal ids from the path:
+```cypher
+MATCH path=(:Character { name: "Jon Snow" })-[:KILLED *bfs]->(:Character)
+WITH extract(n IN nodes(path) | ID(n)) AS nodes_ids
+RETURN nodes_ids;
+```
+
+When run in Memgraph Lab, **the full roundtrip is down to 41 ms**. 
+
+![](/pages/querying/best-practices/query-optimization-lab-got-4.png)
+
+Similarly, the following query returns only `name` nodes' property from the path:
+```cypher
+MATCH path=(:Character { name: "Jon Snow" })-[:KILLED *bfs]->(:Character)
+WITH extract(n IN nodes(path) | n {.name}) AS nodes_ids
+RETURN nodes_ids;
+```
+
+When run in Memgraph Lab, **the full roundtrip is down to 31 ms**. 
+
+![](/pages/querying/best-practices/query-optimization-lab-got-5.png)
+
+These are some of the tips that can help to reduce the roundtrip time. **On larger
+datasets, these optimization strategies have larger impact and should be
+utilized whenever possible to achieve the best performance**. 
 
 ## Fast deep-path traversals
 In contrast to other graph databases, Memgraph deep-path traversals efficiently 
