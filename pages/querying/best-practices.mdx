@@ -9,24 +9,25 @@ import GitHub from '/components/icons/GitHub'
 # Querying best practices
 
 Querying Memgraph via Cypher is a common operation that needs to be properly
-optimized. This page will provide you with the best practices for querying
-Memgraph and writing Cypher so the queries are executed as fast as possible with
-the least amount of resources.
+optimized. This page will show you the best practices for querying Memgraph and
+writing Cypher so the queries are executed as fast as possible with the least
+amount of resources.
 
 ## Take advantage of the query plan
 
 Cypher is a declarative query language, meaning you write the query to describe
 **what data you want to get, not how to get it**. The Memgraph query engine is
 responsible for figuring out the best way to get the data. It generates a
-**query plan**, which is a set of operations that need to be executed.
+[**query plan**](/querying/query-plan), which is a set of operations that need
+to be executed.
 
 The query plan is cost-based, which means that the query planner will try to
 find the most efficient way to execute the query. That includes finding the best
 way to filter, expand and return the data. 
 
 If you want to see how the query plan looks for a specific query, just use the
-[`EXPLAIN`](/querying/clauses/explain) before the query. Here is an example of a
-simple query plan:
+[`EXPLAIN`](/querying/clauses/explain) clause before the query. Here is an
+example of a simple query:
 
 ```cypher
 EXPLAIN MERGE (p:Person {name: 'Angela'})
@@ -35,7 +36,7 @@ ON CREATE SET p.notFound = TRUE
 RETURN p.name, p.notFound, p.found;
 ```
 
-And its output:
+And its plan:
 ```
 +------------------------------------------+
 | QUERY PLAN                               |
@@ -59,16 +60,16 @@ And its output:
 **The query plan should be read from the bottom to the top**. The data will be
 passed from the operator to the operator until it reaches the top operator,
 `Produce` in this case, which will return the data to the user. The process of
-data passing through the operators is called the **data pipeline**. 
+data passing through the operators is called **data pipeline**. 
 
-In order to improve your query performance and data pipeline, you need to
-optimize the [query plan](querying/query-plan). 
+In order to improve query performance and data pipeline, you need to optimize
+the [query plan](querying/query-plan). 
 
 ## How to speed up query execution
 
 Before diving into the details of the query execution optimization, it is
-important to note that the query performance may be slow in the parsing or
-planning phase. To ensure that is not the case, you can run your query and use
+important to note that the **query performance may be slow in the parsing or
+planning phase**. To ensure that is not the case, you can run your query and use
 [query execution summary](/getting-started/cli#query-execution-time).
 
 ```
@@ -79,8 +80,8 @@ Additional execution time info:
   Query PLANNING time: 0.001479502 sec
 ```
 
-Here, the focus is on the lowering the `PLAN EXECUTION time` part of the Query
-execution summary. 
+Based on the execution summary above, the focus should be on lowering the `PLAN
+EXECUTION time` part of the Query execution summary. 
 
 If you're using Memgraph Lab, it includes a Query execution summary by default
 in the UI. If you are using client libraries, execution summary objects are
@@ -90,7 +91,7 @@ guides](/client-libraries) for these details.
 ### Profiling queries
 
 Memgraph executes queries based on the generated query plan. Changing a single
-operator in a query plan can make a significant difference in data pipline and
+operator in a query plan can make a significant difference in data pipeline and
 query performance.
 
 In order to understand the impact of each operator, you need to use the
@@ -99,6 +100,10 @@ example of a simple query profile:
 
 ```cypher
 PROFILE MATCH (n) RETURN n;
+```
+
+Here is the output:
+```
 +-----------------+-----------------+-----------------+-----------------+
 | OPERATOR        | ACTUAL HITS     | RELATIVE TIME   | ABSOLUTE TIME   |
 +-----------------+-----------------+-----------------+-----------------+
@@ -113,62 +118,15 @@ means keeping `ACTUAL HITS` as low as possible. It represents the number of rows
 (nodes and relationships) that are processed by each operator. In this case, it
 is 14578 nodes that have been produced.
 
-To lower the data pipeline, you need to optimize the query plan with indexing. 
+To lower the data pipeline, you need to optimize the query plan. You can start
+with [indexing](#indexing) your data properly. 
 
 ### Indexing
 
 Creating a [label](/fundamentals/indexes#label-index) and
 [label-property](/fundamentals/indexes#label-property-index) index can
-significantly lower the time needed to search a specific node and lower the data
-in the data pipeline. 
-
-Here is an example: 
-
-```cypher
-PROFILE  MATCH (n:Transfer {year:1992}) RETURN n;
-```
-
-Here is the output:
-```
-+------------------------------------+------------------------------------+------------------------------------+------------------------------------+
-| OPERATOR                           | ACTUAL HITS                        | RELATIVE TIME                      | ABSOLUTE TIME                      |
-+------------------------------------+------------------------------------+------------------------------------+------------------------------------+
-| "* Produce {n}"                    | 148                                | "  0.451183 %"                     | "  0.033538 ms"                    |
-| "* Filter (n :Transfer), {n.year}" | 148                                | " 81.888209 %"                     | "  6.087073 ms"                    |
-| "* ScanAll (n)"                    | 14578                              | " 17.658844 %"                     | "  1.312651 ms"                    |
-| "* Once"                           | 2                                  | "  0.001765 %"                     | "  0.000131 ms"                    |
-+------------------------------------+------------------------------------+------------------------------------+------------------------------------+
-
-```
-
-The `ScanAll` operator produces 14578 nodes, which the `Filter` operator then
-processes, taking 81% of the query time. The cause of issue is that `ScanAll` is
-producing a data pipeline that is too big. By creating a label-property index
-the search time will decrease, data piplene will be smaller, and the `Filter`
-operator won't be necessary. 
-
-Here is an example: 
-
-```cypher
-CREATE INDEX ON :Transfer(year); 
-PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
-```
-
-Here is the output:
-```
-+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
-| OPERATOR                                        | ACTUAL HITS                                     | RELATIVE TIME                                   | ABSOLUTE TIME                                   |
-+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
-| "* Produce {n}"                                 | 148                                             | " 21.446945 %"                                  | "  0.016885 ms"                                 |
-| "* ScanAllByLabelPropertyValue (n :Transfer ... | 148                                             | " 78.488746 %"                                  | "  0.061794 ms"                                 |
-| "* Once"                                        | 2                                               | "  0.064309 %"                                  | "  0.000051 ms"                                 |
-+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
-```
-
-The `ScanAll` operator produces 14578 nodes, which the filter operator then
-processes, taking 81% of the query time. However, the issue is that `ScanAll` is
-producing a data pipeline that is too big. By creating a label-property index
-the search time will decrease, and the `Filter` operator won't be necessary. 
+significantly lower the time needed to find a specific node and lower the amount
+of data in the data pipeline. 
 
 It is important to note that indexing in a database is dependent on the actual
 dataset stored in the database. The general rule is that the properties that
@@ -176,7 +134,6 @@ have high cardinality should be used as indexes. If you index a low cardinality
 property, such as gender or boolean, you won't get a lot of performance
 benefits. On top of that, you will have higher memory usage and slow down write
 operations. 
-
 
 By applying an index, you are changing the process of how the query plan is
 being constructed and executed. 
@@ -196,11 +153,11 @@ memgraph> PROFILE MATCH (n) RETURN n;
 
 So, the `MATCH (n)` will take all the nodes from the database and pass it to the
 next operator in the query plan. The total number of nodes in the dataset is
-14577, and the `ScanAll` operator will take all the nodes from the database and
+14578, and the `ScanAll` operator will take all the nodes from the database and
 pass it on to the next operator. 
 
-But this is the intended operation to run the total database node return. In
-general, your queries should not contain `ScanALL` operators. 
+If you see a `ScanAll` operator in the query plan, you should consider creating
+an index. 
 
 Take a look at the following query: 
 
@@ -217,20 +174,26 @@ memgraph> PROFILE  MATCH (n:Transfer {year:1992} ) RETURN n;
 ```
 
 In this example, the goal is to find the `:Transfer` node with the specific
-`year` property, and the `Filter` is applied to filter the results from
-`ScanAll,` again the filter is applied on the all nodes in the graph that are
-being produced by `ScanALL` operator. 
+`year` property. The `Filter` operator is applied on the all nodes in the graph
+that are being produced by `ScanAll` operator. 
 
 The first optimization step would be to create a [label
 index](../fundamentals/indexes#label-index). This would allow the query to
 search just for a specific set of nodes.  
 
-Here is an example:   
-
-```
+ 
+Let's first create a label index:
+```cypher
 CREATE INDEX ON :Transfer;
+```
 
-memgraph> PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
+Let's run the query again:
+```cypher
+memgraph> PROFILE  MATCH (n:Transfer {year:1992}) RETURN n;
+```
+
+And see how the profile looks now:
+```
 +----------------------------------+----------------------------------+----------------------------------+----------------------------------+
 | OPERATOR                         | ACTUAL HITS                      | RELATIVE TIME                    | ABSOLUTE TIME                    |
 +----------------------------------+----------------------------------+----------------------------------+----------------------------------+
@@ -241,27 +204,34 @@ memgraph> PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
 +----------------------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
-Several things have changed, the most important thing is that the query plan is
-now using the `ScanAllByLabel` operator instead of `ScanAll`, which will search
-nodes based on labels, and the actual search space will be reduced. Next, notice
-the `ACTUAL HITS` got down from 14k to 9k nodes. This also did split the total
-execution time into half, notice the `ABSOLUTE TIME`. It is not just the actual
-faster operator, but the data inside the query plan pipeline is significantly
-reduced, and this has a significant influence on the performance of the next
-operator in line, `Filter` in this case. In general, less operators and lower
-actual hits lead to less data in query plan pipline, and faster execution time
-of query plan. 
+The most important thing that changed is that the query plan is now using the
+`ScanAllByLabel` operator instead of the `ScanAll` operator. That means that the
+nodes will be searched based on labels, and the actual search space will be
+reduced. Next, notice the `ACTUAL HITS` got down from 14k to 9k nodes. This also
+did split the total execution time into half (check the `ABSOLUTE TIME`). It is
+not only a faster operator that influenced that, but also the fact that the data
+inside the query plan pipeline is significantly reduced. That has a significant
+influence on the performance of the next operator in line, `Filter` in this
+case. In general, less operators and lower actual hits lead to less data in data
+pipeline, and faster execution time of query plan. 
 
 `Filter` still needs to be applied on the actual bigger chunk of nodes. The
 search spaces can be limited even further by introducing the [label-property
-index](../fundamentals/indexes#label-propery-index). 
+index](/fundamentals/indexes#label-propery-index). 
 
 
-Here is an example: 
-
+Let's create the index:
+```cypher
+CREATE INDEX ON :Transfer(year);
 ```
-CREATE INDEX ON :Transfer(year); 
-memgraph> PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
+
+Now, let's profile the query again:
+```
+memgraph> PROFILE  MATCH (n:Transfer {year:1992}) RETURN n;
+```
+
+Here is the query profile:
+```
 +-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
 | OPERATOR                                        | ACTUAL HITS                                     | RELATIVE TIME                                   | ABSOLUTE TIME                                   |
 +-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
@@ -271,11 +241,22 @@ memgraph> PROFILE  MATCH (n:Transfer{year:1992}) RETURN n;
 +-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
 ```
 
-Again the `ScanAllByLabel` operator was replaced with the more efficient operator `ScanAllByLabelPropertyValue` operator. Ideally, you would like to have the most scan operators of this type. The `ACTUAL` hits got down from 9k nodes to just 148 nodes. `ABSOLUTE TIME` went from 8 milliseconds in the initial version to less than a milisecond.  
+Again the `ScanAllByLabel` operator was replaced with the more efficient
+operator `ScanAllByLabelPropertyValue` operator. Ideally, you would like to have
+the most scan operators of this type. The `ACTUAL` hits got down from 9k nodes
+to just 148 nodes. `ABSOLUTE TIME` went from 8 milliseconds in the initial
+version to less than a milisecond.  
 
-The `MERGE` query also depends on the scan operators to fetch if the nodes exist in the database. If you do not have proper indexes set, the operation looks like this: 
+The `MERGE` query also depends on the scan operators to fetch if the nodes exist
+in the database. 
+
+If you do not have proper indexes set, the plan for this query: 
+```cypher
+memgraph> PROFILE MERGE (p:Player {name:"Pele"}) RETURN p;
 ```
-memgraph> PROFILE MERGE (p:Player{name:"Pele"}) RETURN p;
+
+Looks like this:
+```
 +------------------------------------+------------------------------------+------------------------------------+------------------------------------+
 | OPERATOR                           | ACTUAL HITS                        | RELATIVE TIME                      | ABSOLUTE TIME                      |
 +------------------------------------+------------------------------------+------------------------------------+------------------------------------+
@@ -293,12 +274,16 @@ memgraph> PROFILE MERGE (p:Player{name:"Pele"}) RETURN p;
 +------------------------------------+------------------------------------+------------------------------------+------------------------------------+
 ```
 
-Again, the `ScanAll` operator takes all the nodes and filters them. If you take a closer look at `RELATIVE TIME`, it is 80% of the total cost of the query. 
+Again, the `ScanAll` operator takes all the nodes and filters them. If you take
+a closer look at `RELATIVE TIME`, it is 80% of the total cost of the query. 
 
 Adding a label-property index changes the execution of this query: 
 
 ```
-memgraph> PROFILE MERGE (p:Player{name:"Pele"}) RETURN p;
+memgraph> PROFILE MERGE (p:Player {name:"Pele"}) RETURN p;
+```
+
+```
 +-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
 | OPERATOR                                        | ACTUAL HITS                                     | RELATIVE TIME                                   | ABSOLUTE TIME                                   |
 +-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
@@ -323,7 +308,7 @@ features such as [index hinting](/querying/clauses/index-hinting) and [analyze
 graph](/querying/clauses/analyze-graph) can help do that automatically.
 
 
-## Cyphermorphism
+### Cyphermorphism
 
 
 When writing longer query chains, try to keep them as compact as possible. 
