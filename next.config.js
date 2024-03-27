@@ -2968,7 +2968,12 @@ module.exports = withNextra({
         source: '/help-center/errors/conflicting-transactions',
         destination: '/help-center/errors/transactions',
         permanent: true
-      }                           
+      },
+      {
+        source: '/configuration/experimental-replication',
+        destination: '/configuration/replication/experimental-replication',
+        permanent: true
+      }                             
     ];
   },
 });
