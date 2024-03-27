@@ -350,7 +350,81 @@ you can achieve much more optimized way of using the traversal algorithms.
 Examples from Mrma's video
 
 ### Cartesian product queries consuming too much memory
-left branch is cached ->
-a lot of rows produced from left branch of Cartesian can cause memory overhead
 
-switch branches; if that doesn't help turn off cartesian
+Cartesian product is by default enabled in Memgraph and it enforces the usage of
+the `Cartesian` operator.
+
+Let's say we create the following dataset consisting of 1001 nodes where each
+node has a property `id`:
+```cypher
+FOREACH (i in range(1, 1000) | CREATE (:Node {id: i}));
+```
+
+Here is an example of a query on that dataset which utilizes the `Cartesian`
+operator:
+
+```cypher
+MATCH (n) 
+MATCH (m) 
+WHERE n.id > 500 and m.id > 500 
+RETURN n, m;
+```
+
+If we profile the above query, we get:
+
+```
++---------------------+---------------------+---------------------+---------------------+
+| OPERATOR            | ACTUAL HITS         | RELATIVE TIME       | ABSOLUTE TIME       |
++---------------------+---------------------+---------------------+---------------------+
+| "* Produce {n, m}"  | 250001              | " 74.600388 %"      | " 20.998413 ms"     |
+| "* Cartesian"       | 250001              | " 21.847559 %"      | "  6.149620 ms"     |
+| "|\\"               | ""                  | ""                  | ""                  |
+| "| * Filter {n.id}" | 501                 | "  1.263678 %"      | "  0.355698 ms"     |
+| "| * ScanAll (n)"   | 1001                | "  0.271637 %"      | "  0.076460 ms"     |
+| "| * Once"          | 2                   | "  0.000375 %"      | "  0.000106 ms"     |
+| "* Filter {m.id}"   | 501                 | "  1.724720 %"      | "  0.485472 ms"     |
+| "* ScanAll (m)"     | 1001                | "  0.291143 %"      | "  0.081950 ms"     |
+| "* Once"            | 2                   | "  0.000500 %"      | "  0.000141 ms"     |
++---------------------+---------------------+---------------------+---------------------+
+```
+
+Notice how, in the first case, `ScanAll` operator has 1001 hits in the left
+branch and 1001 hits in the right branch. The `Cartesian` operator is filtering
+both its branches and therefore reduces the cardinality of the rows, before
+coming into the final operator `Produce` which streams the results.
+
+If the Cartesian product was disabled by setting `--cartesian-product-enabled`
+to `false`, this would be the result of the profile query:
+
+```
++--------------------+--------------------+--------------------+--------------------+
+| OPERATOR           | ACTUAL HITS        | RELATIVE TIME      | ABSOLUTE TIME      |
++--------------------+--------------------+--------------------+--------------------+
+| "* Produce {n, m}" | 250001             | " 19.075343 %"     | " 16.333268 ms"    |
+| "* Filter {n.id}"  | 250001             | " 65.714022 %"     | " 56.267649 ms"    |
+| "* ScanAll (n)"    | 500001             | " 14.875191 %"     | " 12.736886 ms"    |
+| "* Filter {m.id}"  | 501                | "  0.287328 %"     | "  0.246024 ms"    |
+| "* ScanAll (m)"    | 1001               | "  0.048061 %"     | "  0.041152 ms"    |
+| "* Once"           | 2                  | "  0.000056 %"     | "  0.000048 ms"    |
++--------------------+--------------------+--------------------+--------------------+
+```
+
+
+Without the Cartesian product, first `ScanAll` would have 1001 hits, but the
+second `ScanAll` would have 500001 hits. That's why Cartesian product is so
+powerful and by default, enabled in Memgraph.
+
+Still, **memory overhead** is a potential downside of the Cartesian product. The
+results produced from the left branch (first below `Cartesian` operator) are
+cached for further use after the results of the right branch are ready. If the
+left branch produces too many records, cache is being filled quickly, causing
+large memory consumption.
+
+To avoid such behavior, there are two options:
+1. **Switch the branches**: You can switch the order in which you're matching, so
+   the branch with lower number of records produces gets cached. 
+2. **Set `--cartesian-product-enabled` to `false`**: If both branches cache a lot of
+   results, then you can't avoid memory overhead by switching the branches. The
+   need for memory resources in that case is larger than the benefit of the
+   performance gained by using the `Cartesian` product, so it's best to [disable
+   it](/configuration/configuration-settings#during-runtime). 
