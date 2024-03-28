@@ -1,0 +1,212 @@
+---
+title: Text search
+description: Learn how to use text search and manage text indices in Memgraph.
+---
+
+import { Callout } from 'nextra/components'
+
+# Text search
+
+<Callout type="warning">
+
+Text search is an experimental feature introduced in Memgraph 2.15.1. To use it,
+start Memgraph with the `--experimental-enabled=text-search` flag.
+
+</Callout>
+
+Text search allows you to look up nodes with properties that contain specific content.
+For a node to be searchable, you first need to create a text index that applies
+to it.
+
+
+Text indices and search are powered by the
+[Tantivy](https://github.com/quickwit-oss/tantivy) full-text search engine.
+
+## Create text indices
+
+Text indices are created with the `CREATE TEXT INDEX` command. You need to give
+a name to the new index and specify which labels it should apply to.
+
+This statement creates a text index named `complianceDocuments` for nodes with
+the `Report` label:
+
+```cypher
+CREATE TEXT INDEX complianceDocuments ON :Report;
+```
+
+If you attempt to create an index with an existing name, the statement will fail.
+
+### What is indexed
+
+For any given node, if a text index applies to it, all its properties with text-indexable types (`String`, `Integer`, `Float`, or `Boolean`) are stored.
+
+## Show text indices
+
+To list all text indices in Memgraph, use the `SHOW INDEX INFO`
+[statement](/fundamentals/indexes#show-created-indexes).
+
+## Query text indices
+
+Querying text indices is done through query procedures.
+
+<Callout type="info">
+
+Unlike other index types, text indices are not used by the query planner.
+
+</Callout>
+
+
+### Search in specific properties
+
+The `text_search.search` procedure finds text-indexed nodes matching the given query.
+
+{<h3> Input: </h3>}
+
+- `index_name: String` - The text index to be searched.
+- `search_query: String` - The query applied to the text-indexed nodes.
+
+{<h3> Output: </h3>}
+
+- `node: Node` - A node in `index_name` matching the given `search_query`.
+
+{<h3> Usage: </h3>}
+
+The syntax for the `search_query` parameter is available
+[here](https://docs.rs/tantivy/latest/tantivy/query/struct.QueryParser.html).
+If the query contains property names, attach the `data.` prefix to them.
+
+The following query searches the `complianceDocuments` index for nodes with the
+value of `title` property containing `Rules2024`:
+
+```cypher
+CALL text_search.search("complianceDocuments", "data.title:Rules2024")
+YIELD node
+RETURN node;
+```
+
+### Search over all indexed properties
+
+The `text_search.search_all` procedure looks for text-indexed nodes where at
+least one property value matches the given query.
+
+Unlike `text_search.search`, this procedure searches over all properties, and
+there is no need to specify property names in the query.
+
+{<h3> Input: </h3>}
+
+- `index_name: String` - The text index to be searched.
+- `search_query: String` - The query applied to the text-indexed nodes.
+
+{<h3> Output: </h3>}
+
+- `node: Node` - A node in `index_name` matching the given `search_query`.
+
+{<h3> Usage: </h3>}
+
+The following query searches the `complianceDocuments` index for nodes where at
+least one property value contains `Rules2024`:
+
+```cypher
+CALL text_search.search_all("complianceDocuments", "Rules2024")
+YIELD node
+RETURN node;
+```
+
+### Regex search
+
+The `text_search.regex_search` procedure looks for text-indexed nodes where at
+least one property value matches the given regular expression (regex).
+
+{<h3> Input: </h3>}
+
+- `index_name: String` - The text index to be searched.
+- `search_query: String` - The regex applied to the text-indexed nodes.
+
+{<h3> Output: </h3>}
+
+- `node: Node` - A node in `index_name` matching the given `search_query`.
+
+{<h3> Usage: </h3>}
+
+Regex searches apply to all properties; do not include property names in the search query.
+
+The following query searches the `complianceDocuments` index for nodes where at
+least one property value satisfies the `wor.*s` regex, e.g. "works" and "words":
+
+```cypher
+CALL text_search.regex_search("complianceDocuments", "wor.*s")
+YIELD node
+RETURN node;
+```
+
+### Aggregations
+
+Aggregations allow you to perform calculations on text search results. By using
+them, you can efficiently summarize the results, calculate averages or totals,
+identify min/max values, and count indexed nodes that meet specific criteria.
+
+The `text_search.aggregate` procedure lets you define an aggregation and apply
+it to the results of a search query.
+
+{<h3> Input: </h3>}
+
+- `index_name: String` - The text index to be searched.
+- `search_query: String` - The query applied to the text-indexed nodes.
+- `aggregation_query: String` - The aggregation (JSON-formatted) to be applied
+    to the output of `search_query`.
+
+{<h3> Output: </h3>}
+
+- `aggregation: String` - JSON-formatted string with the output of aggregation.
+
+{<h3> Usage: </h3>}
+
+Aggregation queries and results are strings with Elasticsearch-compatible JSON
+format, where `"field"` corresponds to node properties. If the search or
+aggregation queries contain property names, attach the `data.` prefix to them.
+
+The following query counts all nodes in the `complianceDocuments` index:
+
+```cypher
+CALL text_search.regex_search(
+    "complianceDocuments",
+    "data.title:Rules2024",
+    '"count": {"value_count": {"field": "metadata.gid"}}'
+)
+YIELD aggregation
+RETURN aggregation;
+```
+
+## Drop text indices
+
+Text indices are dropped with the `DROP TEXT INDEX` command. You need to give
+the name of the index to be deleted.
+
+This statement drops the text index named `complianceDocuments`:
+
+```cypher
+DROP TEXT INDEX complianceDocuments;
+```
+
+If one attempts to delete an index with the same name twice, the statement will
+fail. 
+
+## Compatibility
+
+Being an experimental feature, text search only supports some usage modalities
+that are available in Memgraph. Refer to the table below for an overview:
+
+| Feature                 | Support   |
+|-------------------------|-----------|
+| Multitenancy            | yes       |
+| Durability              | yes       |
+| Storage modes           | yes (all) |
+| Replication             | no        |
+| Concurrent transactions | no        |
+
+<Callout type="warning">
+
+Disclaimer: For now, text search is not guaranteed to work correctly in use
+cases that involve concurrent transactions and replication.
+
+</Callout>
