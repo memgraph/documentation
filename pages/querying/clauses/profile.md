@@ -5,9 +5,9 @@ description: Leverage the PROFILE clause in Memgraph. Detailed guide categorizes
 
 # PROFILE clause
 
-When improving your query performance, one of the most important aspects is [`PROFILE`](./clauses/profile.md) 
-clause. The  profile clause will return detail information about the execution and how the [query plan ](./query-plan.mdx)
-is interacting with data.
+When improving your query performance, one of the most important aspects is
+`PROFILE` clause. The  profile clause will return detail information about the
+execution and how the [query plan](/querying/query-plan) is interacting with data.
 
 A simple example to illustrate the output:
 

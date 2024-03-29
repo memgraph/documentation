@@ -5,6 +5,7 @@ description: Learn best querying techniques for Memgraph.
 
 import { Card, Cards } from 'nextra/components'
 import GitHub from '/components/icons/GitHub'
+import { Callout } from 'nextra/components'
 
 # Querying best practices
 
@@ -18,16 +19,16 @@ amount of resources.
 Cypher is a declarative query language, meaning you write the query to describe
 **what data you want to get, not how to get it**. The Memgraph query engine is
 responsible for figuring out the best way to get the data. It generates a
-[**query plan**](/querying/query-plan), which is a set of operations that need
+[query plan](/querying/query-plan), which is a set of operations that need
 to be executed.
 
-The query plan is cost-based, which means that the query planner will try to
+The **query plan is cost-based**, which means that the query planner will try to
 find the most efficient way to execute the query. That includes finding the best
 way to filter, expand and return the data. 
 
 If you want to see how the query plan looks for a specific query, just use the
 [`EXPLAIN`](/querying/clauses/explain) clause before the query. Here is an
-example of a simple query:
+example:
 
 ```cypher
 EXPLAIN MERGE (p:Person {name: 'Angela'})
@@ -36,7 +37,7 @@ ON CREATE SET p.notFound = TRUE
 RETURN p.name, p.notFound, p.found;
 ```
 
-And its plan:
+And the generated query plan:
 ```
 +------------------------------------------+
 | QUERY PLAN                               |
@@ -59,18 +60,28 @@ And its plan:
 
 **The query plan should be read from the bottom to the top**. The data will be
 passed from the operator to the operator until it reaches the top operator,
-`Produce` in this case, which will return the data to the user. The process of
-data passing through the operators is called **data pipeline**. 
+`Produce` in this case, which will return the data to the user. **Data
+pipeline** defines all data passing through the operators.
 
-In order to improve query performance and data pipeline, you need to optimize
-the [query plan](querying/query-plan). 
+**To improve query performance and data pipeline, you need to optimize
+the query plan**. 
+
+
+<Cards>
+<div className="w-[260px]">
+    <Card
+    title="Read more about query plan"
+    href="/querying/query-plan"
+    />
+</div>
+</Cards>
 
 ## How to speed up query execution
 
 Before diving into the details of the query execution optimization, it is
 important to note that the **query performance may be slow in the parsing or
 planning phase**. To ensure that is not the case, you can run your query and use
-[query execution summary](/getting-started/cli#query-execution-time).
+the [query execution summary](/getting-started/cli#query-execution-time).
 
 ```
 Additional execution time info:
@@ -80,8 +91,8 @@ Additional execution time info:
   Query PLANNING time: 0.001479502 sec
 ```
 
-Based on the execution summary above, the focus should be on lowering the `PLAN
-EXECUTION time` part of the Query execution summary. 
+Based on the query execution summary above, the focus should be on lowering the
+`Query PLAN EXECUTION time`. 
 
 If you're using Memgraph Lab, it includes a Query execution summary by default
 in the UI. If you are using client libraries, execution summary objects are
@@ -90,19 +101,19 @@ guides](/client-libraries) for these details.
 
 ### Profiling queries
 
-Memgraph executes queries based on the generated query plan. Changing a single
+Memgraph executes queries based on the generated query plan. **Changing a single
 operator in a query plan can make a significant difference in data pipeline and
-query performance.
+query performance**.
 
-In order to understand the impact of each operator, you need to use the
-[`PROFILE`](/querying/clauses/profile) clause before the query. Here is an
-example of a simple query profile:
+To understand the impact of each operator, you need to use the
+[`PROFILE`](/querying/clauses/profile) clause before a query. Here is an example
+of a simple query:
 
 ```cypher
 PROFILE MATCH (n) RETURN n;
 ```
 
-Here is the output:
+Here is the profile output:
 ```
 +-----------------+-----------------+-----------------+-----------------+
 | OPERATOR        | ACTUAL HITS     | RELATIVE TIME   | ABSOLUTE TIME   |
@@ -118,8 +129,8 @@ means keeping `ACTUAL HITS` as low as possible. It represents the number of rows
 (nodes and relationships) that are processed by each operator. In this case, it
 is 14578 nodes that have been produced.
 
-To lower the data pipeline, you need to optimize the query plan. You can start
-with [indexing](#indexing) your data properly. 
+**To lower the data pipeline, you need to optimize the query plan**. You can
+start by [indexing](#indexing) your data properly. 
 
 ### Indexing
 
@@ -156,13 +167,17 @@ next operator in the query plan. The total number of nodes in the dataset is
 14578, and the `ScanAll` operator will take all the nodes from the database and
 pass it on to the next operator. 
 
-If you see a `ScanAll` operator in the query plan, you should consider creating
-an index. 
+**If you see a `ScanAll` operator in the query plan, you should consider
+creating an index**. 
 
 Take a look at the following query: 
 
-```txt
-memgraph> PROFILE  MATCH (n:Transfer {year:1992} ) RETURN n;
+```cypher
+PROFILE  MATCH (n:Transfer {year:1992}) RETURN n;
+```
+
+And its profile:
+```
 +------------------------------------+------------------------------------+------------------------------------+------------------------------------+
 | OPERATOR                           | ACTUAL HITS                        | RELATIVE TIME                      | ABSOLUTE TIME                      |
 +------------------------------------+------------------------------------+------------------------------------+------------------------------------+
@@ -177,22 +192,18 @@ In this example, the goal is to find the `:Transfer` node with the specific
 `year` property. The `Filter` operator is applied on the all nodes in the graph
 that are being produced by `ScanAll` operator. 
 
-The first optimization step would be to create a [label
-index](../fundamentals/indexes#label-index). This would allow the query to
-search just for a specific set of nodes.  
-
- 
-Let's first create a label index:
+The first optimization step would be to create a label index:
 ```cypher
 CREATE INDEX ON :Transfer;
 ```
+Because of label index, query will search just for a specific set of nodes.  
 
-Let's run the query again:
+Let's run the profile again:
 ```cypher
-memgraph> PROFILE  MATCH (n:Transfer {year:1992}) RETURN n;
+PROFILE MATCH (n:Transfer {year:1992}) RETURN n;
 ```
 
-And see how the profile looks now:
+And see how it looks now:
 ```
 +----------------------------------+----------------------------------+----------------------------------+----------------------------------+
 | OPERATOR                         | ACTUAL HITS                      | RELATIVE TIME                    | ABSOLUTE TIME                    |
@@ -208,26 +219,24 @@ The most important thing that changed is that the query plan is now using the
 `ScanAllByLabel` operator instead of the `ScanAll` operator. That means that the
 nodes will be searched based on labels, and the actual search space will be
 reduced. Next, notice the `ACTUAL HITS` got down from 14k to 9k nodes. This also
-did split the total execution time into half (check the `ABSOLUTE TIME`). It is
-not only a faster operator that influenced that, but also the fact that the data
-inside the query plan pipeline is significantly reduced. That has a significant
-influence on the performance of the next operator in line, `Filter` in this
-case. In general, less operators and lower actual hits lead to less data in data
-pipeline, and faster execution time of query plan. 
+split the total execution time into half (check the `ABSOLUTE TIME`). It is not
+only a faster operator that influenced that, but also the fact that the data
+inside the query plan pipeline is significantly reduced. That impacts the
+performance of the next operator in line, `Filter` in this case. In general, **a
+lower number of operators and less actual hits lead to less data in data
+pipeline, and faster execution time of query plan**. 
 
-`Filter` still needs to be applied on the actual bigger chunk of nodes. The
-search spaces can be limited even further by introducing the [label-property
-index](/fundamentals/indexes#label-propery-index). 
+In the above example, `Filter` still needs to be applied on 9438 nodes. The
+search space can be limited even further by introducing the label-property
+index:
 
-
-Let's create the index:
 ```cypher
 CREATE INDEX ON :Transfer(year);
 ```
 
 Now, let's profile the query again:
-```
-memgraph> PROFILE  MATCH (n:Transfer {year:1992}) RETURN n;
+```cypher
+PROFILE MATCH (n:Transfer {year:1992}) RETURN n;
 ```
 
 Here is the query profile:
@@ -241,18 +250,17 @@ Here is the query profile:
 +-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
 ```
 
-Again the `ScanAllByLabel` operator was replaced with the more efficient
-operator `ScanAllByLabelPropertyValue` operator. Ideally, you would like to have
-the most scan operators of this type. The `ACTUAL` hits got down from 9k nodes
-to just 148 nodes. `ABSOLUTE TIME` went from 8 milliseconds in the initial
-version to less than a milisecond.  
+The `ScanAllByLabel` operator was replaced with the more efficient
+ `ScanAllByLabelPropertyValue` operator. Ideally, you would have the most scan
+operators of this type. The `ACTUAL` hits got down from 9k nodes to just 148
+nodes. `ABSOLUTE TIME` went from 8 milliseconds in the initial version to less
+than a milisecond.  
 
 The `MERGE` query also depends on the scan operators to fetch if the nodes exist
-in the database. 
+in the database. If you do not have proper indexes set, the plan for this query: 
 
-If you do not have proper indexes set, the plan for this query: 
 ```cypher
-memgraph> PROFILE MERGE (p:Player {name:"Pele"}) RETURN p;
+PROFILE MERGE (p:Player {name: "Pele"}) RETURN p;
 ```
 
 Looks like this:
@@ -275,14 +283,14 @@ Looks like this:
 ```
 
 Again, the `ScanAll` operator takes all the nodes and filters them. If you take
-a closer look at `RELATIVE TIME`, it is 80% of the total cost of the query. 
-
+a closer look at `RELATIVE TIME`, it is 80% of the total cost of the query.
 Adding a label-property index changes the execution of this query: 
 
-```
-memgraph> PROFILE MERGE (p:Player {name:"Pele"}) RETURN p;
+```cypher
+PROFILE MERGE (p:Player {name: "Pele"}) RETURN p;
 ```
 
+Here is the profile:
 ```
 +-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+-------------------------------------------------+
 | OPERATOR                                        | ACTUAL HITS                                     | RELATIVE TIME                                   | ABSOLUTE TIME                                   |
@@ -304,20 +312,31 @@ There is no more `Filter` operator that took 80% of the cost of the query. Now,
 the actual cost comes from writing a node. 
 
 Besides creating indexes to decrease the data pipeline and improve search,
-features such as [index hinting](/querying/clauses/index-hinting) and [analyze
-graph](/querying/clauses/analyze-graph) can help do that automatically.
+features such as [index hinting](/fundamentals/indexes#index-hinting) and
+[analyze graph](/fundamentals/indexes#analyze-graph) can help do that
+automatically.
 
+<Cards>
+<div className="w-[240px]">
+    <Card
+    title="Read more about indexes"
+    href="/fundamentals/indexes"
+    />
+</div>
+</Cards>
 
 ### Cyphermorphism
 
+If you're looking for a longer path in your dataset, try to keep the query as
+compact as possible. Let's see what happens when you're matching a longer path
+(chain):
 
-When writing longer query chains, try to keep them as compact as possible. 
-
-Here is an example of longer query chains: 
-
-```
-
+```cypher
 EXPLAIN MATCH (n)-[r1]-(m)-[r2]-(l) RETURN *;
+```
+
+Here is the generated plan:
+```
 +-------------------------------------+
 | QUERY PLAN                          |
 +-------------------------------------+
@@ -328,25 +347,18 @@ EXPLAIN MATCH (n)-[r1]-(m)-[r2]-(l) RETURN *;
 | " * ScanAll (l)"                    |
 | " * Once"                           |
 +-------------------------------------+
-
 ```
 
-Your goal should be  *cyphermorphism*, i.e., ensure unique relationships are
-result of the `MATCH` operations.  Based on cyphermorphism there cannot be
-relationship `r1` that is the same as `r2` since they are in a different part of
-the chain pattern. 
+The `EdgeUniquenessFilter` was applied, meaning that relationships `r1` and `r2`
+must be unique. The query engine treats the following triplet syntax `(start
+node, edge, end node)` in the same way: 
 
-If you want a chained query where a specific pattern exists, it should be
-written that way. Notice how the `EdgeUniquenessFilter` was applied in this,
-meaning the relationships `r1` and `r2` need to be unique, and that means the
-data in the query pipeline is unique, and there are no duplicated nodes and
-relationships. 
-
-The query engine treats the following triplet syntax `(start node, edge, end
-node)` the same way: 
-
-```
+```cypher
 EXPLAIN MATCH (n)-[r1]-(m), (m)-[r2]-(l) RETURN *;
+```
+
+Here is the plan it generates:
+```
 +-------------------------------------+
 | QUERY PLAN                          |
 +-------------------------------------+
@@ -359,11 +371,18 @@ EXPLAIN MATCH (n)-[r1]-(m), (m)-[r2]-(l) RETURN *;
 +-------------------------------------+
 ```
 
-But if you are using the following syntax with multiple `MATCH` statements, it
-is different: 
+The `EdgeUniquenessFilter` was applied because of graph matching morphism called
+**cyphermorphism**, which ensures that all relationships matched by the same
+clause must be different.
 
+On the other hand, if the above query was split into two `MATCH` clauses:
+
+```cypher
+EXPLAIN MATCH (n)-[r1]-(m) MATCH (m)-[r2]-(l) RETURN *;
 ```
-EXPLAIN MATCH (n)-[r1]-(m)  MATCH (m)-[r2]-(l) RETURN *;
+
+The generated plan would look like this:
+```
 +--------------------------------+
 | QUERY PLAN                     |
 +--------------------------------+
@@ -373,12 +392,16 @@ EXPLAIN MATCH (n)-[r1]-(m)  MATCH (m)-[r2]-(l) RETURN *;
 | " * ScanAll (l)"               |
 | " * Once"                      |
 +--------------------------------+
-
 ```
 
-During parsing of a Cypher query, some clauses, such as multiple `MATCH`
-statements, split the query into multiple logical query parts. They are
-considered independent, so no uniqueness filter is applied.
+The above plan does not utilize `EdgeUniquenessFilter` operator anymore, leading
+to unexpected results, duplicated data in the data pipeline, and consequently,
+poor performance. 
+
+`EdgeUniquenessFilter` operator was not applied, because during query parsing,
+multiple `MATCH`, `MERGE`, `OPTIONAL MATCH`, `WITH` and `UNION` statements, split
+the query into multiple logical query parts. They are considered independent, so
+no uniqueness filter is applied.
 
 Here is the visualization of the process: 
 ```
@@ -386,16 +409,15 @@ MATCH (n) CREATE (m) WITH m MATCH (l)-[]-(m) RETURN l
 |                          |                        |
 |------- part 1 -----------+-------- part 2 --------|
 |                                                   |
-|-------------------- single query -----------------|
+|------------------ single query -------------------|
 ```
 
 The part 1 and part 2 are similar to separate queries, that share a common `m`
 variable. 
 
-The clauses that cause a query split are `MATCH,` `MERGE,` `OPTIONAL MATCH,`
-`WITH`, and `UNION.` This will lead to wrong results and more duplicated data in
-the query pipeline, which leads to poor performance. 
-
+When searching for a longer chain in the graph, you should be aware of
+cyphermorphism and make sure you utilize it. You can achieve that by writing a
+query that matches the exact pattern you need within the same clause.
 
 ### Query parametrization
 
@@ -405,12 +427,10 @@ query planner will try to generate multiple versions of the query plan and
 choose the optimal one. 
 
 After the optimal query plan is generated, it is cached and reused for the same
-query. 
-
-To enable query plan caching, use the query parameters as much as possible.
+query. **To utilize the benefits of the query plan caching, use query parameters
+as much as possible**.
 
 Here is an example of a query without query parameters:
-
 ```cypher
 CREATE (n:Node {id: 123}); 
 CREATE (n:Node {id: 154}); 
@@ -425,8 +445,9 @@ CREATE (n:Node {id: $id});
 CREATE (n:Node {id: $id});
 ```
 
-Memgraph query engine will try to cache the query plan without parameters, but
-To make this work, you should use the query parameters as much as possible.
+Memgraph query engine will try to cache the query plan even without the
+parameters. Still, **to ensure the best performance, use the query parameters
+whenever you can**.
 
 <Cards>
     <Card
@@ -554,8 +575,7 @@ handle complex graph queries, as these algorithms have been built into
 Memgraph's core. This eliminates the need for the overhead of business logic on
 the application side. There are four built-in deep path traversal algorithms:
 Depth-first search (DFS), Breadth-first search (BFS), Weighted Shortest Path and
-All Shortest Paths. Below are provided basic examples and usages of these
-algorithms. 
+All Shortest Paths. 
 
 <Cards>
     <Card
@@ -568,9 +588,6 @@ Deep path traversal algorithms play a crucial role in exploring and analyzing
 graph data. In Memgraph, a powerful graph database management system, optimizing 
 these algorithms can significantly enhance performance when dealing with 
 large-scale graph structures. 
-
-Let's dive into some strategies for optimizing traversal algorithms in Memgraph, 
-along with providing examples using Cypher queries.
 
 For example, let's take the following unoptimized query that traverses through the 
 European transportation network. Using the BFS algorithm, we'll find all of the cities 
@@ -590,6 +607,17 @@ Since we didn't provide any restrictions and filtering, the algorithm scans and
 traverses through entire dataset which can lead to slower performance on a larger 
 scale datasets.
 
+<Callout> 
+**Limit query memory usage** 
+
+It is a good practice to limit [query memory
+usage](/fundamentals/storage-memory-usage#control-query-memory-usage) before
+running deep path traversals, to avoid large memory consumption for unoptimized
+queries. Keep in mind that query execution memory monotonically grows in size
+during the execution, and it's freed once the query execution is done. Set a
+query limit to a value of about 80% of the available resource of your database
+instance.
+</Callout>
 
 #### Creating indexes
 Creating indexes on relevant properties can drastically speed up traversal queries 
@@ -604,12 +632,13 @@ This query creates an index on the property of nodes, enabling faster lookups
 during algorithm traversals.
 
 <Cards>
+<div className="w-[240px]">
     <Card
     title="Read more about indexing"
     href="/fundamentals/indexes"
     />
+</div>
 </Cards>
- 
 
 #### Filtering by relationship type
 
@@ -687,8 +716,7 @@ WHERE n.id > 500 and m.id > 500
 RETURN n, m;
 ```
 
-If we [profile](/querying/performance-optimization#profiling-queries) the above
-query, we get:
+If we profile the above query, we get:
 
 ```
 +---------------------+---------------------+---------------------+---------------------+
