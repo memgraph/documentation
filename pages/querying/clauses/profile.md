@@ -33,9 +33,9 @@ For every logical operator, the following info is provided:
 
 
 - `OPERATOR` &mdash; the name of the operator, just like in the output of an
-  `EXPLAIN` query.
-  Here is the [full list of operators](./query-plan#query-plan-operators). 
-  Each operator is usually based on the Cypher clauses used in the query.  
+  `EXPLAIN` query. Here is the [full list of
+  operators](/querying/query-plan#query-plan-operators). Each operator is
+  usually based on the Cypher clauses used in the query.  
 
 - `ACTUAL HITS` &mdash; the number of times a particular operator was pulled from. 
   This is similar to the number of objects being passed in the query. 
