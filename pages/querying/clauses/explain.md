@@ -1,12 +1,11 @@
 ---
 title: EXPLAIN clause
-description: Learn to effectively use the DELETE clause in Memgraph. Our comprehensive documentation ensures competent data management for graph computing.
+description: Learn to effectively use the EXPLAIN clause in Memgraph. Our comprehensive documentation ensures competent data management for graph computing.
 ---
 
 # EXPLAIN clause
 
-The EXPLAIN clause can be used to inspect a particular Cypher query in order to see its
-execution plan.
+The `EXPLAIN` clause can be used to inspect a particular Cypher query in order to see its [execution plan](/querying/query-plan).
 
 For example, the following query will return the execution plan:
 
@@ -23,6 +22,3 @@ EXPLAIN MATCH (n) RETURN n;
 |  * Once        |
 +----------------+
 ```
-
-For more information, check the [reference guide on inspecting
-queries](/querying/performance-optimization). 
