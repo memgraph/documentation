@@ -3,8 +3,6 @@ title: Query modules C++ API
 description: Get your hands on the API documentation for mgp.hpp, covering declarations of every function in the C++ API for implementing query modules.
 ---
 
-import { Callout } from 'nextra/components'
-
 # Query modules C++ API
 
 This is the API documentation for `mgp.hpp`, which contains declarations of all
@@ -2356,85 +2354,25 @@ Additionally, operator<< is overloaded for Type enum, and usage of this operator
 std::ostream &operator<<(std::ostream &os, const mgp::Type &type)
 ```
 
-## Database internals API
-
-This section describes C++ API methods for database operations beyond graph manipulation.
-
-### Text search
-
-<Callout type="warning">
-
-Text search is an experimental feature introduced in Memgraph 2.15.1. Refer to
-the [text search page](/configuration/text-search) for an overview of its
-capabilities.
-
-To use text search, start memgraph with the `--experimental-enabled=text-search`
-flag.
-
-</Callout>
-
-#### SearchTextIndex
-
-Search the named text index for the given query and get a list of the nodes
-whose text-indexed properties match the given query.
-
-```cpp
-List SearchTextIndex(
-    mgp_graph *memgraph_graph,
-    std::string_view index_name,
-    std::string_view search_query,
-    text_search_mode search_mode);
-```
-
-##### Input
-
-- `memgraph_graph`: the graph
-- `index_name`: the name of the given text index
-- `search_query`: the query with which to search the text index
-- `search_mode`: one of `SPECIFIED_PROPERTIES`, `REGEX`, and `ALL_PROPERTIES`
-
-#### AggregateOverTextIndex
-
-Aggregate over the results of the search over the named text index and get a
-JSON-formatted string with the results of the aggregation.
-
-```cpp
-List AggregateOverTextIndex(
-    mgp_graph *memgraph_graph,
-    std::string_view index_name,
-    std::string_view search_query,
-    std::string_view aggregation_query);
-```
-
-##### Input
-
-- `memgraph_graph`: the graph
-- `index_name`: the name of the given text index
-- `search_query`: the query with which to search the text index
-- `aggregation_query`: the query (JSON-format) with which to aggregate over
-  search results
-
 ## Exceptions
 
 During operation, the following exceptions may be thrown.
 
-| Exception                      | Message                                                  |
-| ------------------------------ | -------------------------------------------------------- |
-| `ValueException`               | various (handles unknown/unexpected types)               |
-| `NotFoundException`            | Node with ID [ID] not found!                             |
-| `NotEnoughMemoryException`     | Not enough memory!                                       |
-| `UnknownException`             | Unknown exception!                                       |
-| `AllocationException`          | Could not allocate memory!                               |
-| `InsufficientBufferException`  | Buffer is not sufficient to process procedure!           |
-| `IndexException`               | Index value out of bounds!                               |
-| `OutOfRangeException`          | Index out of range!                                      |
-| `LogicException`               | Logic exception, check the procedure signature!          |
-| `DeletedObjectException`       | Object is deleted!                                       |
-| `InvalidArgumentException`     | Invalid argument!                                        |
-| `InvalidIDException`           | Invalid ID!                                              |
-| `KeyAlreadyExistsException`    | Key you are trying to set already exists!                |
-| `ImmutableObjectException`     | Object you are trying to change is immutable!            |
-| `ValueConversionException`     | Error in value conversion!                               |
-| `SerializationException`       | Error in serialization!                                  |
-| `TextSearchException`          | various (indicates issues with the text search utility)  |
-
+| Exception                     | Message                                         |
+| ----------------------------- | ----------------------------------------------- |
+| `ValueException`              | various (handles unknown/unexpected types)      |
+| `NotFoundException`           | Node with ID [ID] not found!                    |
+| `NotEnoughMemoryException`    | Not enough memory!                              |
+| `UnknownException`            | Unknown exception!                              |
+| `AllocationException`         | Could not allocate memory!                      |
+| `InsufficientBufferException` | Buffer is not sufficient to process procedure!  |
+| `IndexException`              | Index value out of bounds!                      |
+| `OutOfRangeException`         | Index out of range!                             |
+| `LogicException`              | Logic exception, check the procedure signature! |
+| `DeletedObjectException`      | Object is deleted!                              |
+| `InvalidArgumentException`    | Invalid argument!                               |
+| `InvalidIDException`          | Invalid ID!                                     |
+| `KeyAlreadyExistsException`   | Key you are trying to set already exists!       |
+| `ImmutableObjectException`    | Object you are trying to change is immutable!   |
+| `ValueConversionException`    | Error in value conversion!                      |
+| `SerializationException`      | Error in serialization!                         |

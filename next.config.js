@@ -1373,17 +1373,17 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/analyze-graph',
-        destination: '/fundamentals/indexes#analyze-graph',
+        destination: '/querying/performance-optimization',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/inspecting-queries',
-        destination: '/querying/clauses/explain',
+        destination: '/querying/performance-optimization',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/profiling-queries',
-        destination: '/querying/best-practices#profiling-queries',
+        destination: '/querying/performance-optimization',
         permanent: true
       },
       {
@@ -2386,27 +2386,27 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-guides-overview/explain-profile',
-        destination: '/querying/clauses/explain',
+        destination: '/querying/performance-optimization',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/inspecting-queries',
-        destination: '/querying/clauses/explain',
+        destination: '/querying/performance-optimization',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/profiling-queries',
-        destination: '/querying/best-practices#profiling-queries',
+        destination: '/querying/performance-optimization',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/inspecting-queries',
-        destination: '/querying/clauses/explain',
+        destination: '/querying/performance-optimization',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/profiling-queries',
-        destination: '/querying/best-practices#profiling-queries',
+        destination: '/querying/performance-optimization',
         permanent: true
       },
       {
@@ -2958,27 +2958,11 @@ module.exports = withNextra({
         source: '/advanced-algorithms/available-algorithms/convert',
         destination: '/querying/functions#conversion-functions',
         permanent: true
-      },      
-      {
+      },      {
         source: '/querying/functions#schema',
         destination: '/querying/schema',
         permanent: true
-      },
-      {
-        source: '/help-center/errors/conflicting-transactions',
-        destination: '/help-center/errors/transactions',
-        permanent: true
-      },
-      {
-        source: '/configuration/experimental-replication',
-        destination: '/configuration/replication/experimental-replication',
-        permanent: true
-      },
-      {
-        source: '/querying/performance-optimization',
-        destination: '/querying/best-practices',
-        permanent: true
-      }
+      }                       
     ];
   },
 });
