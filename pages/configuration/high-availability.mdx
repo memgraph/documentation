@@ -35,7 +35,7 @@ You can start the coordinator instance by specifying `--raft-server-id` and `--r
 queries related to high availability, so you cannot execute any data-oriented query on it. The Raft server port is used for the Raft protocol, which
 all coordinators use to ensure the consistency of the cluster's state. The replication instance is distinguished from the coordinator instance by
 specifying `--coordinator-server-port` flag. This port is used for RPC network communication that happens between coordinators and replication
-instances. When started by default replication instance is MAIN. All replication instances should be started with flag `--replication-restore-state-on-startup=true`
+instances. When started by default replication instance is MAIN. All replication instances should be started with flag `--restore-replication-state-at-startup`
 so that its role (MAIN or REPLICA) is restored on restart. The coordinator will ensure that no data inconsistency can happen during and after the instance's
 restart. Currently, all REPLICAs should be SYNC replicas to avoid branching from happening.
 Once all instances are started, the user can start registering replication instances.
@@ -149,41 +149,34 @@ Once the instance is down, in case it is REPLICA coordinator will try to contact
 always returns as REPLICA. MAIN can return as MAIN if failover doesn't succeed in the meantime or if it comes back up faster
 than `--instance-down-timeout-sec` timeout, which is set.
 
-If the current MAIN is down more than `--instance-down-timeout-sec`, at that point, failover starts. From alive REPLICAs coordinator chooses from one of the REPLICAs a new potential MAIN. 
-This instance is a potential MAIN as failover can still fail. Before promoting REPLICA to MAIN, the coordinator sends RPC request to each alive REPLICA
-to stop listening to the old MAIN.  Once each alive REPLICA acknowledges that it stopped listening to the old MAIN,
-the coordinator sends an RPC request to the potential new MAIN, which is still in REPLICA state, to promote itself to the MAIN instance with info
-about other REPLICAs to which it will replicate data. Once that request is successful, MAIN can start replication to the other instances.
+If the instance is MAIN, at that point, failover starts. From alive REPLICAs coordinator chooses a new potential MAIN. 
+The coordinator first contacts each alive REPLICA to stop listening to the old MAIN and start
+listening to the potential new MAIN. Once each alive REPLICA acknowledges that it stopped listening to the old MAIN,
+the coordinator sends an RPC request to the potential new MAIN, which is still in REPLICA state, to promote itself to the MAIN instance and
+sends all instances from the cluster to which the new MAIN will replicate data. If the instance is down at the moment, the new MAIN will establish 
+a connection later when it comes back up and recover it to the correct state.
+In RPC, request new potential MAIN gets UUID which REPLICAs are ready to listen to.
 
-Once the old MAIN gets back up, the coordinator sends an RPC request to demote the old MAIN to REPLICA. 
+Once the old MAIN gets back up, an RPC request is sent to demote MAIN to REPLICA, and a new RPC request is sent for REPLICA to start listening to 
+the new MAIN.
 
 The coordinator tracks at all times which instance was the last MAIN. 
 
 ### Old MAIN getting back to the cluster
 If, at a certain point new MAIN dies while the old MAIN is still not demoted to REPLICA, both instances might get back up as MAIN.
 Old MAIN will get demoted to REPLICA, while new MAIN will stay as MAIN or also be demoted to REPLICA, depending on fact whether 
-failover in the meantime has succeeded or not.
+failover has succeeded or not.
 
+### Demoting MAIN to REPLICA
+When MAIN is demoted to REPLICA it can happen that MAIN gets demoted, but setting now new REPLICA to listen to the current MAIN fails. If
+that happens, the coordinator will retry every `--instance-health-check-frequency-sec` to set up REPLICA to start listening to the current MAIN.
 
-### How REPLICA knows which MAIN to listen
-Each REPLICA has UUID of MAIN it listens. That means if, at one point, network partition happens and the coordinator can't talk to MAIN, but 
-MAIN can talk to each REPLICA, we will have a network partition. From the coordinator's point of view that MAIN is unavailable.
-That is the reason why before failover happens to a new MAIN, each REPLICA gets a new UUID that no current MAIN has. Before failover happens
-coordinator generates a new UUID, which the new MAIN will get to use once each alive replica acknowledges it received a new UUID. In RPC
-request to promote itself to MAIN, the REPLICA instance also receives the generated UUID.
-
-### Demoting old MAIN to REPLICA
-When old MAIN rejoins the cluster, the coordinator sends two RPC requests in the given order:
-1. Demote MAIN to REPLICA
-2. Send the UUID of the new MAIN, which MAIN demoted to REPLICA should listen to
-If the MAIN gets demoted, but the RPC request to change the UUID of the new MAIN doesn't succeed, the coordinator will retry both actions until success.
 
 ### Replication concerns
-On failover, the current logic is to choose the first available instance from alive REPLICAs to promote to the new MAIN. For promotion to the MAIN
-to successfully happen, the new MAIN figures out if REPLICA is behind (has less up-to-date data) or has data that the new MAIN doesn't have.
-If REPLICA has data that MAIN doesn't have, in that case REPLICA is in a diverged-from-MAIN state. If at least one REPLICA is in diverged-from-MAIN
-state, failover won't succeed as MAIN can't replicate data to diverged-from-MAIN REPLICA.
 
+If at some point it happens that MAIN goes down, but REPLICA, which is chosen as the new MAIN, has less up-to-date data than other 
+REPLICAs, failover won't succeed as from MAINs perspective it cannot become new MAIN as it has some other instance which is more up to date
+and therefore diverged from the new MAIN.
 At that point, the best solution is to UNREGISTER the instance that has less up-to-date data, let failover succeed and set the instance back in the cluster.
 Another option is to drop data from an instance that is more up-to-date by shutting it down and deleting snapshots and WAL directories in 
 `--data-directory`.
@@ -196,7 +189,7 @@ happen automatically when the coordinator's ping to the instance passes. When th
 until a ping from the coordinator passes. When the coordinator realizes the once-MAIN instance is alive, it will choose between enabling writing on old MAIN
 or demoting it to REPLICA. The choice depends on whether there was any other MAIN instance chosen between the old MAIN's failure and restart.
 
-Since the instance can die and get back up, use `--replication-state-at-startup=true` to restore the last replication state. This configuration will restore the instance to
+Since the instance can die and get back up use `--replication-state-at-startup=true` to restore the last replication state. This configuration will restore the instance to
 the state it was last, and everything should function normally from that point on. If this flag is not set, every instance will restart as MAIN and that case is not handled.
 
 ## Handling errors
@@ -218,17 +211,17 @@ docker run  --name coord1 -p 7687:7687 -p 7444:7444 memgraph/memgraph-mage --bol
 
 ii.) Start instance1:
 ```plaintext
-docker run  --name instance1 -p 7688:7688 -p 7445:7444 memgraph/memgraph-mage --bolt-port=7688 --log-level=TRACE --data-directory=/tmp/mg_data_instance1 --log-file=/tmp/instance1.log --also-log-to-stderr --replication-restore-state-on-startup=true --coordinator-server-port=10011 --experimental-enabled=high-availability
+docker run  --name instance1 -p 7688:7688 -p 7445:7444 memgraph/memgraph-mage --bolt-port=7688 --log-level=TRACE --data-directory=/tmp/mg_data_instance1 --log-file=/tmp/instance1.log --also-log-to-stderr --replication-restore-state-on-startup --coordinator-server-port=10011 --experimental-enabled=high-availability
 ```
 
 iii.) Start instance2:
 ```plaintext
-docker run --name instance1 -p 7689:7689 -p 7446:7444 memgraph/memgraph-mage --bolt-port=7689 --log-level=TRACE --data-directory=/tmp/mg_data_instance2 --log-file=/tmp/instance2.log --also-log-to-stderr --replication-restore-state-on-startup=true --coordinator-server-port=10012 --experimental-enabled=high-availability
+docker run --name instance1 -p 7689:7689 -p 7446:7444 memgraph/memgraph-mage --bolt-port=7689 --log-level=TRACE --data-directory=/tmp/mg_data_instance2 --log-file=/tmp/instance2.log --also-log-to-stderr --replication-restore-state-on-startup --coordinator-server-port=10012 --experimental-enabled=high-availability
 ```
 
 iv.) Start instance3:
 ```plaintext
-docker run --name instance1 -p 7690:7690  -p 7447:7444 memgraph/memgraph-mage --bolt-port=7690 --log-level=TRACE --data-directory=/tmp/mg_data_instance3 --log-file=/tmp/instance3.log --also-log-to-stderr --replication-restore-state-on-startup=true --coordinator-server-port=10013 --experimental-enabled=high-availability
+docker run --name instance1 -p 7690:7690  -p 7447:7444 memgraph/memgraph-mage --bolt-port=7690 --log-level=TRACE --data-directory=/tmp/mg_data_instance3 --log-file=/tmp/instance3.log --also-log-to-stderr --replication-restore-state-on-startup --coordinator-server-port=10013 --experimental-enabled=high-availability
 ```
 
 ### 2. Register instances

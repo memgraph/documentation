@@ -296,7 +296,7 @@ to, only on the property. Also, enforcing a uniqueness constraint on a property
 will not create an index on that property. 
 
 Also, there are several features you can employ to [speed up query
-execution](/querying/best-practices), such as analysing the graph and
+execution](/querying/performance-optimization), such as analysing the graph and
 hinting at indexes.
 
 ### Does replication affect performance?
