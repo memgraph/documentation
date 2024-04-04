@@ -62,6 +62,6 @@ using `OPTIONAL` expansions, function calls, etc.
 
 ## DROP GRAPH
 
-Memgraph supports the [`DROP GRAPH`](/querying/clauses/drop-graph) query which deletes all the data, along with all the indices, constraints,
-triggers, and streams, in an efficient manner. 
+Memgraph supports the [`DROP GRAPH`](/querying/clauses/drop-graph) query that deletes all the data, along with all the indices, constraints,
+triggers, and streams in an efficient manner. 
 
