@@ -522,7 +522,7 @@ you can use the following query:
 DROP GRAPH;
 ```
 
-More examples are available [here](/querying/clauses/delete).
+More details are available at [`DROP GRAPH`](/querying/clauses/drop-graph) documentation.
 
 ### REMOVE
 
