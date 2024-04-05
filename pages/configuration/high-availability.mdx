@@ -17,28 +17,22 @@ Memgraph 2.15 introduced a high availability enterprise feature, which is only e
 A cluster is considered highly available if, at any point, there is some instance that can respond to a user query. Our high availability 
 relies on replication. The cluster consists of:
 - The MAIN instance on which the user can execute write queries
-- The REPLICA instances that can only respond to read queries and coordinators that manage the cluster state. 
-
-<Callout type="info">
-
-In the Memgraph 2.16 release, the cluster is highly available
-in the sense that there will always be a consistent MAIN instance on which the user can write, but the coordinator is implemented only as a single
-instance for which it is assumed that it cannot fail. Work is being done on introducing NuRaft to connect coordinator instances to a Raft cluster
-so that at any point, there is an active coordinator that can correctly manage cluster state.
-
-</Callout>
-
+- REPLICA instances that can only respond to read queries
+- COORDINATOR instances that manage the cluster state.
 
 ## Cluster management
 
-You can start the coordinator instance by specifying `--raft-server-id` and `--raft-server-port` flags. The coordinator instance only responds to
-queries related to high availability, so you cannot execute any data-oriented query on it. The Raft server port is used for the Raft protocol, which
-all coordinators use to ensure the consistency of the cluster's state. The replication instance is distinguished from the coordinator instance by
-specifying `--coordinator-server-port` flag. This port is used for RPC network communication that happens between coordinators and replication
-instances. When started by default replication instance is MAIN. All replication instances should be started with flag `--replication-restore-state-on-startup=true`
+Typical Memgraph's highly available cluster consists of 3 data instances (1 MAIN and 2 REPLICAS) and 3 coordinator instances backed up by Raft protocol. One coordinator instance
+is the leader whose job is to make sure there is always one writeable data instance (MAIN). Other two coordinator instances replicate changes done by leader coordinator in its
+own Raft log. Operations saved into Raft log are those which are related to cluster management. Memgraph doesn't have its own implementation of Raft protocol, 
+rather this task was offloaded to industry-proven library [NuRaft](https://github.com/eBay/NuRaft). You can start the coordinator instance by specifying `--coordinator-id` and 
+`--coordinator-port` flags. The coordinator instance only responds to
+queries related to high availability, so you cannot execute any data-oriented query on it. The coordinator port is used for the Raft protocol, which
+all coordinators use to ensure the consistency of the cluster's state. Data instances are distinguished from coordinator instances by
+specifying `--management-port` flag. This port is used for RPC network communication between coordinator and data
+instances. When started by default, data instance is MAIN. All data instances should be started with flag `--replication-restore-state-on-startup=true`
 so that its role (MAIN or REPLICA) is restored on restart. The coordinator will ensure that no data inconsistency can happen during and after the instance's
-restart. Currently, all REPLICAs should be SYNC replicas to avoid branching from happening.
-Once all instances are started, the user can start registering replication instances.
+restart. Once all instances are started, the user can start adding data instances to the cluster.
 
 <Callout type="info">
 
@@ -53,30 +47,38 @@ coordination in a fault-tolerant manner.
 ### Register instance
 
 Register instance query will result in several actions:
-1. The coordinator instance will connect to the replication instance 
-2. The coordinator instance will start pinging the replication instance every `--instance-health-check-frequency-sec` seconds to check 
-the status of the replication instance.
-3. Replication instance will be demoted from MAIN to REPLICA.
-4. Replication instance will start the replication server on `replicationSocketAddress` specified in the query to be in sync with MAIN.
-
-Both the coordinator and replication socket addresses need to be unique.
+1. The coordinator instance will connect to the data instance on the `management_server` network address.
+2. The coordinator instance will start pinging the data instance every `--instance-health-check-frequency-sec` seconds to check its status.
+3. Data instance will be demoted from MAIN to REPLICA.
+4. Data instance will start the replication server on `replication_server`.
 
 ```plaintext
-REGISTER INSTANCE instanceName ON coordinatorSocketAddress ( AS ASYNC ) ? WITH replicationSocketAddress ;
+REGISTER INSTANCE instanceName WITH CONFIG {"bolt_server": boltServer, "management_server": managementServer, "replication_server": replicationServer};
+```
+
+This operation will result in writing to the Raft log.
+
+### Add coordinator instance
+
+The user can choose any coordinator instance and connect other two (or more) coordinator instances to the cluster. This can be done before or after registering data instances,
+the order isn't important. 
+
+```plaintext
+ADD COORDINATOR coordinatorId WITH CONFIG {"bolt_server": boltServer, "coordinator_server": coordinatorServer}; 
 ```
 
 ### Set instance to MAIN
 
-Once all instances are registered, one replication instance should be promoted to MAIN. This can be achieved by using the following query:
+Once all data instances are registered, one data instance should be promoted to MAIN. This can be achieved by using the following query:
 
 ```plaintext
 SET INSTANCE instanceName to MAIN;
 ```
 
 This query will register all other instances as REPLICAs to the new MAIN. If one of the instances is unavailable, setting the instance to MAIN will not succeed.
-
 If there is already a MAIN instance in the cluster, this query will fail. 
 
+This operation will result in writing to the Raft log.
 
 ### Unregister instance
 
@@ -87,24 +89,24 @@ network communication could be set up incorrectly, etc. The user can remove the 
 UNREGISTER INSTANCE instanceName;
 ```
 
-At the moment of registration, the instance which you want to unregister must not be MAIN because unregistering MAIN could lead to the cluster which
-is in an inconsistent state. 
+At the moment of registration, the instance which you want to unregister must not be MAIN because unregistering MAIN could lead to the inconsistent cluster state. 
 
 The instance requested to be unregistered will also be unregistered from the current MAIN's REPLICA set.
 
 ### Show instances
 
-You can check the state of the whole cluster using `SHOW INSTANCES` query. The query will show what instances are visible in the cluster,
-which Raft port are they using (single coordinator for now), which coordinator port are they using, and are they considered alive from the coordinator's
-perspective and their role (are they MAIN, REPLICA, coordinator or unknown if not alive).
+You can check the state of the whole cluster using `SHOW INSTANCES` query. The query will show which instances are visible in the cluster,
+which network ports are they using for managing cluster state, and are they considered alive from the coordinator's
+perspective and their role (are they MAIN, REPLICA, coordinator or unknown if not alive). Currently we cannot know what is the health status of coordinators so the return value for
+health field will always be unknown.
 
 ```plaintext
 SHOW INSTANCES;
 ```
 ## Setting config for highly-available cluster
 
-There are several flags that you can use for managing the cluster. Flag `--coordinator-server-port` is used for distinguishing replication instances
-from coordinators. The provided flag needs to be unique. Setting a flag will create an RPC server on replication instances capable of 
+There are several flags that you can use for managing the cluster. Flag `--management-port` is used for distinguishing data instances
+from coordinators. The provided flag needs to be unique. Setting a flag will create an RPC server on data instances capable of 
 responding to the coordinator's RPC messages. 
 
 <Callout type="info">
@@ -115,14 +117,14 @@ for replication tasks.
 
 </Callout>
 
-Flags `--raft-server-id` and `--raft-server-port` need to be unique and specified on coordinator instances. They will cause the creation of a Raft 
+Flags `--coordinator-id` and `--coordinator-port` need to be unique and specified on coordinator instances. They will cause the creation of a Raft 
 server that coordinator instances use for communication. Flag `--instance-health-check-frequency-sec` specifies how often should leader coordinator
 check the status of the replication instance to update its status. Flag `--instance-down-timeout-sec` gives the user the ability to control how much time should
 pass before the coordinator starts considering the instance to be down. 
 
 <Callout type="info">
 
-Consider the instance to be down only if several consecutive pings fail because a single ping can fail because of a large number of different reasons. 
+Consider the instance to be down only if several consecutive pings fail because a single ping can fail because of a large number of different reasons in distributed systems.
 
 </Callout>
 
@@ -134,24 +136,20 @@ the flag to more than `--instance-down-timeout-sec`, as it is needed first to co
 
 ## Failover
 
-### Single coordinator
-Currently, failover is operated from the point of a single coordinator. The coordinator is not supposed to fail. If the coordinator fails best solution
-is to register each instance again and set the old instance, which was MAIN as MAIN.
-
-
 ### Failover procedure
+
 Every `--instance-health-check-frequency-sec` seconds, the coordinator contacts each instance. 
 The instance is not considered to be down for `--instance-down-timeout-sec`. Expectation currently is to set `--instance-health-check-frequency-sec`
 to be less than `--instance-down-timeout-sec` and for `--instance-down-timeout-sec to be multiplier` of `--instance-health-check-frequency-sec` with coefficiient N.
 Set the multiplier coefficient to be N>=2.
 
-Once the instance is down, in case it is REPLICA coordinator will try to contact it again every `--instance-health-check-frequency-sec`. REPLICA
+Once the instance is down, in case it is REPLICA, coordinator will try to contact it again every `--instance-health-check-frequency-sec`. REPLICA
 always returns as REPLICA. MAIN can return as MAIN if failover doesn't succeed in the meantime or if it comes back up faster
 than `--instance-down-timeout-sec` timeout, which is set.
 
-If the current MAIN is down more than `--instance-down-timeout-sec`, at that point, failover starts. From alive REPLICAs coordinator chooses from one of the REPLICAs a new potential MAIN. 
+If the current MAIN is down more than `--instance-down-timeout-sec`, at that point, failover starts. From alive REPLICAs coordinator chooses a new potential MAIN. 
 This instance is a potential MAIN as failover can still fail. Before promoting REPLICA to MAIN, the coordinator sends RPC request to each alive REPLICA
-to stop listening to the old MAIN.  Once each alive REPLICA acknowledges that it stopped listening to the old MAIN,
+to stop listening to the old MAIN. Once each alive REPLICA acknowledges that it stopped listening to the old MAIN,
 the coordinator sends an RPC request to the potential new MAIN, which is still in REPLICA state, to promote itself to the MAIN instance with info
 about other REPLICAs to which it will replicate data. Once that request is successful, MAIN can start replication to the other instances.
 
@@ -160,12 +158,14 @@ Once the old MAIN gets back up, the coordinator sends an RPC request to demote t
 The coordinator tracks at all times which instance was the last MAIN. 
 
 ### Old MAIN getting back to the cluster
+
 If, at a certain point new MAIN dies while the old MAIN is still not demoted to REPLICA, both instances might get back up as MAIN.
 Old MAIN will get demoted to REPLICA, while new MAIN will stay as MAIN or also be demoted to REPLICA, depending on fact whether 
 failover in the meantime has succeeded or not.
 
 
 ### How REPLICA knows which MAIN to listen
+
 Each REPLICA has UUID of MAIN it listens. That means if, at one point, network partition happens and the coordinator can't talk to MAIN, but 
 MAIN can talk to each REPLICA, we will have a network partition. From the coordinator's point of view that MAIN is unavailable.
 That is the reason why before failover happens to a new MAIN, each REPLICA gets a new UUID that no current MAIN has. Before failover happens
@@ -173,12 +173,14 @@ coordinator generates a new UUID, which the new MAIN will get to use once each a
 request to promote itself to MAIN, the REPLICA instance also receives the generated UUID.
 
 ### Demoting old MAIN to REPLICA
+
 When old MAIN rejoins the cluster, the coordinator sends two RPC requests in the given order:
 1. Demote MAIN to REPLICA
 2. Send the UUID of the new MAIN, which MAIN demoted to REPLICA should listen to
 If the MAIN gets demoted, but the RPC request to change the UUID of the new MAIN doesn't succeed, the coordinator will retry both actions until success.
 
 ### Replication concerns
+
 On failover, the current logic is to choose the first available instance from alive REPLICAs to promote to the new MAIN. For promotion to the MAIN
 to successfully happen, the new MAIN figures out if REPLICA is behind (has less up-to-date data) or has data that the new MAIN doesn't have.
 If REPLICA has data that MAIN doesn't have, in that case REPLICA is in a diverged-from-MAIN state. If at least one REPLICA is in diverged-from-MAIN
@@ -190,8 +192,7 @@ Another option is to drop data from an instance that is more up-to-date by shutt
 
 ## Instances' restart
 
-Memgraph operates under the assumption that the existing single coordinator instance cannot fail. Replication instances can fail both as MAIN and as REPLICA.
-When an instance that was REPLICA comes back, it won't accept updates from any instance until the coordinator updates its responsible peer. This should
+Data instances can fail both as MAIN and as REPLICA. When an instance that was REPLICA comes back, it won't accept updates from any instance until the coordinator updates its responsible peer. This should
 happen automatically when the coordinator's ping to the instance passes. When the MAIN instance comes back, any writing to the MAIN instance will be forbidden 
 until a ping from the coordinator passes. When the coordinator realizes the once-MAIN instance is alive, it will choose between enabling writing on old MAIN
 or demoting it to REPLICA. The choice depends on whether there was any other MAIN instance chosen between the old MAIN's failure and restart.
@@ -207,37 +208,54 @@ instances and the time needed to realize the instance is down.
 
 ## Example
 
-This example will show how to set up a highly available cluster in Memgraph using a single coordinator.
+This example will show how to set up a highly available cluster in Memgraph using 3 coordinators and 3 data instances.
 
 ### 1. Start all instances
 
-i.) Start coordinator:
+i.) Start coordinator1:
 ```plaintext
-docker run  --name coord1 -p 7687:7687 -p 7444:7444 memgraph/memgraph-mage --bolt-port=7687 --log-level=TRACE --data-directory=/tmp/mg_data_coord1 --log-file=/tmp/coord1.log --also-log-to-stderr --raft-server-id=1 --raft-server-port=10111 --experimental-enabled=high-availability
+docker run  --name coord1 -p 7687:7687 -p 7444:7444 memgraph/memgraph-mage --bolt-port=7687 --log-level=TRACE --data-directory=/tmp/mg_data_coord1 --log-file=/tmp/coord1.log --also-log-to-stderr --coordinator-id=1 --coordinator-port=10111 --experimental-enabled=high-availability
 ```
 
-ii.) Start instance1:
+ii.) Start coordinator2:
 ```plaintext
-docker run  --name instance1 -p 7688:7688 -p 7445:7444 memgraph/memgraph-mage --bolt-port=7688 --log-level=TRACE --data-directory=/tmp/mg_data_instance1 --log-file=/tmp/instance1.log --also-log-to-stderr --replication-restore-state-on-startup=true --coordinator-server-port=10011 --experimental-enabled=high-availability
+docker run  --name coord2 -p 7688:7688 -p 7445:7444 memgraph/memgraph-mage --bolt-port=7688 --log-level=TRACE --data-directory=/tmp/mg_data_coord2 --log-file=/tmp/coord2.log --also-log-to-stderr --coordinator-id=2 --coordinator-port=10112 --experimental-enabled=high-availability
 ```
 
-iii.) Start instance2:
+iii.) Start coordinator3:
 ```plaintext
-docker run --name instance1 -p 7689:7689 -p 7446:7444 memgraph/memgraph-mage --bolt-port=7689 --log-level=TRACE --data-directory=/tmp/mg_data_instance2 --log-file=/tmp/instance2.log --also-log-to-stderr --replication-restore-state-on-startup=true --coordinator-server-port=10012 --experimental-enabled=high-availability
+docker run  --name coord3 -p 7689:7689 -p 7446:7444 memgraph/memgraph-mage --bolt-port=7689 --log-level=TRACE --data-directory=/tmp/mg_data_coord3 --log-file=/tmp/coord3.log --also-log-to-stderr --coordinator-id=3 --coordinator-port=10113 --experimental-enabled=high-availability
 ```
 
-iv.) Start instance3:
+iv.) Start instance1:
 ```plaintext
-docker run --name instance1 -p 7690:7690  -p 7447:7444 memgraph/memgraph-mage --bolt-port=7690 --log-level=TRACE --data-directory=/tmp/mg_data_instance3 --log-file=/tmp/instance3.log --also-log-to-stderr --replication-restore-state-on-startup=true --coordinator-server-port=10013 --experimental-enabled=high-availability
+docker run  --name instance1 -p 7690:7690 -p 7447:7444 memgraph/memgraph-mage --bolt-port=7690 --log-level=TRACE --data-directory=/tmp/mg_data_instance1 --log-file=/tmp/instance1.log --also-log-to-stderr --replication-restore-state-on-startup=true --management-port=10011 --experimental-enabled=high-availability
+```
+
+v.) Start instance2:
+```plaintext
+docker run --name instance2 -p 7691:7691 -p 7448:7444 memgraph/memgraph-mage --bolt-port=7691 --log-level=TRACE --data-directory=/tmp/mg_data_instance2 --log-file=/tmp/instance2.log --also-log-to-stderr --replication-restore-state-on-startup=true --management-port=10012 --experimental-enabled=high-availability
+```
+
+vi.) Start instance3:
+```plaintext
+docker run --name instance3 -p 7692:7692  -p 7449:7444 memgraph/memgraph-mage --bolt-port=7692 --log-level=TRACE --data-directory=/tmp/mg_data_instance3 --log-file=/tmp/instance3.log --also-log-to-stderr --replication-restore-state-on-startup=true --management-port=10013 --experimental-enabled=high-availability
 ```
 
 ### 2. Register instances
 
-i.) Start communication with the coordinator with any Memgraph client on port 7687.
+i.) Start communication with any Memgraph client on any coordinator. Here we chose coordinator 1.
 ```plaintext
 mgconsole --port=7687
 ```
-ii.) Register all 3 instances as part of the cluster:
+ii.) Connect other two coordinator instances to the cluster.
+
+```plaintext
+ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "127.0.0.1:7688", "coordinator_server": "127.0.0.1:10112"};
+ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "127.0.0.1:7689", "coordinator_server": "127.0.0.1:10113"};
+```
+
+iii.) Register 3 data instances as part of the cluster:
 
 <Callout type="info">
 
@@ -246,34 +264,38 @@ Replace `<ip_address>` with the container's IP address. This is necessary for Do
 </Callout>
 
 ```plaintext
-REGISTER INSTANCE instance_1 ON '<ip_address_1>:10011' WITH '127.0.0.1:10001';
-REGISTER INSTANCE instance_2 ON '<ip_address_2>:10012' WITH '127.0.0.1:10002';
-REGISTER INSTANCE instance_3 ON '<ip_address_3>:10013' WITH '127.0.0.1:10003';
+REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "127.0.0.1:7687", "management_server": "127.0.0.1:10011", "replication_server": "127.0.0.1:10001"};
+REGISTER INSTANCE instance_2 WITH CONFIG {"bolt_server": "127.0.0.1:7688", "management_server": "127.0.0.1:10012", "replication_server": "127.0.0.1:10002"};
+REGISTER INSTANCE instance_3 WITH CONFIG {"bolt_server": "127.0.0.1:7689", "management_server": "127.0.0.1:10013", "replication_server": "127.0.0.1:10003"};
 ```
 
-iii.) Set instance_3 as MAIN:
+iv.) Set instance_3 as MAIN:
 ```plaintext
 SET INSTANCE instance_3 TO MAIN;
 ```
 
-iv.) Connect to the coordinator and check cluster state with `SHOW INSTANCES`;
+iv.) Connect to the leader coordinator and check cluster state with `SHOW INSTANCES`;
 
-| instance_name | raft_socket_address | coordinator_socket_address | alive | role        |
-| ------------- | ------------------- | -------------------------- | ----- | ----------- |
-| coordinator_1 | 127.0.0.1:10111     | ""                         | True  | coordinator |
-| instance_1    | ""                  | 127.0.0.1:10011            | True  | replica     |
-| instance_2    | ""                  | 127.0.0.1:10012            | True  | replica     |
-| instance_3    | ""                  | 127.0.0.1:10013            | True  | main        |
+| name          | raft_socket_address | coordinator_socket_address | health   | role        |
+| ------------- | ------------------- | -------------------------- | -------- | ----------- |
+| coordinator_1 | 127.0.0.1:10111     | ""                         | unknown  | coordinator |
+| coordinator_2 | 127.0.0.1:10112     | ""                         | unknown  | coordinator |
+| coordinator_3 | 127.0.0.1:10113     | ""                         | unknown  | coordinator |
+| instance_1    | ""                  | 127.0.0.1:10011            | up       | replica     |
+| instance_2    | ""                  | 127.0.0.1:10012            | up       | replica     |
+| instance_3    | ""                  | 127.0.0.1:10013            | up       | main        |
 
 
 ### 3. Check automatic failover
 
 Let's say that the current MAIN instance is down for some reason. After `--instance-down-timeout-sec` seconds, the coordinator will realize
-that and automatically promote the first alive REPLICA to become the new MAIN. The output of running `SHOW INSTANCES` could then look like:
+that and automatically promote the first alive REPLICA to become the new MAIN. The output of running `SHOW INSTANCES` on the leader coordinator could then look like:
 
-| instance_name | raft_socket_address | coordinator_socket_address | alive | role        |
-| ------------- | ------------------- | -------------------------- | ----- | ----------- |
-| coordinator_1 | 127.0.0.1:10111     | ""                         | True  | coordinator |
-| instance_1    | ""                  | 127.0.0.1:10011            | True  | main        |
-| instance_2    | ""                  | 127.0.0.1:10012            | True  | replica     |
-| instance_3    | ""                  | 127.0.0.1:10013            | False | unknown     |
+| instance_name | raft_socket_address | coordinator_socket_address | alive    | role        |
+| ------------- | ------------------- | -------------------------- | -------- | ----------- |
+| coordinator_1 | 127.0.0.1:10111     | ""                         | unknown  | coordinator |
+| coordinator_2 | 127.0.0.1:10112     | ""                         | unknown  | coordinator |
+| coordinator_3 | 127.0.0.1:10113     | ""                         | unknown  | coordinator |
+| instance_1    | ""                  | 127.0.0.1:10011            | up       | main        |
+| instance_2    | ""                  | 127.0.0.1:10012            | up       | replica     |
+| instance_3    | ""                  | 127.0.0.1:10013            | down     | unknown     |
