@@ -357,6 +357,11 @@ module.exports = withNextra({
         permanent: true
       },
       {
+        source: '/mage/query-modules/cpp/set-property',
+        destination: '/advanced-algorithms/available-algorithms/set_property',
+        permanent: true
+      },
+      {
         source: '/mage/algorithms/machine-learning-graph-analytics/temporal-graph-networks',
         destination: '/advanced-algorithms/available-algorithms/tgn',
         permanent: true
