@@ -1,0 +1,313 @@
+---
+title: Differences in Cypher implementation
+description: Learn the differences in the most common openCypher implementations and how to achieve quick workarounds in Memgraph.
+---
+
+import { Card, Cards } from 'nextra/components'
+import { Callout } from 'nextra/components'
+
+# Differences in Cypher implementations
+
+Memgraph implements the [openCypher](https://www.opencypher.org/) query
+language and aims to be as close as possible to the most commonly used openCypher implementations. Still, there are some differences in Memgraph Cypher implementation that enhance the user experience.
+
+## Difference from Neo4j's Cypher implementation
+
+The openCypher initiative stems from Neo4j's Cypher query language. Following is
+a list of the most important differences between Neo4j's and Memgraph's
+Cypher implementation is for users who are already familiar with Neo4j.
+
+### Indexes and constraints
+
+In Memgraph, indexes are not created in advance and creating constraints does not imply index creation. Memgraph supports label-property and label node indexes, node property existence and uniqueness constraints. 
+
+By default, Neo4j will create a range index for the `CREATE ... INDEX ...` command. Here is an example of such a query:
+```cypher
+CREATE INDEX node_range_index_name FOR (n:Person) ON (n.surname);
+```
+Memgraph does not support the same syntax. To create such an index in Memgraph, run:
+```cypher
+CREATE INDEX ON :Person(surname);
+```
+To create only label index in Memgraph, run the following query:
+```cypher
+CREATE INDEX ON :Person;
+```
+
+Memgraph does not support composite indexes. -> Track progress on [GitHub](https://github.com/memgraph/memgraph/issues/1214
+) and add a comment if you require such a feature.
+
+You can instruct the planner to use specific index(es) in Memgraph by using the syntax below:
+```cypher
+USING INDEX :Label1, :Label2 ...;
+USING INDEX :Label(property) ...;
+```
+
+Besides index hinting, the [`ANALYZE GRAPH`](/fundamentals/indexes#analyze-graph) feature can also be applied to [optimize performance](/querying/best-practices).
+
+<Cards>
+    <Card
+    title="Read more about indexes"
+    href="/fundamentals/indexes"
+    />
+</Cards>
+
+To **create a node property existence constraint** in Neo4j, you would run the following query:
+```cypher
+CREATE CONSTRAINT author_name
+FOR (author:Author) REQUIRE author.name IS NOT NULL;
+```
+To achieve the same in Memgraph, change the syntax to:
+```cypher
+CREATE CONSTRAINT ON (author:Author) ASSERT EXISTS (author.name);
+```
+
+To **drop a node property existence constraint** in Neo4j, you would run the following query:
+```cypher
+DROP CONSTRAINT author_name;
+```
+To achieve the same in Memgraph, change the syntax to:
+```cypher
+DROP CONSTRAINT ON (author:Author) ASSERT EXISTS (author.name);
+```
+
+To **create a node property uniqueness constraint** in Neo4j, you would run the following query:
+```cypher
+CREATE CONSTRAINT book_isbn
+FOR (book:Book) REQUIRE book.isbn IS UNIQUE
+```
+To achieve the same in Memgraph, change the syntax to:
+```cypher
+CREATE CONSTRAINT ON (book:Book) ASSERT book.isbn IS UNIQUE;
+```
+
+To **drop a node property uniqueness constraint** in Neo4j, you would run the following query:
+```cypher
+DROP CONSTRAINT book_isbn;
+```
+To achieve the same in Memgraph, change the syntax to:
+```cypher
+DROP CONSTRAINT ON (book:Book) ASSERT book.isbn IS UNIQUE;
+```
+
+<Cards>
+    <Card
+    title="Read more about constraints"
+    href="/fundamentals/constraints"
+    />
+</Cards>
+
+### Shortest path
+
+In Neo4j, to find the shortest possible path between two nodes, you would use the `shortestPath` algorithm:
+
+```cypher
+MATCH p=shortestPath(
+(:Person {name:"Keanu Reeves"})-[*]-(:Person {name:"Tom Hanks"})
+)
+RETURN p
+```
+
+Memgraph offers fast deep-path traversals as [built-in graph algorithms](/advanced-algorithms/built-in-graph-algorithm), including BFS, DFS, WSP and ASP algorithms. That is a bit different from the `shortestPath` and `allShortestPaths` functions you might be used to, but with such algorithms being built in, Memgraph offers fast traversals. Here is an example of how you would rewrite the above query to work in Memgraph:
+
+```cypher
+MATCH p=(:Person {name:"Keanu Reeves"})-[*BFS]-(:Person {name:"Tom Hanks"})
+RETURN p
+```
+
+### NOT label expression
+In Neo4j, you can use the `NOT` label expression (`!`):
+```cypher
+MATCH (:Person {name:'Tom Hanks'})-[r:!ACTED_IN]->(m:Movie)
+Return type(r) AS type, m.title AS movies
+```
+In Memgraph, such a construct is not supported, but there is still a workaround:
+```cypher
+MATCH (p:Person {name:'Tom Hanks'})-[r]->(m:Movie)
+WHERE type(r) != "ACTED_IN"
+RETURN type(r) AS type, m.title AS movies;
+```
+
+### Search for patterns of a fixed length
+
+In Neo4j, to search for patterns of a fixed length, you would use the following construct:
+```cypher
+MATCH (tom:Person {name:'Tom Hanks'})--{2}(colleagues:Person)
+RETURN DISTINCT colleagues.name AS name, colleagues.born AS bornIn
+ORDER BY bornIn
+LIMIT 5
+```
+Memgraph does not support such a construct, but since it has built-in traversals, you can achieve the same with the [depth-first search](/advanced-algorithms/built-in-graph-algorithms#depth-first-search) (DFS) algorithm:
+```cypher
+MATCH (tom:Person {name:'Tom Hanks'})-[*2]-(colleagues:Person)
+RETURN DISTINCT colleagues.name AS name, colleagues.born AS bornIn
+ORDER BY bornIn
+LIMIT 5
+```
+
+Similarly, to match a graph for patterns of a variable length, you would run the following query in Neo4j:
+```cypher
+MATCH (p:Person {name:'Tom Hanks'})--{1,4}(colleagues:Person)
+RETURN DISTINCT colleagues.name AS name, colleagues.born AS bornIn
+ORDER BY bornIn, name
+LIMIT 5
+```
+In Memgraph, again use DFS:
+```cypher
+MATCH (p:Person {name:'Tom Hanks'})-[*1..4]-(colleagues:Person)
+RETURN DISTINCT colleagues.name AS name, colleagues.born AS bornIn
+ORDER BY bornIn, name
+LIMIT 5
+```
+
+### Unsupported constructs
+
+{<h4>CALL subqueries in transactions</h4>}
+Such a query is not supported in Memgraph, but you can use the [periodic](/advanced-algorithms/available-algorithms/periodic) module to execute a query periodically in batches.
+
+{<h4>EXISTS subqueries</h4>}
+Such clause is not supported in Memgraph, but you can use `exists()` [pattern function](/querying/functions#pattern-functions) with the `WHERE` clause to [filter with pattern expressions](/querying/clauses/where#17-filter-with-pattern-expressions). 
+
+The following constructs are not yet supported in Memgraph:
+- **`EXISTS` subquery with `WHERE` clause** -> Track progress on [GitHub](https://github.com/memgraph/memgraph/issues/1483) and add a comment if you require such a feature.
+- **Nesting `EXISTS` subqueries** -> Track progress on [GitHub](https://github.com/memgraph/memgraph/issues/905) and add a comment if you require such a feature.
+- **`EXISTS` subquery outside of a `WHERE` clause** -> Track progress on [GitHub](https://github.com/memgraph/memgraph/issues/1308) and add a comment if you require such a feature.
+
+For all other unsupported constructs that you require, please open an issue on our [GitHub repository](https://github.com/memgraph/memgraph/issues). Learn more in our Community Call on [Subqueries & Patterns in Filtering Clauses](https://www.youtube.com/watch?v=QYFU5d_xLIs&list=PL7Eotag2rRhZssS4f11PKAHuCykMCljg3).
+
+{<h4>COUNT subqueries</h4>}
+Such a construct is not supported in Memgraph, but you can use `count()` [aggregation function](querying/functions#aggregation-functions) to count the number of non-null values returned by the expression. 
+
+{<h4>COLLECT subqueries</h4>}
+Such a construct is not supported in Memgraph, but you can use `collect()` [aggregation function](querying/functions#aggregation-functions) to return a single aggregated list from provided values.
+
+{<h4>Patterns in expressions</h4>}
+Patterns in expressions are supported in Memgraph in particular functions, like `exists(pattern)`.
+In other cases, Memgraph does not yet support patterns in functions, e.g. `size((n)-->())`.
+Most of the time, the same functionalities can be expressed differently in Memgraph
+using `OPTIONAL` expansions, function calls, etc.
+
+{<h4>Pattern comprehension</h4>}
+The following type of query is not yet supported in Memgraph:
+```cypher
+MATCH (keanu:Person {name: 'Keanu Reeves'})
+RETURN [(keanu)-->(b:Movie) WHERE b.title CONTAINS 'Matrix' | b.released] AS years
+```
+-> The work on this feature is in progress. Track it on [GitHub](https://github.com/memgraph/memgraph/pull/1827).
+
+{<h4>List comprehension</h4>}
+The following type of query is not yet supported in Memgraph:
+```cypher
+MATCH (keanu:Person {name:'Keanu Reeves'})
+RETURN [x IN keanu.resume WHERE x contains 'The Matrix'] AS matrixList
+```
+
+### Unsupported expressions
+
+{<h4>Cypher expressions</h4>}
+- Numerical:
+  - An octal `INTEGER` literal (starting with `0o`): `0o1372`, `0o5671`
+  - A `FLOAT` literal: `Inf`, `Infinity`, `NaN`
+- Boolean:
+  - Label and relationship type expressions: `(n:A|B)`, `()-[r:R1|R2]->()` -> Track progress on [GitHub](https://github.com/memgraph/memgraph/issues/1848) and add a comment if you require such a feature.
+
+{<h4>Conditional expressions (<code>CASE</code>)</h4>}
+- More than one value after `WHEN` operator: 
+  ```cypher
+  MATCH (n:Person)
+  RETURN
+  CASE n.eyes
+    WHEN 'blue'  THEN 1
+    WHEN 'brown', 'hazel' THEN 2
+    ELSE 3
+  END AS result, n.eyes
+  ```
+  Here is a workaround in Memgraph:
+  ```cypher
+  MATCH (n:Person)
+  RETURN
+  CASE
+  WHEN n.eyes='blue' THEN 1
+  WHEN n.eyes='brown' OR n.eyes='hazel' THEN 2
+  ELSE 3
+  END AS result, n.eyes;
+  ```
+  -> Track progress on [GitHub](https://github.com/memgraph/memgraph/issues/1853) and add a comment if you require such a feature.
+
+{<h4>Type predicate expressions</h4>}
+The following expression is not supported in Memgraph:
+```cypher
+UNWIND [42, true, 'abc'] AS val
+RETURN val, val IS :: INTEGER AS isInteger
+```
+Still, you can check the value type with the `valueType()` [scalar function](https://memgraph.com/docs/querying/functions#scalar-functions), which returns the value type of the object in textual format:
+```cypher
+UNWIND [42, true, 'abc'] AS val
+RETURN val, valueType(val) = "INTEGER"
+```
+
+### Unsupported data types
+
+- `POINT` -> Track progress on [GitHub](https://github.com/memgraph/memgraph/issues/1583) and add a comment if you require such a feature.
+- `ZONED DATETIME`, `ZONED TIME` -> Track progress on [GitHub](https://github.com/memgraph/memgraph/issues/612) and add a comment if you require such a feature.
+
+### Unsupported functions
+
+**Functions for converting data values**:
+
+- `toBooleanList()`
+- `toBooleanOrNull()`
+- `toFloatList()`
+- `toFloatOrNull()`
+- `toIntegerList()`
+- `toIntegerOrNull()`
+- `toStringList()`
+- `toStringOrNull()`
+
+**Predicate functions**:
+
+- `exists(n.property)` - can be expressed using `n.property IS NOT NULL`
+- `isEmpty()`
+
+**Scalar functions**:
+
+- `elementId()` - `id()` can be used instead
+- `length()` - `size()` can be used instead
+- `nullIf()`
+
+**Aggegating functions**:
+
+- `percentileCont()`, `percentileDisc()`
+- `stDev()`, `stDevP()`
+
+**Mathematical functions**:
+
+- `isNan()`
+- `cot()`
+- `degrees()`
+- `haversin()`
+- `radians()`
+
+**String functions**:
+
+- `normalize()`
+
+**Datetime functions**:
+
+- `datetime()`
+- `time()`
+
+
+## Memgraph's Cypher extension
+
+Besides implementing openCypher, Memgraph created various language extensions to provide an enhanced user experience. Here are some of the improvements:
+
+- [Deep-path traversals](/advanced-algorithms/built-in-graph-algorithms)
+- [`ANALYZE GRAPH`](/fundamentals/indexes#analyze-graph)
+- [MAGE algorithms library](/advanced-algorithms)
+- [Custom query modules](/custom-query-modules)
+
+
+<Callout type="info">
+For all other unsupported constructs that you require, please open an issue on our [GitHub repository](https://github.com/memgraph/memgraph/issues).
+</Callout>
