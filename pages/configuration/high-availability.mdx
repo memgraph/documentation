@@ -113,7 +113,7 @@ responding to the coordinator's RPC messages.
 
 RPC (Remote Procedure Call) is a protocol for executing functions on a remote
 system. RPC enables direct communication in distributed systems and is crucial
-for replication tasks.
+for replication and high availability tasks.
 
 </Callout>
 
@@ -136,32 +136,72 @@ the flag to more than `--instance-down-timeout-sec`, as it is needed first to co
 
 ## Failover
 
-### Failover procedure
+### Determining instance's health
 
 Every `--instance-health-check-frequency-sec` seconds, the coordinator contacts each instance. 
-The instance is not considered to be down for `--instance-down-timeout-sec`. Expectation currently is to set `--instance-health-check-frequency-sec`
+The instance is not considered to be down unless `--instance-down-timeout-sec` has passed and instance hasn't responded to coordinator in the meantime. Expectation currently is to set `--instance-health-check-frequency-sec`
 to be less than `--instance-down-timeout-sec` and for `--instance-down-timeout-sec to be multiplier` of `--instance-health-check-frequency-sec` with coefficiient N.
-Set the multiplier coefficient to be N>=2.
+Set the multiplier coefficient to be N>=2. For example, set `--instance-down-timeout-sec=5` and `--instance-health-check-frequency-sec=1` which will result in coordinator
+contacting each instance every 1 second and instance is considered dead after it doesn't respond for 5 times (5 seconds / 1 second).
 
-Once the instance is down, in case it is REPLICA, coordinator will try to contact it again every `--instance-health-check-frequency-sec`. REPLICA
-always returns as REPLICA. MAIN can return as MAIN if failover doesn't succeed in the meantime or if it comes back up faster
-than `--instance-down-timeout-sec` timeout, which is set.
+In case a REPLICA doesn't respond to health check, coordinator will try to contact it again every `--instance-health-check-frequency-sec`. When REPLICA instance rejoins cluster (comes back up), 
+it always rejoins as REPLICA. For MAIN instance there are two options. If it down for less than `--instance-down-timeout-sec`, it will rejoin as MAIN because it is still considered alive. If it is down for more than
+`--instance-down-timeout-sec`, failover procedure is initiated. Whether MAIN will rejoin as MAIN it depends on success of failvoer procedure. If failover procedure succeeds, now old MAIN
+will rejoin as REPLICA. If failover doesn't succeed, MAIN will rejoin as MAIN.
 
-If the current MAIN is down more than `--instance-down-timeout-sec`, at that point, failover starts. From alive REPLICAs coordinator chooses a new potential MAIN. 
-This instance is a potential MAIN as failover can still fail. Before promoting REPLICA to MAIN, the coordinator sends RPC request to each alive REPLICA
+
+### Failover procedure - high level description
+
+From alive REPLICAs coordinator chooses a new potential MAIN. More on details how new MAIN is chosen in next chapter.
+This instance is a potential MAIN as failover procedure can still fail due to various factors (all replicas being down, networking issues, etc). 
+Before promoting REPLICA to MAIN, the coordinator sends RPC request to each alive REPLICA
 to stop listening to the old MAIN. Once each alive REPLICA acknowledges that it stopped listening to the old MAIN,
 the coordinator sends an RPC request to the potential new MAIN, which is still in REPLICA state, to promote itself to the MAIN instance with info
-about other REPLICAs to which it will replicate data. Once that request is successful, MAIN can start replication to the other instances.
+about other REPLICAs to which it will replicate data. Once that request succeeds, new MAIN can start replication to the other instances and accept write queries.
 
-Once the old MAIN gets back up, the coordinator sends an RPC request to demote the old MAIN to REPLICA. 
 
-The coordinator tracks at all times which instance was the last MAIN. 
 
-### Old MAIN getting back to the cluster
+### Choosing new MAIN from available REPLICAs
 
-If, at a certain point new MAIN dies while the old MAIN is still not demoted to REPLICA, both instances might get back up as MAIN.
-Old MAIN will get demoted to REPLICA, while new MAIN will stay as MAIN or also be demoted to REPLICA, depending on fact whether 
-failover in the meantime has succeeded or not.
+When failover is happening some REPLICAs can be down also. From list of alive REPLICAs, new MAIN is chosen. First, leader coordinator contacts each alive REPLICA to get info about each database's last commit timestamp.
+In case of enabled multi-tenancy, from each instance coordinator will get info on all databases and their last commit timestamp. Currently coordinator chooses instance to become new MAIN by comparing latest commit timestamp 
+only of default database for every instance. If multiple instances have same latest commit timestamp, instance which was added earlier will be chosen as new MAIN.  
+
+
+### Providing atomicity of action
+
+To ensure atomicity of each action, the leader coordinator wraps each of the following actions with locks:
+ - registering of replica instance
+ - unregistering of replica instance
+ - setting instance to MAIN
+ - failover procedure
+ - force reset of cluster (described in next chapter)
+
+Special mechanism includes opening lock before each action starts, and closing it once it is complete. Closed lock means action is fully completed. If due to some failure action doesn't complete fully,
+cluster enters state of force reset where action is undoed. State of truth is what is stored in RAFT log accross all coordinators.
+
+
+### Force reset of cluster
+
+The leader coordinator executes force reset of cluster if action didn't fully complete. Failure can happen anywhere, i.e. in case of setting instance to MAIN,
+the RPC request to promote itself to MAIN to instance can succeed, but writing to RAFT log that instance was promoted can fail. 
+Force reset includes demoting every alive instance to REPLICA, and executing failover procedure once again. Such procedure is needed as currently cluster doesn't track 
+where action failed exactly, but only whether it fully succeded. RAFT log is taken as source of truth at all times. In case the leader coordinator dies while executing 
+force reset, next coordinator which is elected as leader will continue executing force reset. Action is executed until it succeeds.
+
+If instance is down at point of force reset, the leader coordinator writes in RAFT log that instance needs to be demoted to REPLICA once it comes back up.
+
+If all instanes are down at point of force reset, action won't succed as new MAIN instance can't be chosen.
+
+
+### Old MAIN rejoining the to the cluster
+
+Once the old MAIN gets back up, the coordinator sends an RPC request to demote the old MAIN to REPLICA. The coordinator tracks at all times which instance was the last MAIN. 
+
+The leader coordinator sends two RPC requests in the given order to demote old MAIN to REPLICA:
+1. Demote MAIN to REPLICA RPC request
+2. A request to store the UUID of the current MAIN, which the old MAIN, now acting as a REPLICA instance, must listen to.
+If the MAIN gets demoted, but the RPC request to change the UUID of the new MAIN doesn't succeed, the coordinator will retry both actions until success.
 
 
 ### How REPLICA knows which MAIN to listen
@@ -172,26 +212,19 @@ That is the reason why before failover happens to a new MAIN, each REPLICA gets 
 coordinator generates a new UUID, which the new MAIN will get to use once each alive replica acknowledges it received a new UUID. In RPC
 request to promote itself to MAIN, the REPLICA instance also receives the generated UUID.
 
-### Demoting old MAIN to REPLICA
-
-When old MAIN rejoins the cluster, the coordinator sends two RPC requests in the given order:
-1. Demote MAIN to REPLICA
-2. Send the UUID of the new MAIN, which MAIN demoted to REPLICA should listen to
-If the MAIN gets demoted, but the RPC request to change the UUID of the new MAIN doesn't succeed, the coordinator will retry both actions until success.
 
 ### Replication concerns
 
-On failover, the current logic is to choose the first available instance from alive REPLICAs to promote to the new MAIN. For promotion to the MAIN
-to successfully happen, the new MAIN figures out if REPLICA is behind (has less up-to-date data) or has data that the new MAIN doesn't have.
-If REPLICA has data that MAIN doesn't have, in that case REPLICA is in a diverged-from-MAIN state. If at least one REPLICA is in diverged-from-MAIN
-state, failover won't succeed as MAIN can't replicate data to diverged-from-MAIN REPLICA.
+#### Force sync of data 
 
-At that point, the best solution is to UNREGISTER the instance that has less up-to-date data, let failover succeed and set the instance back in the cluster.
-Another option is to drop data from an instance that is more up-to-date by shutting it down and deleting snapshots and WAL directories in 
-`--data-directory`.
+When choosing new MAIN in failover procedure from list of available REPLICAs, the instance with latest commit timestamp for default database is chosen as new MAIN. In case some other instance
+had more up to date data when failover procedure was choosing new MAIN, but was down at that point, when rejoining cluster, the new MAIN instance sends force sync RPC request to such instance. Force sync
+RPC request deletes all current data on all databases on given instance and accepts data from current MAIN. This way cluster will always follow current MAIN. 
+
 
 ## Instances' restart
 
+### Data instances' restart
 Data instances can fail both as MAIN and as REPLICA. When an instance that was REPLICA comes back, it won't accept updates from any instance until the coordinator updates its responsible peer. This should
 happen automatically when the coordinator's ping to the instance passes. When the MAIN instance comes back, any writing to the MAIN instance will be forbidden 
 until a ping from the coordinator passes. When the coordinator realizes the once-MAIN instance is alive, it will choose between enabling writing on old MAIN
@@ -199,6 +232,14 @@ or demoting it to REPLICA. The choice depends on whether there was any other MAI
 
 Since the instance can die and get back up, use `--replication-state-at-startup=true` to restore the last replication state. This configuration will restore the instance to
 the state it was last, and everything should function normally from that point on. If this flag is not set, every instance will restart as MAIN and that case is not handled.
+Furthermore it is imporant for data instances to have `--data-recovery-on-startup=true` which recovers data from data directory. It also recovers imporant information
+for each database on data instance. This way MAIN can establish connection to REPLICAs and replicate data to correct databases.
+
+### Coordinator instances's restart
+
+In case coordinator instance dies and it is restarted, it loses all data from RAFT log. Information about other coordinators and their endpoints is recovered from `high_availability/coordinator`  directory stored under 
+top level `--data-directory` folder. When coordinator rejoins it will communicate with other coordinators, and receive update from current leader. It is imporant that at least one coordinator is alive at all the time
+so that data from RAFT log is not lost.
 
 ## Handling errors
 
