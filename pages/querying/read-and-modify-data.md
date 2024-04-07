@@ -513,7 +513,16 @@ MATCH p = (:X)-->()-->()-->()
 DETACH DELETE p;
 ```
 
-More examples are available [here](/querying/clauses/delete).
+### DROP GRAPH
+
+To delete all the data, along with all indices, constraints, triggers, and streams, in an efficient manner,
+you can use the following query:
+
+```cypher
+DROP GRAPH;
+```
+
+More details are available at [`DROP GRAPH`](/querying/clauses/drop-graph) documentation.
 
 ### REMOVE
 
