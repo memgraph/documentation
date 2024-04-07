@@ -1,0 +1,119 @@
+---
+title: Transactions
+description: Learn about transaction errors that can occur in Memgraph and what to do when you encounter them. 
+---
+
+import { Callout } from 'nextra/components'
+
+# Transaction errors
+
+While working with Memgraph, you can encounter various transaction errors. Here are some of them, along with the instructions on how to handle them:
+- [Conflicting transactions](#conflicting-transaction)
+- [Transaction timeout](#transaction-timeout)
+
+## Conflicting transactions
+
+<Callout type="info">
+If you are encountering issues with conflicting transactions or serialization errors, we're here to help. Join the conversation on <a href="https://www.discord.gg/memgraph" target="_blank">Discord</a> for support.
+</Callout>
+
+### Error messages
+
+1. **Unable to commit due to serialization error.**
+2. **Cannot resolve conflicting transactions.**
+
+### Handling conflicting transaction and serialization error
+
+Conflicting transactions and serialization errors are, in a sense, the same error that usually occurs when concurrent data 
+imports and transactions try to work on the same data points simultaneously. This situation can occur in both testing 
+and production environments. It's important that your code anticipates and handles these errors. 
+
+A common scenario that triggers an error is when two nodes in a graph are being updated by two
+different transactions attempting to add relationships between them at the same moment, changing a property, label, etc. 
+The same applies to relationships as well. In essence, it is a write-write conflict.
+For example, if both transactions try to add a relationship at the same time to 
+an identical node, the error will happen. 
+
+To address these problems, consider the following strategies:
+
+
+- **Retry the transaction:** The basic approach would be to retry the transaction
+  that failed. This can be done by catching the error and then retrying the
+  transaction. This is a simple and effective way to handle the error.
+
+  Here is an example of how to do it in Python via Neo4j client:
+
+  ```python
+  def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1, jitter=0.1):
+    session = GraphDatabase.driver("bolt://localhost:7687", auth=("", "")).session()
+    for attempt in range(max_retries):
+        try:
+            with session.begin_transaction() as tx:
+                tx.run(query, {"batch": create_list})
+                tx.commit()
+                break
+        except TransientError as te:
+            jitter = random.uniform(0, jitter) * initial_wait_time 
+            wait_time = initial_wait_time * (backoff_factor ** attempt) + jitter
+            print(f"Commit failed on attempt {attempt+1}. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+        except Exception as e:
+            print(f"Failed to execute transaction: {e}")
+            session.close()
+            raise e
+  ```
+
+  Keep in mind that adjusting the `max_retries`, `initial_wait_time`, `backoff_factor`, and `jitter` is important to avoid overloading the system with retries. 
+  For more information on how to handle retries and adjust parameters, please refer to the respective [client documentation](../../client-libraries.mdx) since examples will vary based on different clients.
+
+- **Understand the client you are using:** 
+  Neo4j clients in managed transactions have built-in logic to retry transactions that fail due to 
+  serialization errors automatically. Typically, a timeout is associated with these retries, after which 
+  the client will forward the error to the application code. Developers must be
+  aware of this and implement additional error handling as required.
+
+  Here is an example of Managed API in Python Neo4j Driver:
+
+  ```python
+  def process_chunk_managed_API(query, create_list):
+    driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
+    with driver.session(max_transaction_retry_time=180.0, initial_retry_delay=0.2, retry_delay_multiplier=1.1, retry_delay_jitter_factor=0.1) as session:
+        session.execute_write(lambda tx: tx.run(query, {"batch": create_list}))
+    driver.close()
+  ```
+
+  Again, for the details of how specific clients work, please refer to the respective [client documentation](../../client-libraries.mdx).
+
+
+- **Avoid conflicts**: This can be done by
+  implementing application-level logic to prevent concurrent transactions from
+  modifying the same data points. This strategy can significantly reduce the
+  likelihood of encountering errors. It will also lead to better performance 
+  since the system is not spending time resolving conflict. 
+
+Handling serialization errors effectively is essential for maintaining a smooth
+user experience and ensuring the reliability of your application. Implementing
+robust error handling and conflict avoidance mechanisms can mitigate the impact
+of these errors.
+
+While some client drivers may handle serialization errors by retrying transactions, 
+developers should not rely solely on this mechanism. Always include comprehensive error handling 
+in your application to address cases where the error persists beyond the retry logic. 
+
+
+## Transaction timeout
+
+### Error message
+
+1. **Transaction was asked to abort because of transaction timeout.**
+
+### Handling transaction timeout
+
+The transaction that is running exceeds the query execution timeout that is set in the Memgraph configuration to 600 seconds by default.
+To change that, update the flag `--query-execution-timeout-sec` value to a value that is large enough to handle the transaction (query) you're running or set it to 0 for no limit.
+
+Here are the [instructions](/configuration/configuration-settings#using-flags-and-config-file) on how to update the configuration. 
+<Callout type="info">
+If you weren't able to find the error, please submit it through a <a href="https://support.memgraph.com"
+target="_blank">Support Ticket</a> so we can look into it and get back to you.
+</Callout>

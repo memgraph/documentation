@@ -63,6 +63,11 @@ Memgraph comes with a couple of queries that allow you to safely make a backup
 of the files containing its data. Memgraph supports replication and allows you
 to create a cluster of nodes running Memgraph instances.
 
+### [Experimental Replication](/configuration/replication/experimental-replication)
+
+When distributing data across several instances, Memgraph uses replication. This
+has now been expanded to include not only user data but system data as well. 
+
 ## [Security](/configuration/security)
 
 Memgraph comes with the option of granting, denying, or revoking a certain set
@@ -76,3 +81,9 @@ Get information about the running instance.
 
 Memgraph uses SSL (Secure Sockets Layer) protocol for establishing an
 authenticated and encrypted connection to a database instance.
+
+## [System configuration](/configuration/system-configuration)
+
+Improving Memgraph's efficiency may occasionally require fine-tuning settings at
+the operating system level. Such modifications are directly related to the rules
+that control resource distribution and the management of processes.
