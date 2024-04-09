@@ -88,7 +88,7 @@ session.run('CREATE (alice:Person {name: $name, age: $ageValue})',
 To do the same with labels:
 
 ```python
-session.run('CREATE (alice:$label {name: $name, age: $ageValue}', 
+session.run('CREATE (alice:$label {name: $name, age: $ageValue}',
             label='Person', name='Alice', ageValue=22)).consume()
 ```
 
@@ -136,3 +136,59 @@ predicates. In this case, anything that is not true is interpreted as being fals
 
 The [`exists()`](/querying/functions#pattern-functions) function cannot be used with the CASE clause.
 
+## Pattern comprehension
+
+Pattern comprehension is a syntactic construct available in Cypher for creating a list based on matchings of a pattern.
+A pattern comprehension matches the specified pattern like a normal `MATCH` clause, with predicates like a normal `WHERE` clause,
+but yields a custom projection as specified.
+
+Currently, pattern comprehensions are supported in `RETURN` and `WITH` clauses.
+
+For example, if you want to get person names along with the release years and titles of all the movies with `Matrix` in their title that they
+are related to the query would be:
+
+```cypher
+MATCH (n:Person)
+RETURN n.name,
+    [(n)-->(b:Movie) WHERE b.title CONTAINS 'Matrix' | b.released] AS years,
+    [(n)-->(c:Movie) WHERE c.title CONTAINS 'Matrix' | c.title] AS titles;
+```
+
+For example, the following query finds person names with more than 5 characters, treats them as `actors`, and extracts the titles and releases years
+of the movies they're linked to (provided those movies were released after the year 2000), then returns all this information as lists,
+alongside the corresponding actor's name.
+
+```cypher
+MATCH (n:Person) WHERE size(n.name) > 5
+WITH
+    n AS actor,
+    [(n)-->(m) WHERE m.released > 2000 | m.title] AS titles,
+    [(n)-->(m) WHERE m.released > 2000 | m.released] AS years
+RETURN actor.name, years, titles;
+```
+
+The whole predicate, including the `WHERE` keyword, is optional and may be omitted.
+
+### Storing lists as properties
+It is possible to store homogenous lists of simple values as properties.
+For example, the following query creates a list from the title properties of the Movie nodes connected to `Keanu Reeves`.
+It then sets that list as a resume property on `Keanu Reeves`.
+
+```cypher
+MATCH (keanu:Person {name: 'Keanu Reeves'})
+WITH keanu,[(keanu)-->(b:Movie) | b.title] AS movieTitles
+SET keanu.resume = movieTitles
+RETURN keanu.resume
+```
+
+It is not, however, possible to store heterogeneous lists as properties.
+For example, the following query, which tries to set a list including both the title and the released properties as the resume property
+of `Keanu Reeves` will fail.
+This is because the title property values are stored as STRING values, while the released property values are stored as INTEGER values.
+
+```cypher
+MATCH (keanu:Person {name: 'Keanu Reeves'})
+WITH keanu,[(keanu)-->(b:Movie) | b.title]  + [(keanu)-->(b:Movie) | b.released] AS movieTitles
+SET keanu.resume = movieTitles
+RETURN keanu.resume
+```
