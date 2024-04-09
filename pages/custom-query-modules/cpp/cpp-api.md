@@ -3,6 +3,8 @@ title: Query modules C++ API
 description: Get your hands on the API documentation for mgp.hpp, covering declarations of every function in the C++ API for implementing query modules.
 ---
 
+import { Callout } from 'nextra/components'
+
 # Query modules C++ API
 
 This is the API documentation for `mgp.hpp`, which contains declarations of all
@@ -2354,25 +2356,312 @@ Additionally, operator<< is overloaded for Type enum, and usage of this operator
 std::ostream &operator<<(std::ostream &os, const mgp::Type &type)
 ```
 
+### ExecutionHeaders
+
+Represents the headers/columns of the query being executed through the C++ API.
+
+#### Constructors
+
+```cpp
+ExecutionHeaders(mgp_execution_headers *headers);
+```
+
+This constructor is automatically called during the query execution logic if the user needs headers.
+
+#### Member functions
+
+| Name         | Description                                                         |
+| ------------ | ------------------------------------------------------------------- |
+| `Size`       | Returns the size of the headers/columns.                            |
+| `At`         | Returns the header at a specific index.                             |
+| `begin`      | Returns an iterator at the beginning position for the headers.      |
+| `cbegin`     | Returns a const iterator at the beginning position for the headers. |
+| `end`        | Returns an iterator at the ending position for the headers.         |
+| `cend`       | Returns a const iterator at the ending position for the headers.    |
+
+##### Size
+
+Returns the size of the headers/columns.
+
+```cpp
+  size_t Size() const
+```
+
+##### At
+
+Returns the header at a specific index.
+
+```cpp
+  std::string At(size_t index) const
+```
+
+##### begin
+
+Returns an iterator at the beginning position for the headers.
+
+```cpp
+  Iterator begin()
+```
+
+##### cbegin
+
+Returns a const iterator at the beginning position for the headers.
+
+```cpp
+  Iterator cbegin()
+```
+
+##### end
+
+Returns an iterator at the ending position for the headers.
+
+```cpp
+  Iterator end()
+```
+
+##### cend
+
+Returns a const iterator at the ending position for the headers.
+
+```cpp
+  Iterator cend()
+```
+
+#### Operators
+
+| Name         | Description                                                         |
+| ------------ | ------------------------------------------------------------------- |
+| `operator[]` | Returns a header at a specific index.                               |
+
+##### operator[]
+
+Returns a header at a specific index.
+
+```cpp
+  std::string_view operator[](size_t index) const
+```
+
+### QueryExecution
+
+Represents the object which is able to execute a query through the C++ API.
+
+#### Constructors
+
+```cpp
+QueryExecution(mgp_graph *graph);
+```
+
+Query execution needs the `mgp_graph` object because it stores the database context.
+
+#### Member functions
+
+| Name           | Description                                 |
+| -------------- | ------------------------------------------- |
+| `ExecuteQuery` | Executes the query through the C++ API.     |
+
+##### ExecuteQuery
+
+Executes the query through the C++ API.
+
+```cpp
+  ExecutionResult ExecuteQuery(std::string_view query, Map params = Map()) const
+```
+
+```cpp
+  ExecutionResult ExecuteQuery(std::string query, Map params = Map()) const
+```
+
+
+### ExecutionResult
+
+Represents the object which is able to handle the pulling logic of the query being executed through the C++ API.
+
+#### Constructors
+
+```cpp
+ExecutionResult(mgp_execution_result *result, mgp_graph *graph);
+```
+
+The `result` object is stored in the `ExecutionResult` to handle the pulling logic. Database context is also needed.
+
+#### Member functions
+
+| Name          | Description                                            |
+| ------------- | ------------------------------------------------------ |
+| `Headers`     | Returns the headers/columns of the executing query.    |
+| `PullOne`     | Returns one result row from the executing query.       |
+
+##### Headers
+
+Returns the headers/columns of the executing query.
+
+```cpp
+  ExecutionHeaders Headers() const
+```
+
+##### PullOne
+
+Returns one result row from the executing query.
+
+```cpp
+  std::optional<ExecutionRow> PullOne() const
+```
+
+### ExecutionRow
+
+Represents a row in the database pulled from the query being executed through the C++ API.
+
+#### Constructors
+
+```cpp
+ExecutionRow(mgp_map *row);
+```
+
+The `mgp_map` objects stores the header/column names as keys, and the corresponding values (`mgp_value`) as map values. 
+
+#### Member functions
+
+| Name         | Description                                    |
+| ------------ | ---------------------------------------------- |
+| `Size`       | Returns the size of the row.                   |
+| `Empty`      | Returns true if the row has no values.         |
+| `At`         | Returns a row value from the given column key. |
+| `KeyExists`  | Returns true if the column exists in a row.    |
+| `Values`     | Returns a map of column keys and row values.   |
+
+##### Size
+
+Returns the size of the row.
+
+```cpp
+  size_t Size() const
+```
+
+##### Empty
+
+Returns true if the row has no values.
+
+```cpp
+  bool Empty() const
+```
+
+##### At
+
+Returns a row value from the given column key.
+
+```cpp
+  Value At(std::string_view key) const
+```
+
+##### KeyExists
+
+Returns true if the column exists in a row.
+
+```cpp
+  bool KeyExists(std::string_view key) const
+```
+
+##### Values
+
+Returns a map of column keys and row values.
+
+```cpp
+  Map Values() const
+```
+
+#### Operators
+
+| Name         | Description                                    |
+| ------------ | ---------------------------------------------- |
+| `operator[]` | Returns a row value from the given column key. |
+
+##### operator[]
+
+Returns a row value from the given column key.
+
+```cpp
+  Value operator[](std::string_view key) const
+```
+
+## Database internals API
+
+This section describes C++ API methods for database operations beyond graph manipulation.
+
+### Text search
+
+<Callout type="warning">
+
+Text search is an experimental feature introduced in Memgraph 2.15.1. Refer to
+the [text search page](/configuration/text-search) for an overview of its
+capabilities.
+
+To use text search, start memgraph with the `--experimental-enabled=text-search`
+flag.
+
+</Callout>
+
+#### SearchTextIndex
+
+Search the named text index for the given query and get a list of the nodes
+whose text-indexed properties match the given query.
+
+```cpp
+List SearchTextIndex(
+    mgp_graph *memgraph_graph,
+    std::string_view index_name,
+    std::string_view search_query,
+    text_search_mode search_mode);
+```
+
+##### Input
+
+- `memgraph_graph`: the graph
+- `index_name`: the name of the given text index
+- `search_query`: the query with which to search the text index
+- `search_mode`: one of `SPECIFIED_PROPERTIES`, `REGEX`, and `ALL_PROPERTIES`
+
+#### AggregateOverTextIndex
+
+Aggregate over the results of the search over the named text index and get a
+JSON-formatted string with the results of the aggregation.
+
+```cpp
+List AggregateOverTextIndex(
+    mgp_graph *memgraph_graph,
+    std::string_view index_name,
+    std::string_view search_query,
+    std::string_view aggregation_query);
+```
+
+##### Input
+
+- `memgraph_graph`: the graph
+- `index_name`: the name of the given text index
+- `search_query`: the query with which to search the text index
+- `aggregation_query`: the query (JSON-format) with which to aggregate over
+  search results
+
 ## Exceptions
 
 During operation, the following exceptions may be thrown.
 
-| Exception                     | Message                                         |
-| ----------------------------- | ----------------------------------------------- |
-| `ValueException`              | various (handles unknown/unexpected types)      |
-| `NotFoundException`           | Node with ID [ID] not found!                    |
-| `NotEnoughMemoryException`    | Not enough memory!                              |
-| `UnknownException`            | Unknown exception!                              |
-| `AllocationException`         | Could not allocate memory!                      |
-| `InsufficientBufferException` | Buffer is not sufficient to process procedure!  |
-| `IndexException`              | Index value out of bounds!                      |
-| `OutOfRangeException`         | Index out of range!                             |
-| `LogicException`              | Logic exception, check the procedure signature! |
-| `DeletedObjectException`      | Object is deleted!                              |
-| `InvalidArgumentException`    | Invalid argument!                               |
-| `InvalidIDException`          | Invalid ID!                                     |
-| `KeyAlreadyExistsException`   | Key you are trying to set already exists!       |
-| `ImmutableObjectException`    | Object you are trying to change is immutable!   |
-| `ValueConversionException`    | Error in value conversion!                      |
-| `SerializationException`      | Error in serialization!                         |
+| Exception                      | Message                                                  |
+| ------------------------------ | -------------------------------------------------------- |
+| `ValueException`               | various (handles unknown/unexpected types)               |
+| `NotFoundException`            | Node with ID [ID] not found!                             |
+| `NotEnoughMemoryException`     | Not enough memory!                                       |
+| `UnknownException`             | Unknown exception!                                       |
+| `AllocationException`          | Could not allocate memory!                               |
+| `InsufficientBufferException`  | Buffer is not sufficient to process procedure!           |
+| `IndexException`               | Index value out of bounds!                               |
+| `OutOfRangeException`          | Index out of range!                                      |
+| `LogicException`               | Logic exception, check the procedure signature!          |
+| `DeletedObjectException`       | Object is deleted!                                       |
+| `InvalidArgumentException`     | Invalid argument!                                        |
+| `InvalidIDException`           | Invalid ID!                                              |
+| `KeyAlreadyExistsException`    | Key you are trying to set already exists!                |
+| `ImmutableObjectException`     | Object you are trying to change is immutable!            |
+| `ValueConversionException`     | Error in value conversion!                               |
+| `SerializationException`       | Error in serialization!                                  |
+| `TextSearchException`          | various (indicates issues with the text search utility)  |
+

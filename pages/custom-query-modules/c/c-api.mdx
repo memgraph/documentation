@@ -41,6 +41,9 @@ Memgraph in order to use them.
 | **[mgp_local_time_parameters](#mgp_local_time_parameters)** |   |
 | **[mgp_local_date_time_parameters](#mgp_local_date_time_parameters)** |   |
 | **[mgp_duration_parameters](#mgp_duration_parameters)** |   |
+| **[mgp_execution_headers](#mgp_execution_headers)** | Headers of the query that's executed through the API. |
+| **[mgp_execution_result](#mgp_execution_result)** | Type handling the pulling logic of the query executing through the API. |
+
 
 ## Types
 
@@ -182,6 +185,9 @@ Memgraph in order to use them.
 | enum [mgp_error](#variable-mgp-error) | **[mgp_edge_iter_properties](#function-mgp-edge-iter-properties)**(struct mgp_edge * e, struct mgp_memory * memory, struct mgp_properties_iterator ** result)<br />Start iterating over properties stored in the given edge.  |
 | enum [mgp_error](#variable-mgp-error) | **[mgp_graph_get_vertex_by_id](#function-mgp-graph-get-vertex-by-id)**(struct mgp_graph * g, struct [mgp_vertex_id](#mgp_vertex_id) id, struct mgp_memory * memory, struct mgp_vertex ** result)<br />Get the vertex corresponding to given ID, or NULL if no such vertex exists.  |
 | enum [mgp_error](#variable-mgp-error) | **[mgp_graph_is_transactional](#function-mgp-graph-is-transactional)**(struct mgp_graph * graph, int * result)<br />Result is non-zero if the graph is in transactional storage mode.  |
+| enum [mgp_error](#variable-mgp-error) | **[mgp_graph_has_text_index](#function-mgp-graph-has-text-index)**(struct mgp_graph * graph, const char * index_name, int * result)<br />(Experimental) Result is non-zero if there exists a text index with the given name. |
+| enum [mgp_error](#variable-mgp-error) | **[mgp_graph_search_text_index](#function-mgp-graph-search-text-index)**(struct mgp_graph * graph, const char * index_name, const char * search_query, enum text_search_mode search_mode, struct mgp_memory * memory, struct mgp_map ** result)<br />(Experimental) Search over the given text index. The result contains a list of all vertices matching the search query. |
+| enum [mgp_error](#variable-mgp-error) | **[mgp_graph_aggregate_over_text_index](#function-mgp-graph-aggregate-over-text-index)**(struct mgp_graph * graph, const char * index_name, const char * search_query, const char * aggregation_query, struct mgp_memory * memory, struct mgp_map ** result)<br />(Experimental) Aggregate over the results of a search over the named text index.  |
 | enum [mgp_error](#variable-mgp-error) | **[mgp_graph_is_mutable](#function-mgp-graph-is-mutable)**(struct mgp_graph * graph, int * result)<br />Result is non-zero if the graph can be modified.  |
 | enum [mgp_error](#variable-mgp-error) | **[mgp_graph_create_vertex](#function-mgp-graph-create-vertex)**(struct mgp_graph * graph, struct mgp_memory * memory, struct mgp_vertex ** result)<br />Add a new vertex to the graph.  |
 | enum [mgp_error](#variable-mgp-error) | **[mgp_graph_delete_vertex](#function-mgp-graph-delete-vertex)**(struct mgp_graph * graph, struct mgp_vertex * vertex)<br />Delete a vertex from the graph.  |
@@ -286,7 +292,13 @@ Memgraph in order to use them.
 | enum [mgp_error](#variable-mgp-error) | **[mgp_messages_at](#function-mgp-messages-at)**(struct mgp_messages * message, size_t index, struct mgp_message ** result)<br />Get the message from a messages list at given index.  |
 | enum [mgp_error](#variable-mgp-error) | **[mgp_module_add_transformation](#function-mgp-module-add-transformation)**(struct mgp_module * module, const char * name, [mgp_trans_cb](#typedef-mgp-trans-cb) cb)<br />Register a transformation with a module.  |
 | enum [mgp_error](#variable-mgp-error) | **[mgp_vertices_iterator_next](#function-mgp-vertices-iterator-next)**(struct mgp_vertices_iterator * it, struct mgp_vertex ** result)<br />Advance the iterator to the next vertex and return it.  |
-| enum [mgp_error](#variable-mgp-error)| **[mgp_log](#function-mgp-log)**(mgp_log_level log_level, const char *output)<br />Log a message on a certain level. |
+| enum [mgp_error](#variable-mgp-error) | **[mgp_log](#function-mgp-log)**(mgp_log_level log_level, const char *output)<br />Log a message on a certain level. |
+| enum [mgp_error](#variable-mgp-error) | **[mgp_execution_headers_at](#function-mgp-execution-headers-at)**(struct mgp_execution_headers * headers, size_t index, const char ** result)<br />Returns the header/column of the query at the specific index. |
+| enum [mgp_error](#variable-mgp-error) | **[mgp_execution_headers_size](#function-mgp-execution-headers-size)**(struct mgp_execution_headers * headers, size_t * result)<br />Returns the size of headers/columns. |
+| enum [mgp_error](#variable-mgp-error) | **[mgp_execute_query](#function-mgp-execute-query)**(struct mgp_graph * graph, struct mgp_memory * memory, const char * query, struct mgp_map * params, struct mgp_execution_result ** result)<br />Executes the query. |
+| enum [mgp_error](#variable-mgp-error) | **[mgp_fetch_execution_headers](#function-mgp-fetch-execution-headers)**(struct mgp_execution_result * exec_result, struct mgp_execution_headers ** result)<br />Returns the query headers/columns. |
+| enum [mgp_error](#variable-mgp-error) | **[mgp_pull_one](#function-mgp-pull-one)**(struct mgp_execution_result * exec_result, struct mgp_graph * graph, struct mgp_memory * memory, struct mgp_map ** result)<br />Pulls one result from the executing query. |
+| enum [mgp_error](#variable-mgp-error) | **[mgp_execution_result_destroy](#function-mgp-execution-result-destroy)**(struct mgp_execution_result * exec_result)<br />Performs cleanup of the object. |
 
 ## Attributes
 
@@ -529,6 +541,7 @@ double millisecond;
 ```cpp
 double microsecond;
 ```
+
 
 ## Types Documentation
 
@@ -2187,6 +2200,97 @@ Result is non-zero if the graph can be modified.
 If a graph is immutable, then vertices cannot be created or deleted, and all of the returned vertices will be immutable also. The same applies for edges. Current implementation always returns without errors.
 
 
+### mgp_graph_has_text_index [#function-mgp-graph-has-text-index]
+```cpp
+enum mgp_error mgp_graph_has_text_index(
+    struct mgp_graph * graph,
+    const char * index_name,
+    int * result
+)
+```
+
+<Callout type="warning">
+
+This method is part of the experimental text search feature introduced in
+Memgraph 2.15.1. Refer to the [text search page](/configuration/text-search)
+for an overview of its capabilities.
+
+To use text search, start memgraph with the `--experimental-enabled=text-search`
+flag.
+
+</Callout>
+
+Result is non-zero if the index with the given name exists.
+
+The current implementation always returns without errors.
+
+
+### mgp_graph_search_text_index [#function-mgp-graph-search-text-index]
+```cpp
+enum mgp_error mgp_graph_search_text_index(
+    struct mgp_graph * graph,
+    const char * index_name,
+    const char * search_query,
+    enum text_search_mode search_mode,
+    struct mgp_memory * memory,
+    struct mgp_map ** result
+)
+```
+
+<Callout type="warning">
+
+This method is part of the experimental text search feature introduced in
+Memgraph 2.15.1. Refer to the [text search page](/configuration/text-search)
+for an overview of its capabilities.
+
+To use text search, start memgraph with the `--experimental-enabled=text-search`
+flag.
+
+</Callout>
+
+Search the named text index for the given query. The result is a map with the
+`"search_results"` and `"error_msg"` keys. The `"search_results"` key contains
+the vertices whose text-indexed properties match the given query. In case of a
+Tantivy error, the `search_results` key is absent, and `"error_msg"` contains 
+the error message.
+
+Return MGP_ERROR_UNABLE_TO_ALLOCATE if there’s an allocation error while
+constructing the results map.
+
+
+### mgp_graph_aggregate_over_text_index [#function-mgp-graph-aggregate-over-text-index]
+```cpp
+enum mgp_error mgp_graph_aggregate_over_text_index(
+    struct mgp_graph * graph,
+    const char * index_name,
+    const char * search_query,
+    const char * aggregation_query,
+    struct mgp_memory * memory,
+    struct mgp_map ** result
+)
+```
+
+<Callout type="warning">
+
+This method is part of the experimental text search feature introduced in
+Memgraph 2.15.1. Refer to the [text search page](/configuration/text-search)
+for an overview of its capabilities.
+
+To use text search, start memgraph with the `--experimental-enabled=text-search`
+flag.
+
+</Callout>
+
+Aggregate over the results of a search over the named text index. The result is
+a map with the `"aggregation_results"` and `"error_msg"` keys. The
+`"aggregation_results"` key contains the vertices whose text-indexed properties
+match the given query. In case of a Tantivy error, the `"aggregation_results"`
+key is absent, and `"error_msg"` contains the error message.
+
+Return MGP_ERROR_UNABLE_TO_ALLOCATE if there’s an allocation error while
+constructing the results map.
+
+
 ### mgp_graph_create_vertex [#function-mgp-graph-create-vertex]
 ```cpp
 enum mgp_error mgp_graph_create_vertex(
@@ -3475,6 +3579,77 @@ enum mgp_error mgp_log(
 
 Log a message on a certain level.
 
+### mgp_execution_headers_at [#function-mgp-execution-headers-at]
+```cpp
+enum mgp_error mgp_execution_headers_at(
+    struct mgp_execution_headers *headers, 
+    size_t index, 
+    const char **result
+);
+```
+
+Returns the header at the specific index. If the index is out of bounds, the code will make an exception.
+The header is stored in the `result` pointer.
+
+### mgp_execution_headers_size [#function-mgp-execution-headers-size]
+```cpp
+enum mgp_error mgp_execution_headers_size(
+    struct mgp_execution_headers *headers, 
+    size_t *result
+);
+```
+
+Returns the size of the headers/columns. Size is stored in the `result` pointer.
+
+### mgp_execute_query [#function-mgp-execute-query]
+```cpp
+enum mgp_error mgp_execute_query(
+    struct mgp_graph *graph, 
+    struct mgp_memory *memory, 
+    const char *query,
+    struct mgp_map *params, 
+    struct mgp_execution_result **result
+);
+```
+
+The function initializes a new interpreter capable of running a query. The query is interpreted 
+and ready to pull results from the result stream, similar to what a database driver would do.
+The object to manipulate the query is stored in the `result` struct.
+
+### mgp_fetch_execution_headers [#function-mgp-fetch-execution-headers]
+```cpp
+enum mgp_error mgp_fetch_execution_headers(
+    struct mgp_execution_result *exec_result,
+    struct mgp_execution_headers **result
+);
+```
+
+Returns the headers/columns of the executing query. Headers are stored in the `result` struct.
+
+### mgp_pull_one [#function-mgp-pull-one]
+```cpp
+enum mgp_error mgp_pull_one(
+    struct mgp_execution_result *exec_result, 
+    struct mgp_graph *graph,
+    struct mgp_memory *memory,
+    struct mgp_map **result
+);
+```
+
+Pulls one result from the executing query stream. The pulled result corresponds to one returned row from the
+database. The row is stored in the `result` struct as an `mgp_map` that contains the header as the key and
+`mgp_value` as the corresponding value.
+
+### mgp_execution_result_destroy [#function-mgp-execution-result-destroy]
+```cpp
+void mgp_execution_result_destroy(
+    struct mgp_execution_result *exec_result
+);
+```
+
+Perfroms the cleanup of the `mgp_execution_result` struct. This is necessary because the interpreter
+has a more complex logic to be correctly free'd in the system.
+
 
 ## Attributes Documentation
 
@@ -3958,6 +4133,22 @@ enum mgp_error mgp_graph_is_transactional(struct mgp_graph *graph, int *result);
 
 enum mgp_error mgp_graph_is_mutable(struct mgp_graph *graph, int *result);
 
+enum mgp_error mgp_graph_has_text_index(struct mgp_graph *graph, const char *index_name, int *result);
+
+enum text_search_mode{
+    SPECIFIED_PROPERTIES,
+    REGEX,
+    ALL_PROPERTIES,
+};
+
+enum mgp_error mgp_graph_search_text_index(struct mgp_graph *graph, const char *index_name, const char *search_query,
+                                           enum text_search_mode search_mode, struct mgp_memory *memory,
+                                           struct mgp_map **result);
+ 
+enum mgp_error mgp_graph_aggregate_over_text_index(struct mgp_graph *graph, const char *index_name,
+                                                   const char *search_query, const char *aggregation_query,
+                                                   struct mgp_memory *memory, struct mgp_map **result);                                          
+
 enum mgp_error mgp_graph_create_vertex(struct mgp_graph *graph, struct mgp_memory *memory, struct mgp_vertex **result);
 
 enum mgp_error mgp_graph_delete_vertex(struct mgp_graph *graph, struct mgp_vertex *vertex);
@@ -4246,6 +4437,44 @@ enum mgp_error mgp_messages_at(struct mgp_messages *message, size_t index, struc
 typedef void (*mgp_trans_cb)(struct mgp_messages *, struct mgp_graph *, struct mgp_result *, struct mgp_memory *);
 
 enum mgp_error mgp_module_add_transformation(struct mgp_module *module, const char *name, mgp_trans_cb cb);
+
+struct mgp_func_context;
+
+enum mgp_error mgp_func_add_arg(struct mgp_func *func, const char *name, struct mgp_type *type);
+
+enum mgp_error mgp_func_add_opt_arg(struct mgp_func *func, const char *name, struct mgp_type *type,
+                                    struct mgp_value *default_value);
+
+typedef void (*mgp_func_cb)(struct mgp_list *, struct mgp_func_context *, struct mgp_func_result *,
+                            struct mgp_memory *);
+
+enum mgp_error mgp_module_add_function(struct mgp_module *module, const char *name, mgp_func_cb cb,
+                                       struct mgp_func **result);
+
+enum mgp_error mgp_func_result_set_error_msg(struct mgp_func_result *result, const char *error_msg,
+                                             struct mgp_memory *memory);
+
+enum mgp_error mgp_func_result_set_value(struct mgp_func_result *result, struct mgp_value *value,
+                                         struct mgp_memory *memory);
+
+struct mgp_execution_headers;
+
+enum mgp_error mgp_execution_headers_at(struct mgp_execution_headers *headers, size_t index, const char **result);
+
+enum mgp_error mgp_execution_headers_size(struct mgp_execution_headers *headers, size_t *result);
+
+struct mgp_execution_result;
+
+enum mgp_error mgp_execute_query(struct mgp_graph *graph, struct mgp_memory *memory, const char *query,
+                                 struct mgp_map *params, struct mgp_execution_result **result);
+
+enum mgp_error mgp_fetch_execution_headers(struct mgp_execution_result *exec_result,
+                                           struct mgp_execution_headers **result);
+
+enum mgp_error mgp_pull_one(struct mgp_execution_result *exec_result, struct mgp_graph *graph,
+                            struct mgp_memory *memory, struct mgp_map **result);
+
+void mgp_execution_result_destroy(struct mgp_execution_result *exec_result);
 
 #ifdef __cplusplus
 }  // extern "C"
