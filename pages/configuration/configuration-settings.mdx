@@ -9,31 +9,181 @@ import { Steps } from 'nextra/components'
 
 # Configuration settings
 
+Memgraph has a set of configuration options that can be fine-tuned for specific need. 
+
 The main Memgraph configuration file is available in
-`/etc/memgraph/memgraph.conf`. You can modify that file to suit your specific
-needs. Additional configuration can be specified by including another
-configuration file, in a file pointed to by the `MEMGRAPH_CONFIG` environment
-variable or by passing arguments on the command line.
-
-For example, you can start the `memgraph` Docker image with `docker run
-memgraph/memgraph --bolt-port=7687 --log-level=TRACE`.
-
-<Callout type="info">
-
-If you are working with Memgraph Platform Docker image, you should pass
-configuration flags inside of environment variables, e.g. `docker run -p
-7687:7687 -p 7444:7444 -p 3000:3000 -e MEMGRAPH="--bolt-port=7687
---log-level=TRACE" memgraph/memgraph-platform`.
-
-</Callout>
+`/etc/memgraph/memgraph.conf`. The file contains a set of default configuration values 
+and key-value pairs that can be modified to suit your specific needs.
 
 Each configuration setting is in the form: `--setting-name=value`.
 
 You can check the current configuration by using the following query (privilege
 level `CONFIG` is required):
+
 ```opencypher
 SHOW CONFIG;
 ```
+
+The way you can change the configuration settings depends on the way you are using Memgraph.
+
+
+## Change the configuration
+
+Some configuration settings can be changed during runtime, while others need to
+be changed in the configuration file or by passing configuration flags.
+
+### Changes at the start or restart
+
+Changing the configuration settings for Memgraph differes if you are using
+Memgraph with **Docker** or if it was installed with **Linux** - Ubuntu,
+Debian, RPM package, or WSL.
+
+
+<Tabs items={["Docker", "Linux"]}>
+
+    <Tab>
+
+        You can customize the configuration by
+        passing configuration options within the `docker run` command.
+
+        If you are working with the `memgraph-platform` image, you should pass
+        configuration options with environment variables.
+
+        For example, if you want to limit memory usage for the whole instance to 50 MiB
+        and set the log level to `TRACE`, pass the configuration like this:
+
+        ```
+        docker run -p 7687:7687 -p 3000:3000 -p 7444:7444 -e MEMGRAPH="--memory-limit=50 --log-level=TRACE" --name memgraph memgraph/memgraph-platform
+        ```
+
+        When you are working with `memgraph` or `memgraph-mage` images, you should pass
+        configuration options as arguments.
+
+        For example, if you want to limit memory usage for the whole instance to 50 MiB
+        and set the log level to `TRACE`, pass the configuration argument like this:
+
+        ```
+        docker run -p 7687:7687 -p 7444:7444 memgraph/memgraph --memory-limit=50 --log-level=TRACE
+        ```
+        ---
+
+        You can also change the configuration within the configuration file:
+
+        <Steps>
+
+            {<h3>Start Memgraph</h3>}
+
+            Start Memgraph with a `docker run` command.
+
+            {<h3>Find container ID</h3>}
+
+            Open a new terminal and find the `CONTAINER ID` of the Memgraph Docker container
+            using the following command:
+
+            ```console
+            docker ps
+            ```
+
+            {<h3>Enter the continer</h3>}
+
+            Enter the Docker container with the following command:
+
+            ```plaintext
+            docker exec -it -u 0 <CONTAINER ID> bash
+            ```
+
+            {<h3>Install the text editor of your choice</h3>}
+
+            For example, if you want to use `vim` run:
+
+            ```console
+            apt-get update
+            apt-get install vim
+            ```
+
+            {<h3>Edit the configuration file</h3>}
+
+            The file is located at `/etc/memgraph/memgraph.conf`.
+
+            {<h3>Restart the intance</h3>}
+
+            Run the following command:
+
+            ```
+            docker restart <CONTAINER ID>
+            ```
+
+        </Steps>
+
+    </Tab>
+    <Tab>
+        Once Memgraph is installed on your Linux machine, and running, if you want to change the configuration settings, you can do the following:
+        
+        Stop the Memgraph instance by running the following command:
+        ```bash
+        sudo systemctl stop memgraph
+        ```
+        Open the configuration file with your favorite text editor. The configuration file is available at `/etc/memgraph/memgraph.conf`.
+
+        Modify it, save the changes and start the insance by running the following command:
+
+        ```bash
+        sudo systemctl start memgraph
+        ```
+    </Tab>
+</Tabs>
+
+### Changing the configuration settings via file 
+
+Additional configuration can be specified by including another
+configuration file, in a file pointed to by the `MEMGRAPH_CONFIG` environment
+variable or by passing arguments on the command line.
+
+You can define additional configuration files in the main configuration file or
+within a Docker command in the terminal. Additional files are processed after
+the main configuration file and they override the main configuration file.
+Additional configuration files are specified with the `--flag-file` flag.
+
+Example:
+
+ `--flag-file=another.conf`
+
+
+### During runtime
+
+Memgraph contains settings that can be modified during runtime using a query.
+Some runtime settings are persisted between multiple runs, while others will
+fallback to the value of the command-line argument.
+
+| Setting name               | Description                                                                                   | Persistent between runs |
+|----------------------------|-----------------------------------------------------------------------------------------------|-------------------------|
+| organization.name          | Name of the organization using the instance of Memgraph (used for verifying the license key). | yes                     |
+| enterprise.license         | License key for Memgraph Enterprise.                                                          | yes                     |
+| server.name                | Bolt server name.                                                                             | yes                     |
+| query.timeout              | Maximum allowed query execution time. Value of 0 means no limit.                              | yes                     |
+| log.level                  | Minimum log level. Allowed values: TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL.              | no                      |
+| log.to_stderr              | Log messages go to `stderr` in addition to `logfiles`.                                        | no                      |
+| cartesian-product-enabled  | Enforces cartesian product operator during query matching.                                    | no                      |
+
+All settings can be fetched by calling the following query:
+
+```opencypher
+SHOW DATABASE SETTINGS;
+```
+
+To check the value of a single setting you can use a slightly different query:
+
+```opencypher
+SHOW DATABASE SETTING "setting.name";
+```
+
+If you want to change a value for a specific setting, following query should be used:
+
+```opencypher
+SET DATABASE SETTING "setting.name" TO "some-value";
+```
+
+### Multitenancy and configuration 
 
 If you are using a multi-tenant architecture, all isolated databases share
 identical configurations. At the moment, there is no way to specify a
@@ -203,151 +353,7 @@ This section contains the list of all other releant flags used within Memgraph.
 | MEMGRAPH_PASSWORD | User password                                                                                                                                                                                                             | `[string]` |
 | MEMGRAPH_PASSFILE | Path to file that contains username and password for creating user. Data in file should be in format `username:password` if your username or password contains  `:` just add `\` before for example `us\:ername:password` | `[string]` |
 
-## Additional configuration inclusion
 
-You can define additional configuration files in the main configuration file or
-within a Docker command in the terminal. Additional files are processed after
-the main configuration file and they override the main configuration file.
-Additional configuration files are specified with the `--flag-file` flag.
-
-Example:
-
- `--flag-file=another.conf`
-
-## Check configuration
-
-Check the current configuration by running the `SHOW CONFIG;` query.
-
-## Change the configuration
-
-Some configuration settings can be changed during runtime, while others need to
-be changed in the configuration file or by passing configuration flags.
-
-### During runtime
-
-Memgraph contains settings that can be modified during runtime using a query.
-Some runtime settings are persisted between multiple runs, while others will
-fallback to the value of the command-line argument.
-
-| Setting name               | Description                                                                                   | Persistent between runs |
-|----------------------------|-----------------------------------------------------------------------------------------------|-------------------------|
-| organization.name          | Name of the organization using the instance of Memgraph (used for verifying the license key). | yes                     |
-| enterprise.license         | License key for Memgraph Enterprise.                                                          | yes                     |
-| server.name                | Bolt server name.                                                                             | yes                     |
-| query.timeout              | Maximum allowed query execution time. Value of 0 means no limit.                              | yes                     |
-| log.level                  | Minimum log level. Allowed values: TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL.              | no                      |
-| log.to_stderr              | Log messages go to `stderr` in addition to `logfiles`.                                        | no                      |
-| cartesian-product-enabled  | Enforces cartesian product operator during query matching.                                    | no                      |
-
-All settings can be fetched by calling the following query:
-
-```opencypher
-SHOW DATABASE SETTINGS;
-```
-
-To check the value of a single setting you can use a slightly different query:
-
-```opencypher
-SHOW DATABASE SETTING "setting.name";
-```
-
-If you want to change a value for a specific setting, following query should be used:
-
-```opencypher
-SET DATABASE SETTING "setting.name" TO "some-value";
-```
-
-### Using flags and config file
-
-Changing the configuration settings for Memgraph differes if you are using
-Memgraph with **Docker** or if it was installed with **Linux** - Ubuntu,
-Debian, RPM package, or WSL.
-
-
-<Tabs items={["Docker", "Linux"]}>
-
-    <Tab>
-
-        You can customize the configuration by
-        passing configuration options within the `docker run` command.
-
-        If you are working with the `memgraph-platform` image, you should pass
-        configuration options with environment variables.
-
-        For example, if you want to limit memory usage for the whole instance to 50 MiB
-        and set the log level to `TRACE`, pass the configuration like this:
-
-        ```
-        docker run -p 7687:7687 -p 3000:3000 -p 7444:7444 -e MEMGRAPH="--memory-limit=50 --log-level=TRACE" --name memgraph memgraph/memgraph-platform
-        ```
-
-        When you are working with `memgraph` or `memgraph-mage` images, you should pass
-        configuration options as arguments.
-
-        For example, if you want to limit memory usage for the whole instance to 50 MiB
-        and set the log level to `TRACE`, pass the configuration argument like this:
-
-        ```
-        docker run -p 7687:7687 -p 7444:7444 memgraph/memgraph --memory-limit=50 --log-level=TRACE
-        ```
-        ---
-
-        You can also change the configuration within the configuration file:
-
-        <Steps>
-
-            {<h3>Start Memgraph</h3>}
-
-            Start Memgraph with a `docker run` command.
-
-            {<h3>Find container ID</h3>}
-
-            Open a new terminal and find the `CONTAINER ID` of the Memgraph Docker container
-            using the following command:
-
-            ```console
-            docker ps
-            ```
-
-            {<h3>Enter the continer</h3>}
-
-            Enter the Docker container with the following command:
-
-            ```plaintext
-            docker exec -it -u 0 <CONTAINER ID> bash
-            ```
-
-            {<h3>Install the text editor of your choice</h3>}
-
-            For example, if you want to use `vim` run:
-
-            ```console
-            apt-get update
-            apt-get install vim
-            ```
-
-            {<h3>Edit the configuration file</h3>}
-
-            The file is located at `/etc/memgraph/memgraph.conf`.
-
-            {<h3>Restart the intance</h3>}
-
-            Run the following command:
-
-            ```
-            docker restart <CONTAINER ID>
-            ```
-
-        </Steps>
-
-    </Tab>
-    <Tab>
-
-        After installing Memgraph, the configuration file is available at `/etc/memgraph/memgraph.conf`.
-
-        Modify it, save the changes and restart the instance.
-    </Tab>
-</Tabs>
 
 ## Use `init` flags with Docker
 
@@ -578,3 +584,4 @@ Notice how the database is already populated and the current value of
 container.
 
 </Steps>
+
