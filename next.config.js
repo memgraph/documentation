@@ -2983,6 +2983,11 @@ module.exports = withNextra({
         source: '/querying/performance-optimization',
         destination: '/querying/best-practices',
         permanent: true
+      },
+      {
+        source: '/getting-started/first-steps-with-memgraph',
+        destination: '/getting-started',
+        permanent: true
       }
     ];
   },
