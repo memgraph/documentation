@@ -1,12 +1,11 @@
 ---
-title: Configuration features
-description: Configure Memgraph to suit your graph project needs by accessing our comprehensive documentation. These features will ensure seamless configuration and monitoring of your instances. 
+title: Database management
+description: Learn the best practices on how to manage your Memgraph instance and utilize its features properly.
 ---
 
-# Configuration features
+# Database management
 
-The following features enable you smooth configuration and monitoring of your
-instances. 
+Learn which features Memgraph offers for the smooth database management and how to utilize them.
 
 ## [Audit log](/configuration/audit-log)
 
@@ -20,7 +19,7 @@ integrity of systems by preventing unauthorized access. For the purpose of
 supporting LDAP authentication and (optional) authorization, we have built an
 auth module that is packaged with Memgraph Enterprise. 
 
-## [Configuration settings](/configuration/configuration-settings)
+## [Configuration](/configuration/configuration-settings)
 
 Memgraph can be configured by editing the Memgraph configuration file or by
 including another configuration file.
