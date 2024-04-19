@@ -34,9 +34,8 @@ in Memgraph's visual interface Memgraph Lab.
 
 ### 1. Connect to Memgraph
 
-First, run Memgraph using the Memgraph MAGE Docker image, which includes
-both the MAGE library and Memgraph Lab. To run the image, open a command-line
-interpreter and run the following Docker command:
+First, run Memgraph using the Memgraph MAGE Docker image. To run the image, open
+a command-line interpreter and run the following Docker command:
 
 ```
 docker run -p 7687:7687 -p 7444:7444 --name memgraph memgraph/memgraph-mage
@@ -97,9 +96,8 @@ Lab.
 
 ### 1. Connect to Memgraph
 
-First, run Memgraph using the Memgraph MAGE Docker image, which includes
-both the MAGE library and Memgraph Lab. To run the image, open a command-line
-interpreter and run the following Docker command:
+First, run Memgraph using the Memgraph MAGE Docker image. To run the image, open
+a command-line interpreter and run the following Docker command:
 
 ```
 docker run -p 7687:7687 -p 7444:7444 --name memgraph memgraph/memgraph-mage
