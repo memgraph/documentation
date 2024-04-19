@@ -1003,7 +1003,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/tutorials/first-steps-with-memgraph',
-        destination: '/getting-started/first-steps-with-memgraph',
+        destination: '/getting-started',
         permanent: true
       },
       {
@@ -2835,7 +2835,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/2.4.1/tutorials/first-steps-with-memgraph',
-        destination: '/getting-started/first-steps-with-memgraph',
+        destination: '/getting-started',
         permanent: true
       },
       {
@@ -2982,6 +2982,11 @@ module.exports = withNextra({
       {
         source: '/querying/performance-optimization',
         destination: '/querying/best-practices',
+        permanent: true
+      },
+      {
+        source: '/getting-started/first-steps-with-memgraph',
+        destination: '/getting-started',
         permanent: true
       }
     ];
