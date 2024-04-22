@@ -357,6 +357,11 @@ module.exports = withNextra({
         permanent: true
       },
       {
+        source: '/mage/query-modules/cpp/set-property',
+        destination: '/advanced-algorithms/available-algorithms/set_property',
+        permanent: true
+      },
+      {
         source: '/mage/algorithms/machine-learning-graph-analytics/temporal-graph-networks',
         destination: '/advanced-algorithms/available-algorithms/tgn',
         permanent: true
@@ -998,7 +1003,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/tutorials/first-steps-with-memgraph',
-        destination: '/getting-started/first-steps-with-memgraph',
+        destination: '/getting-started',
         permanent: true
       },
       {
@@ -2830,7 +2835,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/2.4.1/tutorials/first-steps-with-memgraph',
-        destination: '/getting-started/first-steps-with-memgraph',
+        destination: '/getting-started',
         permanent: true
       },
       {
@@ -2977,6 +2982,11 @@ module.exports = withNextra({
       {
         source: '/querying/performance-optimization',
         destination: '/querying/best-practices',
+        permanent: true
+      },
+      {
+        source: '/getting-started/first-steps-with-memgraph',
+        destination: '/getting-started',
         permanent: true
       }
     ];

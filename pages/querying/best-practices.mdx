@@ -775,3 +775,56 @@ To avoid memory overhead, there are two options:
    best to [disable it](/configuration/configuration-settings#during-runtime).
    In order for this change to apply for the same query, you need to do [query
    plan cache cleanup](/querying/query-plan#query-plan-cache-cleanup).
+
+## Workarounds for fast filtering
+
+For simple filtering queries where you have label and label-property indexes
+set, those indexes will be utilized as expected. Here is an example of such
+a query:
+
+```cypher
+MATCH (p:Person)
+WHERE p.age = 20
+RETURN p;
+```
+
+For more advanced filtering with boolean operators, profile the query and check
+if indexes are being properly utilized. The following query will not utilize
+label-property index as expected because it consists of the `OR` boolean
+operator:
+
+```cypher
+MATCH (p:Person)
+WHERE p.age = 20 OR p.age = 25
+RETURN p;
+```
+
+Such queries haven't been optimized to use the union of indexes from
+its two branches. 
+
+As a workaround, use `IN` so that the `ScanAllByLabelPropertyValue` operator is used:
+
+```cypher
+MATCH (p:Person)
+WHERE p.age IN [20, 25]
+RETURN p;
+```
+
+A similar thing happens if you try using the `range()` function:
+
+```cypher
+MATCH (p:Person)
+WHERE p.age IN range(20, 25)
+RETURN p;
+```
+
+Only the `ScanAllByLabel` operator will be used, and the execution won't be as fast
+as expected. To utilize the `ScanAllByLabelPropertyValue` operator and to achieve
+better execution time, do the following workaround:
+
+```cypher
+UNWIND range(20, 25) AS person_age
+MATCH (p:Person)
+WHERE p.age = person_age,
+RETURN p;
+```

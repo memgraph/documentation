@@ -30,7 +30,7 @@ Notice the `ScanAllByLabel` operations. By creating indexes, query execution
 can be much faster because indexes partition data with a key. When a query is
 executed, the engine first checks if there is an index, and instead of
 explicitly checking every node, it can just check the indexed ones, making
-retrieving indexed data more efficient. 
+retrieving indexed data more efficient.
 
 The following query creates an index on a property of a certain label:
 
@@ -61,7 +61,7 @@ But there are also some downsides to indexing:
 - indexes slow down write operations to the database.
 
 It is important to choose the right data to create indexes on, as indexing all
-of the content will not improve the database speed. 
+of the content will not improve the database speed.
 
 The structures in the index are dynamically updated on modifications or
 insertions of new nodes, slowing down the write operations.
@@ -74,10 +74,10 @@ gain. For example, for properties with boolean values, the time will be cut in h
 
 ## Create an index
 
-Indexes are not created automatically. 
+Indexes are not created automatically.
 
 You can explicitly create indexes on a data with a specific label or
-label-property combination using the `CREATE INDEX ON` syntax.
+label-property combination using the `CREATE INDEX ON` syntax or `CREATE EDGE INDEX ON` syntax in the case of edge-type indexes.
 
 ### Label index
 
@@ -131,9 +131,54 @@ expression, the expression can be so complicated that the index doesn't get used
 If there is any suspicion that an index isn't used, we recommend writing
 labels and properties inside the `MATCH` pattern.
 
+### Edge-type index
+
+To optimize queries that fetch only the edges by specific edge-types, you need to create an edge-type index.
+
+<Callout type="warning">
+
+Creating an edge-type index requires the --storage-properties-on-edges flag to be set to true!
+
+</Callout>
+
+```cypher
+CREATE EDGE INDEX ON :EDGE_TYPE;
+```
+
+Creating an edge-type index will optimize the following type of queries:
+
+```cypher
+MATCH ()-[r:EDGE_TYPE]->() RETURN r;
+```
+
+#### Analyze graph
+
+When multiple label-property indexes exist, the database can sometimes select a
+non-optimal index due to the data's distribution.
+
+The [`ANALYZE GRAPH;`](/querying/performance-optimization#analyze-graph) query
+calculates the distribution of property values so the database can select a more
+optimal label-property index with the smallest average property value size. The
+query is run only once after all indexes have been created and data inserted in
+the database.
+
+### Index hinting
+
+You can also instruct the planner to [use specific
+index(es)](/querying/performance-optimization) (if possible) by specifying which
+index(es) to use at the beginning of the query with `USING INDEX` clause.
+
+<Callout type="warning">
+
+Overriding planner behavior with index hints should be used with caution, and
+only by experienced developers and/or database administrators, as a poor index
+choice may cause queries to perform poorly.
+
+</Callout>
+
 ### Schema-related procedures
 
-You can [delete all indexes](#delete-all-indexes) or modify them using the [`schema.assert()` procedure](/querying/schema#assert).
+You can [delete all node indexes](#delete-all-node-indexes) or modify them using the [`schema.assert()` procedure](/querying/schema#assert).
 
 ### Speed comparison
 
@@ -174,7 +219,7 @@ memgraph> MATCH (n:Person) WHERE n.name =~ ".*an$" RETURN n.name;
 ## Show created indexes
 
 To check all the labels and label-property pairs that Memgraph currently
-indexes use the following query: 
+indexes, use the following query:
 
 ```cypher
 SHOW INDEX INFO;
@@ -195,10 +240,14 @@ DROP INDEX ON :Label;
 DROP INDEX ON :Label(property);
 ```
 
+```cypher
+DROP EDGE INDEX ON :EDGE_TYPE;
+```
+
 These queries instruct all active transactions to abort as soon as possible.
 Once all transactions have finished, the index will be deleted.
 
-### Delete all indexes
+### Delete all node indexes
 
 To delete all indexes, use the [`schema.assert()`](/querying/schema#assert) procedure with the following parameters:
 - `indices_map` = `{}`
@@ -221,7 +270,7 @@ There are three uniqueness and one existence constraint. Additionally, there are
 two indexes - one label and one label-property index. To delete all indexes, run:
 
 ```cypher
-CALL schema.assert({}, {Employee: [["id"], ["email"], ["name", "surname"]]}, {Person: ["name"]}, true) 
+CALL schema.assert({}, {}, {}, true)
 YIELD action, key, keys, label, unique
 RETURN action, key, keys, label, unique;
 ```
@@ -232,14 +281,17 @@ indicates that no indexes should be asserted as existing, while the
 dropped.
 
 Primarily, the [`assert()`](querying/schema#assert) procedure is used to define a schema, but it's also
-useful if you need to [delete all constraints](/fundamentals/constraints#delete-all-constraints) or [delete all indexes and constraints](/querying/schema#delete-all-indexes-and-constraints).
+useful if you need to [delete all constraints](/fundamentals/constraints#delete-all-constraints) or [delete all node indexes and constraints](/querying/schema#delete-all-node-indexes).
+
+## Automatic index creation
+Using the [`storage-automatic-label-index-creation-enabled`](/configuration/configuration-settings#storage) and [`storage-automatic-edge-type-index-creation-enabled`](/configuration/configuration-settings#storage) flags, it is possible to create label and edge-type indices automatically. Every time the database encounters a label or edge-type that is currently not indexed, it will create an index for that construct.
 
 ## Recovery
 
 Existence and unique [constraints](/fundamentals/constraints), and indexes can be
 recovered in parallel. To enable this behavior, set the
 [`storage-parallel-schema-recovery`
-configuration](/configuration/configuration-settings#storage) flag to `true`. 
+configuration](/configuration/configuration-settings#storage) flag to `true`.
 
 ## Query optimization
 ### Analyze graph
