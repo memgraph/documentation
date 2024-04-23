@@ -8,10 +8,10 @@ import { Callout } from 'nextra/components'
 # Indexes
 
 When running queries, you want to get results as soon as possible. In the
-worst-case scenario, during query execution all nodes need to be checked to find
+worst-case scenario, during query execution, all nodes need to be checked to find
 a match.
 
-This is how [the query plan](/querying/performance-optimization) looks when there is
+This is how [the query plan](/querying/query-plan) looks when there is
 no index on the data:
 
 ```console copy=false
@@ -30,7 +30,7 @@ Notice the `ScanAllByLabel` operations. By creating indexes, query execution
 can be much faster because indexes partition data with a key. When a query is
 executed, the engine first checks if there is an index, and instead of
 explicitly checking every node, it can just check the indexed ones, making
-retrieving indexed data more efficient. 
+retrieving indexed data more efficient.
 
 The following query creates an index on a property of a certain label:
 
@@ -38,7 +38,7 @@ The following query creates an index on a property of a certain label:
 CREATE INDEX ON :Person(prop);
 ```
 
-[The query plan](/querying/performance-optimization) of a query matching that
+[The query plan](/querying/query-plan) of a query matching that
 specific node and property:
 
 ```nocopy
@@ -52,7 +52,7 @@ memgraph> EXPLAIN MATCH (n:Person {prop: 1}) RETURN n;
 +-----------------------------------------------------+
 ```
 
-The `ScanAllByLabel` operations has been replaced by
+The `ScanAllByLabel` operations have been replaced by
 `ScanAllByLabelPropertyValue`, a more efficient operation.
 
 But there are also some downsides to indexing:
@@ -61,7 +61,7 @@ But there are also some downsides to indexing:
 - indexes slow down write operations to the database.
 
 It is important to choose the right data to create indexes on, as indexing all
-of the content will not improve the database speed. 
+of the content will not improve the database speed.
 
 The structures in the index are dynamically updated on modifications or
 insertions of new nodes, slowing down the write operations.
@@ -74,10 +74,10 @@ gain. For example, for properties with boolean values, the time will be cut in h
 
 ## Create an index
 
-Indexes are not created automatically. 
+Indexes are not created automatically.
 
 You can explicitly create indexes on a data with a specific label or
-label-property combination using the `CREATE INDEX ON` syntax.
+label-property combination using the `CREATE INDEX ON` syntax or `CREATE EDGE INDEX ON` syntax in the case of edge-type indexes.
 
 ### Label index
 
@@ -97,7 +97,7 @@ MATCH (n:Person) RETURN n;
 
 To optimize queries that fetch nodes with a certain label and property
 combination, you need to create a label-property index. For the best
-performance, create index on properties containing unique integer values.
+performance, create an index on properties containing unique integer values.
 
 <Callout type="warning">
 
@@ -127,14 +127,34 @@ MATCH (n) WHERE n:Person AND n.age = 42 RETURN n;
 ```
 
 Be aware that since the filter inside `WHERE` can contain any kind of an
-expression, the expression can so complicated that the index doesn't get used.
+expression, the expression can be so complicated that the index doesn't get used.
 If there is any suspicion that an index isn't used, we recommend writing
 labels and properties inside the `MATCH` pattern.
+
+### Edge-type index
+
+To optimize queries that fetch only the edges by specific edge-types, you need to create an edge-type index.
+
+<Callout type="warning">
+
+Creating an edge-type index requires the --storage-properties-on-edges flag to be set to true!
+
+</Callout>
+
+```cypher
+CREATE EDGE INDEX ON :EDGE_TYPE;
+```
+
+Creating an edge-type index will optimize the following type of queries:
+
+```cypher
+MATCH ()-[r:EDGE_TYPE]->() RETURN r;
+```
 
 #### Analyze graph
 
 When multiple label-property indexes exist, the database can sometimes select a
-non-optimal index due to the data's distribution. 
+non-optimal index due to the data's distribution.
 
 The [`ANALYZE GRAPH;`](/querying/performance-optimization#analyze-graph) query
 calculates the distribution of property values so the database can select a more
@@ -146,19 +166,19 @@ the database.
 
 You can also instruct the planner to [use specific
 index(es)](/querying/performance-optimization) (if possible) by specifying which
-index(es) to use at the beginning of the query with `USING INDEX` clause. 
+index(es) to use at the beginning of the query with `USING INDEX` clause.
 
-<Callout type="warning"> 
+<Callout type="warning">
 
 Overriding planner behavior with index hints should be used with caution, and
-only by experienced developers and/or database administrators, as poor index
+only by experienced developers and/or database administrators, as a poor index
 choice may cause queries to perform poorly.
 
 </Callout>
 
 ### Schema-related procedures
 
-You can also modify the indexes using the [`schema.assert()` procedure](/querying/schema#assert).
+You can [delete all node indexes](#delete-all-node-indexes) or modify them using the [`schema.assert()` procedure](/querying/schema#assert).
 
 ### Speed comparison
 
@@ -199,7 +219,7 @@ memgraph> MATCH (n:Person) WHERE n.name =~ ".*an$" RETURN n.name;
 ## Show created indexes
 
 To check all the labels and label-property pairs that Memgraph currently
-indexes, use the following query: 
+indexes, use the following query:
 
 ```cypher
 SHOW INDEX INFO;
@@ -220,53 +240,197 @@ DROP INDEX ON :Label;
 DROP INDEX ON :Label(property);
 ```
 
+```cypher
+DROP EDGE INDEX ON :EDGE_TYPE;
+```
+
 These queries instruct all active transactions to abort as soon as possible.
 Once all transactions have finished, the index will be deleted.
 
-### Deleting all indexes and constraints
+### Delete all node indexes
 
-<Callout type="info">
+To delete all indexes, use the [`schema.assert()`](/querying/schema#assert) procedure with the following parameters:
+- `indices_map` = `{}`
+- `unique_constraints` = map of key-value pairs of all uniqueness constraints in the database
+- `existence_constraints` = map of key-value pairs of all existence constraints in the database
+- `drop_existing` = `true`
 
-Ensure you use this feature with caution, as it will remove all schema
-constraints and indexes, potentially affecting query performance and data
-integrity constraints until they are recreated.
-
-</Callout>
-
-To delete all indexes and constraints at once you can use the
-[`schema.assert`](/querying/schema) procedure with specific parameters to drop
-all indexes and constraints. The command is as follows:
+Here is an example of indexes and constraints set in the database:
 
 ```cypher
-CALL schema.assert({}, {}, {}, true) 
+CREATE CONSTRAINT ON (n:Person) ASSERT EXISTS (n.name);
+CREATE CONSTRAINT ON (n:Employee) ASSERT n.id IS UNIQUE;
+CREATE CONSTRAINT ON (n:Employee) ASSERT n.email IS UNIQUE;
+CREATE CONSTRAINT ON (n:Employee) ASSERT n.name, n.surname IS UNIQUE;
+CREATE INDEX ON :Student(id);
+CREATE INDEX ON :Student;
+```
+
+There are three uniqueness and one existence constraint. Additionally, there are
+two indexes - one label and one label-property index. To delete all indexes, run:
+
+```cypher
+CALL schema.assert({}, {}, {}, true)
 YIELD action, key, keys, label, unique
 RETURN action, key, keys, label, unique;
 ```
 
-This command effectively removes all existing indexes and constraints from the
-database. The parameters passed to `schema.assert` indicate that no indexes or
-constraints should be asserted as existing, and the final parameter (`true`)
-specifies that all existing indexes and constraints not mentioned (which would
-be all, given the empty objects `{}`) should be dropped.
+The above query removes all existing indexes because the empty `indices_map`
+indicates that no indexes should be asserted as existing, while the
+`drop_existing` set to `true` specifies that all existing indexes should be
+dropped.
+
+Primarily, the [`assert()`](querying/schema#assert) procedure is used to define a schema, but it's also
+useful if you need to [delete all constraints](/fundamentals/constraints#delete-all-constraints) or [delete all node indexes and constraints](/querying/schema#delete-all-node-indexes).
+
+## Automatic index creation
+Using the [`storage-automatic-label-index-creation-enabled`](/configuration/configuration-settings#storage) and [`storage-automatic-edge-type-index-creation-enabled`](/configuration/configuration-settings#storage) flags, it is possible to create label and edge-type indices automatically. Every time the database encounters a label or edge-type that is currently not indexed, it will create an index for that construct.
 
 ## Recovery
 
 Existence and unique [constraints](/fundamentals/constraints), and indexes can be
-recovered in parallel. To enable this behaviour, set the
+recovered in parallel. To enable this behavior, set the
 [`storage-parallel-schema-recovery`
-configuration](/configuration/configuration-settings#storage) flag to `true`. 
+configuration](/configuration/configuration-settings#storage) flag to `true`.
+
+## Query optimization
+### Analyze graph
+
+The `ANALYZE GRAPH` will check and calculate certain properties of a graph so
+that the database can choose a more optimal index or `MERGE` transaction. 
+
+Before the introduction of the `ANALYZE GRAPH` query, the database would choose
+an index solely based on the number of indexed nodes. But if the number of nodes
+is the only condition, in some cases the database would choose a non-optimal
+index. Once the `ANALYZE GRAPH` is run, Memgraph analyzes the distribution of
+property values and can select a more optimal label-property index, the one with
+the smallest average property value size.
+
+The average property value's group size directly represents the database's
+expected number of hits which can be used to estimate the query's cost. When the
+average group size is the same, the chi-squared statistic is used to measure how
+close the distribution of property-value group size is to the uniform
+distribution. The index with a distribution closest to the uniform distribution
+is selected.
+
+$
+\chi^2 = \sum_{i}\frac{(E_i-O_i)^2}{E_i}
+$
+
+Upon running the `ANALYZE GRAPH` query, Memgraph also check the node degree of
+every indexed nodes and calculates the average degree. By having these values,
+Memgraph can make a more optimal `MERGE` expansion and improve performance. It's
+always better to perform a `MERGE` by expanding from the node that has a lower
+degree than the connecting node.
+
+The `ANALYZE GRAPH;` command should be run only once after all indexes have been
+created and nodes inserted in the database. In rare situations when one property
+is set on many more nodes than another property, choosing an index based on
+average group size and uniform distribution would be misleading. That's why the
+database always selects the label-property index with >= 10x fewer nodes than
+the other label-property index.
+
+{<h4>Calculate the statistic</h4>}
+
+Run the following query to calculate the statistics:
+
+```cypher
+ANALYZE GRAPH;
+```
+
+The query will iterate over all label and label-property indexes in the database
+and calculate the average group size, chi-squared statistic and avg degree for
+each one, then return the following output:
+
+| label | property | num estimation nodes | num groups | avg group size | chi-squared value | avg degree
+| ----- | -------- | -------------------- | ---------- | -------------- | ----------------- | ----------
+| index's label | index's property | number of nodes used for estimation | number of distinct values the property contains | average group size of property's values | value of the chi-squared statistic | average degree of the indexed nodes
+
+Once the necessary information is obtained, Memgraph can choose the optimal
+index and `MERGE` expansion. If you don't want to run the analysis on all labels,
+you can specify which labels to use by adding the labels to the query:
+
+```cypher
+ANALYZE GRAPH ON LABELS :Label1, :Label2;
+```
+
+{<h4>Delete statistic</h4>}
+
+Information about the graph is persistent between instance reruns as is
+recovered as all the other data, using [snapshots and WAL
+files](/configuration/data-durability-and-backup). If you want the database to
+ignore information about the average group size, the chi-squared statistic and
+the average degree, the existing statistic can be deleted by running:
+
+```cypher
+ANALYZE GRAPH DELETE STATISTICS;
+```
+
+The results will contain all label-property indexes that were successfully deleted:
+
+| label | property |
+| ----- | -------- |
+| index's label | index's property |
+
+Specific labels can be specified with the construct `ON LABELS`:
+
+```cypher
+ANALYZE GRAPH ON LABELS :Label1 DELETE STATISTICS;
+```
+
+
+### Index hinting
+
+When executing a query, Memgraph query planner needs to decide where in the query it should
+start matching. To get the optimal match, it checks the `MATCH` clause conditions
+and finds the index that's likely to be the best choice, if there are multiple indexes
+to choose from.
+
+However, the selected index might not always be the best one. Sometimes, there
+are multiple candidate indexes, and the query planner picks the suboptimal one
+from a performance point of view.
+
+With **index hinting**, you can instruct the planner to use specific index(es)
+(if possible) in the query that follows. Here is the syntax for such query:
+
+```cypher
+USING INDEX :Label, :Label2 ...;
+```
+
+```cypher
+USING INDEX :Label(property) ...;
+```
+
+It is also possible to specify multiple hints separated with comma. In that
+case, the planner will apply the first hint that is applicable for a given
+match.
+
+An example of selecting an index with `USING INDEX`: 
+```
+USING INDEX :Person(name)
+MATCH (n:Person {name: 'John', gender: 'male'})
+RETURN n;
+```
+
+<Callout type="warning"> 
+
+Overriding planner behavior with index hints should be used with caution, and
+only by experienced developers and/or database administrators, as poor index
+choice may cause queries to perform poorly.
+
+</Callout>
 
 ## Underlying implementation
 
-The central part of Memgraph's index data structure is a highly-concurrent [skip
+The central part of Memgraph's index data structure is a highly concurrent [skip
 list](https://en.wikipedia.org/wiki/Skip_list). Skip lists are probabilistic
 data structures that allow fast search within an ordered sequence of elements.
-The structure itself is built in layers where the bottom layer is an ordinary
+The structure itself is built in layers, where the bottom layer is an ordinary
 linked list that preserves the order. Each higher level can be imagined as a
 highway for layers below.
 
 The implementation details behind skip list operations are well documented in
-the literature and are out of scope for this document. Nevertheless, we believe
+the literature and are out of the scope of this document. Nevertheless, we believe
 that it is important for more advanced users to understand the following
 implications of this data structure (`n` denotes the current number of elements
 in a skip list):

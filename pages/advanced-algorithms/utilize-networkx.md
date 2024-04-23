@@ -34,15 +34,14 @@ in Memgraph's visual interface Memgraph Lab.
 
 ### 1. Connect to Memgraph
 
-First, run Memgraph using the Memgraph Platform Docker image, which includes
-both the MAGE library and Memgraph Lab. To run the image, open a command-line
-interpreter and run the following Docker command:
+First, run Memgraph using the Memgraph MAGE Docker image. To run the image, open
+a command-line interpreter and run the following Docker command:
 
 ```
-docker run -p 7687:7687 -p 7444:7444 -p 3000:3000 memgraph/memgraph-platform:latest
+docker run -p 7687:7687 -p 7444:7444 --name memgraph memgraph/memgraph-mage
 ```
 
-Connect to Memgraph via [Memgraph Lab](/data-visualization) which is running at `localhost:3000`. 
+Connect to Memgraph via [Memgraph Lab](/data-visualization). 
 
 Check out the [installation guide](/getting-started/install-memgraph) for other
 installation options. If you wish to avoid the installation, you can also use
@@ -97,16 +96,14 @@ Lab.
 
 ### 1. Connect to Memgraph
 
-First, run Memgraph using the Memgraph Platform Docker image, which includes
-both the MAGE library and Memgraph Lab. To run the image, open a command-line
-interpreter and run the following Docker command:
+First, run Memgraph using the Memgraph MAGE Docker image. To run the image, open
+a command-line interpreter and run the following Docker command:
 
 ```
-docker run -p 7687:7687 -p 7444:7444 -p 3000:3000 memgraph/memgraph-platform:latest
+docker run -p 7687:7687 -p 7444:7444 --name memgraph memgraph/memgraph-mage
 ```
 
-Connect to Memgraph via [Memgraph Lab](/data-visualization) which is running at
-`localhost:3000`. 
+Connect to Memgraph via [Memgraph Lab](/data-visualization). 
 
 Check out the [installation guide](/getting-started/install-memgraph) for other
 installation options. If you wish to avoid the installation, you can also use

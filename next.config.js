@@ -2993,7 +2993,7 @@ module.exports = withNextra({
         source: '/advanced-algorithms/built-in-graph-algorithms',
         destination: '/advanced-algorithms/deep-path-traversal',
         permanent: true
-      }   
+      }
     ];
   },
 });
