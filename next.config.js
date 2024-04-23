@@ -357,6 +357,11 @@ module.exports = withNextra({
         permanent: true
       },
       {
+        source: '/mage/query-modules/cpp/set-property',
+        destination: '/advanced-algorithms/available-algorithms/set_property',
+        permanent: true
+      },
+      {
         source: '/mage/algorithms/machine-learning-graph-analytics/temporal-graph-networks',
         destination: '/advanced-algorithms/available-algorithms/tgn',
         permanent: true
@@ -998,7 +1003,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/tutorials/first-steps-with-memgraph',
-        destination: '/getting-started/first-steps-with-memgraph',
+        destination: '/getting-started',
         permanent: true
       },
       {
@@ -1373,17 +1378,17 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/analyze-graph',
-        destination: '/querying/performance-optimization',
+        destination: '/fundamentals/indexes#analyze-graph',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/inspecting-queries',
-        destination: '/querying/performance-optimization',
+        destination: '/querying/clauses/explain',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/profiling-queries',
-        destination: '/querying/performance-optimization',
+        destination: '/querying/best-practices#profiling-queries',
         permanent: true
       },
       {
@@ -2386,27 +2391,27 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-guides-overview/explain-profile',
-        destination: '/querying/performance-optimization',
+        destination: '/querying/clauses/explain',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/inspecting-queries',
-        destination: '/querying/performance-optimization',
+        destination: '/querying/clauses/explain',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/profiling-queries',
-        destination: '/querying/performance-optimization',
+        destination: '/querying/best-practices#profiling-queries',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/inspecting-queries',
-        destination: '/querying/performance-optimization',
+        destination: '/querying/clauses/explain',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/profiling-queries',
-        destination: '/querying/performance-optimization',
+        destination: '/querying/best-practices#profiling-queries',
         permanent: true
       },
       {
@@ -2830,7 +2835,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/2.4.1/tutorials/first-steps-with-memgraph',
-        destination: '/getting-started/first-steps-with-memgraph',
+        destination: '/getting-started',
         permanent: true
       },
       {
@@ -2965,10 +2970,30 @@ module.exports = withNextra({
         permanent: true
       },
       {
+        source: '/help-center/errors/conflicting-transactions',
+        destination: '/help-center/errors/transactions',
+        permanent: true
+      },
+      {
+        source: '/configuration/experimental-replication',
+        destination: '/configuration/replication/experimental-replication',
+        permanent: true
+      },
+      {
+        source: '/querying/performance-optimization',
+        destination: '/querying/best-practices',
+        permanent: true
+      },
+      {
+        source: '/getting-started/first-steps-with-memgraph',
+        destination: '/getting-started',
+        permanent: true
+      },
+      {
         source: '/advanced-algorithms/built-in-graph-algorithms',
         destination: '/advanced-algorithms/deep-path-traversal',
         permanent: true
-      }                         
+      }   
     ];
   },
 });
