@@ -403,7 +403,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-guide/built-in-graph-algorithms',
-        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        destination: '/advanced-algorithms/deep-path-traversal',
         permanent: true
       },
       {
@@ -1581,27 +1581,27 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/reference-overview/graph-algorithms',
-        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        destination: '/advanced-algorithms/deep-path-traversal',
         permanent: true
       },
       {
         source: '/memgraph/concepts-overview/graph-algorithms',
-        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        destination: '/advanced-algorithms/deep-path-traversal',
         permanent: true
       },
       {
         source: '/memgraph/concepts/graph-algorithms',
-        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        destination: '/advanced-algorithms/deep-path-traversal',
         permanent: true
       },
       {
         source: '/memgraph/under-the-hood/graph-algorithms',
-        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        destination: '/advanced-algorithms/deep-path-traversal',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/graph-algorithms',
-        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        destination: '/advanced-algorithms/deep-path-traversal',
         permanent: true
       },
       {
@@ -2725,7 +2725,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/1.3.0/concepts/graph-algorithms',
-        destination: '/advanced-algorithms/built-in-graph-algorithms',
+        destination: '/advanced-algorithms/deep-path-traversal',
         permanent: true
       },
       {
@@ -2987,6 +2987,11 @@ module.exports = withNextra({
       {
         source: '/getting-started/first-steps-with-memgraph',
         destination: '/getting-started',
+        permanent: true
+      },
+      {
+        source: '/advanced-algorithms/built-in-graph-algorithms',
+        destination: '/advanced-algorithms/deep-path-traversal',
         permanent: true
       }
     ];
