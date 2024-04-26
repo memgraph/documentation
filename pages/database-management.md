@@ -1,9 +1,9 @@
 ---
-title: Configuration features
-description: Configure Memgraph to suit your graph project needs by accessing our comprehensive documentation. These features will ensure seamless configuration and monitoring of your instances. 
+title: Database management
+description: Learn how to manage your Memgraph instance and utilize its features.
 ---
 
-# Configuration features
+# Database management
 
 The following features enable you smooth configuration and monitoring of your
 instances. 
