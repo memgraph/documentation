@@ -15,6 +15,10 @@ more.
 Constraints define rules and conditions that ensure the integrity and validity
 of data stored in a database, preventing inconsistent or incorrect entries.
 
+## [Data durability](/fundamentals/data-durability)
+
+Data durability is an important aspect of making sure you keep your data secure, regardless of Memgraph's in-memory storage. 
+
 ## [Data types](/fundamentals/data-types)
 
 Data types form the foundational architecture upon which the information within
