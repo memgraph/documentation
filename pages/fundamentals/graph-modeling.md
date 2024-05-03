@@ -263,7 +263,7 @@ nodes. In the end, our graph should look like this:
 
 ![graph-modeling-storing-properties](/pages/fundamentals/graph-modeling/graph-modeling-storing-properties.png)
 
-### 3.5 Should I use property or relationship?
+### Should I use property or relationship?
 
 Graph property models are not so complicated as they may have appeared, right?
 One of the questions that have probably come to your mind while reading this is:
@@ -302,7 +302,7 @@ information and it’s not used in any type of analysis, the first approach can 
 used. But if the data is used to find common grounds or in group analysis, then
 the second approach will improve performance for those query types.
 
-## 4. Types of graphs
+## Types of graphs
 
 There are some characteristics that define the type of graph. Here are some
 basic types:
