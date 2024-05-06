@@ -263,6 +263,12 @@ nodes. In the end, our graph should look like this:
 
 ![graph-modeling-storing-properties](/pages/fundamentals/graph-modeling/graph-modeling-storing-properties.png)
 
+#### Memory considerations
+
+Another important thing worth considering when modeling a graph is property data types. Memgraph is an in-memory graph database, so you want to be considerate of memory resources. Using an integer is always the best option when choosing a data type for your properties. A boolean is another data type that doesn’t take up a lot of resources. 
+
+Storing a local datetime takes up fewer resources if saved as a temporal type instead of a string. For example, if we have a “2021-10-05T14:15:00” value and store it as a string, it takes up 3B and at least 1B for each character. Since the string containing the date and time has 19 characters, the local datetime stored as a string will take at least 22B of memory. On the other hand, if that datetime is stored as temporal data in Memgraph, it will take 15B of memory. For more information on how much memory each data type occupies, check the [example with detailed calculation](/fundamentals/storage-memory-usage#the-calculation-in-detail).
+
 ### Should I use property or relationship?
 
 Graph property models are not so complicated as they may have appeared, right?
@@ -296,11 +302,9 @@ between them, your model would get more complicated.
 
 ![graph-modeling-property-or-relationship](/pages/fundamentals/graph-modeling/graph-modeling-property-or-relationship.png)
 
-Choosing between setting a value as a property or a separate entity depends on
-the type of analysis you want to make on the dataset. If the data serves only as
-information and it’s not used in any type of analysis, the first approach can be
-used. But if the data is used to find common grounds or in group analysis, then
-the second approach will improve performance for those query types.
+It is also important to note that additional memory will be used if a new node, and consequently a relationship, is created for every property. Additionally, if that property is shared between many nodes in the dataset, then the node it translates might become a supernode, and those kinds of nodes are not good to have in a graph database. 
+
+Try out your queries on the modeled dataset and refactor the graph until you get the wanted performance.
 
 ## Types of graphs
 
