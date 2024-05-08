@@ -5,85 +5,65 @@ description: Learn how to manage your Memgraph instance and utilize its features
 
 # Database management
 
-The following features enable you smooth configuration and monitoring of your
-instances. 
+Learn how to configure, manage and monitor your Memgraph instance. 
 
-## [Audit log](/configuration/audit-log)
+## [Authentication and authorization](/database-management/authentication-and-authorization)
 
-Memgraph supports all query audit logging. When enabled, the audit log contains
-records of all queries executed on the database.
+Memgraph supports managing users and roles as well as role-based and fine-grained access control. It is possible to integrate with third-party authentication systems, such as LDAP.
 
-## [Auth module](/configuration/auth-module)
+## [Backup and restore](/database-management/backup-and-restore) 
 
-Authentication modules play a crucial role in ensuring the security and
-integrity of systems by preventing unauthorized access. For the purpose of
-supporting LDAP authentication and (optional) authorization, we have built an
-auth module that is packaged with Memgraph Enterprise. 
+Memgraph uses snapshots and WAL to ensure the durability of the stored data.
+Learn how to safely backup and restore your data.
 
-## [Configuration settings](/configuration/configuration-settings)
+## [Clustering](/clustering/high-availability)
 
-Memgraph can be configured by editing the Memgraph configuration file or by
-including another configuration file.
+Memgraph uses replication to distribute data across several instances. Memgraph Enterprise offers the high availability feature to ease the management of Memgraph cluster.
 
-## [Data durability and backup](/configuration/data-durability-and-backup) 
+## [Configuration](/database-management/configuration)
 
-Memgraph uses snapshots and WAL to ensure the durability of the stored data and
-it comes with a couple of queries that allow you to safely make a backup of
-these files.
+Memgraph has a set of configuration options that can be fine-tuned for specific
+needs. 
 
-## [Enabling Memgraph Enterprise](/configuration/enabling-memgraph-enterprise) 
+## [Enabling Memgraph Enterprise](/database-management/enabling-memgraph-enterprise) 
 
-Check how to enable Memgraph Enterprise to get access to advanced security
-features and multi-tenancy. 
+Check how to enable Memgraph Enterprise to get access to advanced features. 
 
-## [Logs](/configuration/logs)
+## [Logs](/database-management/logs)
 
-Check how to access logs and change log tracking level. 
+Check how to access logs and change log tracking level. Learn about query audit logging in Memgraph Enterprise.
 
-## [Metadata](/configuration/metadata)
-
-Bolt protocol specifies additional data (metadata) that can be sent along with
-the requested results. Find out how to access it.
-
-## [Monitoring server](/configuration/monitoring-server)
+## [Monitoring](database-management/monitoring)
 
 Receive logs and runtime information from Memgraph in real-time using a
 WebSocket or HTTP server.
 
-## [Multi-tenancy](/configuration/multi-tenancy)
+## [Multi-tenancy](/database-management/multi-tenancy)
 
-Multi-tenant support in Memgraph enables users to manage multiple isolated
-databases within a single instance. The primary objective is to facilitate
-efficient resource isolation, maintain data integrity, and manage access for
-different clients.
+Multi-tenant support in Memgraph Enterprise enables users to manage multiple
+isolated databases within a single instance. The primary objective is to
+facilitate efficient resource isolation, maintain data integrity, and manage
+access for different clients.
 
-## [Replication](/configuration/replication)
+## [Query metadata](/database-management/query-metadata)
 
-Memgraph comes with a couple of queries that allow you to safely make a backup
-of the files containing its data. Memgraph supports replication and allows you
-to create a cluster of nodes running Memgraph instances.
+Bolt protocol specifies additional data (metadata) that can be sent along with
+the requested results. Find out how to access it.
 
-### [Experimental Replication](/configuration/replication/experimental-replication)
+## [Server stats](/database-management/server-stats)
 
-When distributing data across several instances, Memgraph uses replication. This
-has now been expanded to include not only user data but system data as well. 
+Get the version, storage and build information about the running instance. 
 
-## [Security](/configuration/security)
-
-Memgraph comes with the option of granting, denying, or revoking a certain set
-of privileges to users or groups of users.
-
-## [Server stats](/configuration/server-stats)
-
-Get information about the running instance. 
-
-## [SSL encryption](/configuration/ssl-encryption)
+## [SSL encryption](/database-management/ssl-encryption)
 
 Memgraph uses SSL (Secure Sockets Layer) protocol for establishing an
 authenticated and encrypted connection to a database instance.
 
-## [System configuration](/configuration/system-configuration)
+## [System configuration](/database-management/system-configuration)
 
 Improving Memgraph's efficiency may occasionally require fine-tuning settings at
 the operating system level. Such modifications are directly related to the rules
 that control resource distribution and the management of processes.
+
+
+
