@@ -16,7 +16,7 @@ Memgraph supports managing users and roles as well as role-based and fine-graine
 Memgraph uses snapshots and WAL to ensure the durability of the stored data.
 Learn how to safely backup and restore your data.
 
-## [Clustering](/clustering/high-availability)
+## [Clustering](/clustering)
 
 Memgraph uses replication to distribute data across several instances. Memgraph Enterprise offers the high availability feature to ease the management of Memgraph cluster.
 
