@@ -90,11 +90,11 @@ Administrators manage multi-tenant privileges with:
 
 ### Configuration flags
 
-The `data_recovery_on_startup` flag replaces `storage_recover_on_startup`,
+The `data-recovery-on-startup` flag replaces `storage-recover-on-startup`,
 facilitating recovery of individual databases and their contents during startup.
-`storage_recover_on_startup` is still functional but deprecated.
+`storage-recover-on-startup` is still functional but deprecated.
 
-If `storage_delete_on_drop` is set to true, the underlying directories
+If `storage-delete-on-drop` is set to true, the underlying directories
 associated with the dropped database will be deleted.
 
 ### Using Neo4j Drivers
