@@ -7,22 +7,24 @@ import { Card, Cards } from 'nextra/components'
 
 # Manage Memgraph in Linux native enviroment
 
-Learn the best practices for managing your Memgraph instance in the Native Linux 
-environment. This guide will cover the most common task you might need to do while 
-configuring and running Memgraph in the Linux native enviroment. 
+Learn the best practices for managing your Memgraph instance in the Native Linux
+environment. This guide will cover the most common task you might need to do
+while configuring and running Memgraph in the Linux native enviroment. 
 
-Keep in mind that links from this guide will take you to the other documentation pages
-that cover the specific topic in more detail.
+Keep in mind that links from this guide will take you to the other documentation
+pages that cover the specific topic in more detail.
 
 ## Install Memgraph on Linux 
 
-To install Memgraph on Linux, you need to download the apropriate packagage from the 
-[Memgraph download page](https://memgraph.com/download). The installation process is
-straightforward and it is covered in the [Memgraph installation guide](/getting-started/install-memgraph).
+To install Memgraph on Linux, you need to download the apropriate packagage from
+the [Memgraph download page](https://memgraph.com/download). The installation
+process is straightforward and it is covered in the [Memgraph installation
+guide](/getting-started/install-memgraph).
 
 
-For a native Linux deployment you can only use the base Memgraph package, there is no Memgraph Mage package
-available for Linux. For running Memgraph Mage, you can use the Docker image. 
+For a native Linux deployment you can only use the base Memgraph package, there
+is no Memgraph Mage package available for Linux. For running Memgraph Mage, you
+can use the Docker image. 
 
 Once Memgraph is installed you can use `systemd` to manage the Memgraph service.
 Here is an example of how to start, stop and restart Memgraph service:
@@ -85,11 +87,53 @@ that file will override values in the default `memgraph.conf` file.
 
 ## Secure the database
 
-- TBD
+In the community version of Memgraph, you can create a user and its password for
+security. To achieve that, set `MEMGRAPH_USER` and `MEMGRAPH_PASSWORD`
+environment variables. When you set values for those variables, user will be
+created if it does not exist and no one except from that user will be able to
+access the database. 
 
-### Set up SSL encryption
+To authenticate, provide the correct username and password. For example, if you
+want to run Memgraph's CLI mgconsole on localhost, run the following command:
 
-- TBD
+```bash
+mgconsole --host=127.0.0.1 --port=7687 --username=user --password=pass
+```
+
+
+<Cards>
+<div className="w-[230px]">
+    <Card
+    title="Learn more about users"
+    href="/database-management/authentication-and-authorization/users"
+    />
+</div>
+</Cards>
+
+The other option is to start Memgraph with init flags, and you can read more
+about it in the [configuration
+guide](/database-management/configuration#use-init-flags-with-docker).
+
+In the Enteprise version of Memgraph, you can achieve higher level of security
+with the role-based access control (RBAC) and fine-grained access control.
+Within fine-grained access control Memgraph offers label-based access control.
+
+To set it up, first [enable Memgraph
+Enterprise](/database-management/enabling-memgraph-enterprise), and then run
+[the necessary Cypher
+queries](/database-management/authentication-and-authorization/role-based-access-control)
+to set up priviledges properly.
+
+You can add the additional layer of security by enabling SSL encryption.
+
+<Cards>
+<div className="w-[300px]">
+    <Card
+    title="Learn more about SSL encryption"
+    href="/database-management/ssl-encryption"
+    />
+</div>
+</Cards>
 
 ## Data persistency 
 
@@ -172,36 +216,80 @@ the database, since it is significantly faster.
 
 ## Restore data
 
-Depending on the backup method you used, you can restore data in the different way. 
-If you have copied the data persistency folder, you can simply copy the folder back to the 
-custom location and start the Memgraph instance with the `--data-directory` flag
-pointing to the restored folder. 
+Depending on the backup method you used, you can restore data in the different
+way. If you have copied the data persistency folder, you can simply copy the
+folder back to the custom location and start the Memgraph instance with the
+`--data-directory` flag pointing to the restored folder. 
 
-The backup data folder should be owned by the Memgraph user, so make sure the folder 
-is acessible for read and write operations by the Memgraph user. 
+The backup data folder should be owned by the Memgraph user, so make sure the
+folder is acessible for read and write operations by the Memgraph user. 
 
-Putting the backup folder back to `/var/lib/` path is recommended, since you will avoid 
-issues with ownership. 
+Putting the backup folder back to `/var/lib/` path is recommended, since you
+will avoid issues with ownership. 
 
-If you have dumped the database, you can import the data back into Memgraph by 
+If you have dumped the database, you can import the data back into Memgraph by
 using the `mgconsole` CLI tool or the client library.
 
 
 ### Upgrading Memgraph
 
 Keep in mind that between different version of Memgraph, we might break the
-compatibility of the configurations, snapshots and wal-files. 
-This is done very rarely, but it usefull to keep and eye on the [release
+compatibility of the configurations, snapshots and wal-files. This is done very
+rarely, but it usefull to keep and eye on the [release
 notes](https://memgraph.com/docs/release-notes) to se if there are any breaking
 changes.
 
 ## Set up a cluster
 
-- Instructions on how to set up a replication cluster
+To create a cluster, replicate data across several instances. Setting up
+replication basically means running a couple of Memgraph instances on different
+machines and connecting them to each other. One of the instances will be the
+MAIN instance, and others will be either SYNC or ASYNC replicas.
 
-### Set up a highly-available cluster [enterprise]
+In order to set up replication cluster, start memgraph instances on different
+machines with `--replication-restore-state-on-startup` flag set to `true`.
 
-## Logging and monitoring
+All started instances are MAIN upon starting. To set up a cluster, two instances
+must be demoted to REPLICA roles, because only one instance can be MAIN. To do
+that, run the following query from the second and third instance (REPLICA
+instances):
+
+```cypher
+SET REPLICATION ROLE TO REPLICA WITH PORT 10000;
+
+Once the replica instances are in `REPLICA` role, you can connect them to each other by running the following query from the MAIN instance:
+
+```cypher
+REGISTER REPLICA REP1 SYNC TO "<IP_ADDRESS_REP1>";
+REGISTER REPLICA REP2 ASYNC TO "<IP_ADDRESS_REP2>";
+```
+
+If you have troubles connecting, check your firewall and network settings.
+
+That's it, replication cluster with one MAIN, one SYNC REPLICA and one ASYNC
+REPLICA instance is set up. To learn more about the replication Memgraph, refer
+to our [replication docs](/clustering/replication#set-up-a-replication-cluster). 
+
+Having the replication cluster set up is great if you need to replicate data,
+add load balancing or improve availability. Still, to achieve high availability,
+you need to manage automatic failover. On the other hand, Memgraph Enterprise
+has high availability feature included in the offering to ease the management of
+Memgraph cluster. In such case, the cluster consists of MAIN instance, REPLICA
+instances and COORDINATOR instances which, backed up by Raft protocol, manage
+the cluster state.
+
+<Cards>
+<div className="w-[300px]">
+    <Card
+    title="Learn more about high availability"
+    href="/clustering/high-availability"
+    />
+</div>
+</Cards>
+
+
+
+## Logging
 
 - How can I check Memgraph logs in Docker env? What is the best practice?
 - Can I monitor the db? How? Websocket, HTTP (enterprise)
@@ -209,12 +297,10 @@ changes.
 
 ## Where to next?
 
-Docker is a powerful tool, and it is usually a good starting point. If your
-application involves multiple services besides a database, you might want to
-create a multi-container application with Docker Compose. To learn more about
-how to manage Memgraph in such environment, follow our Docker Compose guide.
-
-To discuss Docker and similar topics, [join our Discord
+Each of the topics covered in this guide has its own dedicated documentation
+pages that cover the topic in more detail. Condiser reading those pages to get a
+better understanding of the topic. If things are unclear or you need help, feel
+free to reach out to us on Linux and similar topics, [join our Discord
 community](https://www.discord.gg/memgraph).
 
 Schedule a 30-min session with our engineers to discuss how Memgraph fits with
@@ -226,9 +312,5 @@ sales pitch, just tech.
 
 ![](/pages/getting-started/memgraph-office-hours.svg)
 
-<Cards>
-  <Card
-    title="Book a call"
-    href="https://memgraph.com/office-hours"
-  />
-</Cards>
+<Cards> <Card title="Book a call" href="https://memgraph.com/office-hours" />
+  </Cards>
