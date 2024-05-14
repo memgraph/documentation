@@ -110,7 +110,7 @@ bt
 
 ## 2. Generating a core dump with Memgraph
 
-### Generating a core dump with plain docker image
+### Generating a core dump with plain Docker image
 In order to generate a core dump, you need to do a few steps on the host and in the container image.
 
 1. Setting no size limit to the core dump
@@ -157,6 +157,44 @@ gdb /usr/lib/memgraph/memgraph --core=/core.memgraph.file
 where the `core.memgraph.file` is the name of your core dump file. Possibly, appropriate permissions will need to be set on the core dump file. You can check the list of useful `GDB` commands in the above sections.
 
 To find out more about setting core dumps, you can check [this article](https://medium.com/@sourabhedake/core-dumps-how-to-enable-them-73856a437711).
+
+### Generating a core dump with Docker Compose
+The setup with Docker Compose is similar like with Docker. You will need to bind the volume, run Memgraph in privileged mode, and make sure you set the no limit boundaries on the generated core dump.
+
+Below we can see an example Docker Compose file which is able to generate a core dump:
+
+```yaml
+version: "3"
+ 
+services:
+  memgraph:
+    image: memgraph:2.16.0_17_050d5c985
+    container_name: mg
+    privileged: true
+    ports:
+      - "7687:7687"
+      - "7444:7444"
+      - "9091:9091"
+    volumes:
+      - /home/josipmrden/cores:/tmp/cores
+    command: ["--log-level=TRACE", "--also-log-to-stderr=true"]
+    ulimits:
+      core:
+        hard: -1
+        soft: -1
+ 
+  lab:
+    image: memgraph/lab:latest
+    container_name: memgraph-lab
+    ports:
+      - "3000:3000"
+    depends_on:
+      - memgraph
+    environment:
+      - QUICK_CONNECT_MG_HOST=memgraph
+      - QUICK_CONNECT_MG_PORT=7687
+```
+
 
 ## 3. Using `perf` to identify performance bottlenecks
 
