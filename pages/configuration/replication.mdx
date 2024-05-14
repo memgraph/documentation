@@ -53,6 +53,15 @@ cluster, one instance has to be chosen as the MAIN instance. The rest of the
 instances have to be demoted to REPLICA roles and have a port defined using a
 Cypher query.
 
+
+<Callout type="info">
+
+For replication, ensure all machines (Main and Replica instances) have exactly
+the same amount of RAM and the same CPU. This uniformity is crucial for
+consistent performance and reliability.
+
+</Callout>
+
 If you want instances to remember their role and configuration in a replication
 cluster upon restart, they need to be initialized with the
 `--replication-restore-state-on-startup` set to `true` and remain `true`
@@ -115,7 +124,7 @@ If you are exploring replication and running multiple instances on one machine,
 you can run Memgraph with Docker, but if you are using volumes, they need to be
 called differently and each instance needs to be exposed via a different port.
 
-Check the exampe of creating [a replication
+Check the example of creating [a replication
 cluster](#set-up-a-replication-cluster).
 
 ## Assigning roles
@@ -139,7 +148,7 @@ SET REPLICATION ROLE TO REPLICA WITH PORT <port_number>;
 ```
 
 If you set the port of each REPLICA instance to `10000`, it will be easier to
-register replicas later on because the query for registering replicas uses port
+register replicas later on because the query for registering replicas uses a port
 10000 as the default one.
 
 Otherwise, you can use any unassigned port between 1000 and 10000.
@@ -269,12 +278,14 @@ DROP REPLICA <name>;
 By comparing timestamps, the MAIN instance knows when a REPLICA instance is not
 synchronized and is missing some earlier transactions. The REPLICA instance is
 then set into a RECOVERY state, where it remains until it is fully synchronized
-with the MAIN instance#synchronizing-instances.
+with the MAIN instance#synchronizing-instances. 
 
 The missing data changes can be sent as snapshots or WAL files. Snapshot files
 represent an image of the current state of the database and are much larger than
 the WAL files, which only contain the changes, deltas. Because of the difference
-in file size, Memgraph favors the WAL files.
+in file size, Memgraph favors the WAL files. It is important to note that replicas
+receive only changes which are made durable on the MAIN instance, in other words changes which
+are alredy fsynced.
 
 While the REPLICA instance is in the RECOVERY state, the MAIN instance
 calculates the optimal synchronization path based on the REPLICA instance's
@@ -328,14 +339,7 @@ REPLICA instance 2:
 docker run -p 7689:7687 memgraph/memgraph-mage
 ```
 
-You can connect to each instance with the [Memgraph Lab](/data-visualization)
-in-browser application at:
-
-- the MAIN instance - `localhost:3000`
-- REPLICA instance 1 - `localhost:3001`
-- REPLICA instance 2 - `localhost:3002`
-
-You can connect to each instance using the Memgraph Lab desktop appliation, or any
+You can connect to each instance using the Memgraph Lab desktop application, or any
 other external application by changing the port:
 
 - the MAIN instance - `localhost:6787`
@@ -400,7 +404,7 @@ instances:
    REPLICA instance 2 is called REP2, its replication mode is ASYNC, and it is
    located at IP address `172.17.0.4.` with port `10000`.
 
-   When the REPLICA instance is running in ASYNC mode the MAIN instance will
+   When the REPLICA instance is running in ASYNC mode, the MAIN instance will
    commit a transaction without receiving confirmation from REPLICA instances
    that they have received the same transaction. ASYNC mode ensures system
    availability and partition tolerance.
@@ -442,9 +446,9 @@ three properties:
 
 ![](/pages/configuration/replication/memgraph-replication-CAP-theorem.png)
 
-Most of the Memgraph use-cases do not benefit from well-known algorithms that
+Most of the Memgraph use cases do not benefit from well-known algorithms that
 strive to achieve all three CAP properties, such as Raft, because due to their
-complexity they produce performance issues. Memgraph use-cases are based on
+complexity, they produce performance issues. Memgraph use-cases are based on
 running analytical graph workloads on real-time data, demanding a simpler
 concept such as **replication**.
 
@@ -579,7 +583,7 @@ To delay the file deletion, Memgraph uses a file retainer that consists of
 multiple lockers. Threads can store and lock the files they found while
 searching for the optimal recovery path in the lockers, thus ensuring the files
 will still exist once they are sent to the REPLICA instance as a part of the
-synchronization process. If some other part of the system sends a deletion
+synchronization process. If another part of the system sends a deletion
 request for a certain file, the file retainer first checks if that file is
 locked in a locker. If it is not, it is deleted immediately. If the file is
 locked, the file retainer adds the file to the deletion queue. The file retainer
