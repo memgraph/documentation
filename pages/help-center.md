@@ -28,6 +28,9 @@ or graph community there to help!
 
 📱[**Book a call**](https://memgraph.com/office-hours) and learn more about Memgraph capabilities to integrate it into your current stack as fast as possible.
 
+🐞 [**Debug by yourself**](/help-center/debugging). Inspect your application with useful tools we have provided to you in the
+container. Send us the diagnostics, so we can be faster in identification of your issues.
+
 ## Community
 
 If you want to be a part of Memgraph's fast-growing community, join us on our
