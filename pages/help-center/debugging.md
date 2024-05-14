@@ -22,11 +22,15 @@ This setup is intended to empower users to conduct thorough investigations into 
 After identification of all the issues and moving to production, users are encouraged to switch to Release mode, with the default Memgraph images, to make sure they gain the extra performance, from the now fast and reliable system.
 
 Memgraph in the RelWithDebInfo mode can be downloaded from DockerHub with the following command:
+
+// TODO: Set this command
 ```bash
 docker image pull
 ```
 
 If you are using Memgraph MAGE, the following command should do
+
+// TODO: Set this command
 ```bash
 docker image pull
 ```
@@ -37,7 +41,7 @@ Yes, Memgraph container needs to be run in the **--privileged mode**. Privileged
 Below, we can see an example command of how to run a Memgraph container in the privileged mode:
 
 ```bash
-docker container run
+docker container run --name mg --privileged -p 7687:7687 -p 9091:9091 memgraph --log-level=TRACE --also-log-to-stderr
 ```
 
 ### I have run Memgraph container, where should I perform the debugging?
@@ -51,13 +55,13 @@ The ```-u root``` command is there to enable root privileges inside the containe
 
 ### What are all the debugging capabilities I am equipped with?
 Memgraph supports the following debug capabilities:
-- attaching Memgraph with `GDB` and inspecting threads
-- generating a core dump after Memgraph crashed
-- using `perf` to identify performance bottlenecks
+1. Attaching Memgraph with `GDB` and inspecting threads
+2. Generating a core dump after Memgraph crashed
+3. Using `perf` to identify performance bottlenecks
 
 we will be going through each of them in detail.
 
-## Attaching Memgraph with GDB
+## 1. Attaching Memgraph with GDB
 `GDB` and `pgrep` are already installed packages in the Memgraph container that has the debug symbols.
 Since Memgraph is already running there at the port 7687, you can attach to your Memgraph with GDB
 with the following command.
@@ -104,11 +108,57 @@ Seeing the backtrace can be done with the command
 bt
 ```
 
-## Generating a core dump with Memgraph
+## 2. Generating a core dump with Memgraph
 
-Instructions for this paragraph will be updated.
+### Generating a core dump with plain docker image
+In order to generate a core dump, you need to do a few steps on the host and in the container image.
 
-## Using `perf` to identify performance bottlenecks
+1. Setting no size limit to the core dump
+Initially, you will need to set no boundaries to the size of the core dump that can be generated. This is done with the following command:
+
+```bash
+ulimit -c unlimited
+```
+
+2. Mounting the correct volume
+When Memgraph crashes, we would want to get the present core dump file on our host system. When starting the container, we will provide the appropriate volume. Additionally, don't forget to set the `--privileged` flag as noted in the previous sections.
+```bash
+docker container run --name mg --privileged -v /home/user/cores:/tmp/cores -p 7687:7687 -p 9091:9091 memgraph:2.16.0_17_050d5c985 --log-level=TRACE --also-log-to-stderr
+```
+
+3. Setting up the container for core dump generation
+Additionally, in the container, the following commands will need to be executed after the container has started, to be able to generate a correct core dump.
+
+```bash
+ulimit -c unlimited
+mkdir -p /tmp/cores
+chmod a+rwx /tmp/cores
+echo "/tmp/cores/core.%e.%p.%h.%t" > /proc/sys/kernel/core_pattern
+```
+
+When Memgraph crashes, a core dump will be generated, and you will see it on the host system if you have mounted the volume correctly.
+
+4. Starting Memgraph again and inspecting the core dump with `GDB`
+The container will need to be started again, since we want the same debug symbols to be present, and using an identical image is the most proper way for that. However, we don't need now the Memgraph process at the port 7687, so we will ignore it.
+
+You will need to copy the core dump file into the container with the `docker cp` command.
+
+After logging into the container with the root credentials:
+```bash
+docker container exec -it -u root memgraph bash
+```
+
+we will execute `GDB` with the core dump file provided
+
+```bash
+gdb /usr/lib/memgraph/memgraph --core=/core.memgraph.file
+```
+
+where the `core.memgraph.file` is the name of your core dump file. Possibly, appropriate permissions will need to be set on the core dump file. You can check the list of useful `GDB` commands in the above sections.
+
+To find out more about setting core dumps, you can check [this article](https://medium.com/@sourabhedake/core-dumps-how-to-enable-them-73856a437711).
+
+## 3. Using `perf` to identify performance bottlenecks
 
 Perfing is the most common operation that is run when Memgraph is hanging or performing slowly.
 
