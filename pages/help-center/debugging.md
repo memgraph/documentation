@@ -244,4 +244,5 @@ hotspot perf.data
 
 you should be able to see the flamegraph like below.
 
+// TODO: Check why the image does not work
 ![](/pages/help-center/perf.png)
