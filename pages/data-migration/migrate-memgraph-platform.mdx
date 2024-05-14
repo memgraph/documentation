@@ -6,6 +6,7 @@ description: Switch from legacy version of Memgraph Platform to Memgraph MAGE.
 import { Card, Cards } from 'nextra/components'
 import { Callout } from 'nextra/components'
 import { Steps } from 'nextra/components'
+import { Tabs, Tab } from 'nextra/components'
 
 # Migrate from Memgraph Platform to Memgraph MAGE
 
@@ -15,194 +16,106 @@ application. This upgrade separates the previous single Docker image into
 individual containers for Memgraph+MAGE and Memgraph Lab.
 
 If you are running an older version of Memgraph Platform (versions up to 2.15),
-you can migrate your data to the newer version of Memgraph using one of the
-methods described below.
+you can migrate your data to the newer version of Memgraph MAGE.
 
-### Using a snapshot
+## Using a database dump
 
-A snapshot in Memgraph is a backup of your database. Once you create a snapshot of your Memgraph Platform you can copy it your fresh Memgraph MAGE instance and restore the data.
+Dumping the database in Memgraph creates a comprehensive record of the database
+state, encapsulating nodes, relationships, indexes, constraints, and triggers in
+Cypher queries. In this scenario, we are having two Memgraph instances:
 
-### Creating a snapshot
-
- Here's how you can create one:
-
- <Steps>
-
-{<h3>Start Memgraph Platform</h3>}
-
-Start your Memgraph Platform using the following command:
-
-```bash
-docker run -p 7687:7687 -p 7444:7444 -p 3000:3000 --name mgplatform -e MEMGRAPH="--telemetry-enabled=False --log-level=TRACE" memgraph/memgraph-platform
-```
-
-{<h3>Open Memgraph Lab</h3>}
-
-Use your web browser to connect to [http://localhost:3000](http://localhost:3000).
-
-{<h3>Create new snapshot</h3>}
-
-Run the following query:
-
-CREATE SNAPSHOT;
-
-The snapshot is saved in the directory (`/var/lib/memgraph/snapshots`).
-
-In the log file you will see the complete path for the snapshot. the log entry will look something like this:
-
-```
-[2024-05-09 13:05:56.453][Debug][Run - memgraph] 'CREATE SNAPSHOT'
-[2024-05-09 13:05:56.453][Info]Starting snapshot creation to "/var/lib/memgraph/snapshots/20240509130556453229_timestamp_406"
-[2024-05-09 13:05:56.527][Info]Snapshot creation successful!
-```
+1. Memgraph Platform
+2. Memgraph MAGE
 
 
-<Callout>
-Another way to check the snapshot's full name and path is to run the following command on your host:
+<Steps>
+{<h3>Creating a database dump</h3>}
 
-```bash
-docker exec mgplatform ls -al /var/lib/memgraph/snapshots
-```
-The output will be similar to this:
+To create a dump of your Memgraph Platform database, execute the following command in `mgconsole`:
 
-```
-total 11828
-drwxr-xr-x 2 memgraph memgraph    4096 May  9 13:07 .
-drwxrwxrwx 1 memgraph memgraph    4096 May  9 13:03 ..
--rw-r----- 1 memgraph memgraph 1101782 May  9 13:04 20240509130415306911_timestamp_162
--rw-r----- 1 memgraph memgraph 5497050 May  9 13:05 20240509130556453229_timestamp_406
--rw-r----- 1 memgraph memgraph 5497050 May  9 13:07 20240509130704295444_timestamp_517
-```
-</Callout>
-
-
-{<h3>Stop Memgraph Platform</h3>}
-
-
-After creating the snapshot, stop the Memgrpah Platform container:
-
-```bash
-docker stop mgplatform
-```
-
-
-{<h3>Copy a snapshot to the host</h3>}
-
-Now you need to copy the snapshot file. In this case this copy `20240509130704295444_timestamp_517` from your Docker container to your host using:
-
-```bash
-docker cp mgplatform:/var/lib/memgraph/snapshots/20240509130704295444_timestamp_517 /tmp/snapshots/
-```
-
-The output will be something like:
-
-```
-Successfully copied 5.5MB to /tmp/snapshots/
-```
-
-
-{<h3>Start and stop Memgraph MAGE</h3>}
-
-Start the `mgmage` container using:
-
-```bash
-docker run -p 7687:7687 -p 7444:7444 --name mgmage memgraph/memgraph-mage --log-level=TRACE
-docker create -p 7687:7687 -p 7444:7444 -v snapshots:/var/lib/memgraph/snapshots --name mgmage memgraph/memgraph-mage --log-level=TRACE
-tar -cf - /tmp/snapshots/20240509130704295444_timestamp_517 | docker cp -a - mgmage:/var/lib/memgraph/snapshots
-```
-
-To safely copy snapshot file into it, stop the `mgmage` container:
-```bash
-docker stop mgmage
-```
-
-
-{<h3>Copy snapshot file to `mgmage` Container</h3>}
-
-Copy the snapshot file from `/temp/transfer` to the `mgmage` container:
-```bash
-docker cp c:\temp\transfer\20240509130704295444_timestamp_517 mgmage:/var/lib/memgraph/snapshots/
-```
-
-The output will be something like:
-```
-Successfully copied 5.5MB to mgmage:/var/lib/memgraph/snapshots/
-```
-
-{<h3>Restart the `mgmage` container</h3>}
-Finally, start the `mgmage` container again:
-```bash
-docker start mgmage
-```
-
-
-After running this command, you can connect to the Memgraph instance using the command-line interface `mgconsole` by running the following command in a new terminal:
-
-```bash
-docker exec -it mgmage mgconsole
-```
-
-
-docker create -p 7687:7687 -p 7444:7444 -v c:\temp\snapshots\`:/var/lib/memgraph/snapshots --name mgmage memgraph/memgraph-mage --log-level=TRACE
-
-docker start mgmage
-
-
-tar -cf - .\20240509110709931436_timestamp_148 | docker exec -i mgmage tar -C /var/lib/memgraph/snapshots -xf -
-
-
-
-</Steps>
-
-## Dumping the Database
-
-Dumping the database in Memgraph creates a comprehensive record of the database state, encapsulating nodes, relationships, indexes, constraints, and triggers in Cypher queries. 
-
-### Creating a Database Dump
-
-To create a dump of your Memgraph Platform database, execute the following command in `mgconsole` or Memgraph Lab:
-
-```opencypher
+```cypher
 DUMP DATABASE;
 ```
 
-This command will generate a series of Cypher queries that represent the current state of the database. These queries can be used to recreate the database at its dumped state.
+This command will generate a series of Cypher queries that represent the current
+state of the database. These queries can be used to recreate the database in its
+dumped state. Copy this file to the location that will be accessible to the
+Memgraph MAGE instance.
 
-### Exporting the Dump File
+{<h3>Importing a database dump</h3>}
 
-In Memgraph Lab, navigate to the `Import & Export` section. Here, you can export the database dump to a file with a `.cypherl` extension. This file can be used to import the database state into another instance of Memgraph or for backup purposes.
+<Tabs items={['Docker 🐳', 'Linux']}>
 
-## Importing a Database Dump
+  <Tab>
 
-To import a database dump into Memgraph, you will need to execute the Cypher queries contained within the `.cypherl` file. This can be done through `mgconsole` or directly in Memgraph Lab.
+    If you installed and started Memgraph MAGE using **Docker**, follow these steps:
 
-1. Ensure your Memgraph instance is running and accessible.
-2. Load the Cypher queries from your dump file into `mgconsole` or execute them in Memgraph Lab.
+    1. Open a new terminal and check the Docker container ID by running `docker ps`.
+    2. Run the following command
 
-https://memgraph.com/docs/data-migration/cypherl
+      ```
+      docker exec -i CONTAINER_ID mgconsole < queries.cypherl
+      ```
+
+    For more information about `mgconsole` options run:
+
+    ```console
+    docker exec -i CONTAINER_ID mgconsole --help
+    ```
+
+  </Tab>
+  <Tab>
+
+    Once Memgraph MAGE is running in **Linux**, Cypher queries are imported by running
+    [mgconsole](/getting-started/cli) in a non-interactive mode and importing data
+    saved in a CYPHERL file.
+
+    You can import queries saved in e.g. `queries.cypherl` by issuing the following
+    shell command:
+
+    ```plaintext
+    mgconsole < queries.cypherl
+    ```
+
+    For more information about `mgconsole` options run:
+
+    ```console
+    mgconsole --help
+  ```
+    </Tab>
+</Tabs>
+
+</Steps>
 
 
-## Restoring a Snapshot
+<Callout>
 
-To restore a snapshot, you can follow these steps:
+You can also use Memgraph Lab for exporting and importing .cypherl file. On the
+Memgraph Platform instance, run the Memgraph Lab and navigate to the `Export`
+section. You can export the database dump to a file with a `.cypherl` extension.
+Access the Memgraph MAGE instance using the Memgraph Lab desktop application and
+navigate to the `Import` section. Use the `.cypherl` dump to import the database
+state into the Memgraph MAGE instance.
 
-1. Copy the backed-up snapshot file into the `snapshots` directory after creating the container and start the database. The commands should look like this:
-```bash
-docker create -p 7687:7687 -p 7444:7444 -v `snapshots`:/var/lib/memgraph/snapshots --name memgraphDB memgraph/memgraph
-tar -cf - sample_snapshot_file | docker cp -a - memgraphDB:/var/lib/memgraph/snapshots
-```
-The `sample_snapshot_file` is the snapshot file you want to use to restore the data. 
+</Callout>
 
-2. After that, start the database with:
-```bash
-docker start -a memgraphDB
-```
-The `-a` flag is used to attach to the container's output so you can see the logs.
+For more details on using .cypherl, look at documentation on [working with
+.cypherl files](/data-migration/cypherl).
 
-3. Once Memgraph is started, change the snapshot directory ownership to the `memgraph` user by running the following command:
-```bash
-docker exec -it -u 0 memgraphDB bash -c "chown memgraph:memgraph /var/lib/memgraph/snasphots"
-```
-Otherwise, Memgraph will not be able to write the future snapshot files and will fail.
+## Memgraph's office hours
 
-For more detailed instructions, you can refer to the [Memgraph documentation](https://memgraph.com/docs/configuration/data-durability-and-backup).
+Schedule a 30 min session with one of our engineers to discuss how Memgraph fits
+with your architecture. Our engineers are highly experienced in helping
+companies of all sizes to integrate and get the most out of Memgraph in their
+projects. Talk to us about data modeling, optimizing queries, defining
+infrastructure requirements or migrating from your existing graph database. No
+nonsense or sales pitch, just tech.
+
+![](/pages/getting-started/memgraph-office-hours.svg)
+
+<Cards>
+  <Card
+    title="Book a call"
+    href="https://memgraph.com/office-hours"
+  />
+</Cards>
