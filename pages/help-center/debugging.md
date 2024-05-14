@@ -1,6 +1,6 @@
 ---
 title: Debugging Memgraph by yourself
-description: Utilize tools provided to you in the container to inspect what's happening in your Memgraph instance. Send us diagnostics, so we're able to identify issues quicker, and make the product more stable. 
+description: Utilize tools provided to you in the container to inspect what's happening in your Memgraph instance. Send us diagnostics, so we're able to identify issues quicker and make the product more stable. 
 ---
 
 # Debugging Memgraph by yourself
@@ -13,9 +13,9 @@ By conducting initial debugging, users can provide us with valuable diagnostic d
 
 These tools not only empower users to identify and report problems more accurately but also expedite the resolution process, enhancing overall system stability and performance.
 
-### Which Memgraph image can I use in order to debug Memgraph?
+### Which Memgraph image can I use to debug Memgraph?
 
-Memgraph offers Docker images specifically tailored for debugging, with Memgraph built in **RelWithDebInfo** mode. These containers are equipped with crucial debugging tools such as **perf, gdb, and pgrep**, along with other useful apt packages. 
+Memgraph offers Docker images specifically tailored for debugging, with Memgraph built in the **RelWithDebInfo** mode. These containers are equipped with crucial debugging tools such as **perf, gdb, and pgrep**, along with other useful apt packages. 
 
 This setup is intended to empower users to conduct thorough investigations into issues such as slow performance, system hangs, or unusually high memory usage. Although the RelWithDebInfo build mode of Memgraph comes with some performance degradations (**~10% slower performance overall**), this approach contributes to more stable and efficient system performance in the long run. 
 
@@ -63,13 +63,12 @@ we will be going through each of them in detail.
 
 ## 1. Attaching Memgraph with GDB
 `GDB` and `pgrep` are already installed packages in the Memgraph container that has the debug symbols.
-Since Memgraph is already running there at the port 7687, you can attach to your Memgraph with GDB
-with the following command.
+Since Memgraph is already running there at port 7687, you can attach GDB to your running Memgraph with the following command:
 
 ```bash
 gdb -p $(pgrep memgraph)
 ```
-Most likely, the Memgraph process will have the PID number 1, but for certainty we use `pgrep`.
+Most likely, the Memgraph process will have the PID number 1, but for certainty, we use `pgrep`.
 
 ### List of useful commands when in GDB
 
@@ -110,7 +109,7 @@ bt
 
 ## 2. Generating a core dump with Memgraph
 
-### Generating a core dump with plain Docker image
+### Generating a core dump with a plain Docker image
 In order to generate a core dump, you need to do a few steps on the host and in the container image.
 
 1. Setting no size limit to the core dump
@@ -139,7 +138,7 @@ echo "/tmp/cores/core.%e.%p.%h.%t" > /proc/sys/kernel/core_pattern
 When Memgraph crashes, a core dump will be generated, and you will see it on the host system if you have mounted the volume correctly.
 
 4. Starting Memgraph again and inspecting the core dump with `GDB`
-The container will need to be started again, since we want the same debug symbols to be present, and using an identical image is the most proper way for that. However, we don't need now the Memgraph process at the port 7687, so we will ignore it.
+The container will need to be started again since we want the same debug symbols to be present, and using an identical image is the most proper way for that. However, we don't need now the Memgraph process at port 7687, so we will ignore it.
 
 You will need to copy the core dump file into the container with the `docker cp` command.
 
@@ -159,9 +158,9 @@ where the `core.memgraph.file` is the name of your core dump file. Possibly, app
 To find out more about setting core dumps, you can check [this article](https://medium.com/@sourabhedake/core-dumps-how-to-enable-them-73856a437711).
 
 ### Generating a core dump with Docker Compose
-The setup with Docker Compose is similar like with Docker. You will need to bind the volume, run Memgraph in privileged mode, and make sure you set the no limit boundaries on the generated core dump.
+The setup with Docker Compose is similar to Docker. You will need to bind the volume, run Memgraph in privileged mode, and make sure you set no size limit on the generated core dump.
 
-Below we can see an example Docker Compose file which is able to generate a core dump:
+Below we can see an example Docker Compose file which can generate a core dump:
 
 ```yaml
 version: "3"
@@ -229,7 +228,7 @@ docker cp <container_id>:<path_to_perf.data> .
 where the `container_id` is the Memgraph container ID, and the `path_to_perf.data` is the absolute path in the container to the generated `perf.data` file.
 
 4. Linking Memgraph's debug symbols in the container to the host
-In order for `hotspot` to be able to identify debug symbols and draw the flamegraph, it needs the path to the debug symbols to be the exact one as in the container. In the container it is the `/usr/lib/memgraph/memgraph` binary, so we will need to make a symbolic link from the container volume to the host system:
+For `hotspot` to be able to identify debug symbols and draw the flamegraph, it needs the path to the debug symbols to be the exact one as in the container. In the container it is the `/usr/lib/memgraph/memgraph` binary, so we will need to make a symbolic link from the container volume to the host system:
 
 ```bash
 ln -s <path_to_docker_volume_debug_symbols_binary> /usr/lib/memgraph/memgraph
@@ -242,7 +241,7 @@ If you did everything correctly, by starting hotspot
 hotspot perf.data
 ```
 
-you should be able to see the flamegraph like below.
+you should be able to see a similar flamegraph like in the picture below.
 
 // TODO: Check why the image does not work
 ![](/pages/help-center/perf.png)
