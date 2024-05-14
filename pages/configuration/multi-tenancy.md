@@ -50,14 +50,16 @@ Users interact with multi-tenant features through specialized Cypher queries:
 
 1. `CREATE DATABASE name`: Creates a new database.
 2. `DROP DATABASE name`: Deletes a specified database.
-3. `SHOW DATABASE`: Shows the current used database. It will return `NULL` if there is not one.
+3. `SHOW DATABASE`: Shows the current used database. It will return `NULL` if
+   there is not one.
 4. `SHOW DATABASES`: Shows only the existing set of multitenant databases.
 5. `USE DATABASE name`: Switches focus to a specific database (disabled during
    transactions).
 6. `GRANT DATABASE name TO user`: Grants a user access to a specified database.
 7. `DENY DATABASE name FROM user`: Denies a user's access to a specified
-8. `REVOKE DATABASE name FROM user`: Removes database from user's authentication 
-   context
+   database.
+8. `REVOKE DATABASE name FROM user`: Removes database from user's authentication
+   context.
 9. `SET MAIN DATABASE name FOR user`: Sets a user's default (landing) database.
 10. `SHOW DATABASE PRIVILEGES FOR user`: Lists a user's database access rights.
 
@@ -88,11 +90,11 @@ Administrators manage multi-tenant privileges with:
 
 ### Configuration flags
 
-The `data_recovery_on_startup` flag replaces `storage_recover_on_startup`,
+The `data-recovery-on-startup` flag replaces `storage-recover-on-startup`,
 facilitating recovery of individual databases and their contents during startup.
-`storage_recover_on_startup` is still functional but deprecated.
+`storage-recover-on-startup` is still functional but deprecated.
 
-If `storage_delete_on_drop` is set to true, the underlying directories
+If `storage-delete-on-drop` is set to true, the underlying directories
 associated with the dropped database will be deleted.
 
 ### Using Neo4j Drivers
