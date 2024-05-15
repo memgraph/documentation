@@ -2989,6 +2989,93 @@ module.exports = withNextra({
         destination: '/getting-started',
         permanent: true
       },
+      //START Config - Deployment redirects
+      {
+        source: '/configuration/audit-log',
+        destination: '/database-management/logs',
+        permanent: true
+      },
+      {
+        source: '/configuration/auth-module',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations',
+        permanent: true
+      },
+      {
+        source: '/configuration/configuration-settings',
+        destination: '/database-management/configuration',
+        permanent: true
+      },
+      {
+        source: '/configuration/data-durability-and-backup',
+        destination: '/fundamentals/data-durability',
+        permanent: true
+      },
+      {
+        source: '/configuration/enabling-memgraph-enterprise',
+        destination: '/database-management/enabling-memgraph-enterprise',
+        permanent: true
+      },
+      {
+        source: '/configuration/high-availability',
+        destination: '/clustering/high-availability',
+        permanent: true
+      },
+      {
+        source: '/configuration/logs',
+        destination: '/database-management/logs',
+        permanent: true
+      },
+      {
+        source: '/configuration/metadata',
+        destination: '/database-management/query-metadata',
+        permanent: true
+      },
+      {
+        source: '/configuration/monitoring-server',
+        destination: '/database-management/monitoring',
+        permanent: true
+      },
+      {
+        source: '/configuration/multi-tenancy',
+        destination: '/database-management/multi-tenancy',
+        permanent: true
+      },
+      {
+        source: '/configuration/replication',
+        destination: '/clustering/replication',
+        permanent: true
+      },
+      {
+        source: '/configuration/replication/experimental-replication',
+        destination: '/clustering/replication/experimental-replication',
+        permanent: true
+      },
+      {
+        source: '/configuration/security',
+        destination: '/database-management/authentication-and-authorization/role-based-access-control',
+        permanent: true
+      },
+      {
+        source: '/configuration/server-stats',
+        destination: '/database-management/server-stats',
+        permanent: true
+      },
+      {
+        source: '/configuration/ssl-encryption',
+        destination: '/database-management/ssl-encryption',
+        permanent: true
+      },
+      {
+        source: '/configuration/text-search',
+        destination: '/querying/text-search',
+        permanent: true
+      },
+      {
+        source: '/configuration/system-configuration',
+        destination: '/database-management/system-configuration',
+        permanent: true
+      },
+      //END Config - Deployment redirects
       {
         source: '/advanced-algorithms/built-in-graph-algorithms',
         destination: '/advanced-algorithms/deep-path-traversal',
