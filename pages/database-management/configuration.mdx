@@ -1,5 +1,5 @@
 ---
-title: Configuration settings
+title: Configuration
 description: Optimize your graph computing environment with Memgraph's configuration settings. Go to our documentation page for instructions on how to effectively configure Memgraph and more.
 ---
 
@@ -7,39 +7,342 @@ import { Tabs, Tab } from 'nextra/components'
 import { Callout } from 'nextra/components'
 import { Steps } from 'nextra/components'
 
-# Configuration settings
+# Configuration
 
-The main Memgraph configuration file is available in
-`/etc/memgraph/memgraph.conf`. You can modify that file to suit your specific
-needs. Additional configuration can be specified by including another
-configuration file, in a file pointed to by the `MEMGRAPH_CONFIG` environment
-variable or by passing arguments on the command line.
+Memgraph has a set of configuration options that can be fine-tuned for specific needs. 
 
-For example, you can start the `memgraph` Docker image with `docker run
-memgraph/memgraph --bolt-port=7687 --log-level=TRACE`.
-
-<Callout type="info">
-
-If you are working with Memgraph Platform Docker image, you should pass
-configuration flags inside of environment variables, e.g. `docker run -p
-7687:7687 -p 7444:7444 -p 3000:3000 -e MEMGRAPH="--bolt-port=7687
---log-level=TRACE" memgraph/memgraph-platform`.
-
-</Callout>
+The main Memgraph configuration file is available at the
+`/etc/memgraph/memgraph.conf`. The file contains a set of default configuration values 
+and key-value pairs that can be modified to suit your specific needs.
 
 Each configuration setting is in the form: `--setting-name=value`.
 
-You can check the current configuration by using the following query (privilege
-level `CONFIG` is required):
+You can check the current configuration by using the following query:
+
 ```opencypher
 SHOW CONFIG;
 ```
+
+## Changing configuration
+
+The `memgraph.conf` file is the persistency for configuration. Changing the
+configuration settings depends on the way you are using Memgraph and the
+configuration settings you want to change.
+
+Most of the configuration changes need to happen before Memgraph is
+started. Still, a set of configuration settings can be [changed during
+runtime](/configuration/configuration-settings#change-configuration-settings-during-runtime). 
+
+Changing the configuration settings for Memgraph differs if you are using
+Memgraph with **Docker**, **Docker Compose**, or if it was installed on the
+native **Linux**.
+
+<Tabs items={["Docker", "Docker Compose" , "Linux"]}>
+
+     <Tab>
+
+       {<h3>Pass the configuration flags</h3>}
+
+        The most simple way to change the configuration with Docker is by passing 
+        the configuration options within the `docker run` command.
+        For example, if you want to limit memory usage for the whole instance to 
+        50 MiB and set the log level to `TRACE`, pass the configuration argument 
+        like this.
+
+        ```
+        docker run -p 7687:7687 -p 7444:7444 memgraph/memgraph --memory-limit=50 --log-level=TRACE
+        ```
+
+        {<h3>Update the configuration file</h3>}
+        Another way of updating the default configuration is by updating the 
+        configuration file on the running instance, but such action requires 
+        restart so the update is applied. Here are the steps to change the 
+        default configuration file:
+
+        <Steps>
+
+            {<h3>Start Memgraph</h3>}
+
+            Start Memgraph with a `docker run` command.
+
+            {<h3>Find container ID</h3>}
+
+            Open a new terminal and find the `CONTAINER ID` of the Memgraph Docker container
+            using the following command:
+
+            ```console
+            docker ps
+            ```
+
+            {<h3>Enter the container</h3>}
+
+            Enter the Docker container with the following command:
+
+            ```plaintext
+            docker exec -it -u 0 <CONTAINER ID> bash
+            ```
+
+            {<h3>Install the text editor of your choice</h3>}
+
+            For example, if you want to use `vim` run:
+
+            ```console
+            apt-get update && apt-get install -y vim
+            ```
+
+            {<h3>Edit the configuration file</h3>}
+
+            The file is located at `/etc/memgraph/memgraph.conf`.
+
+            {<h3>Restart the instance</h3>}
+
+            Run the following command:
+
+            ```
+            docker restart <CONTAINER ID>
+            ```
+
+        </Steps>
+
+        {<h3>Provide additional configuration file</h3>}
+        To achieve a different configuration on startup, you can also provide the 
+        path to the additional configuration file which will override the default
+        one. The file should contain the configuration settings in the form
+        `--setting-name=value`. Still, if any configuration settings are set as 
+        arguments, they will override the settings in the additional configuration 
+        file as well. Providing the path to the additional configuration file 
+        requires more steps than setting the configuration via arguments. That's 
+        because the file you're pointing to must be located within the container 
+        before the container is running. To provide the additional configuration 
+        file, follow these steps:
+
+        <Steps>
+            {<h3>Create a container</h3>}
+            Create a Docker container with the `--flag-file` argument pointing to the location where you'll save the additional configuration file.
+            The file must be saved within the container, ideally in the `/etc/memgraph` folder, where the default configuration file is stored.
+            ```
+            docker create --name memgraph_container -p 7687:7687 -p 7444:7444 memgraph/memgraph --flag-file=/etc/memgraph/my.conf 
+            ```
+
+            Besides the `--flag-file` flag, you can [set the environment variable](#environment-variables) `MEMGRAPH_CONFIG` to achieve the same.
+
+            {<h3>Copy the additional configuration file</h3>}
+            ```
+            docker cp my.conf memgraph_container:/etc/memgraph/my.conf
+            ```
+
+            {<h3>Start the container</h3>}
+
+            ```
+            docker start memgraph_container
+            ```
+        </Steps>
+    </Tab>
+
+    <Tab>
+        {<h3>Pass the configuration flags</h3>}
+
+        The most simple way to change the configuration with Docker Compose is 
+        by passing the configuration options within the `command` line in the 
+        `docker-compose.yml` file.
+
+        For example, if you want to limit memory usage for the whole instance to 
+        50 MiB and set the log level to `TRACE`, pass the configuration argument 
+        like this.
+
+        ```yaml
+        version: "3"
+        services:
+          memgraph:
+            image: "memgraph/memgraph"
+            ports:
+              - "7687:7687"
+              - "7444:7444"
+            volumes:
+              - mg_lib:/var/lib/memgraph
+              - mg_log:/var/log/memgraph
+              - mg_etc:/etc/memgraph
+            command: ["--log-level=TRACE", "--memory-limit=50"]
+        volumes:
+          mg_lib:
+          mg_log:
+          mg_etc:
+        ```
+
+        {<h3>Update the configuration file</h3>}
+
+        Another way of updating the default configuration is by updating the 
+        configuration file on the running instance, but such action requires 
+        restart so the update is applied. Here are the steps to change the 
+        default configuration file:
+
+        <Steps>
+          {<h3>Start Memgraph</h3>}
+
+          Start Memgraph with a `docker-compose up` command.
+
+          {<h3>Find container ID</h3>}
+
+          Open a new terminal and find the `CONTAINER ID` of the Memgraph Docker 
+          container using the following command:
+
+          ```console
+          docker ps
+          ```
+
+          {<h3>Enter the container</h3>}
+
+          Enter the Docker container with the following command:
+
+          ```plaintext
+          docker exec -it -u 0 <CONTAINER ID> bash
+          ```
+
+          {<h3>Install the text editor of your choice</h3>}
+
+          For example, if you want to use `vim` run:
+
+          ```console
+          apt-get update && apt-get install -y vim
+          ```
+
+          {<h3>Edit the configuration file</h3>}
+
+          The file is located at `/etc/memgraph/memgraph.conf`.
+
+          {<h3>Restart the instance</h3>}
+
+          Once you've added the environment variables, restart the instance using 
+          Docker Compose. Place yourself in the terminal in the folder containing 
+          the docker-compose.yml file and run the following command:
+          ```
+          docker-compose restart 
+          ```
+
+          This will restart the containers with the updated environment variables. 
+        </Steps>
+
+        {<h3>Provide additional configuration file</h3>}
+
+        To achieve a different configuration on startup, you can also provide the 
+        path to the additional configuration file which will override the default
+        one. The file should contain the configuration settings in the form
+        `--setting-name=value`. Still, if any configuration settings are set as 
+        arguments, they will override the settings in the additional configuration 
+        file as well. Providing the path to the additional configuration file 
+        requires more steps than setting the configuration via arguments. That's 
+        because the file you're pointing to must be located within the container 
+        before the container is running. To provide the additional configuration 
+        file, follow these steps:
+
+        <Steps>
+            {<h3>Create a container</h3>}
+            In your Docker Compose file, Add the `--flag-file` argument pointing 
+            to the location where you'll save the additional configuration file.
+            The file must be saved within the container, ideally in the 
+            `/etc/memgraph` folder, where the default configuration file is stored.
+            ```
+            docker-compose -f docker-compose.yml create
+            ```
+
+            Besides the `--flag-file` flag, you can 
+            [set the environment variable](#environment-variables) 
+            `MEMGRAPH_CONFIG` to achieve the same.
+
+            {<h3>Find container ID</h3>}
+
+            Open a new terminal and find the `CONTAINER_ID` of the Memgraph Docker 
+            container using the following command:
+
+            ```console
+            docker ps -a
+            ```
+            
+            {<h3>Copy the additional configuration file</h3>}
+            ```
+            docker cp my.conf <CONTAINER_ID>:/etc/memgraph/my.conf
+            ```
+
+            {<h3>Start the container</h3>}
+
+            ```
+            docker-compose up
+            ```
+        </Steps>
+    </Tab>
+
+    <Tab>
+          {<h3>Update the configuration file</h3>}
+        Once Memgraph is installed on your Linux machine, check the status with: 
+``` bash
+systemctl status memgraph
+```
+        
+        If the instance is in a running state, stop the Memgraph instance by running the following command:
+        ```bash
+        sudo systemctl stop memgraph
+        ```
+       The configuration file is available at `/etc/memgraph/memgraph.conf`. Open the configuration file with your favorite text editor.
+        Modify it, save the changes, and start the instance by running the following command:
+
+        ```bash
+        sudo systemctl start memgraph
+        ```
+
+        {<h3>Provide additional configuration file</h3>}
+        To achieve a different configuration on startup, you can also provide the path
+        to the additional configuration file which will override the default
+        one. The file should contain the configuration settings in the form
+        `--setting-name=value`. 
+        To provide the path to the additional configuration file, [set the environment variable](#environment-variables) `MEMGRAPH_CONFIG` to the correct path.
+    </Tab>
+</Tabs>
+
+---
+
+### Change configuration during runtime
+
+Memgraph contains settings that can be modified during runtime using a Cypher query.
+Some runtime settings are persisted between multiple runs, while others will
+fallback to the value of the command-line argument.
+
+| Setting name               | Description                                                                                   | Persistent between runs |
+|----------------------------|-----------------------------------------------------------------------------------------------|-------------------------|
+| organization.name          | Name of the organization using the instance of Memgraph (used for verifying the license key). | yes                     |
+| enterprise.license         | License key for Memgraph Enterprise.                                                          | yes                     |
+| server.name                | Bolt server name.                                                                             | yes                     |
+| query.timeout              | Maximum allowed query execution time. Value of 0 means no limit.                              | yes                     |
+| log.level                  | Minimum log level. Allowed values: TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL.              | no                      |
+| log.to_stderr              | Log messages go to `stderr` in addition to `logfiles`.                                        | no                      |
+| cartesian-product-enabled  | Enforces cartesian product operator during query matching.                                    | no                      |
+
+All settings can be fetched by calling the following query:
+
+```opencypher
+SHOW DATABASE SETTINGS;
+```
+
+To check the value of a single setting, you can use a slightly different query:
+
+```opencypher
+SHOW DATABASE SETTING "setting.name";
+```
+
+If you want to change a value for a specific setting, following query should be used:
+
+```opencypher
+SET DATABASE SETTING "setting.name" TO "some-value";
+```
+
+### Multitenancy and configuration 
 
 If you are using a multi-tenant architecture, all isolated databases share
 identical configurations. At the moment, there is no way to specify a
 per-database configuration.
 
-## Audit log
+## List of configuration flags
+
+### Audit log
 
 This section contains the list of flags that are used to configure the audit
 logging.
@@ -51,24 +354,24 @@ logging.
 | --audit-buffer-flush-interval-ms | Controls the time interval (in milliseconds) used for flushing the in-memory buffer to disk.   |
 
 
-## Auth module
+### Auth module
 
 This section contains the list of flags that are used to configure the external
 auth module authentication and authorization mechanisms used by Memgraph.
 
 | Flag                             | Description
-| ---------------------------------|-----------------------------------------------------------------------------------------------------------|
-| --auth-module-executable         | Path to the executable that should be used for user authentication/authorization.                         |
-| --auth-module-create-missing-user| DEPRECATED No authentication data is modified by the auth module                                          |
-| --auth-module-create-missing-role| DEPRECATED No authentication data is modified by the auth module                                          |
-| --auth-module-manage-roles       | DEPRECATED No authentication data is modified by the auth module                                          |
-| --auth-module-timeout-ms         | Specifies the maximum time that Memgraph will wait for a response from the external auth module.          |
-| --auth-password-permit-null      | Can be set to false to disable null passwords.                                                            |
-| --auth-password-strength-regex   | The regular expression that should be used to match the entire entered password to ensure its strength.   |
-| --auth-user-or-role-regex        | Set to the regular expression that each user or role name must fulfill.                                   |
+| ---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| --auth-module-executable         | Path to the executable that should be used for user authentication/authorization.                                                                                                                                                                                                 |
+| --auth-module-create-missing-user| DEPRECATED No authentication data is modified by the auth module                                                                                                                                                                                                                  |
+| --auth-module-create-missing-role| DEPRECATED No authentication data is modified by the auth module                                                                                                                                                                                                                  |
+| --auth-module-manage-roles       | DEPRECATED No authentication data is modified by the auth module                                                                                                                                                                                                                  |
+| --auth-module-timeout-ms         | Specifies the maximum time that Memgraph will wait for a response from the external auth module.                                                                                                                                                                                  |
+| --auth-password-permit-null      | Can be set to false to disable null passwords.                                                                                                                                                                                                                                    |
+| --auth-password-strength-regex   | The regular expression that should be used to match the entire entered password to ensure its strength. The syntax for regular expressions is derived from a [modified version of the ECMAScript regular expression grammar](https://en.cppreference.com/w/cpp/regex/ecmascript). |
+| --auth-user-or-role-regex        | Set to the regular expression that each user or role name must fulfill. The syntax for regular expressions is derived from a [modified version of the ECMAScript regular expression grammar](https://en.cppreference.com/w/cpp/regex/ecmascript).                                 |
 
 
-## Bolt
+### Bolt
 
 This section contains the list of flags that are used to configure the Bolt
 protocol used by Memgraph.
@@ -91,7 +394,7 @@ workers simultaneously.
 
 </Callout>
 
-## Experimental features
+### Experimental features
 
 This section contains the list of flags that are used to configure experimental features in Memgraph.
 
@@ -101,20 +404,20 @@ This section contains the list of flags that are used to configure experimental 
 | --experimental-enabled=system-replication     | Enables system replication, including authentication and multi-tenancy replication in the Enterprise Edition. |
 | --experimental-enabled=text-search            | Enables text search capabilities within Memgraph.                                             |
 
-## High availability
+### High availability
 
 This section contains the list of flags that are used to configure highly available cluster in Memgraph.
 
 | Flag                                     | Description                                                                                                 | Type       |
 |------------------------------------------|-------------------------------------------------------------------------------------------------------------|------------|
-| --coordinator-id                         | Id of the coordinator instance.                                                                             | `[uint32]` |
-| --coordinator-port                       | Port used for Raft server on coordinator instance.                                                          | `[uint32]` |
-| --management-port                        | Port on which replication instances receive messages from coordinator .                                     | `[uint32]` |
+| --raft-server-id                         | Raft server id on coordinator instance.                                                                     | `[uint32]` |
+| --raft-server-port                       | Raft server's port on coordinator instance.                                                                 | `[uint32]` |
+| --coordinator-server-port                | Port on which replication instances receive messages from coordinator .                                     | `[uint32]` |
 | --instance-health-check-frequency-sec=1  | The interval between two health checks that coordinator does on replication instances.                      | `[uint32]` |
 | --instance-down-timeout-sec=5            | Number of seconds that need to pass before replication instance is considered down.                         | `[uint32]` |
 | --instance-get-uuid-frequency-sec=10     | The interval between two instance uuid checks.                                                              | `[uint32]` |
 
-## Query
+### Query
 
 This section contains the list of flags that are used to configure query
 execution in Memgraph.
@@ -130,7 +433,7 @@ execution in Memgraph.
 | --query-plan-cache-max-size=1000                                              | Maximum number of query plans to cache.                                                                                                                                                                          | `[int32]`  |
 | --query-vertex-count-to-expand-existing=10                                    | Maximum count of indexed vertices which provoke indexed lookup and then expand to existing, <br/>instead of a regular expand. Default is 10, to turn off use -1.                                                 | `[int64]`  |
 
-## Storage
+### Storage
 
 This section contains the list of flags that are used to configure storage usage
 in Memgraph.
@@ -144,7 +447,7 @@ in Memgraph.
 | --storage-parallel-index-recovery=false                       | [DEPRECATED] Controls whether the index creation can be done in a multithreaded fashion during recovery.                           | `[bool]`   |
 | --storage-parallel-schema-recovery=false                      | Controls whether the indices and constraints creation can be done in a multithreaded fashion during recovery.                      | `[bool]`   |
 | --storage-properties-on-edges=true                            | Controls whether edges have properties.                                                                                            | `[bool]`   |
-| --storage-recover-on-startup=true                             | Deprecated and replaced with the `data_recovery_on_startup` flag. Controls whether the storage recovers persisted data on startup. | `[bool]`   |
+| --storage-recover-on-startup=true                             | Deprecated and replaced with the `data-recovery-on-startup` flag. Controls whether the storage recovers persisted data on startup. | `[bool]`   |
 | --storage-recovery-thread-count                               | The number of threads used to recover persisted data from disk. Defaults to using system's maximum thread count.                   | `[uint64]` |
 | --storage-snapshot-interval-sec=300                           | Storage snapshot creation interval (in seconds). Set to 0 to disable periodic snapshot creation.                                   | `[uint64]` |
 | --storage-snapshot-on-exit=true                               | Controls whether the storage creates another snapshot on exit.                                                                     | `[bool]`   |
@@ -155,11 +458,10 @@ in Memgraph.
 | --storage-mode=IN_MEMORY_TRANSACTIONAL                        | The storage mode Memgraph will run on startup. Can be IN_MEMORY_TRANSACTIONAL, IN_MEMORY_ANALYTICAL or ON_DISK_TRANSACTIONAL.      | `[string]` |
 | --storage-enable-schema-metadata=false                        | Facilitates the utilization of a specialized cache designed to store specific metadata related to the database.                    | `[bool]`   |
 | --storage-enable-edges-metadata=false                         | Utilizes additional memory to store metadata related to edges. This metadata is used to speed up id based lookups on edges.        | `[bool]`   |
-| --storage-automatic-label-index-creation-enabled=false        | Enables creating indices on labels automatically.                                                                                  | `[bool]`   |
-| --storage-automatic-edge-type-index-creation-enabled=false    | Enables creating indices on edge-types automatically.                                                                              | `[bool]`   |
+| --storage-automatic-label-index-creation-enabled=false        | Enables automatic creation of indices on labels. Only usable in IN_MEMORY_TRANSACTIONAL mode.                                      | `[bool]`   |
+| --storage-automatic-edge-type-index-creation-enabled=false    | Enables automatic creation of indices on edge types. Only usable in IN_MEMORY_TRANSACTIONAL mode.                                  | `[bool]`   |
 
-
-## Streams
+### Streams
 
 This section contains the list of flags that are used to configure stream
 connections in Memgraph.
@@ -172,7 +474,7 @@ connections in Memgraph.
 | --stream-transaction-retry-interval=500  | The interval to wait (measured in milliseconds) before retrying to execute again a conflicting transaction. | `[uint32]` |
 
 
-## Other
+### Other
 
 This section contains the list of all other releant flags used within Memgraph.
 
@@ -183,6 +485,9 @@ This section contains the list of all other releant flags used within Memgraph.
 | --data-directory=/var/lib/memgraph            | Path to directory in which to save all permanent data.                                                                                                                                                                                                                                                                                                       | `[string]` |
 | --data-recovery-on-startup=true               | Facilitates recovery of one or more individual databases and their contents during startup. Replaces `--storage-recover-on-startup`                                                                                                                                                                                                                          | `[bool]`   |
 | --delta-chain-cache-threshold=128             | The minimum number of deltas worth caching when rebuilding a certain object's state. Useful when executing parallel transactions dependant on changes of a frequently changed graph object, to lower CPU usage. Must be a positive non-zero integer.                                                                                                         | `[uint64]` |
+| --flag-file                                   | Path to the additional configuration file, overrides the default configuration settings.                                                                                                                                                                                                                                                                                           | `[string]` |
+| --help                                        | Show help on all flags and exit. The default values is `false`.                                                                                                                                                                                                                                                                                              | `[bool]`   |
+| --help-xml                                    | Produce an XML version of help and exit. The default values is `false`.                                                                                                                                                                                                                                                                                      | `[bool]`   |
 | --init-file                                   | Path to the CYPHERL file which contains queries that need to be executed before the Bolt server starts, such as creating users.                                                                                                                                                                                                                              | `[string]` |
 | --init-data-file                              | Path to the CYPHERL file, which contains queries that need to be executed after the Bolt server starts.                                                                                                                                                                                                                                                      | `[string]` |
 | --isolation-level=SNAPSHOT_ISOLATION          | Isolation level used for the transactions. Allowed values: SNAPSHOT_ISOLATION, READ_COMMITTED, READ_UNCOMMITTED.                                                                                                                                                                                                                                             | `[string]` |
@@ -198,160 +503,112 @@ This section contains the list of all other releant flags used within Memgraph.
 | --replication-replica-check-frequency-sec     | The time duration in seconds between two replica checks/pings. If < 1, replicas will not be checked at all and the replica will never be recovered. The MAIN instance allocates a new thread for each REPLICA.                                                                                                                                               | `[uint64]` |
 | --replication-restore-state-on-startup        | Set to `true` when initializing an instance to restore the replication role and configuration upon restart.                                                                                                                                                                                                                                                  | `[bool]`   |
 | --telemetry-enabled=true                      | Set to true to enable telemetry. We collect information about the running system (CPU and memory information), information about the database runtime (vertex and edge counts and resource usage), and aggregated statistics about some features of the database (e.g. how many times a feature is used) to allow for an easier improvement of the product.  | `[bool]`   |
+| --version                                     | Show version and build info and exit. The default values is `false`.                                                                                                                                                                                                                                                                                         | `[bool]`   |
 
-## Environment variables
+
+
+### Environment variables
+
+This section contains the list of environment variables that can be used to configure Memgraph.
+
+Before the running of Memgraph, you can set the following environment variables:
+
 
 | Variable          | Description                                                                                                                                                                                                               | Type       |
 |-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------|
 | MEMGRAPH_USER     | Specifies the username for connecting to Memgraph. If the user does not exist, a new one is created with this username. Manual entry of credentials is always necessary when accessing Memgraph using Memgraph Lab. | `[string]` |
 | MEMGRAPH_PASSWORD | Specifies the password for the user. If creating a new user, this password is assigned. For existing users, this setting does not change the password. Manual entry of credentials is always necessary when accessing Memgraph using Memgraph Lab. | `[string]` |
 | MEMGRAPH_PASSFILE | Path to file that contains username and password for creating a user. Data in file should be in format `username:password` if your username or password contains  `:` just add `\` before for example `us\:ername:password` | `[string]`
+| MEMGRAPH_CONFIG   | Path to the additional configuration file.                                                                                                                                                                                           | `[string]` |
 
-## Additional configuration inclusion
+In order to apply the environment variables with Memgraph, you can follow the steps below:
 
-You can define additional configuration files in the main configuration file or
-within a Docker command in the terminal. Additional files are processed after
-the main configuration file and they override the main configuration file.
-Additional configuration files are specified with the `--flag-file` flag.
-
-Example:
-
- `--flag-file=another.conf`
-
-## Check configuration
-
-Check the current configuration by running the `SHOW CONFIG;` query.
-
-## Change the configuration
-
-Some configuration settings can be changed during runtime, while others need to
-be changed in the configuration file or by passing configuration flags.
-
-### During runtime
-
-Memgraph contains settings that can be modified during runtime using a query.
-Some runtime settings are persisted between multiple runs, while others will
-fallback to the value of the command-line argument.
-
-| Setting name               | Description                                                                                   | Persistent between runs |
-|----------------------------|-----------------------------------------------------------------------------------------------|-------------------------|
-| organization.name          | Name of the organization using the instance of Memgraph (used for verifying the license key). | yes                     |
-| enterprise.license         | License key for Memgraph Enterprise.                                                          | yes                     |
-| server.name                | Bolt server name.                                                                             | yes                     |
-| query.timeout              | Maximum allowed query execution time. Value of 0 means no limit.                              | yes                     |
-| log.level                  | Minimum log level. Allowed values: TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL.              | no                      |
-| log.to_stderr              | Log messages go to `stderr` in addition to `logfiles`.                                        | no                      |
-| cartesian-product-enabled  | Enforces cartesian product operator during query matching.                                    | no                      |
-
-All settings can be fetched by calling the following query:
-
-```opencypher
-SHOW DATABASE SETTINGS;
-```
-
-To check the value of a single setting you can use a slightly different query:
-
-```opencypher
-SHOW DATABASE SETTING "setting.name";
-```
-
-If you want to change a value for a specific setting, following query should be used:
-
-```opencypher
-SET DATABASE SETTING "setting.name" TO "some-value";
-```
-
-### Using flags and config file
-
-Changing the configuration settings for Memgraph differes if you are using
-Memgraph with **Docker** or if it was installed with **Linux** - Ubuntu,
-Debian, RPM package, or WSL.
-
-
-<Tabs items={["Docker", "Linux"]}>
+<Tabs items={["Docker", "Docker Compose" , "Linux"]}>
 
     <Tab>
+    To set the environment variable when running Memgraph with Docker, use the following syntax:
 
-        You can customize the configuration by
-        passing configuration options within the `docker run` command.
+    ```
+    docker run -p 7687:7687 -p 7444:7444 -e MEMGRAPH_USER=newUser -e MEMGRAPH_PASSWORD=pass memgraph/memgraph 
+    ```
 
-        If you are working with the `memgraph-platform` image, you should pass
-        configuration options with environment variables.
+    The above command will start Memgraph in Docker container and create a user with username `newUser` and password `pass`. 
+    </Tab>
 
-        For example, if you want to limit memory usage for the whole instance to 50 MiB
-        and set the log level to `TRACE`, pass the configuration like this:
-
-        ```
-        docker run -p 7687:7687 -p 3000:3000 -p 7444:7444 -e MEMGRAPH="--memory-limit=50 --log-level=TRACE" --name memgraph memgraph/memgraph-platform
-        ```
-
-        When you are working with `memgraph` or `memgraph-mage` images, you should pass
-        configuration options as arguments.
-
-        For example, if you want to limit memory usage for the whole instance to 50 MiB
-        and set the log level to `TRACE`, pass the configuration argument like this:
-
-        ```
-        docker run -p 7687:7687 -p 7444:7444 memgraph/memgraph --memory-limit=50 --log-level=TRACE
+    <Tab>
+    In order to apply the environment variables in when running it with Docker Compose, add environment variables in your docker-compose.yml file:
+    ```yaml
+        version: "3"
+        services:
+          memgraph:
+            image: "memgraph/memgraph"
+            ports:
+              - "7687:7687"
+              - "7444:7444"
+            volumes:
+              - mg_lib:/var/lib/memgraph
+              - mg_log:/var/log/memgraph
+              - mg_etc:/etc/memgraph
+            command: ["--log-level=TRACE"]
+            enviroment:
+              - MEMGRAPH_USER=memgraph
+              - MEMGRAPH_PASSWORD=memgraph
+        volumes:
+          mg_lib:
+          mg_log:
+          mg_etc:
         ```
         ---
 
-        You can also change the configuration within the configuration file:
+        Once you've added the environment variables, restart the instance using 
+        Docker Compose. First, bring the services down. Place yourself in the 
+        terminal in the folder containing the docker-compose.yml file and run 
+        the following command:
+        ```
+        docker-compose down
+        ```
+        
+        Then bring them back up:
+        ```
+        docker-compose up -d
+        ```
 
-        <Steps>
-
-            {<h3>Start Memgraph</h3>}
-
-            Start Memgraph with a `docker run` command.
-
-            {<h3>Find container ID</h3>}
-
-            Open a new terminal and find the `CONTAINER ID` of the Memgraph Docker container
-            using the following command:
-
-            ```console
-            docker ps
-            ```
-
-            {<h3>Enter the continer</h3>}
-
-            Enter the Docker container with the following command:
-
-            ```plaintext
-            docker exec -it -u 0 <CONTAINER ID> bash
-            ```
-
-            {<h3>Install the text editor of your choice</h3>}
-
-            For example, if you want to use `vim` run:
-
-            ```console
-            apt-get update
-            apt-get install vim
-            ```
-
-            {<h3>Edit the configuration file</h3>}
-
-            The file is located at `/etc/memgraph/memgraph.conf`.
-
-            {<h3>Restart the intance</h3>}
-
-            Run the following command:
-
-            ```
-            docker restart <CONTAINER ID>
-            ```
-
-        </Steps>
+        This will restart the containers with the updated environment variables. 
 
     </Tab>
+
     <Tab>
 
-        After installing Memgraph, the configuration file is available at `/etc/memgraph/memgraph.conf`.
+    In order to apply the environment variables in Memgraph, 
+    open a service file in your favorite text editor and add the following lines:
 
-        Modify it, save the changes and restart the instance.
+    ```bash
+        [Service]
+        Environment="MEMGRAPH_USER=memgraph"
+        Environment="MEMGRAPH_PASSWORD=memgraph"
+    ```
+
+    The service file should be located at `/lib/systemd/system/memgraph.service`.
+
+    After you have added the environment variables, reload the systemd:
+
+    ```bash
+    systemctl daemon-reload
+    ```
+
+    After that you can restart or start the Memgraph instance:
+
+    ```bash 
+    systemctl start memgraph
+    ```
+    The enviroment variables will be applied to the Memgraph instance, and user will be created. 
+
+
     </Tab>
+
+
 </Tabs>
+
 
 ## Use `init` flags with Docker
 
@@ -428,7 +685,7 @@ docker run -it -p 7687:7687 -p 7444:7444 my_image --init-file=/usr/lib/memgraph/
 ```
 
 To check all available flags in Memgraph, refer to [the configuration reference
-guide](/configuration/configuration-settings).
+guide](/database-management/configuration).
 
 {<h3> Connect to Memgraph </h3>}
 
@@ -439,7 +696,7 @@ to connect manually and input the correct username and password. This happened
 because `auth.cypherl` file was run before the Bolt server started. You can also
 run the `SHOW CONFIG` query:
 
-![](/pages/configuration/configuration-settings/memgraph-lab-init-file.png)
+![](/pages/database-management/configuration/memgraph-lab-init-file.png)
 
 Notice how the current value of `init_file` is updated with the path to the
 CYPHERL file inside the container.
@@ -575,10 +832,11 @@ docker run -it -p 7687:7687 -p 7444:7444 my_image --init-data-file=/usr/lib/memg
 To verify that everything is set up correctly, [run Memgraph
 Lab](/data-visualization), connect to Memgraph, and run the `SHOW CONFIG` query:
 
-![](/pages/configuration/configuration-settings/memgraph-lab-init-data-file.png)
+![](/pages/database-management/configuration/memgraph-lab-init-data-file.png)
 
 Notice how the database is already populated and the current value of
 `init_data_file` is updated with the path to the CYPHERL file inside the
 container.
 
 </Steps>
+

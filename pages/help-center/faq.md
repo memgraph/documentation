@@ -66,7 +66,7 @@ label-property indexes and a custom visualization library. Check our
 ### Is Memgraph a distributed database?
 
 At the moment, Memgraph supports horizontal scaling of read queries by using
-[replication](/configuration/replication). 
+[replication](/clustering/replication). 
 
 Horizontal scaling of write queries requires sharding of data which Memgraph
 doesn’t support because once data is sharded in a cluster it becomes a complex
@@ -100,7 +100,7 @@ the WAL file.
 ### How does Memgraph ensure high availability?
 
 Memgraph ensures high availability by using
-[replication](/configuration/replication). Replication involves replicating data
+[replication](/clustering/replication). Replication involves replicating data
 from one MAIN instance to one or several REPLICA instances. If a MAIN instance
 fails, another REPLICA instance can be upgraded and serve as the MAIN instance,
 thus ensuring continuous data availability. 
@@ -268,7 +268,7 @@ dynamically, so 3 labels take up as much memory as 4, and 5-7 labels take as
 much space as 8, etc.) You can use the same technique to save multilayer
 networks. 
 
-Memgraph Enterprise supports [multi-tenant architecture](/configuration/multi-tenancy). 
+Memgraph Enterprise supports [multi-tenant architecture](/database-management/multi-tenancy). 
 
 ### Can I run MAGE modules and algorithms on just a part of the graph/subgraph?
 
@@ -313,7 +313,7 @@ replication is a bottleneck for highly parallel workflows.
 ### How can I check storage information?
 
 You can check storage information by running the [SHOW STORAGE
-INFO;](/configuration/server-stats) that will provide information about the
+INFO;](/database-management/server-stats) that will provide information about the
 number of stored nodes and relationships and memory usage. 
 
 ### Where does Memgraph save or preview logs?
@@ -326,7 +326,7 @@ listens to logs on the 7444 port. You can also use this web socket port 7444 and
 listen to the logs from your custom system.
 
 Log level and location can be modified using [configuration
-flags](/configuration/configuration-settings).
+flags](/database-management/configuration).
 
 ### Do I need to know Cypher to query the database?
 

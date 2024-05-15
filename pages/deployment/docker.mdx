@@ -1,0 +1,448 @@
+---
+title: Manage Memgraph with Docker
+description: Learn how to manage your Memgraph instance in the Docker environment.
+---
+
+import { Card, Cards } from 'nextra/components'
+import { Steps } from 'nextra/components'
+
+# Manage Memgraph with Docker 
+
+Learn the best practices for managing your Memgraph instance in the Docker
+environment.
+
+## Install and run Memgraph with Docker
+
+Memgraph offers two images you can run with Docker, depending on your needs:
+
+- `memgraph/memgraph-mage` - use this image if you require [MAGE
+  library](/advanced-algorithms) which consist of graph algorithms and util
+  procedures. 
+- `memgraph/memgraph` - use this image if you just require Memgraph database
+  without MAGE library. This image is more lightweight but it does not include
+  commonly used graph algorithms.
+
+In this guide, we'll proceed with `memgraph/memgraph-mage` images for all examples,
+but if you'd like to use `memgraph/memgraph` image, just replace it in the code
+snippets.
+
+The simplest way of running Memgraph in the Docker environment is using the
+following command:
+
+```
+docker run -p 7687:7687 -p 7444:7444 memgraph/memgraph-mage
+```
+
+Once you start, you'll see Memgraph logs in the terminal. To avoid logs showing up
+in the terminal, you can run the container in detach mode (`-d` flag).
+
+The above command starts Memgraph in a Docker container, and it exposes ports
+`7687` and `7444`. The port `7687` is used to connect to the database and query it via the Bolt
+protocol. The port `7444` is optional, but it's a good practice to use it, because
+that's where the logs are exposed. Memgraph Lab, a visual user interface, uses
+that port to note all logs in the UI. 
+
+To connect to Memgraph, you can use CLI [mgconsole](/cli), preferred
+[client](/client-libraries) or visual user interface [Memgraph
+Lab](/data-visualization).
+
+## Configure Memgraph
+
+Memgraph has its configuration settings persisted in the `memgraph.conf` file
+located in the `/etc/memgraph` folder. Some of the most commonly configured
+settings are:
+
+- `--log-level=WARNING`
+- `--query-execution-timeout-sec=600`
+- `--storage-snapshot-interval-sec=300	`
+- `--storage-snapshot-retention-count=3`
+- `--storage-mode=IN_MEMORY_TRANSACTIONAL`
+
+Of course, other
+[settings](/database-management/configuration#list-of-configuration-flags)
+are as important, so make sure you get familiar with them as well.
+
+Add the appropriate flags at the end of the command to configure Memgraph within the `docker run` command. For example, to change the log level to `TRACE` and to
+remove query execution timeout, run the following command:
+
+```
+docker run -p 7687:7687 -p 7444:7444 memgraph/memgraph-mage --log-level=TRACE --query-execution-timeout-sec=0
+```
+
+The set flags override the default settings in the `memgraph.conf` file. It is
+also possible to provide an additional configuration file by providing a path to it
+via `--file-flag` or `MEMGRAPH_CONFIG` environment variable. The set values in
+that file will override values in the default `memgraph.conf` file. Still, flags
+in the `docker run` command will override them both, so be careful when
+setting the configuration. To ensure all is set correctly, run `SHOW CONFIG`
+once the database is up and running.
+
+<Cards>
+<div className="w-[300px]">
+    <Card
+    title="Learn more about configuration"
+    href="/database-management/configuration"
+    />
+</div>
+</Cards>
+
+## Secure the database
+
+In the community version of Memgraph, you can create a user and its password for security. 
+To achieve that, set `MEMGRAPH_USER` and `MEMGRAPH_PASSWORD`
+environment variables. When you set values for those variables, a user will be
+created if it does not exist, and no one except from that user will be able to
+access the database. Here is the command to start Memgraph with the user environment variables set:
+
+```bash
+docker run -p 7687:7687 -p 7444:7444 -e MEMGRAPH_USER="user" -e MEMGRAPH_PASSWORD="pass" memgraph/memgraph-mage 
+```
+
+To authenticate, provide the correct username and password. For example, if you
+want to run Memgraph's CLI mgconsole, run the following command:
+
+```bash
+# Run docker ps to get CONTAINER_ID
+docker exec -it <CONTAINER_ID> mgconsole --username user --password pass
+```
+
+<Cards>
+<div className="w-[230px]">
+    <Card
+    title="Learn more about users"
+    href="/database-management/authentication-and-authorization/users"
+    />
+</div>
+</Cards>
+
+The other option is to start Memgraph with init flags, and you can read more
+about it in the [configuration
+guide](/database-management/configuration#use-init-flags-with-docker).
+
+In the Enterprise version of Memgraph, you can achieve a higher level of security
+with the role-based access control (RBAC) and fine-grained access control.
+Within fine-grained access control Memgraph offers label-based access control.
+
+To set it up, first [enable Memgraph
+Enterprise](/database-management/enabling-memgraph-enterprise), and then run
+[the necessary Cypher
+queries](/database-management/authentication-and-authorization/role-based-access-control)
+to set up privileges properly.
+
+You can add an additional layer of security by enabling SSL encryption.
+
+<Cards>
+<div className="w-[300px]">
+    <Card
+    title="Learn more about SSL encryption"
+    href="/database-management/ssl-encryption"
+    />
+</div>
+</Cards>
+
+## Persist data with Docker volumes
+
+Docker volumes are used for data persistence across container lifecycles, data
+sharing between containers, efficient data storage, backup and migration and for
+easy access from the host system. 
+
+Whenever you restart your Docker container, the container's filesystem will
+persist your data, logs and configuration. Still, data will not be persisted
+across container deletion and recreation. To ensure you have your data even if
+you decide to spin up a new container, run the container with volumes. 
+
+Volumes are the preferred mechanism for persisting data generated by and used by
+Docker containers. They are completely managed by Docker and are stored outside
+of the default filesystem. The data in volumes is preserved across container
+restarts and can be shared between multiple containers.
+
+Although bind mounts, which allow you to attach specific paths from your host
+machine to paths in the container, are also used for data persistence, they are
+not a recommended option.
+
+The best practice to ensure volume data persistence is to use named volumes and
+to do regular backups.
+
+Here are the locations of the different types of data that Memgraph uses:
+
+- Configuration files: `/etc/memgraph`
+- Logs: `/var/log/memgraph`
+- User-related data: `/usr/lib/memgraph`
+- Graph data: `/var/lib/memgraph`
+
+Here is the command to run Memgraph with volumes for data persistency:
+
+```
+docker run -p 7687:7687 -p 7444:7444 -v mg_lib:/var/lib/memgraph memgraph/memgraph-mage
+```
+
+Commonly, you want to ensure you have the same Memgraph configuration
+wherever you start it. Then you can add volume for the configuration persistency
+as well:
+
+```
+docker run -p 7687:7687 -p 7444:7444 -v mg_lib:/var/lib/memgraph -v mg_etc:/etc/memgraph memgraph/memgraph-mage
+```
+
+If you'd like an easy access to logs on your machine, you can add volume for logs as well:
+
+```
+docker run -p 7687:7687 -p 7444:7444 -v mg_lib:/var/lib/memgraph -v mg_etc:/etc/memgraph -v mg_log:/var/log/memgraph memgraph/memgraph-mage
+```
+
+Named volumes are Docker-managed volumes that store data independently of
+containers. They are not directly mapped to a specific host directory that you
+choose because, in this case, Docker manages where the data is stored on the
+host. However, you can still access this data from the host.
+
+As opposed to bind mounts, named volumes provide better encapsulation and
+separation of the environment. Having named volumes makes it easier to back up or
+migrate data. Since they're managed by Docker, there is an additional layer of
+abstraction and security. Named volumes are more suitable for production
+deployments, where security, data integrity, and portability are critical. 
+
+
+If you want to start a new Memgraph instance with the data from another Docker
+container which has `mg_lib` volume attached to it, you can run the following
+command:
+
+```
+docker run -p 7687:7687 -p 7444:7444 -v mg_lib:/var/lib/memgraph memgraph/memgraph-mage
+```
+
+The new container will be started with the contents from the `mg_lib` volume,
+meaning it will restore the database from the existing snapshots. That's the
+easiest way to transfer your data to another instance.
+
+Additionally, here are some useful facts about Docker volumes:
+- Two containers can't use the same volume at the same time: Be careful when
+  you run a new Memgraph instance to change the name of the volume if you plan
+  on running two Memgraph instances at the same time with different data.
+- Two containers can use the same volume if they're not running at the same
+  time: you can run a new Memgraph instance with an already used volume if you
+  first stopped a previously running instance. That is useful when you want to
+  reuse the same data for two instances.
+- Using named volumes is the easiest way to migrate data between different containers.
+- With named volumes, you can save files locally by inspecting the volume and
+  saving the data to the local machine. With Docker Desktop, these actions are
+  straightforward. Docker volumes can be inspected even when the container is
+  down.
+
+<Cards>
+<div className="w-[260px]">
+    <Card
+    title="Learn more about Docker"
+    href="/getting-started/first-steps-with-docker"
+    />
+</div>
+</Cards>
+
+## Backup data
+
+All your data is stored in the `/var/lib/memgraph` data folder. Although being
+in-memory, Memgraph creates snapshots and WAL files to persist your data.
+Because of that, it is a good practice to have a named volume on the
+`/var/lib/memgraph` folder. That volume can be attached to a new instance, which
+will then start with your data being loaded.
+
+Still, it is a good practice to do a backup regularly.
+
+### Copy the data persistence folder 
+
+To create a backup, you need to copy the contents of `/var/lib/memgraph` folder.
+If you previously set up the volume on `/var/lib/memgraph` data folder, then
+just save the content from that volume on a safe location.
+
+If you didn't run Memgraph with set up volumes, then copy the contents of
+`/var/lib/memgraph` folder to a safe location. To do that, use `docker cp`
+command. For example, to copy the whole data folder from Memgraph onto the local
+file system, first run the following query in Memgraph to lock the data
+directory to avoid changes happening during the backup process:
+
+```
+LOCK DATA DIRECTORY;
+```
+
+After that, copy the data folder onto your local file system:
+
+```
+docker cp <container_id>:/var/lib/memgraph /path/to/my/local-folder
+```
+
+In the end, unlock the data directory by running the following query in Memgraph:
+
+```
+UNLOCK DATA DIRECTORY;
+```
+
+By default, Memgraph creates snapshots every 300 seconds and retains three latest
+snapshots, so it can easily recover in case of corruption. It is a good practice
+to have more than one snapshot. If something caused the database to crash,
+Memgraph will still be able to recover your data from the write-ahead logs. On
+exit, Memgraph will create the latest snapshot. This can be
+[configured](/database-management/configuration#storage), based on your dataset
+size and use case. If your data is not being frequently updated, you can disable
+periodic snapshot creation and create snapshots manually when you need to.
+
+### Dump database
+
+Another approach is to dump the database into a file. That is useful if you want
+to move the data between different Memgraph versions that might have
+incompatible data formats are used for snapshots or WAL files.
+
+Here are the steps to dump the database with Memgraph running in a Docker container:
+
+1. `docker exec -it -u 0 <container_id> bash`
+2. `echo "DUMP DATABASE;" | mgconsole --output-format=cypherl > data.cypherl`
+3. `docker cp <container_id>:data.cypherl data.cypherl`
+
+The whole graph is dumped into a CYPHERL file, which consists of Cypher queries
+used to create a database. 
+
+It is a better practice to copy the data persistency folder when possible over dumping
+the database since both the backup and restore processes are significantly faster.
+
+## Restore data
+
+Depending on the backup method you use, you can restore data differently.
+If you set up a volume on `var/lib/memgraph` directory, then you can attach it
+to the new container. If you didn't set up a volume on `var/lib/memgraph`
+directory, then you need to copy the data folder's contents in the new
+container in `var/lib/memgraph` directory.
+
+The Memgraph user should own the backup data folder, so make sure the
+folder is accessible for read and write operations by the Memgraph user.
+
+If you have dumped the database, you can import the data back into Memgraph 
+using the mgconsole CLI tool or the client library. Make sure you read the [best
+practices for such
+import](/data-migration/best-practices#cypher-queries-best-practices).
+
+
+### Upgrading Memgraph
+
+Between different versions of Memgraph, we might break the
+compatibility of the configurations, snapshots, and WAL files. That is done very
+rarely, but it is helpful to keep an eye on the [release notes](/release-notes)
+to see if there are any breaking changes.
+
+## Set up a cluster
+
+To create a cluster, replicate data across several instances.
+Setting up replication means running a couple of Memgraph instances,
+where one of them is the MAIN instance, and others are either SYNC or ASYNC
+replicas. 
+
+Here is an example of setting up a replication cluster with three instances:
+
+Run the instance on port 7687 (this instance will be MAIN):
+
+```bash
+docker run -p 7687:7687 -p 7444:7444 -p 10000:10000 memgraph/memgraph-mage --replication-restore-state-on-startup=true
+```
+
+Run another instance on port 7888 (this instance will be REPLICA):
+
+```bash
+docker run -p 7688:7687 -p 7445:7444 -p 10000:10000 memgraph/memgraph-mage --replication-restore-state-on-startup=true
+```
+
+Run the last instance on port 7689 (this instance will be REPLICA):
+
+```bash
+docker run -p 7689:7687 -p 7446:7444 -p 10000:10000 memgraph/memgraph-mage --replication-restore-state-on-startup=true
+```
+
+All started instances are MAIN upon starting. To set up a cluster, two instances must be demoted to REPLICA roles because only one instance can be MAIN.
+To do that, run the following query from the second and third instance (REPLICA instances):
+
+```cypher
+SET REPLICATION ROLE TO REPLICA WITH PORT 10000;
+```
+
+To finish setting up the replication cluster, you need to register REPLICA instances from the MAIN instance with the correct IP addresses or DNS of REPLICA instances:
+```cypher
+REGISTER REPLICA REP1 SYNC TO "<IP_ADDRESS_REP1>";
+REGISTER REPLICA REP2 ASYNC TO "<IP_ADDRESS_REP2>";
+```
+
+If you have trouble connecting, check your firewall settings.
+
+That's it, replication cluster with one MAIN, one SYNC REPLICA and one ASYNC
+REPLICA instance is set up. To learn more about the replication Memgraph, refer
+to our [replication docs](/clustering/replication#set-up-a-replication-cluster). 
+
+Having the replication cluster set up is great if you need to replicate data,
+add load balancing or improve availability. Still, to achieve high availability,
+you need to manage automatic failover. On the other hand, Memgraph Enterprise
+has a high availability feature included in the offering to ease the management of
+Memgraph cluster. In such case, the cluster consists of MAIN instance, REPLICA
+instances and COORDINATOR instances, which, backed up by Raft protocol, manage
+the cluster state.
+
+<Cards>
+<div className="w-[300px]">
+    <Card
+    title="Learn more about high availability"
+    href="/clustering/high-availability"
+    />
+</div>
+</Cards>
+
+## Logging
+
+At any point in your Memgraph instance lifecycle, you might need to check the
+logs either to debug an issue or to monitor the performance. Memgraph logs are
+stored in the `/var/log/memgraph` folder if the default location is not changed
+by the `--log-file` flag. They are typically stored in the format
+`memgraph_year-month-day.log`.
+
+You can control the log level as described on the [logs
+page](/database-management/logs). If you are setting up the production
+environment, you should consider setting the log level to `INFO` or `WARNING` to
+avoid the log files growing too large.
+
+If you are experiencing some issues or you have trouble setting up the Memgraph
+instance, consider setting the log level to `TRACE` to get more information about
+the issue.
+
+If you created a volume on `/var/log/memgraph` folder, you can inspect it to access logs.
+
+The best way to monitor logs is to attach the logs directly to your terminal as
+you debug the issue. You can do that by running the following command:
+
+```bash
+docker logs -f <CONTAINER>
+```
+
+Because of flag `-f` or `--follow`, the above command will continue streaming the
+new output from the container's `STDOUT` and `STDERR`.
+
+More on the `docker logs` command can be found on the [Docker
+documentation](https://docs.docker.com/reference/cli/docker/container/logs/).
+
+## Where to next?
+
+Docker is a powerful tool, and it is usually a good starting point. If your
+application involves multiple services besides a database, you might want to
+create a multi-container application with Docker Compose. To learn more about
+how to manage Memgraph in such an environment, follow our Docker Compose guide.
+
+To discuss Docker and similar topics, [join our Discord
+community](https://www.discord.gg/memgraph).
+
+Schedule a 30-min session with our engineers to discuss how Memgraph fits with
+your architecture. Our engineers are highly experienced in helping companies of
+all sizes to integrate and get the most out of Memgraph in their projects. Talk
+to us about data modeling, optimizing queries, defining infrastructure
+requirements or migrating from your existing graph database. No nonsense or
+sales pitch, just tech.
+
+![](/pages/getting-started/memgraph-office-hours.svg)
+
+<Cards>
+  <Card
+    title="Book a call"
+    href="https://memgraph.com/office-hours"
+  />
+</Cards>
