@@ -11,14 +11,14 @@ number of advanced algorithms available in Memgraph.
 Some algorithms are built in, and others are available in the [MAGE graph
 library](/advanced-algorithms/install-mage).
 
-## Built-in algorithms
+## Deep path traversal algorithms
 
 | Algorithms                                                                                      | Lang | Description                                                                                                                                                                                                                                    |
 |-------------------------------------------------------------------------------------------------|------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [Depth-first search](/advanced-algorithms/built-in-graph-algorithms#depth-first-search)         | C++  | An algorithm for traversing through a graph starting based on nodes' depth (distance from the source node).                                                                                                                                    |
-| [Breadth-first search](/advanced-algorithms/built-in-graph-algorithms#breadth-first-search)     | C++  | An algorithm for traversing through a graph starting based on nodes' breadth (distance from the source node).                                                                                                                                  |
-| [Weighted shortest path](/advanced-algorithms/built-in-graph-algorithms#weighted-shortest-path) | C++  | The weighted shortest path problem is the problem of finding a path between two nodes in a graph such that the sum of the weights of relationships connecting nodes, or the sum of the weight of some node property on the path, is minimized. |
-| [All shortest paths](/advanced-algorithms/built-in-graph-algorithms#all-shortest-paths)         | C++  | Finding all shortest paths is an expansion of the weighted shortest paths problem. The goal of finding the shortest path is obtaining any minimum sum of weights on the path from one node to the other.                                       |
+| [Depth-first search](/advanced-algorithms/deep-path-traversal#depth-first-search)         | C++  | An algorithm for traversing through a graph starting based on nodes' depth (distance from the source node).                                                                                                                                    |
+| [Breadth-first search](/advanced-algorithms/deep-path-traversal#breadth-first-search)     | C++  | An algorithm for traversing through a graph starting based on nodes' breadth (distance from the source node).                                                                                                                                  |
+| [Weighted shortest path](/advanced-algorithms/deep-path-traversal#weighted-shortest-path) | C++  | The weighted shortest path problem is the problem of finding a path between two nodes in a graph such that the sum of the weights of relationships connecting nodes, or the sum of the weight of some node property on the path, is minimized. |
+| [All shortest paths](/advanced-algorithms/deep-path-traversal#all-shortest-paths)         | C++  | Finding all shortest paths is an expansion of the weighted shortest paths problem. The goal of finding the shortest path is obtaining any minimum sum of weights on the path from one node to the other.                                       |
 
 ## Traditional graph algorithms
 

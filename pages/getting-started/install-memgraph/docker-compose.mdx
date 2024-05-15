@@ -187,6 +187,83 @@ the MAGE library included, you won't be able to use graph algorithms.
 > Want to see applications built with Memgraph and Docker Compose? Check out
 > [Memgraph's Github](https://github.com/memgraph) repositories.
 
+## Configuring user authentication in Docker Compose
+
+When setting up Memgraph with Docker Compose, you can use environment variables
+ `MEMGRAPH_USER` and
+`MEMGRAPH_PASSWORD` to create a new user if that username doesn't already exist.
+
+<Callout>
+
+When working with `MEMGRAPH_USER` and `MEMGRAPH_PASSWORD` environmental
+variables, keep the following things in mind:
+- **New User Creation:** When `MEMGRAPH_USER` and `MEMGRAPH_PASSWORD` are set
+  and the specified user does not exist, Memgraph creates this new user.
+  However, these credentials must be manually entered each time when accessing
+  Memgraph through Memgraph Lab.
+- **Existing Users:** If the username already exists and an incorrect password
+  is provided via `MEMGRAPH_PASSWORD`, no changes will occur. The existing
+  password remains unchanged, and you must use the original credentials to
+  access Memgraph Lab.
+- **Docker Compose Restarts:** If Memgraph is restarted via Docker Compose
+  without these environment variables being set, previously created users remain
+  unaffected. You must manually enter the user credentials every time you access
+  Memgraph Lab.
+
+</Callout>
+
+Below is an example of how to configure these environment variables in your
+`docker-compose.yml` file:
+
+```yaml
+version: "3"
+
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:latest
+    container_name: memgraph-mage
+    ports:
+      - "7687:7687"
+      - "7444:7444"
+    command: ["--log-level=TRACE"]
+    environment:
+      - MEMGRAPH_USER=testuser123
+      - MEMGRAPH_PASSWORD=t123
+
+  lab:
+    image: memgraph/lab:latest
+    container_name: memgraph-lab
+    ports:
+      - "3000:3000"
+    depends_on:
+      - memgraph
+    environment:
+      - QUICK_CONNECT_MG_HOST=memgraph
+      - QUICK_CONNECT_MG_PORT=7687
+```
+
+<Callout type="warning">
+
+When specifying environment variables in Docker Compose, avoid spaces around the
+equals sign (`=`). Including spaces can cause the variables to be misinterpreted
+or ignored by Docker, leading to unexpected behavior.
+
+Correct format:
+```
+environment:
+  - MEMGRAPH_USER=testuser123
+  - MEMGRAPH_PASSWORD=t123
+```
+
+Incorrect format (will not work):
+```
+environment:
+  - MEMGRAPH_USER = testuser123
+  - MEMGRAPH_PASSWORD = t123
+```
+
+</Callout>
+
 ## Issues when running Memgraph and Lab within the same Docker compose
 
 When running both Memgraph and Lab services within the same Docker Compose file,
@@ -216,6 +293,47 @@ also use the `QUICK_CONNECT_MG_PORT` environment variable to specify the quick
 connect port number, e.g. `QUICK_CONNECT_MG_PORT: 7688`
 
 ---
+
+## Adding a health check
+
+Including a health check in your Docker Compose configuration for Memgraph helps
+ensure that the container is not only up but also operational. Below is one
+possible approach to adding a health check to your `docker-compose.yml` for the
+Memgraph service:
+
+```yaml
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:latest
+    container_name: memgraph-mage
+    ports:
+      - "7687:7687"
+      - "7444:7444"
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'RETURN 0;' | mgconsole || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 0s
+    command: ["--log-level=TRACE"]
+```
+
+Here is what this `healthcheck` does:
+
+- `test`: The command `echo 'RETURN 0;' | mgconsole || exit 1` runs within the
+  shell to check the responsiveness of the Memgraph console. It's a simple
+  command to verify that the database can process queries. If `mgconsole` fails
+  to execute or returns a non-zero exit status, the health check fails.
+- `interval`: Specifies how often to run the health check. Here, it's set to
+  every 10 seconds.
+- `timeout`: Sets the maximum time allowed for the health check to run. If the
+  test command exceeds 5 seconds, the check is considered to have failed.
+- `retries`: Defines how many times the health check will retry upon failure
+  before considering the service unhealthy. Here, it will try three times.
+- `start_period`: Sets the initialization period during which the health check
+  command failures are considered to be setup failures rather than an unhealthy
+  container. This is set to 0s, meaning it starts checking immediately at
+  container start-up.
 
 ## Docker Compose for Memgraph Platform image up to version 2.14
 
