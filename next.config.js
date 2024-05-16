@@ -3100,6 +3100,11 @@ module.exports = withNextra({
         source: '/memgraph/2.2.0/reference-guide/query-modules/implement-custom-query-modules/overview',
         destination: '/custom-query-modules',
         permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/rpm-package',
+        destination: '/getting-started/install-memgraph',
+        permanent: true
       }
     ];
   },
