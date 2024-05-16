@@ -533,12 +533,12 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-guides/create-backup',
-        destination: '/configuration/data-durability-and-backup',
+        destination: '/fundamentals/data-durability',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/backup',
-        destination: '/configuration/data-durability-and-backup',
+        destination: '/fundamentals/data-durability',
         permanent: true
       },
       {
@@ -1108,7 +1108,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/install-memgraph-from-rpm',
-        destination: '/getting-started/install-memgraph/rpm-package',
+        destination: '/getting-started/install-memgraph',
         permanent: true
       },
       {
@@ -1761,7 +1761,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/database-functionalities/backup',
-        destination: '/configuration/data-durability-and-backup',
+        destination: '/fundamentals/data-durability',
         permanent: true
       },
       {
@@ -2211,7 +2211,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/getting-started/installation/rpm-installation',
-        destination: '/getting-started/install-memgraph/rpm-package',
+        destination: '/getting-started/install-memgraph',
         permanent: true
       },
       {
@@ -2790,7 +2790,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/2.2.1/install-memgraph-from-rpm',
-        destination: '/getting-started/install-memgraph/rpm-package',
+        destination: '/getting-started/install-memgraph',
         permanent: true
       },
       {
@@ -2880,7 +2880,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/2.6.0/how-to-guides/create-backup',
-        destination: '/configuration/data-durability-and-backup',
+        destination: '/fundamentals/data-durability',
         permanent: true
       },
       {
@@ -3079,6 +3079,31 @@ module.exports = withNextra({
       {
         source: '/advanced-algorithms/built-in-graph-algorithms',
         destination: '/advanced-algorithms/deep-path-traversal',
+        permanent: true
+      },
+      {
+        source: '/help-center/errors/serialization',
+        destination: '/help-center/errors/transactions',
+        permanent: true
+      },
+      {
+        source: '/fundamentals/querying/schema',
+        destination: '/querying/schema',
+        permanent: true
+      },
+      {
+        source: '/querying/getting-started/cli',
+        destination: '/getting-started/cli',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.2.0/reference-guide/query-modules/implement-custom-query-modules/overview',
+        destination: '/custom-query-modules',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/rpm-package',
+        destination: '/getting-started/install-memgraph',
         permanent: true
       }
     ];
