@@ -1108,7 +1108,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/install-memgraph-from-rpm',
-        destination: '/getting-started/install-memgraph/rpm-package',
+        destination: '/getting-started/install-memgraph',
         permanent: true
       },
       {
@@ -2211,7 +2211,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/getting-started/installation/rpm-installation',
-        destination: '/getting-started/install-memgraph/rpm-package',
+        destination: '/getting-started/install-memgraph',
         permanent: true
       },
       {
@@ -2790,7 +2790,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/2.2.1/install-memgraph-from-rpm',
-        destination: '/getting-started/install-memgraph/rpm-package',
+        destination: '/getting-started/install-memgraph',
         permanent: true
       },
       {
