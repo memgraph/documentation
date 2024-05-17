@@ -1,0 +1,336 @@
+---
+title: Manage Memgraph native Linux deployment
+description: Learn how to manage your Memgraph instance in the native Linux environment.
+---
+
+import { Card, Cards } from 'nextra/components'
+
+# Manage Memgraph in Linux native environment
+
+Learn the best practices for managing your Memgraph instance in the native Linux
+environment. This guide will cover the most common tasks you might need to do
+while configuring and running Memgraph in the Linux native environment. 
+
+Keep in mind that links from this guide will take you to the other documentation
+pages that cover the specific topic in more detail.
+
+## Install Memgraph on Linux 
+
+To install Memgraph on Linux, you need to download the appropriate package from
+the [Memgraph download page](https://memgraph.com/download). The installation
+process is straightforward, and it is covered in the [Memgraph installation
+guide](/getting-started/install-memgraph).
+
+
+For a native Linux deployment, you can only use the base Memgraph package.
+Currently, no Memgraph MAGE package is available for Linux. To run Memgraph MAGE
+on Linux, you can use the Docker container. 
+
+Once Memgraph is installed, you can use `systemd` to manage the Memgraph
+service. Here is an example of how to start, stop, and restart the Memgraph
+service:
+
+```bash
+sudo systemctl start memgraph
+sudo systemctl stop memgraph
+sudo systemctl restart memgraph
+sudo systemctl status memgraph
+```
+
+## Connect to Memgraph
+
+By default, Memgraph listens on port `7687` for the Bolt protocol. That means you
+can connect to Memgraph using any of the [client libraries](/client-libraries)
+or the [mgconsole](../getting-started/cli.mdx) CLI tool.
+
+Memgraph pre-installs the `mgconsole` CLI tool, so you can connect to Memgraph
+by running the following command:
+
+```bash
+mgconsole --host=127.0.0.1 --port=7687
+```
+
+You can use the `mgconsole` in interactive or non-interactive mode to set up the
+Memgraph and run setup scripts. To connect to Memgraph from remote machines, you
+need to change the `--host` parameter to the proper IP address. 
+
+The same goes for using a client library, you need to provide the proper IP
+address and port number. The client needs to be in the same network as the
+Memgraph instance, or the instance, needs to be exposed to the internet.
+
+If you are unable to connect to a remote Memgraph instance, keep in mind that
+your firewall environment may be blocking the connection to Memgraph.
+
+## Configure Memgraph
+
+Memgraph has its configuration settings persisted in the `memgraph.conf` file
+located in the `/etc/memgraph` folder. Some of the most commonly configured
+settings are:
+
+- `--log-level=WARNING`
+- `--query-execution-timeout-sec=600`
+- `--storage-snapshot-interval-sec=300  `
+- `--storage-snapshot-retention-count=3`
+- `--storage-mode=IN_MEMORY_TRANSACTIONAL`
+
+Of course, other
+[settings](../database-management/configuration.mdx#list-of-configuration-flags)
+are as important, so make sure you get familiar with them as well.
+
+To change the configuration settings, you need to open and edit the
+`memgraph.conf` file and restart the Memgraph service. 
+
+The set flags override the default settings in the `memgraph.conf` file. It is
+also possible to provide an additional configuration file by providing a path to
+it via `--file-flag` or `MEMGRAPH_CONFIG` environment variable. The set values
+in that file will override values in the default `memgraph.conf` file. 
+
+## Secure the database
+
+In the community version of Memgraph, you can create a user and its password for
+security. To achieve that, set `MEMGRAPH_USER` and `MEMGRAPH_PASSWORD`
+environment variables. When you set values for those variables, a user will be
+created if it does not exist, and no one except that user will be able to
+access the database. 
+
+To authenticate, provide the correct username and password. For example, if you
+want to run Memgraph's CLI `mgconsole` on localhost, run the following command:
+
+```bash
+mgconsole --host=127.0.0.1 --port=7687 --username=user --password=pass
+```
+
+
+<Cards>
+<div className="w-[230px]">
+    <Card
+    title="Learn more about users"
+    href="/database-management/authentication-and-authorization/users"
+    />
+</div>
+</Cards>
+
+In the Enterprise version of Memgraph, you can achieve a higher level of
+security with role-based access control (RBAC) and fine-grained access
+control. Within fine-grained access control Memgraph offers label-based access
+control.
+
+To set it up, first [enable Memgraph
+Enterprise](/database-management/enabling-memgraph-enterprise), and then run
+[the necessary Cypher
+queries](/database-management/authentication-and-authorization/role-based-access-control)
+to set up privileges properly.
+
+You can add an additional layer of security by enabling SSL encryption.
+
+<Cards>
+<div className="w-[300px]">
+    <Card
+    title="Learn more about SSL encryption"
+    href="/database-management/ssl-encryption"
+    />
+</div>
+</Cards>
+
+## Data persistency 
+
+Data persistence is a crucial aspect of running a database. You want to keep
+your data Persistent if anything goes wrong. Memgraph stores different types of
+information in different places. 
+
+Here are the locations of the different types of data that Memgraph uses: 
+
+- Configuration files: `/etc/memgraph`
+- Logs: `/var/log/memgraph`
+- User-related data: `/usr/lib/memgraph`
+- Graph data: `/var/lib/memgraph`
+
+Based on what you want to backup, consider copying any of the listed folders to
+a safe location.
+
+## Backup data
+
+Memgraph uses  `snapshots` and `WAL files`
+folders for [durability](../fundamentals/data-durability), they enable the database and graph to recover in case
+of a crash. The snapshots and WAL files folders are good candidates for backup,
+and they are part of the `/var/lib/memgraph` folder. 
+
+If you want to restore the data, all you need to do is start a new Memgraph
+instance with different data directories by using the `--data-directory` flag
+and pointing it to a backup folder. 
+
+Also, if you are using query modules and custom configuration files, make sure
+to back them up as well. The query modules are stored in the
+`/usr/lib/memgraph`. 
+
+
+### Copy the data persistence folder 
+
+The easiest and most reliable way to backup the graph data is to copy the whole
+`/var/lib/memgraph` folder.  
+
+First, run the following query in Memgraph to lock the data directory in order
+to avoid changes happening during the backup process
+
+```cypher
+LOCK DATA DIRECTORY;
+```
+
+After that, copy the data persistency folder onto your local file system:
+
+```bash
+cp -rp /var/lib/memgraph /path/to/my/local-folder
+```
+
+Notice that the `-p` flag is used to preserve the file ownership and
+permissions.
+
+In the end, unlock the data directly by running the following query in Memgraph:
+
+```cypher
+UNLOCK DATA DIRECTORY;
+```
+
+### Dump database
+
+Another approach is to dump the database into a file. This is useful if you want
+to move the data between different Memgraph versions that might have
+incompatible data formats are used for snapshots or wal files. 
+
+To dump the database, you can use the `mgconsole` CLI tool. Here is an example
+of how to dump the database into a file:
+
+```bash
+echo "DUMP DATABASE;" | mgconsole --output-format=cypherl > data.cypherl
+```
+
+Keep in mind that the `cypherl` format is used to dump the database. Whole graph
+data is stored in the `data.cypherl` file, this means that the import process
+can take a while since the entire graph data is stored in a single file. 
+
+You should prefer copying the data persistency folder when possible over dumping
+the database since it is significantly faster. 
+
+## Restore data
+
+Depending on the backup method you use, you can restore data in a different way.
+If you have copied the data persistency folder, you can simply copy the folder
+back to the custom location and start the Memgraph instance with the
+`--data-directory` flag pointing to the restored folder. 
+
+The backup data folder should be owned by the Memgraph user, so make sure the
+folder is accessible for read and write operations by the Memgraph user. 
+
+Putting the backup folder back to `/var/lib/` path is recommended since you will
+avoid issues with ownership. 
+
+If you have dumped the database, you can import the data back into Memgraph 
+using the mgconsole CLI tool or the client library. Make sure you read the [best
+practices for such
+import](/data-migration/best-practices#cypher-queries-best-practices).
+
+
+### Upgrading Memgraph
+
+Keep in mind that between different versions of Memgraph, we might break the
+compatibility of the configurations, snapshots, and WAL files. This is done very
+rarely, but it is useful to keep an eye on the [release
+notes](/release-notes) to see if there are any breaking
+changes.
+
+## Set up a cluster
+
+To create a cluster, replicate data across several instances. Setting up
+replication means running a couple of Memgraph instances on different
+machines and connecting them to each other. One of the instances will be the
+MAIN instance and others will be either SYNC or ASYNC replicas.
+
+In order to set up the replication cluster, start memgraph instances on
+different machines with `--replication-restore-state-on-startup` flag set to
+`true`.
+
+All started instances are MAIN upon starting. Two instances must be demoted to
+REPLICA roles because only one instance can be MAIN. To do that, run the
+following query on the second and third instances (REPLICA instances):
+
+```cypher
+SET REPLICATION ROLE TO REPLICA WITH PORT 10000;
+```
+
+Once the replica instances are in `REPLICA` role, you can connect them to MAIN
+instance by running the following query from the MAIN instance:
+
+```cypher
+REGISTER REPLICA REP1 SYNC TO "<IP_ADDRESS_REP1>";
+REGISTER REPLICA REP2 ASYNC TO "<IP_ADDRESS_REP2>";
+```
+
+If you have trouble connecting, check your firewall and network settings.
+
+That's it, replication cluster with one MAIN, one SYNC REPLICA, and one ASYNC
+REPLICA instance is set up. To learn more about the replication Memgraph, refer
+to our [replication docs](/clustering/replication#set-up-a-replication-cluster). 
+
+Setting up the replication cluster is great if you need to replicate data, add
+load balancing, or improve availability. Still, to achieve high availability,
+you need to manage automatic failover. On the other hand, Memgraph Enterprise
+has a high availability feature included in the offering to ease the management
+of the Memgraph cluster. In such cases, the cluster consists of MAIN instances,
+REPLICA instances and COORDINATOR instances, which, backed up by Raft protocol,
+manage the cluster state.
+
+<Cards>
+<div className="w-[300px]">
+    <Card
+    title="Learn more about high availability"
+    href="/clustering/high-availability"
+    />
+</div>
+</Cards>
+
+
+
+## Logging
+
+At any point in your Memgraph instance lifecycle, you might need to check the
+logs either to debug an issue or to monitor the performance. Memgraph logs are
+stored in the `/var/log/memgraph` folder if the default location is not changed
+by `--log-file` command. They are typically stored in the format
+`memgraph_year-month-day.log`. 
+
+You can control the log levels as described in the [logs
+configuration](../database-management/logs.mdx) page. If you are setting up the
+production environment, you should consider setting the log level to `INFO` or
+`WARNING` to avoid the log files growing too large.
+
+If you are experiencing some issues or you have trouble setting up the Memgraph
+instance, consider setting the log level to `TRACE` to get more information
+about the issue.
+
+The best way to monitor logs is to attach the logs directly to your terminal as
+you debug the issue. You can do that by running the following command:
+
+```bash
+tail -f /var/log/memgraph/memgraph_$(date +"%Y-%m-%d").log
+```
+
+
+## Where to next?
+
+Each of the topics covered in this guide has its own dedicated documentation
+pages that cover the topic in more detail. Consider reading those pages to get a
+better understanding of the topic. If things are unclear or you need help, feel
+free to reach out to us on Linux and similar topics [join our Discord
+community](https://www.discord.gg/memgraph).
+
+Schedule a 30-minute session with our engineers to discuss how Memgraph fits
+with your architecture. Our engineers are highly experienced in helping
+companies of all sizes to integrate and get the most out of Memgraph in their
+projects. Talk to us about data modeling, optimizing queries, defining
+infrastructure requirements, or migrating from your existing graph database. No
+nonsense or sales pitch, just tech.
+
+![](/pages/getting-started/memgraph-office-hours.svg)
+
+<Cards> <Card title="Book a call" href="https://memgraph.com/office-hours" />
+  </Cards>

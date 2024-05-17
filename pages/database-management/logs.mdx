@@ -1,0 +1,194 @@
+---
+title: Logs
+description: Discover how to make the most of logs for monitoring and troubleshooting purposes. Explore the documentation page for Memgraph and harness the power of log management.
+---
+
+import { Steps } from 'nextra/components'
+
+# Logs
+
+The default location of logs is inside the `/var/log/memgraph/` directory. That
+location can be configured using the `--log-file` [configuration
+flag](/database-management/configuration#other).
+
+
+Memgraph tracks logs at various levels: TRACE, DEBUG, INFO, WARNING, ERROR,
+CRITICAL. By default, it is using the WARNING level, but you can change the
+level using the [`--log-level`](/database-management/configuration#other)
+configuration flag or [during
+runtime](/database-management/configuration#change-configuration-settings-during-runtime) using the `SET
+DATABASE SETTING "log.level" TO "TRACE";`
+
+The configuration set during runtime will be applied only for that session.
+
+You can check the log level by running `SHOW DATABASE SETTING "log.level";` query.
+
+To access the logs from the Memgraph Lab interface, make sure to expose the port
+7444 when starting Memgraph with Docker. 
+
+## Access logs
+
+If you installed Memgraph with Linux, logs can be found in the
+`/var/log/memgraph` directory.
+
+If you installed Memgraph using Docker, the easiest way to access the logs is by
+having a [named volume](https://docs.docker.com/storage/volumes/) on the
+`/var/log/memgraph` directory and checking its content. If you're not using a
+named volume, here are the steps to access the logs within the running Docker
+container:
+
+<Steps>
+
+    ### Find container ID
+    
+    Open a new terminal and find the `CONTAINER_ID` of the Memgraph Docker
+    container:
+
+    ```plaintext
+    docker ps
+    ```
+
+    ### Enter the container
+
+    Run the following command:
+
+    ```plaintext
+    docker exec -it <CONTAINER_ID> bash
+    ```
+
+    Replace the `<CONTAINER_ID>` parameter with the correct value.
+
+    ### List the contents of the `/var/log/memgraph` directory
+
+    ```plaintext
+    ls /var/log/memgraph
+    ```
+
+    ### List the content of the log 
+    
+    To list the content of the log, use the `cat /var/log/memgraph/<memgraph_date>.log` command.
+
+    For example, if the `ls` command returned `memgraph_2022-03-04.log` you would
+    list the contents using the following command:
+
+    ```plaintext
+    cat /var/log/memgraph/memgraph_2022-03-04.log
+    ```
+
+    #### Filtering unnecessary log messages
+
+    When you inspect Memgraph's log files, you might find too many details that make it
+    hard to spot the important messages. To make analyzing the logs easier, you can
+    use a tool such as `grep` to remove the messages you don't need. For instance, if you want to ignore messages about internal Memgraph Lab work or too much information
+    on storage, indexes, rules, and triggers, you can use this grep command:
+
+    ```bash
+    grep -v -E "SHOW STORAGE INFO|APP_INTERNAL_EXEC_VAR|SHOW INDEX INFO|SHOW CONSTRAINT INFO|SHOW TRIGGERS" /var/log/memgraph/memgraph_2022-03-04.log
+    ```
+
+    This command excludes log lines containing `SHOW STORAGE INFO`, any occurrences
+    of `APP_INTERNAL_EXEC_VAR`, `SHOW INDEX INFO`, `SHOW CONSTRAINT INFO`, and `SHOW
+    TRIGGERS`, making it easier to focus on the messages that are most relevant to
+    your monitoring and troubleshooting efforts.
+
+    Note: Replace `/var/log/memgraph/memgraph_2022-03-04.log` with the actual path to your log
+    file.
+
+    ### Save logs locally
+    
+    If you want to save the log to your computer, exit the container with
+    `CTRL+D` or `exit`, place yourself in a directory where you want to save the copy and run
+    the following command:
+
+    ```plaintext
+    docker cp  <CONTAINER_ID>:/var/log/memgraph/<memgraph_date>.log <memgraph_date>.log
+    ```
+
+    For example, the following command will make a copy of the
+    `memgraph_2022-03-04.log` file on the user's desktop:
+
+    ```plaintext
+    C:\Users\Vlasta\Desktop>docker cp bb3de2634afe:/var/log/memgraph/memgraph_2022-03-04.log memgraph_2022-03-04.log
+
+    ```
+
+</Steps>
+
+
+## Audit log (Enterprise)
+
+Memgraph supports all query audit logging. When enabled, the audit log contains
+records of all queries executed on the database.  Each executed query is one
+entry (one line) in the audit log. The audit log itself is a CSV file.
+
+All audit logs are written to
+`<MEMGRAPH_DURABILITY_DIRECTORY>/audit/audit.log`.  The log is rotated using
+`logrotate`, so entries in the `audit.log` file are always the newest entries.
+Entries in `audit.log.1`, `audit.log.2.gz`, etc.  are older entries. The
+default log rotation configuration can be found in `/etc/logrotate.d/memgraph`.
+By default, the log is rotated every day and a full year of entries is
+preserved. You can modify the values to your own needs and preferences.
+
+### Format
+
+The audit log contains the following information formatted into a CSV file:
+```plaintext
+<timestamp>,<address>,<username>,<query>,<params>
+```
+For each query, the supplied query parameters are also logged. The query is
+escaped and quoted so that commas in queries don't affect the correctness of
+the CSV. The parameters are encoded as JSON objects and are then escaped and
+quoted.
+
+### Example
+
+This is an example of the audit log:
+
+```plaintext
+1551376833.225395,127.0.0.1,admin,"MATCH (n) DETACH DELETE n","{}"
+1551376833.257825,127.0.0.1,admin,"CREATE (n {name: $name})","{\"name\":\"alice\"}"
+1551376833.273546,127.0.0.1,admin,"MATCH (n), (m) CREATE (n)-[:e {when: $when}]->(m)","{\"when\":42}"
+1551376833.300955,127.0.0.1,admin,"MATCH (n), (m) SET n.value = m.value","{}"
+```
+
+We can see that all of the queries were executed from the loopback address and
+were executed by the user `admin`.  The executed queries are:
+
+```
+ Query                                            | Parameters
+--------------------------------------------------|-----------
+MATCH (n) DETACH DELETE n                         | {}
+CREATE (n {name: $name})                          | {"name": "alice"}
+MATCH (n), (m) CREATE (n)-[:e {when: $when}]->(m) | {"when": 42}
+MATCH (n), (m) SET n.value = m.value              | {}
+```
+
+### Parsing the log
+
+If you wish to parse the log, the following Python snippet shows how to extract
+data from the audit log:
+
+```python
+import csv
+import json
+
+with open("audit.log") as f:
+    reader = csv.reader(f, delimiter=',', doublequote=False,
+                        escapechar='\\', lineterminator='\n',
+                        quotechar='"', quoting=csv.QUOTE_MINIMAL,
+                        skipinitialspace=False, strict=True)
+    for line in reader:
+        timestamp, address, username, query, params = line
+        params = json.loads(params)
+        # Rest of your code that processes the logs.
+```
+
+### Flags
+
+Use the following flags to configure audit logging in Memgraph.
+
+| Flag                               | Description                                                                                    |
+|------------------------------------|------------------------------------------------------------------------------------------------|
+| `--audit-enabled`                  | Enables audit logging.                                                                         |
+| `--audit-buffer-size`              | Controls the in-memory buffer size used for audit logs.                                        |
+| `--audit-buffer-flush-interval-ms` | Controls the time interval (in milliseconds) used for flushing the in-memory buffer to disk.   |
