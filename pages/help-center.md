@@ -5,7 +5,7 @@ description: Visit our Help Center to find answers to common questions and troub
 
 # Help Center
 
-Are you stuck? Don't worry, here at Memgraph we are all eager to help - we'll
+Are you stuck? Don't worry, here at Memgraph, we are all eager to help - we'll
 not leave you stranded!
 
 ❓ Try to find an answer in our [**FAQ**](/help-center/faq) page - maybe we already provided an
@@ -26,10 +26,10 @@ or graph community there to help!
   - request information not present in the documentation
   - ask any other kind of technical question.
 
-📱[**Book a call**](https://memgraph.com/office-hours) and learn more about Memgraph capabilities to integrate it into your current stack as fast as possible.
+📱[**Book a call**](https://memgraph.com/office-hours) and learn more about Memgraph's capabilities to integrate it into your current stack as fast as possible.
 
-🐞 [**Debug by yourself**](/help-center/debugging). Inspect your application with useful tools we have provided to you in the
-container. Send us the diagnostics, so we can be faster in identification of your issues.
+🐞 [**Debug by yourself**](/database-management/debugging). Inspect your application with useful tools we have provided to you in the
+container. Send us the diagnostics so we can be faster in identifying your issues.
 
 ## Community
 
