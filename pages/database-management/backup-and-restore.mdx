@@ -1,122 +1,16 @@
 ---
-title: Data durability and backup
-description: Secure your graph data with data durability and backup mechanisms in Memgraph. Our documentation will offer you techniques to ensuring the resilience and reliability of your graph computing environment.
+title: Backup and restore
+description: Learn how to create a backup to secure your data and restore Memgraph database from a backup. 
 ---
 
 import { Callout } from 'nextra/components'
 import { Steps } from 'nextra/components'
 import { Tabs, Tab } from 'nextra/components'
 
-# Data durability and backup
+# Backup and restore
 
-Memgraph uses two mechanisms to ensure the durability of stored data and make
-disaster recovery possible:
-
-* write-ahead logging (WAL)
-* periodic snapshot creation
-
-These mechanisms generate **durability files** and save them in the respective
-`wal` and `snapshots` folders in the **data directory**. Data directory stores
-permanent data on-disk. 
-
-The default data directory path is `/var/lib/memgraph` but the path can be
-changed by [modifying the `data-dir` configuration
-flag](/configuration/configuration-settings#other).
-
-If you are using a multi-tenant architecture, the `data_directory` also houses
-databases within `/data_directory/databases/*db_name*`.
-
-<Callout>
-If you are using Memgraph Enterprise the `databases` directory will exists regardless of if you are using multi-tenancy or not.
-</Callout>
-
-Durability files are deleted when certain events are triggered, for example,
-exceeding the maximum number of snapshots, defined by the
-`--storage-snapshot-retention-count=3` flag.
-
-To prevent the deletion of durability files, you need to lock the `data
-directory`, and enable it again by unlocking the directory.
-
-To manage this behavior, use the following queries:
-
-```cypher
-LOCK DATA DIRECTORY;
-UNLOCK DATA DIRECTORY;
-```
-
-To show the status of the data directory, run:
-
-```cypher
-DATA DIRECTORY LOCK STATUS;
-```
-
-To encrypt the data directory, use
-[LUKS](https://gitlab.com/cryptsetup/cryptsetup/) as it works with Memgraph out
-of the box and is undetectable from the applications perspective so it shouldn't
-break any existing applications. 
-
-## Durability mechanisms
-
-To configure the durability mechanisms check their respective configuration
-flags in the [configuration settings](/configuration/configuration-settings#storage). 
-
-### Write-ahead logging
-
-Write-ahead logging (WAL) is a technique applied in providing **atomicity** and
-**durability** to database systems. 
-
-In the default IN_MEMORY_TRANSACTIONAL [storage
-mode](/fundamentals/storage-memory-usage#storage-modes), Memgraph creates a
-`Delta` object each time data is changed. By using Deltas, Memgraph creates
-write-ahead logs. Each database modification is therefore recorded in a log file
-before being written to the DB, and in the end the log file contains all steps
-needed to reconstruct the DB’s most recent state.
-
-Memgraph has WAL enabled by default. To switch it on and off, use the boolean
-`--storage-wal-enabled` flag. For other WAL-related flags check the [configuration
-reference guide](/configuration/configuration-settings#storage).
-
-WAL files are usually located at `/var/lib/memgraph/wal`.
-
-### Snapshots
-Snapshots provide a faster way to restore the states of your database. Snapshots
-are created periodically based on the value defined with the
-`--storage-snapshot-interval-sec` configuration flag, as well as upon exit based
-on the value of the `--storage-snapshot-on-exit` configuration flag.  When a
-snapshot creation is triggered, the entire data storage is written to the drive.
-Nodes and relationships are divided into groups called batches.
-
-On startup, the database state is recovered from the most recent snapshot file.
-Memgraph can read the data and build the indexes on multiple threads, using
-batches as a parallelization unit: each thread will recover one batch at a time
-until there are no unhandled batches.
-
-This means the same batch size might not be suitable for every dataset. A
-smaller dataset might require a smaller batch size to utilize a multi-threaded
-processor, while bigger datasets might use bigger batches to minimize the
-synchronization between the worker threads. Therefore the size of batches and
-the number of used threads [are
-configurable](/configuration/configuration-settings#storage) similarly to
-other durability related settings.
-
-The timestamp of the snapshot is compared with the latest update recorded in the
-WAL file and, if the snapshot is less recent, the state of the DB will be
-recovered using the WAL file.
-
-Memgraph has snapshot creation enabled by default. You can configure the exact
-snapshot creation behavior by [defining the relevant flags](/configuration/configuration-settings#storage).
-Alternatively, you can make one directly by running the following query:
-
-```opencypher
-CREATE SNAPSHOT;
-```
-Snapshot files are saved inside the `snapshots` directory located in the data directory
-(`var/lib/memgraph`). 
-
-<Callout type="warning">
-Snapshots and WAL files are presently not compatible between Memgraph versions.
-</Callout>
-
+Memgraph uses snapshots and WAL to ensure the [durability](/fundamentals/data-durability) of the stored data.
+Learn how to safely backup and restore your data.
 
 ## Create backup
 
@@ -158,7 +52,7 @@ Follow these steps to create database backup:
   ID by running `docker ps` then run the following command:
 
    ```plaintext
-    docker cp  <CONTAINER ID>:/var/lib/memgraph/<snapshot_file> <snapshot_file>
+    docker cp  <CONTAINER ID>:/var/lib/memgraph/snapshots/<snapshot_file> <snapshot_file>
    ```
 
 {<h3>Unlock the data directory</h3>}
@@ -300,6 +194,7 @@ To dump the Memgraph DB, run the following query:
 ```opencypher
 DUMP DATABASE;
 ```
+
 If you are using Memgraph Lab, you can dump the database, that is, the queries
 to recreate it, to a CYPHERL file in the `Import & Export` section of the Lab.
 
