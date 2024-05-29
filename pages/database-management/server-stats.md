@@ -45,6 +45,106 @@ The result will contain the following fields:
 | next_session_isolation_level | The current `next` isolation level.                                                                                                                                                           |
 | storage_mode                 | The current storage mode.<br/>For more info, check out [storage modes](/fundamentals/storage-memory-usage#storage-modes).                                                                 |
 
+## Metrics information
+
+Running this query will show the system metrics. Same metrics can be provided from the HTTP endpoint at default
+port 9091. This is a query that only works with the Memgraph Enterprise License. For the information about the metrics,
+please see the [information about monitoring via HTTP server](/database-management/monitoring#monitoring-via-http-server-enterprise).
+
+```cypher
+SHOW METRICS INFO;
+```
+
+```console copy=false
++---------------------------------------+---------------+-------------+----------+
+| name                                  | type          | metric type | value    |
++---------------------------------------+---------------+-------------+----------+
+| "AverageDegree"                       | "General"     | "Gauge"     | 0        |
+| "EdgeCount"                           | "General"     | "Gauge"     | 0        |
+| "VertexCount"                         | "General"     | "Gauge"     | 0        |
+| "ActiveLabelIndices"                  | "Index"       | "Counter"   | 0        |
+| "ActiveLabelPropertyIndices"          | "Index"       | "Counter"   | 0        |
+| "ActiveTextIndices"                   | "Index"       | "Counter"   | 0        |
+| "UnreleasedDeltaObjects"              | "Memory"      | "Counter"   | 0        |
+| "DiskUsage"                           | "Memory"      | "Gauge"     | 231838   |
+| "MemoryRes"                           | "Memory"      | "Gauge"     | 45805568 |
+| "PeakMemoryRes"                       | "Memory"      | "Gauge"     | 45805568 |
+| "AccumulateOperator"                  | "Operator"    | "Counter"   | 0        |
+| "AggregateOperator"                   | "Operator"    | "Counter"   | 0        |
+| "ApplyOperator"                       | "Operator"    | "Counter"   | 0        |
+| "CallProcedureOperator"               | "Operator"    | "Counter"   | 0        |
+| "CartesianOperator"                   | "Operator"    | "Counter"   | 0        |
+| "ConstructNamedPathOperator"          | "Operator"    | "Counter"   | 0        |
+| "CreateExpandOperator"                | "Operator"    | "Counter"   | 0        |
+| "CreateNodeOperator"                  | "Operator"    | "Counter"   | 0        |
+| "DeleteOperator"                      | "Operator"    | "Counter"   | 0        |
+| "DistinctOperator"                    | "Operator"    | "Counter"   | 0        |
+| "EdgeUniquenessFilterOperator"        | "Operator"    | "Counter"   | 0        |
+| "EmptyResultOperator"                 | "Operator"    | "Counter"   | 0        |
+| "EvaluatePatternFilterOperator"       | "Operator"    | "Counter"   | 0        |
+| "ExpandOperator"                      | "Operator"    | "Counter"   | 0        |
+| "ExpandVariableOperator"              | "Operator"    | "Counter"   | 0        |
+| "FilterOperator"                      | "Operator"    | "Counter"   | 0        |
+| "ForeachOperator"                     | "Operator"    | "Counter"   | 0        |
+| "HashJoinOperator"                    | "Operator"    | "Counter"   | 0        |
+| "IndexedJoinOperator"                 | "Operator"    | "Counter"   | 0        |
+| "LimitOperator"                       | "Operator"    | "Counter"   | 0        |
+| "MergeOperator"                       | "Operator"    | "Counter"   | 0        |
+| "OnceOperator"                        | "Operator"    | "Counter"   | 0        |
+| "OptionalOperator"                    | "Operator"    | "Counter"   | 0        |
+| "OrderByOperator"                     | "Operator"    | "Counter"   | 0        |
+| "ProduceOperator"                     | "Operator"    | "Counter"   | 0        |
+| "RemoveLabelsOperator"                | "Operator"    | "Counter"   | 0        |
+| "RemovePropertyOperator"              | "Operator"    | "Counter"   | 0        |
+| "RollUpApplyOperator"                 | "Operator"    | "Counter"   | 0        |
+| "ScanAllByEdgeIdOperator"             | "Operator"    | "Counter"   | 0        |
+| "ScanAllByEdgeTypeOperator"           | "Operator"    | "Counter"   | 0        |
+| "ScanAllByIdOperator"                 | "Operator"    | "Counter"   | 0        |
+| "ScanAllByLabelOperator"              | "Operator"    | "Counter"   | 0        |
+| "ScanAllByLabelPropertyOperator"      | "Operator"    | "Counter"   | 0        |
+| "ScanAllByLabelPropertyRangeOperator" | "Operator"    | "Counter"   | 0        |
+| "ScanAllByLabelPropertyValueOperator" | "Operator"    | "Counter"   | 0        |
+| "ScanAllOperator"                     | "Operator"    | "Counter"   | 0        |
+| "SetLabelsOperator"                   | "Operator"    | "Counter"   | 0        |
+| "SetPropertiesOperator"               | "Operator"    | "Counter"   | 0        |
+| "SetPropertyOperator"                 | "Operator"    | "Counter"   | 0        |
+| "SkipOperator"                        | "Operator"    | "Counter"   | 0        |
+| "UnionOperator"                       | "Operator"    | "Counter"   | 0        |
+| "UnwindOperator"                      | "Operator"    | "Counter"   | 0        |
+| "QueryExecutionLatency_us_50p"        | "Query"       | "Histogram" | 0        |
+| "QueryExecutionLatency_us_90p"        | "Query"       | "Histogram" | 0        |
+| "QueryExecutionLatency_us_99p"        | "Query"       | "Histogram" | 0        |
+| "ReadQuery"                           | "QueryType"   | "Counter"   | 0        |
+| "ReadWriteQuery"                      | "QueryType"   | "Counter"   | 0        |
+| "WriteQuery"                          | "QueryType"   | "Counter"   | 0        |
+| "ActiveBoltSessions"                  | "Session"     | "Counter"   | 1        |
+| "ActiveSSLSessions"                   | "Session"     | "Counter"   | 0        |
+| "ActiveSessions"                      | "Session"     | "Counter"   | 1        |
+| "ActiveTCPSessions"                   | "Session"     | "Counter"   | 1        |
+| "ActiveWebSocketSessions"             | "Session"     | "Counter"   | 0        |
+| "BoltMessages"                        | "Session"     | "Counter"   | 3        |
+| "SnapshotCreationLatency_us_50p"      | "Snapshot"    | "Histogram" | 0        |
+| "SnapshotCreationLatency_us_90p"      | "Snapshot"    | "Histogram" | 0        |
+| "SnapshotCreationLatency_us_99p"      | "Snapshot"    | "Histogram" | 0        |
+| "SnapshotRecoveryLatency_us_50p"      | "Snapshot"    | "Histogram" | 0        |
+| "SnapshotRecoveryLatency_us_90p"      | "Snapshot"    | "Histogram" | 0        |
+| "SnapshotRecoveryLatency_us_99p"      | "Snapshot"    | "Histogram" | 0        |
+| "MessagesConsumed"                    | "Stream"      | "Counter"   | 0        |
+| "StreamsCreated"                      | "Stream"      | "Counter"   | 0        |
+| "ActiveTransactions"                  | "Transaction" | "Counter"   | 1        |
+| "CommitedTransactions"                | "Transaction" | "Counter"   | 0        |
+| "FailedPrepare"                       | "Transaction" | "Counter"   | 1        |
+| "FailedPull"                          | "Transaction" | "Counter"   | 0        |
+| "FailedQuery"                         | "Transaction" | "Counter"   | 1        |
+| "RollbackedTransactions"              | "Transaction" | "Counter"   | 0        |
+| "SuccessfulQuery"                     | "Transaction" | "Counter"   | 0        |
+| "TriggersCreated"                     | "Trigger"     | "Counter"   | 0        |
+| "TriggersExecuted"                    | "Trigger"     | "Counter"   | 0        |
++---------------------------------------+---------------+-------------+----------+
+```
+
+
+
 ## Build information
 
 Running the following query will return certain information about the build type of
