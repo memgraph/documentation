@@ -3108,4 +3108,35 @@ module.exports = withNextra({
       }
     ];
   },
+  async headers() {
+    return [
+      {
+        source: '/(.*)', 
+        headers: [
+          {
+            key: 'Permissions-Policy',
+            value: 'geolocation=(), camera=(), microphone=()', 
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'no-referrer', 
+          },
+          {
+            key: 'Content-Security-Policy',
+            value: `
+              default-src 'self';
+              script-src 'self' 'unsafe-inline' 'unsafe-eval';
+              style-src 'self' 'unsafe-inline';
+              img-src 'self' data:;
+              connect-src 'self';
+              frame-src 'self';
+              frame-ancestors 'self';
+              form-action 'self';
+              base-uri 'self';
+            `.replace(/\n/g, ''),
+          },
+        ],
+      },
+    ];
+  },
 });
