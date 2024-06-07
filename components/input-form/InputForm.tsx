@@ -19,14 +19,14 @@ export default function InputForm(props: { title: string, subtitle: string, plac
         target="_blank"
         className="flex gap-[12px]"
       >
-        <input type="hidden" name="u" value="31" />
-        <input type="hidden" name="f" value="31" />
+        <input type="hidden" name="u" value="41" />
+        <input type="hidden" name="f" value="41" />
         <input type="hidden" name="s" />
         <input type="hidden" name="c" value="0" />
         <input type="hidden" name="m" value="0" />
         <input type="hidden" name="act" value="sub" />
         <input type="hidden" name="v" value="2" />
-        <input type="hidden" name="or" value="8746b1a9a146f3d041a04711f336c47b" />
+        <input type="hidden" name="or" value="bdf61bcde6db5ccc28026de19b72cc7a" />
         <input
           type="email"
           name="email"
