@@ -26,17 +26,14 @@ The coordinator instance is a new addition to enable the high availability featu
 
 ## Cluster management
 
-For achieving high availability, Memgraph uses Raft consensus protocol which is very similar to Paxos in terms of performance and fault-tolerance but with a significant advantage that
-it is much easier to understand. It's important to say that Raft isn't a
-Byzantine fault tolerant algorithm. You can find out more about Raft in its [original paper](https://raft.github.io/raft.pdf).
+For achieving high availability, Memgraph uses Raft consensus protocol, which is very similar to Paxos in terms of performance and fault-tolerance but with a significant advantage that it is much easier to understand. It's important to say that Raft isn't a
+Byzantine fault-tolerant algorithm. You can learn more about Raft in the paper [In Search of an Understandable Consensus Algorithm](https://raft.github.io/raft.pdf).
 
 Typical Memgraph's highly available cluster consists of 3 data instances (1 MAIN and 2 REPLICAS) and 3 coordinator instances backed up by Raft protocol.
-Users can create more than 3 coordinators, but replication factor (RF) of 3 is a de facto standard in distributed databases.
+Users can create more than 3 coordinators, but the replication factor (RF) of 3 is a de facto standard in distributed databases.
 
-One coordinator instance is the leader whose job is to make sure there is always one writeable data instance (MAIN). The other two coordinator instances replicate changes done by the leader coordinator in its
-own Raft log. Operations saved into the Raft log are those that are related to cluster management. Memgraph doesn't have its implementation of the Raft protocol, 
-rather this task was offloaded to an industry-proven library [NuRaft](https://github.com/eBay/NuRaft).
-
+One coordinator instance is the leader whose job is always to ensure one writeable data instance (MAIN). The other two coordinator instances replicate changes the leader coordinator did in its
+own Raft log. Operations saved into the Raft log are those that are related to cluster management. Memgraph doesn't have its implementation of the Raft protocol. For this task, Memgraph uses an industry-proven library [NuRaft](https://github.com/eBay/NuRaft).
 
 You can start the coordinator instance by specifying `--coordinator-id` and 
 `--coordinator-port` flags. The coordinator instance only responds to
@@ -59,12 +56,12 @@ coordination in a fault-tolerant manner.
 ## Bolt+routing
 
 Directly connecting to the MAIN instance isn't preferred in the HA cluster since the MAIN instance changes due to various failures. Because of that, users
-have an option of using bolt+routing so that write queries can always be sent to the correct data instance. This protocol works in a way that the client
+can use bolt+routing so that write queries can always be sent to the correct data instance. This protocol works so that the client
 first sends a ROUTE bolt message to any coordinator instance. The coordinator replies to the message by returning the routing table with three entries specifying
 from which instance can be data read, to which instance data can be written and which instances can behave as routers. In the Memgraph HA cluster, the MAIN
-data instance is the only writeable instance, REPLICAs are readable instances and COORDINATORs behave as routers. For more details check [Request message ROUTE](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route) documentation.
+data instance is the only writeable instance, REPLICAs are readable instances, and COORDINATORs behave as routers. For more details check [Request message ROUTE](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route) documentation.
 
-Users only need to change the scheme which they use for connecting to coordinators. This means instead of using `bolt://<main_ip_address>,` you should
+Users only need to change the scheme they use for connecting to coordinators. This means instead of using `bolt://<main_ip_address>,` you should
 use `neo4j://<coordinator_ip_adresss>` to get an active connection to the current MAIN instance in the cluster. You can find examples of how to 
 use bolt+routing in different programming languages [here](https://github.com/memgraph/memgraph/tree/master/tests/drivers).
 
@@ -73,7 +70,7 @@ queries, not coordinator-based queries.
 
 ## Starting instances
 
-You can start the data instance and coordinator instance using either environment flags or configuration flags.
+You can start the data and coordinator instances using environment flags or configuration flags.
 The main difference between data instance and coordinator is that data instances have `--management-port`, whereas coordinators must have `--coordinator-id` and `--coordinator-port`. 
 
 ### Configuration Flags
@@ -105,11 +102,11 @@ docker run --name coord1 -p 7690:7687 -p 7445:7444 memgraph/memgraph-mage
 --experimental-enabled=high-availability
 ```
 
-Coordinator IDs serves as identifiers while the coordinator port is used for synchronization and log replication between coordinators. Coordinator IDs and coordinator ports must be different for all coordinators.
+Coordinator IDs serve as identifiers, while the coordinator port is used for synchronization and log replication between coordinators. Coordinator IDs and coordinator ports must be different for all coordinators.
 
 ### Env flags
 
-There is an additional way to set high availability instances using environment variables. It is important to say that for the following configuration options you can either use
+There is an additional way to set high availability instances using environment variables. It is important to say that for the following configuration options, you can either use
 environment variables or configuration flags:
 
 - experimental enabled
@@ -387,35 +384,34 @@ for each database on data instance. This way, MAIN can establish a connection to
 
 ### Coordinator instances restart
 
-In case the coordinator instance dies and it is restarted, it loses all data from Raft log. Information about other coordinators and their endpoints is recovered from `high_availability/coordinator`  directory stored under 
-top level `--data-directory` folder. When the coordinator rejoins, it will communicate with other coordinators and receive updates from the current leader. It is important that at least one coordinator is alive at all the time
-so that data from the Raft log is not lost.
+In case the coordinator instance dies and it is restarted, it loses all data from the Raft log. Information about other coordinators and their endpoints is recovered from `high_availability/coordinator`  directory stored under 
+top level `--data-directory` folder. When the coordinator rejoins, it will communicate with other coordinators and receive updates from the current leader. It is important that at least one coordinator is alive at all the time so that data from the Raft log is not lost.
 
 ## Recovering from errors
 
 Distributed systems can fail in numerous ways. With the current implementation, Memgraph instances are resilient to occasional network
-failures and independent machine failures. Byzantine failures aren't handled since Raft consensus protocol cannot deal with them either. 
+failures and independent machine failures. Byzantine failures aren't handled since the Raft consensus protocol cannot deal with them either. 
 
 Recovery Time Objective (RTO) is an often used term for measuring the maximum tolerable length of time that an instance or cluster can be down.
-Since there are 2 types of instances in every highly available Memgraph cluster, we need to separately analyze failures of each.
+Since every highly available Memgraph cluster has two types of instances, we need to analyze the failures of each separately.
 
 Raft is a quorum-based protocol and it needs a majority of instances alive in order to stay functional. Hence, with just one coordinator instance down, RTO is 0 since
-cluster stays available. With 2+ coordinator instances down
+the cluster stays available. With 2+ coordinator instances down
 (in a cluster with RF = 3), the RTO depends on the time needed for instances to come back.
 
 Failure of REPLICA data instance isn't very harmful since users can continue writing to MAIN data instance while reading from MAIN or other
 REPLICAs. The most important thing to analyze is what happens when MAIN gets down. In that case, the leader coordinator uses 
 user-controllable parameters related to the frequency of health checks from the leader to replication instances (`--instance-health-check-frequency-sec`) 
-and the time needed to realize the instance is down (`--instance-down-timeout-sec`). After collecting enough evidence, leader concludes the MAIN is down and performs failover using just a handful of RPC
-messages (correct time depends on distance between instances). It is important to mention that whole failover is performed with a zero data-loss if newly chosen MAIN (previously REPLICA)
+and the time needed to realize the instance is down (`--instance-down-timeout-sec`). After collecting enough evidence, the leader concludes the MAIN is down and performs failover using just a handful of RPC
+messages (correct time depends on the distance between instances). It is important to mention that the whole failover is performed with a zero data-loss if the newly chosen MAIN (previously REPLICA)
 had all up-to-date data.
 
-Current deployment assumes existence of only one datacenter which automatically means that Memgraph won't be available in the case whole datacenter goes down. We are actively
+Current deployment assumes the existence of only one datacenter, which automatically means that Memgraph won't be available in the case the whole datacenter goes down. We are actively
 working on 2 datacenter (2-DC) architecture.
 
 ## Kubernetes
 
-We support deploying Memgraph HA instances as part of the Kubernets cluster. You can see example configurations [here](/getting-started/install-memgraph/kubernetes#helm-chart-for-memgraph-high-availability-cluster).
+We support deploying Memgraph HA instances as part of the Kubernetes cluster. You can see example configurations [here](/getting-started/install-memgraph/kubernetes#helm-chart-for-memgraph-high-availability-cluster).
 
 ## Example
 
