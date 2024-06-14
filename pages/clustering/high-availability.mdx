@@ -49,9 +49,12 @@ The Raft consensus algorithm ensures that all nodes in a distributed system
 agree on a single source of truth, even in the presence of failures, by electing
 a leader to manage a replicated log. It simplifies the management of the
 replicated log across the cluster, providing a way to achieve consistency and
-coordination in a fault-tolerant manner.
+coordination in a fault-tolerant manner. Users are advised to use an odd number of instances
+since Raft, as a consensus algorithm, works by forming a majority in the decision making.
 
 </Callout>
+
+
 
 ## Bolt+routing
 
@@ -166,6 +169,7 @@ This operation will result in writing to the Raft log.
 
 In case MAIN is already set in the cluster, a replica instance will also be registered on MAIN.
 
+
 ### Add coordinator instance
 
 The user can choose any coordinator instance and connect other two (or more) coordinator instances to the cluster. This can be done before or after registering data instances,
@@ -174,6 +178,13 @@ the order isn't important.
 ```plaintext
 ADD COORDINATOR coordinatorId WITH CONFIG {"bolt_server": boltServer, "coordinator_server": coordinatorServer}; 
 ```
+
+<Callout type="info">
+
+If you are running `ADD COORDINATOR` Cypher queries on coordinator with --coordinator-id=1, you only need to add other two coordinator instances. For example, when using 3 
+coordinators you need to use two `ADD COORDINATOR` queries.
+
+</Callout>
 
 ### Set instance to MAIN
 
@@ -242,6 +253,14 @@ health status of other instances and the time of last response since only the le
 ```plaintext
 SHOW INSTANCES;
 ```
+
+<Callout type="warning">
+
+When `SHOW INSTANCES` is being run, bolt server of the 1st coordinator (coordinator on which you run registration queries) will always 
+show IP address set to 0.0.0.0 instead of machine's IP address (container/pod when running in Docker/Kubernetes). All communication will
+still work but the displayed output is wrong. This is a known bug and we are working on improving this.
+
+</Callout>
 
 ## Setting config for highly-available cluster
 
@@ -368,6 +387,14 @@ RPC request deletes all current data on all databases on a given instance and ac
 
 From follower coordinators you can only execute `SHOW INSTANCES`. Registration of data instance, unregistration of data instances, demoting instance, setting instance to MAIN and force reseting cluster state
 are all disabled. 
+
+<Callout type="warning">
+
+It is important to note that our current implementation of high availability could lead to data loss. The specific situation could occur when all REPLICAs are behind the current MAIN
+and current MAIN is down. The failover is triggered in which the most-up-to-date replica is chosen for promotion. Such an incident can only happen in high-volume environment where
+data is constantly changed, added, deleted etc. If zero data-loss HA is your requirement, please open an issue on [GitHub](https://github.com/memgraph/memgraph/issues) and we will work towards improving that.
+
+</Callout>
 
 ## Instances' restart
 
