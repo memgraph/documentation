@@ -1,0 +1,517 @@
+---
+title: Role-based access control
+description: Learn how to set up role-based access control.
+---
+
+# Role-based access control (Enterprise)
+
+Role-Based access control (RBAC) simplifies data security by grouping users into
+roles based on their tasks. Instead of assigning permissions to each user, RBAC
+assigns privileges to roles. Users, when linked to roles, gain the necessary
+access for their responsibilities. For example, in a company, a manager's role
+might have different access levels than an employee's role. Through RBAC,
+organizations efficiently ensure that users only access data relevant to their
+role, enhancing security and minimizing risks.
+
+With role-based access control, a database administrator can assign various
+privileges to roles, but for even more control over who can access certain
+data, Memgraph Enterprise offers [fine-grained access
+control](/database-management/authentication-and-authorization/role-based-access-control#fine-grained-access-control). 
+
+## User roles 
+
+Each user can be assigned at most one user role. User roles are abstractions
+that capture the privilege levels of a set of users. 
+
+For example, suppose that `Dominik` and `Marko` belong to the upper management of a
+certain company. It makes sense to grant them a set of privileges that other
+users are not entitled to so, instead of granting those privileges to each of
+them, we can create a role with those privileges called `manager`, which we
+assign to `Dominik` and `Marko`.
+
+In other words, each privilege that is granted to a user role is automatically
+granted to all the users with that role (unless it has been explicitly denied
+to that user). Similarly, each privilege that is denied to a user role is
+automatically denied to all users with that role (even if it has been
+explicitly granted to that user).
+
+To create a user role, run the following query:
+
+```cypher
+CREATE ROLE [IF NOT EXISTS] role_name;
+```
+
+If a role already exists, you can use `IF NOT EXISTS` to only create new roles.
+
+To assign a user with a certain user role, run the following query:
+
+```cypher
+SET ROLE FOR user_name TO role_name;
+```
+
+To remove the role from the user, run the following query:
+
+```cypher
+CLEAR ROLE FOR user_name;
+```
+
+To show all users with a certain role:
+
+```cypher
+SHOW USERS FOR role_name;
+```
+
+To show what role a user has, run the following query:
+
+```cypher
+SHOW ROLE FOR user_name;
+```
+
+To list all defined user roles run:
+
+```cypher
+SHOW ROLES;
+```
+
+## Privileges
+
+At the moment, privileges are confined to users' abilities to perform certain
+`OpenCypher` queries. Namely, users can be given permission to execute a subset
+of the following commands:
+
+| Privilege description | Clause |
+| --------------------- | ------ |
+| Privilege to [access data](/querying/read-and-modify-data). | `MATCH` |
+| Privilege to [modify data](/querying/read-and-modify-data). | `MERGE`, `SET`|
+| Privilege to [create](/querying/create-graph-objects) and [delete]](/querying/read-and-modify-data) data. | `CREATE`, `DELETE`, `REMOVE` |
+| Privilege to [index data](/fundamentals/indexes). | `INDEX` |
+| Privilege to [obtain statistics and information](/database-management/server-stats) from Memgraph. | `STATS` |
+| Privilege to view and alter users, roles and privileges. | `AUTH` |
+| Privilege to enforce [constraints](/fundamentals/constraints). | `CONSTRAINT` |
+| Privilege to [dump the database](/configuration/data-durability-and-backup#database-dump).| `DUMP` |
+| Privilege to use [replication](/clustering/replication) queries. | `REPLICATION` |
+| Privilege to access files in queries, for example, when using `LOAD CSV` clause. | `READ_FILE` |
+| Privilege to manage [durability files](/configuration/data-durability-and-backup#database-dump). | `DURABILITY` |
+| Privilege to try and [free memory](/fundamentals/storage-memory-usage#deallocating-memory). | `FREE_MEMORY` |
+| Privilege to use [trigger queries](/fundamentals/triggers). | `TRIGGER` |
+| Privilege to [configure Memgraph during runtime](/database-management/configuration) and to attain the configuration of the given Memgraph instance. | `CONFIG` |
+| Privilege to use [stream queries](/data-streams). | `STREAM` |
+| Privilege to read the content of Python [query module files](/advanced-algorithms). | `MODULE_READ` |
+| Privilege to modify the content of Python [query modules files](/advanced-algorithms). | `MODULE_WRITE` |
+| Privilege to connect to [Memgraph monitoring server](/database-management/monitoring). | `WEBSOCKET`
+| Privilege to [show and terminate transactions](/fundamentals/transactions#terminate-transactions). | `TRANSACTION_MANAGEMENT` |
+| Privilege to change [storage mode](/fundamentals/storage-memory-usage#storage-modes). | `STORAGE_MODE` |
+| Privilege to manage [multi-tenant databases](/database-management/multi-tenancy). | `MULTI_DATABASE_EDIT` |
+| Privilege to use a database within the multi-tenant architecture. | `MULTI_DATABASE_USE` |
+| Privileges to specific labels. | `ALL LABELS` |
+| Privileges to specific relationships types. | `ALL EDGE TYPES` |
+
+After the first user is created, Memgraph will execute a query if and only if
+either a user or its role is granted that privilege and neither the user nor its
+role are denied that privilege. Otherwise, Memgraph will not execute that
+specific query. Note that `DENY` is a stronger operation than `GRANT`. This is
+also notable from the fact that if neither the user nor its role are explicitly
+granted or denied a certain privilege, that user will not be able to perform
+that specific query. This effect is also known as a silent deny. The information
+above is neatly condensed in the following table:
+
+User Status | Role Status | Effective Status
+------------|-------------|------------------
+GRANT       | GRANT       | GRANT
+GRANT       | DENY        | DENY
+GRANT       | NULL        | GRANT
+DENY        | GRANT       | DENY
+DENY        | DENY        | DENY
+DENY        | NULL        | DENY
+NULL        | GRANT       | GRANT
+NULL        | DENY        | DENY
+NULL        | NULL        | DENY
+
+Once the privileges are changed, they take full effect once the user reconnects
+to the database. 
+
+#### Grant privileges
+
+To grant a certain set of privileges to a specific user or user role, use the
+following query:
+
+```cypher
+GRANT privilege_list TO user_or_role;
+```
+
+For example, to grant `AUTH` and `INDEX` privileges to users with the
+`moderator` role, run:
+
+```cypher
+GRANT AUTH, INDEX TO moderator:
+```
+#### Deny privileges 
+
+Similarly, denying privileges is done using the `DENY` keyword instead of
+`GRANT`.
+
+For example, to deny `AUTH` and `INDEX` privileges to users with the
+`moderator` role, run:
+
+```cypher
+DENY AUTH, INDEX TO moderator:
+```
+
+#### Revoke privileges
+
+Both denied and granted privileges can be revoked, meaning that their status is
+not defined for that user or role. Revoking is done using the `REVOKE` keyword.
+
+For example, to revoke `AUTH` and `INDEX` privileges to users with the
+`moderator` role, run:
+
+```cypher
+REVOKE AUTH, INDEX TO moderator:
+```
+
+Although semantically unintuitive, the level of a certain privilege can be
+raised by using `REVOKE`. For instance, if a user has been denied the `INDEX`
+privilege, but the role it belongs to is granted that privilege, the user is
+unable to use indexing features.
+
+If the user's `INDEX` privilege is revoked, they will be able to use indexing
+features because the role is granted that privilege.
+
+#### Manage all privileges at once
+
+To grant, deny or revoke all privileges, use the `ALL PRIVILEGES` construct:
+
+```cypher
+GRANT ALL PRIVILEGES TO <user>;
+```
+
+```cypher
+DENY ALL PRIVILEGES FROM <user>;
+```
+
+```cypher
+REVOKE ALL PRIVILEGES FROM <user>;
+```
+
+#### Show privileges
+
+To check privilege for a certain user or role, run the following query:
+
+```cypher
+SHOW PRIVILEGES FOR user_or_role;
+```
+
+## Fine-grained access control
+
+Sometimes, authorizing the database by granting and denying clause privileges is
+not enough to make the database fully secure. Certain nodes and relationships
+can be confidential and must be restricted from viewing and manipulating by
+multiple users. Also, disabling users from executing certain commands is sometimes too
+restrictive.
+
+In response to the need for such authorization, Memgraph has added [label-based
+access
+control](/database-management/authentication-and-authorization/role-based-access-control#label-based-access-control)
+(LBAC) as a more fine-grained access control to enable authorization on node
+labels and relationship edge types. By applying authorization to graph's first
+class citizens, a database administrator can now keep all the data in one
+database while keeping any private data secure from those who don't have
+adequate permission.
+
+### Label-based access control
+
+
+Label-based permissions are divided into 4 hierarchical parts or levels:
+- `NOTHING` - denies user visibility and manipulation over nodes and relationships
+- `READ` - grants the user visibility over nodes and relationships
+- `UPDATE` - grants the user visibility and the ability to edit nodes and relationships 
+- `CREATE_DELETE` - grants the user visibility, editing, creation, and deletion of a node or a
+relationship
+
+#### Node permissions
+
+Granting a certain set of node permissions can be done similarly to the clause 
+privileges using the following command:
+
+```cypher
+GRANT permission_level ON LABELS label_list TO user_or_role;
+```
+
+with the legend:
+- `permission_level` is either `NOTHING`, `READ`, `UPDATE` or `CREATE_DELETE`
+- `label_list` is a set of node labels, separated with a comma and with a colon in front of
+each label (e.g. `:L1`), or `*` for specifying all labels in the graph
+- `user_or_role` is the already created user or role in Memgraph
+
+For example, granting a `READ` permission on labels `L1` and `L2` would be written as:
+
+```cypher
+GRANT READ ON LABELS :L1, :L2 TO charlie;
+```
+
+while granting both `READ` and `EDIT` permissions for all labels in the graph, would be written as:
+
+```cypher
+GRANT UPDATE ON LABELS * TO charlie;
+```
+
+For denying visibility to a node, the command would be written as:
+
+```cypher
+GRANT NOTHING ON LABELS :L1 TO charlie;
+```
+
+#### Relationship permissions
+
+Relationship permission queries are in essence the same as node permission queries, with the
+one difference that the name of the relationship type is `EDGE_TYPE` and not `LABEL`.
+
+Granting a certain set of edge type permissions can be done similarly to the
+clause privileges by issuing the following command:
+
+```cypher
+GRANT permission_level ON EDGE_TYPES edge_type_list TO user_or_role;
+```
+
+with the same legend as the node permissions.
+
+For example, granting a `READ` permission on relationship type `:CONNECTS` would be written as:
+
+```cypher
+GRANT READ ON EDGE_TYPES :CONNECTS TO charlie;
+```
+
+#### Revoke label-based permissions
+
+To revoke any of the label-based permissions, users can use one of the following commands:
+
+```cypher
+REVOKE (LABELS | EDGE_TYPES) label_or_edge_type_list FROM user_or_role
+```
+
+where:
+- `label_or_edge_type_list` is a list of labels or edge types with a colon in front of each
+label or edge type (or `*` for specifying all labels or edge types)
+- `user_or_role` is the existing user or role in Memgraph
+
+#### Show privileges for label-based access control
+
+To check which privileges an existing user or role has in Memgraph, it is enough to write
+
+```cypher
+SHOW PRIVILEGES FOR user_or_role;
+```
+
+and all the values of clause privileges, as well as label-based permissions will be displayed.
+
+### Templates for granting privileges
+
+To grant all privileges to a superuser (admin):
+
+```
+GRANT ALL PRIVILEGES TO admin;
+GRANT CREATE_DELETE ON LABELS * TO admin;
+GRANT CREATE_DELETE ON EDGE_TYPES * TO admin;
+```
+
+To grant all read and write privileges:
+
+```
+DENY ALL PRIVILEGES TO readWrite;
+GRANT CREATE, DELETE, MERGE, SET, REMOVE, INDEX, MATCH, STATS TO readWrite;
+GRANT CREATE_DELETE ON LABELS * TO readWrite;
+GRANT CREATE_DELETE ON EDGE_TYPES * TO readWrite;
+```
+
+To grant read only privileges: 
+
+```
+DENY ALL PRIVILEGES TO readonly;
+GRANT MATCH, STATS TO readonly;
+GRANT READ ON LABELS * TO readonly;
+GRANT READ ON EDGE_TYPES * TO readonly;
+```
+
+### Examples
+
+Below are several examples of using the Enterprise security features. 
+
+#### Granting read permissions
+
+Bob is a data analyst for the company. He is making sure he can extract any useful insights
+from the data imported into the database. For now, all the data is labeled with the `DataPoint`
+label. Alice has already created a data analyst role as well as Bob's account in Memgraph with:
+
+```cypher
+CREATE ROLE analyst;
+CREATE USER Bob IDENTIFIED BY 'test';
+SET ROLE FOR Bob TO analyst;
+```
+
+Unfortunately, when he writes:
+
+```cypher
+MATCH (n:DataPoint) RETURN n;
+```
+
+he gets an error that he can not execute the query. Why is that? The first
+problem that we encounter is that Bob can not perform `MATCH` queries, which we
+must explicitly grant.
+
+The database administrator grants him and all the data analysts the `MATCH`
+query to traverse the graph with:
+
+```cypher
+GRANT MATCH TO analyst;
+```
+
+Now Bob is able to perform a match. However, by executing the same query again,
+he is not able to get any results.
+
+Since Bob is not an administrator, he was not able to see any data points in the
+graph. In other words, he does not have `READ` permission on the `DataPoint`
+label.
+
+Memgraph's label-based access control is hierarchically constructed, and the
+first permission one can be given on node labels or relationship edge types is
+`READ`.
+
+Alice now updates Bob's permissions by executing:
+
+```cypher
+GRANT READ ON LABELS :DataPoint TO analyst;
+```
+
+Bob is now executing his queries normally and is able to get insights from the
+database with respect to all the data points in the graph!
+
+Additionally, in the company, it was decided that all the data points would be
+connected in a time series fashion, depending on when they were ingested into
+the database. One `DataPoint` should therefore be connected to the previously
+inserted one. The relationship type is called `:NEXT`.
+
+Bob now again has problems, because when he executes:
+
+```cypher
+MATCH (n:DataPoint)-[e:NEXT]->(m:DataPoint);
+```
+
+he is not able to see the patterns. Although Bob can see all the data points, he
+doesn't have permission to view the relationships. The database administrator
+executes the following command to solve the problem:
+
+```cypher
+GRANT READ ON EDGE_TYPES :NEXT TO analyst;
+```
+
+Since the users are initially constructed without any permission, they would
+need an explicit grant for every new label that appears in the database. This
+approach is called whitelisting, and is more secure for adding new entities in
+the database since confidential nodes and relationships are not leaked into the
+database before securing them.
+
+#### Granting update permissions
+
+Charlie is a tester and customer care specialist. He is in charge of reporting
+bugs and fixing issues in the database. A common problem that he is facing is
+updating the classes of the data points if they are labeled incorrectly. For
+example, the class of one `DataPoint` might be 'dog', while in fact it is an
+'elephant', but it was wrongly selected in the rush of labeling many data
+points. Charlie needs to update the wrongly labeled data points, and he already
+has the IDs of all the nodes he must update. 
+
+The administrator has already set up his account with the following commands:
+
+```cypher
+CREATE ROLE tester;
+CREATE USER Charlie IDENTIFIED BY 'test';
+SET ROLE FOR Charlie TO tester;
+
+GRANT MATCH, SET TO tester;
+
+GRANT READ ON LABELS :DataPoint TO tester;
+GRANT READ ON EDGE_TYPES :NEXT TO tester;
+```
+
+He now has read privileges just like all the data analysts, but when he gets an
+authorization error while executing:
+
+```cypher
+MATCH (n:DataPoint {id:505}) SET n.labelY = 'elephant';
+```
+
+The error occurs because Charlie does not have permission to update the existing
+nodes in the graph. The database administrator needs to update Charlie's
+permissions and grant him access to update the node properties with:
+
+```cypher
+GRANT UPDATE ON LABELS :DataPoint TO tester;
+```
+
+Charlie is now able to update the labeled categories of any data point in the
+graph! The same permission applies if he needs to update a relationship property
+in the graph.
+
+#### Granting full access permissions
+
+David is the data engineer for the company. He is very skilled in database
+systems, and he has been assigned the task of deleting every data point in the
+system that's older than one year. Alice has his account set up with the
+following commands:
+
+```cypher
+CREATE ROLE dataEngineer;
+CREATE USER David IDENTIFIED BY 'test';
+SET ROLE FOR David TO dataEngineer;
+
+GRANT MATCH, DELETE TO dataEngineer;
+
+GRANT UPDATE ON LABELS :DataPoint TO dataEngineer;
+GRANT UPDATE ON EDGE_TYPES :NEXT TO dataEngineer;
+```
+
+However, `UPDATE` privilege capabilities only grant manipulation of properties, not the nodes
+and relationships themselves. Therefore, the query:
+
+```cypher
+MATCH (n:DataPoint) WHERE localDateTime() - n.date > Duration({day:365}) DETACH DELETE n;
+```
+
+results in an error. The permission that grants read, update, create, and delete
+rights over the nodes and relationships in the graph is `CREATE_DELETE`. By
+executing the following commands:
+
+```cypher
+GRANT CREATE_DELETE ON LABELS :DataPoint TO dataEngineer;
+GRANT CREATE_DELETE ON EDGE_TYPES :NEXT TO dataEngineer;
+```
+
+The permission is executed on relationships as well, since David needs to detach
+the nodes prior to deleting them. David is now able to successfully delete the
+deprecated nodes.
+
+#### Denying visibility
+
+Eve is the new senior engineer, and she is making excellent progress in the
+company. The management therefore decided to grant her visibility and
+manipulation over all the nodes. However, there are certain confidential nodes
+that are only for the management people to see.
+
+Since there could be a lot of different node labels or relationship types in the
+database, a shortcut can be made by granting `NOTHING` to the entity. The
+database administrator therefore sets Eve's role as:
+
+```cypher
+CREATE ROLE seniorEngineer;
+CREATE USER Eve IDENTIFIED BY 'test';
+SET ROLE FOR Eve TO seniorEngineer;
+
+GRANT MATCH, DELETE TO seniorEngineer;
+
+GRANT CREATE_DELETE ON LABELS * TO seniorEngineer;
+GRANT NOTHING ON LABELS :SecretLabel TO seniorEngineer;
+```
+
+When granting `NOTHING`, the user is denied both visibility and manipulation of
+the entity. Eve is now able to see all the domain data while the management is
+happy since they have not leaked any confidential data.

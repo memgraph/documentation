@@ -4,6 +4,7 @@ description: Experience Memgraph's integration with Docker Compose. Our dedicate
 ---
 
 import { Callout } from 'nextra/components'
+import { Card, Cards } from 'nextra/components'
 
 # Docker Compose
 
@@ -25,8 +26,6 @@ that all necessary services are properly configured to work together seamlessly,
 emphasizing ease of use and integration.
 
 ```yaml
-version: "3"
-
 services:
   memgraph:
     image: memgraph/memgraph-mage:latest
@@ -48,7 +47,7 @@ services:
       - QUICK_CONNECT_MG_PORT=7687
 ```
 
-### Key Features
+{<h3>Key features</h3>}
 
 - **Memgraph MAGE**: The core of the platform, the Memgraph database with
   included MAGE algorithms, is set up with ports `7687` for the Bolt protocol
@@ -65,15 +64,34 @@ services:
   after the Memgraph database service is fully operational, establishing a
   reliable service order and minimizing startup issues.
 
-### Notes
+{<h3>Configuration</h3>}
 
 - This configuration is primarily optimized for development and testing
   environments. For production deployments, it's recommended to customize the
   configuration according to specific security and performance requirements.
   
-- The `--log-level=TRACE` option in the Memgraph service enables detailed
+- In this Docker Compose file, the `command` directive is used to specify the
+  configuration flags that should be set when the container starts. In this
+  example, the specified command `--log-level=TRACE` sets the log level to
+  TRACE. The `--log-level=TRACE` option in the Memgraph service enables detailed
   logging. This setting is adjustable to suit different phases of development
-  and testing, providing flexibility in monitoring and troubleshooting.
+  and testing, providing flexibility in monitoring and troubleshooting. 
+
+<Callout>
+  
+If you wish to set more than one configuration flag, use the following syntax: <br/>
+`command: ["--setting-name1=value1", "--setting-name2=value2"]`
+
+</Callout>
+
+<Cards>
+<div className="w-[250px]">
+  <Card
+    title="Read more about configuration settings"
+    href="/configuration/configuration-settings"
+  />
+</div>
+</Cards>
 
 
 ## Docker Compose for Memgraph MAGE image
@@ -84,7 +102,6 @@ The **Memgraph MAGE** image contains:
 - **MAGE** - graph algorithms and modules library
 
 ```yaml
-version: "3"
 services:
   memgraph-mage:
     image: "memgraph/memgraph-mage"
@@ -113,7 +130,7 @@ Memgraph Lab application. We specified three useful volumes:
 The exact location of the local directories depends on your specific setup.
 
 We recommend using the `command` option to customize [Memgraph's runtime
-flags](/configuration/configuration-settings) instead of setting them through
+flags](/database-management/configuration) instead of setting them through
 `entrypoint`. This approach enhances your flexibility and aligns with Docker
 best practices, allowing you to easily adjust your container's behavior without
 altering its foundational settings.
@@ -127,7 +144,6 @@ included in this image, you can use the available graph algorithms.
 The **Memgraph** image contains the database that holds your data.
 
 ```yaml
-version: "3"
 services:
   memgraph:
     image: "memgraph/memgraph"
@@ -156,7 +172,7 @@ Memgraph Lab application. We specified three useful volumes:
 The exact location of the local directories depends on your specific setup.
 
 We recommend using the `command` option to customize [Memgraph's runtime
-flags](/configuration/configuration-settings) instead of setting them through
+flags](/database-management/configuration) instead of setting them through
 `entrypoint`. This approach enhances your flexibility and aligns with Docker
 best practices, allowing you to easily adjust your container's behavior without
 altering its foundational settings.
@@ -166,6 +182,81 @@ the MAGE library included, you won't be able to use graph algorithms.
 
 > Want to see applications built with Memgraph and Docker Compose? Check out
 > [Memgraph's Github](https://github.com/memgraph) repositories.
+
+## Configuring user authentication in Docker Compose
+
+When setting up Memgraph with Docker Compose, you can use environment variables
+ `MEMGRAPH_USER` and
+`MEMGRAPH_PASSWORD` to create a new user if that username doesn't already exist.
+
+<Callout>
+
+When working with `MEMGRAPH_USER` and `MEMGRAPH_PASSWORD` environmental
+variables, keep the following things in mind:
+- **New User Creation:** When `MEMGRAPH_USER` and `MEMGRAPH_PASSWORD` are set
+  and the specified user does not exist, Memgraph creates this new user.
+  However, these credentials must be manually entered each time when accessing
+  Memgraph through Memgraph Lab.
+- **Existing Users:** If the username already exists and an incorrect password
+  is provided via `MEMGRAPH_PASSWORD`, no changes will occur. The existing
+  password remains unchanged, and you must use the original credentials to
+  access Memgraph Lab.
+- **Docker Compose Restarts:** If Memgraph is restarted via Docker Compose
+  without these environment variables being set, previously created users remain
+  unaffected. You must manually enter the user credentials every time you access
+  Memgraph Lab.
+
+</Callout>
+
+Below is an example of how to configure these environment variables in your
+`docker-compose.yml` file:
+
+```yaml
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:latest
+    container_name: memgraph-mage
+    ports:
+      - "7687:7687"
+      - "7444:7444"
+    command: ["--log-level=TRACE"]
+    environment:
+      - MEMGRAPH_USER=testuser123
+      - MEMGRAPH_PASSWORD=t123
+
+  lab:
+    image: memgraph/lab:latest
+    container_name: memgraph-lab
+    ports:
+      - "3000:3000"
+    depends_on:
+      - memgraph
+    environment:
+      - QUICK_CONNECT_MG_HOST=memgraph
+      - QUICK_CONNECT_MG_PORT=7687
+```
+
+<Callout type="warning">
+
+When specifying environment variables in Docker Compose, avoid spaces around the
+equals sign (`=`). Including spaces can cause the variables to be misinterpreted
+or ignored by Docker, leading to unexpected behavior.
+
+Correct format:
+```
+environment:
+  - MEMGRAPH_USER=testuser123
+  - MEMGRAPH_PASSWORD=t123
+```
+
+Incorrect format (will not work):
+```
+environment:
+  - MEMGRAPH_USER = testuser123
+  - MEMGRAPH_PASSWORD = t123
+```
+
+</Callout>
 
 ## Issues when running Memgraph and Lab within the same Docker compose
 
@@ -197,6 +288,47 @@ connect port number, e.g. `QUICK_CONNECT_MG_PORT: 7688`
 
 ---
 
+## Adding a health check
+
+Including a health check in your Docker Compose configuration for Memgraph helps
+ensure that the container is not only up but also operational. Below is one
+possible approach to adding a health check to your `docker-compose.yml` for the
+Memgraph service:
+
+```yaml
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:latest
+    container_name: memgraph-mage
+    ports:
+      - "7687:7687"
+      - "7444:7444"
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'RETURN 0;' | mgconsole || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 0s
+    command: ["--log-level=TRACE"]
+```
+
+Here is what this `healthcheck` does:
+
+- `test`: The command `echo 'RETURN 0;' | mgconsole || exit 1` runs within the
+  shell to check the responsiveness of the Memgraph console. It's a simple
+  command to verify that the database can process queries. If `mgconsole` fails
+  to execute or returns a non-zero exit status, the health check fails.
+- `interval`: Specifies how often to run the health check. Here, it's set to
+  every 10 seconds.
+- `timeout`: Sets the maximum time allowed for the health check to run. If the
+  test command exceeds 5 seconds, the check is considered to have failed.
+- `retries`: Defines how many times the health check will retry upon failure
+  before considering the service unhealthy. Here, it will try three times.
+- `start_period`: Sets the initialization period during which the health check
+  command failures are considered to be setup failures rather than an unhealthy
+  container. This is set to 0s, meaning it starts checking immediately at
+  container start-up.
+
 ## Docker Compose for Memgraph Platform image up to version 2.14
 
 <Callout type="info">
@@ -224,7 +356,6 @@ The `memgraph-platform` Docker image contains:
 - **[MAGE](/advanced-algorithms)** - graph algorithms and modules library
 
 ```yaml
-version: "3"
 services:
   memgraph-platform:
     image: "memgraph/memgraph-platform"
@@ -262,7 +393,7 @@ from Memgraph inside Memgraph Lab. We specified three useful volumes:
 
 The exact location of the local directories depends on your specific setup.
 
-[Configuration settings](/configuration/configuration-settings) can be changed
+[Configuration settings](/database-management/configuration) can be changed
 by setting the value of the `MEMGRAPH` environment variable. In the above
 example, you can see how to set `--log-level` to `TRACE`. Since Memgraph
 Platform is not a single service, the process manager
