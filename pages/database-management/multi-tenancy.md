@@ -92,7 +92,6 @@ Administrators manage multi-tenant privileges with:
 
 The `data-recovery-on-startup` flag replaces `storage-recover-on-startup`,
 facilitating recovery of individual databases and their contents during startup.
-`storage-recover-on-startup` is still functional but deprecated.
 
 If `storage-delete-on-drop` is set to true, the underlying directories
 associated with the dropped database will be deleted.
