@@ -117,6 +117,7 @@ environment variables or configuration flags:
 - coordinator port
 - coordinator id
 - management port
+- high availability durability
 
 #### Data instances
 
@@ -138,8 +139,9 @@ export MEMGRAPH_EXPERIMENTAL_ENABLED=high-availability
 export MEMGRAPH_COORDINATOR_PORT=10111
 export MEMGRAPH_COORDINATOR_ID=1
 export MEMGRAPH_BOLT_PORT=7692
+export MEMGRAPH_HA_DURABILITY=true
 ```
-When using either of these flags, configurations flags for `--bolt-port`, `--coordinator-port`, `--coordinator-id` and `--experimental-enabled` will be ignored.
+When using either of these flags, configurations flags for `--bolt-port`, `--coordinator-port`, `--coordinator-id`, `--experimental-enabled` and `--ha-durability` will be ignored.
 
 There is an additional environment variable you can use to set the path to the file with cypher queries used to start a high availability cluster.
 Here, you can use queries we define in the next chapter called User API.
@@ -417,8 +419,69 @@ for each database on data instance. This way, MAIN can establish a connection to
 
 ### Coordinator instances restart
 
-In case the coordinator instance dies and it is restarted, it loses all data from the Raft log. Information about other coordinators and their endpoints is recovered from `high_availability/coordinator`  directory stored under 
-top level `--data-directory` folder. When the coordinator rejoins, it will communicate with other coordinators and receive updates from the current leader. It is important that at least one coordinator is alive at all the time so that data from the Raft log is not lost.
+In case the coordinator instance dies and it is restarted, it will not lose any data from the RAFT log or RAFT snapshots, since --ha-durability is enabled by default. For more details
+read about high availability durability in the durability chapter.
+
+
+## Durability
+
+High availability durability is enabled by default. Durability flag controls logs and snapshots. Details about other coordinators are always made durable
+since without that information, the coordinator can't rejoin the cluster.
+
+Information about logs and snapshots is stored under one RocksDB instance in the `high_availability/raft_data/logs` directory stored under 
+the top-level `--data-directory` folder. All the data stored there is recovered in case the coordinator restarts.
+
+Data about other coordinators and their endpoints is recovered from the `high_availability/raft_data/network` directory stored under 
+the top-level `--data-directory` folder. When the coordinator rejoins, it will communicate with other coordinators and receive updates from the current leader.
+
+In case durability is disabled, at least one coordinator must be alive at all times so that data from the Raft log is not lost.
+
+### First start 
+
+On the first start of coordinators, each will store the current version of the `logs` and `network` durability store. From that point on,
+each RAFT log that is sent to the coordinator is also stored on disk. For every new coordinator instance, the server config is updated. Logs are created 
+for each user action and failover action. Snapshots are created every N (N currently being 5) logs. 
+
+
+### Restart of coordinator 
+
+In case of failure of the coordinator, on the restart, it will read information about other coordinators stored under `high_availability/raft_data/network` 
+directory. 
+
+From the `network` directory we will recover the server state before the coordinator stopped, including the current term, for whom the coordinator voted, and whether 
+election timer is allowed.
+
+It will also recover the following server config information: 
+- other servers, including their endpoints, id, and auxiliary data
+- ID of the previous log 
+- ID of the current log 
+- additional data needed by nuRaft
+
+If durability is not disabled, the following information will be recovered from a common RocksDB `logs` instance: 
+- current version of `logs` durability store 
+- snapshots found with `snapshot_id_` prefix in database:
+  - coordinator cluster state - all data instances with their role (MAIN or REPLICA), UUID of MAIN instance which REPLICA is listening to 
+  - last log idx
+  - last log term
+  - last cluster config
+- logs found in the interval between the start index and the last log index 
+  - data - each log holds data on what has changed since the last state
+  - term - nuRAFT term 
+  - log type - nuRAFT log type
+
+
+### Handling of durability errors 
+
+If snapshots are not stored, an exception is thrown and left for the nuRAFT library to handle the issue. Logs can be missed and not stored since they are compacted and deleted
+every two snapshots and will be removed relatively fast. In case the log is missing on recovery, the coordinator will not start. In that case, it is best to start 
+a coordinator without durability and leave other coordinators to send missing data. Users are advised to use the same strategy in case a snapshot is missing on one 
+of the coordinators. 
+
+Memgraph throws an error in case of failure to store cluster config, which is updated in the `high_availability/raft_data/network` folder. 
+If this happens, it will happen only on the first cluster start when coordinators are connecting since 
+coordinators are configured only once at the start of the whole cluster. This is a non-recoverable error since in case the coordinator rejoins the cluster and has 
+the wrong state of other clusters, it can become a leader without being connected to other coordinators. 
+
 
 ## Recovering from errors
 
