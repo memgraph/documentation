@@ -446,9 +446,9 @@ working on 2 datacenter (2-DC) architecture.
 
 We support deploying Memgraph HA instances as part of the Kubernetes cluster. You can see example configurations [here](/getting-started/install-memgraph/kubernetes#helm-chart-for-memgraph-high-availability-cluster).
 
-## Docker compose
+## Docker Compose
 
-The following example shows you how to setup Memgraph cluster using docker compose. The cluster will use host's network.
+The following example shows you how to setup Memgraph cluster using docker compose. The cluster will use user-defined bridge network.
 
 License file `license.cypherl` should be in the format:
 
@@ -463,12 +463,12 @@ You can directly use initialization file `HA_init.cypherl`:
 
 ```
 
-ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "localhost:7691", "coordinator_server": "localhost:10112"};
-ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "localhost:7692", "coordinator_server": "localhost:10113"};
+ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "coord2:7691", "coordinator_server": "coord2:10112"};
+ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "coord3:7692", "coordinator_server": "coord3:10113"};
 
-REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "localhost:7687", "management_server": "localhost:10011", "replication_server": "localhost:10001"};
-REGISTER INSTANCE instance_2 WITH CONFIG {"bolt_server": "localhost:7688", "management_server": "localhost:10012", "replication_server": "localhost:10002"};
-REGISTER INSTANCE instance_3 WITH CONFIG {"bolt_server": "localhost:7689", "management_server": "localhost:10013", "replication_server": "localhost:10003"};
+REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "instance1:7687", "management_server": "instance1:10011", "replication_server": "instance1:10001"};
+REGISTER INSTANCE instance_2 WITH CONFIG {"bolt_server": "instance2:7688", "management_server": "instance2:10012", "replication_server": "instance2:10002"};
+REGISTER INSTANCE instance_3 WITH CONFIG {"bolt_server": "instance3:7689", "management_server": "instance3:10013", "replication_server": "instance3:10003"};
 SET INSTANCE instance_3 TO MAIN;
 
 ```
@@ -476,57 +476,78 @@ SET INSTANCE instance_3 TO MAIN;
 You can directly use the following `docker-compose.yml` to start the cluster using `docker compose up`:
 
 ```
+networks:
+  memgraph_ha:
+    name: memgraph_ha
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.21.0.0/16"
+
 services:
   coord1:
-    image: "memgraph/memgraph-mage"
+    image: "memgraph/memgraph"
     container_name: coord1
     volumes:
-      - ./license.cypherl:/tmp/init/license.cypherl:ro
-      - ./HA_register.cypherl:/tmp/init/HA_init.cypherl:ro
+      - ./license.cypher:/tmp/init/license.cypher:ro
+      - ./HA_register.cypher:/tmp/init/HA_register.cypher:ro
     environment:
-      - MEMGRAPH_HA_CLUSTER_INIT_QUERIES=/tmp/init/HA_register.cypherl
-    command: ["--bolt-port=7690", "--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord1", "--log-file=/tmp/coord1.log", "--coordinator-id=1", "--coordinator-port=10111", "--experimental-enabled=high-availability"]
-    network_mode: host
+      - MEMGRAPH_HA_CLUSTER_INIT_QUERIES=/tmp/init/HA_register.cypher
+    command: [ "--init-file=/tmp/init/license.cypher", "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord1", "--log-file=/tmp/coord1.log", "--also-log-to-stderr", "--coordinator-id=1", "--coordinator-port=10111", "--experimental-enabled=high-availability"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.4
 
   coord2:
-    image: "memgraph/memgraph-mage"
+    image: "memgraph/memgraph"
     container_name: coord2
     volumes:
-      - ./license.cypherl:/tmp/init/license.cypherl:ro
-    command: ["--bolt-port=7691", "--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord2", "--log-file=/tmp/coord2.log", "--coordinator-id=2", "--coordinator-port=10112", "--experimental-enabled=high-availability"]
-    network_mode: host
+      - ./license.cypher:/tmp/init/license.cypher:ro
+    command: [ "--init-file=/tmp/init/license.cypher", "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord2", "--log-file=/tmp/coord2.log", "--also-log-to-stderr", "--coordinator-id=2", "--coordinator-port=10112", "--experimental-enabled=high-availability"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.2
 
   coord3:
-    image: "memgraph/memgraph-mage"
+    image: "memgraph/memgraph"
     container_name: coord3
     volumes:
-      - ./license.cypherl:/tmp/init/license.cypherl:ro
-    command: ["--bolt-port=7692", "--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord3", "--log-file=/tmp/coord3.log", "--coordinator-id=3", "--coordinator-port=10113", "--experimental-enabled=high-availability"]
-    network_mode: host
-    
+      - ./license.cypher:/tmp/init/license.cypher:ro
+    command: [ "--init-file=/tmp/init/license.cypher",  "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord3", "--log-file=/tmp/coord3.log", "--also-log-to-stderr", "--coordinator-id=3", "--coordinator-port=10113", "--experimental-enabled=high-availability"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.3
+
   instance1:
-    image: "memgraph/memgraph-mage"
+    image: "memgraph/memgraph"
     container_name: instance1
     volumes:
-      - ./license.cypherl:/tmp/init/license.cypherl:ro
-    command: ["--bolt-port=7687", "--init-file=/tmp/init/license.cypherl","--data-recovery-on-startup=true", "--log-level=TRACE", "--data-directory=/tmp/mg_data_instance1", "--log-file=/tmp/instance1.log", "--management-port=10011", "--experimental-enabled=high-availability"]
-    network_mode: host
-    
+      - ./license.cypher:/tmp/init/license.cypher:ro
+    command: ["--init-file=/tmp/init/license.cypher","--data-recovery-on-startup=true", "--log-level=TRACE", "--data-directory=/tmp/mg_data_instance1", "--log-file=/tmp/instance1.log", "--also-log-to-stderr", "--management-port=10011", "--experimental-enabled=high-availability"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.6
+
   instance2:
-    image: "memgraph/memgraph-mage"
+    image: "memgraph/memgraph"
     container_name: instance2
     volumes:
-      - ./license.cypherl:/tmp/init/license.cypherl:ro
-    command: ["--bolt-port=7688", "--init-file=/tmp/init/license.cypherl","--data-recovery-on-startup=true", "--log-level=TRACE", "--data-directory=/tmp/mg_data_instance2", "--log-file=/tmp/instance2.log", "--management-port=10012", "--experimental-enabled=high-availability"]
-    network_mode: host
-    
+      - ./license.cypher:/tmp/init/license.cypher:ro
+    command: ["--init-file=/tmp/init/license.cypher","--data-recovery-on-startup=true", "--log-level=TRACE", "--data-directory=/tmp/mg_data_instance2", "--log-file=/tmp/instance2.log", "--also-log-to-stderr", "--management-port=10012", "--experimental-enabled=high-availability"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.7
+
   instance3:
-    image: "memgraph/memgraph-mage"
+    image: "memgraph/memgraph"
     container_name: instance3
     volumes:
-      - ./license.cypherl:/tmp/init/license.cypherl:ro
-    command: ["--bolt-port=7689", "--init-file=/tmp/init/license.cypherl","--data-recovery-on-startup=true", "--log-level=TRACE", "--data-directory=/tmp/mg_data_instance3", "--log-file=/tmp/instance3.log", "--management-port=10013", "--experimental-enabled=high-availability"]
-    network_mode: host
+      - ./license.cypher:/tmp/init/license.cypher:ro
+    command: ["--init-file=/tmp/init/license.cypher","--data-recovery-on-startup=true", "--log-level=TRACE", "--data-directory=/tmp/mg_data_instance3", "--log-file=/tmp/instance3.log", "--also-log-to-stderr", "--management-port=10013", "--experimental-enabled=high-availability"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.8
 
 ```
 
