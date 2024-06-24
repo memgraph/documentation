@@ -1,0 +1,214 @@
+---
+title: Example of a query module written in Rust
+description: Discover how to develop and implement a Rust query module in Memgraph.
+---
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+
+# Quickstart to custom query module in Rust
+
+In order to start working on a query module, you need to have a Memgraph instance running on a server or in a container. The container or the server where the instance is running will also be used as a development environment for your query module in this case. 
+
+This will provide you with an isolated environment for testing and developing your query module. In order to follow this guide, the best way would be to have Docker installed on your machine.
+
+- [Docker](https://docs.docker.com/get-docker/)
+
+
+If you do not use Docker but have Memgraph on your Linux machine, the following steps will be the same. You will just run commands on your machine instead of the docker container. However,
+you'll need to ensure that system packages required to compile the query modules are present on your machine.
+
+<Steps>
+### Run Memgraph
+
+First, you need to run the Memgraph instance. The easiest way to create and build new query modules is inside our 
+`memgraph-mage-dev` Docker image, since it contains necessary system packages. 
+You can run the container with the following command:
+
+```bash
+docker run -p 7687:7687 -p 7444:7444 --name mage memgraph/memgraph-mage:<version>-dev
+```
+
+### Enter into memgraph container shell
+
+After you have started the Memgraph instance, you need to enter the shell. You can do this by running the following command:
+
+```bash
+docker exec -it -u root mage bash
+```
+
+This will start bash inside the container as the root user. Since we will need to install certain dependencies, we need to be the root user. Of course, if you are running a native Linux machine, you can skip this step.
+
+### Install Cargo for Rust
+
+Query modules in Rust are compiled inside the Memgraph image using `cargo`. Cargo has a large overhead on the Docker image and it is not
+installed by default. In order to install cargo and add it to the `PATH` environment variable, we will use the following commands:
+
+```bash
+curl https://sh.rustup.rs -sSf | sh -s -- -y
+export PATH="/root/.cargo/bin:${PATH}"
+```
+
+### Create the file structure for the query module
+
+Now that all of the required dependencies are installed, you can create a directory for your query module. In the rust directory (`/mage/rust`), you
+can copy the `rsmgp-example` boilerplate file structure and modify the following information:
+
+In the `Cargo.toml` file, apply the changes:
+```toml
+[package]
+name = "your-package-name"
+
+[lib]
+name = "your-query-module-top-level-name"
+```
+
+The complete `Cargo.toml` file should look like this:
+```toml
+[package]
+name = "rsmgp-my-query-module-package"
+version = "0.1.0"
+authors = ["Josip Mrden <josip.mrden@memgraph.io>"]
+edition = "2018"
+
+[dependencies]
+c_str_macro = "1.0.2"
+rsmgp-sys = { path = "../rsmgp-sys" }
+
+[lib]
+name = "my_rust_query_module"
+crate-type = ["cdylib"]
+```
+
+### Develop your Rust query module
+
+Inside the `lib.rs` file of the query module file structure, you can add your specific 
+module using the [Rust API](/custom-query-modules/rust/rust-api.md).
+
+An example query module file would look like this
+
+```rs
+use c_str_macro::c_str;
+use rsmgp_sys::list::*;
+use rsmgp_sys::memgraph::*;
+use rsmgp_sys::mgp::*;
+use rsmgp_sys::property::*;
+use rsmgp_sys::result::*;
+use rsmgp_sys::rsmgp::*;
+use rsmgp_sys::value::*;
+use rsmgp_sys::{close_module, define_optional_type, define_procedure, define_type, init_module};
+use std::ffi::CString;
+use std::os::raw::c_int;
+use std::panic;
+
+init_module!(|memgraph: &Memgraph| -> Result<()> {
+    memgraph.add_read_procedure(
+        basic,
+        c_str!("basic"),
+        &[define_type!("input_string", Type::String)],
+        &[define_optional_type!(
+            "optional_input_int",
+            &MgpValue::make_int(0, &memgraph)?,
+            Type::Int
+        )],
+        &[
+            define_type!("output_string", Type::String),
+            define_type!("output_int", Type::Int),
+        ],
+    )?;
+
+    Ok(())
+});
+
+define_procedure!(basic, |memgraph: &Memgraph| -> Result<()> {
+    // This procedure just forwards the input parameters as procedure results.
+    let result = memgraph.result_record()?;
+    let args = memgraph.args()?;
+    let input_string = args.value_at(0)?;
+    let input_int = args.value_at(1)?;
+    result.insert_mgp_value(
+        c_str!("output_string"),
+        &input_string.to_mgp_value(&memgraph)?,
+    )?;
+    result.insert_mgp_value(c_str!("output_int"), &input_int.to_mgp_value(&memgraph)?)?;
+    Ok(())
+});
+
+close_module!(|| -> Result<()> { Ok(()) });
+```
+
+The three key functions in the file are `init_module`, `define_procedure`, and `close_module`.
+`init_module` is used for registering procedures inside module. In this file, we registered the procedure
+`basic` using the `add_read_procedure` function. With each new query module you want to create, you will
+need an additional `add_read_procedure` or `add_write_procedure` function in the initialization module.
+
+```rs
+    memgraph.add_read_procedure(
+        basic,
+        c_str!("basic"),
+        &[define_type!("input_string", Type::String)],
+        &[define_optional_type!(
+            "optional_input_int",
+            &MgpValue::make_int(0, &memgraph)?,
+            Type::Int
+        )],
+        &[
+            define_type!("output_string", Type::String),
+            define_type!("output_int", Type::Int),
+        ],
+    )?;
+```
+
+`define_procedure` is the definition of our query module. With each query module you add, you need to define
+an additional function for the logic of your query module.
+
+Finally, the `close_module` is a boilerplate code to finish the initialization of the query module.
+
+### Compile the query module
+
+In order to build the query modules, you will need to run the following command:
+
+```bash
+python3 setup build -p /usr/lib/memgraph/query_modules/
+```
+
+This will copy the query modules from `/mage/dist` directory to the appropriate location in the container.
+
+After compiling, you can attach to mgconsole from the host, and reload
+the modules in the `/usr/lib/memgraph/query_modules` directory:
+
+```cypher
+CALL mg.load_all();
+```
+
+Check that the query module is loaded by running the following command:
+
+```cypher
+CALL mg.procedures() YIELD *;
+```
+
+This will return all of the procedures that are loaded in Memgraph. 
+
+### Test the query module
+
+Now that we have loaded the query module, we can test it. You can do this by running the following command:
+
+Call the query module: 
+
+```cypher
+CALL my_rust_query_module.basic("output") YIELD output_string
+RETURN output_string;
+```
+
+```cypher
++---------------+
+| output_string |
++---------------+
+| "output"      |
++---------------+
+```
+
+If you experience any issues with loading the query module, it is recommended to check and
+follow the Memgraph logs and restart Memgraph. 
+
+</Steps>
