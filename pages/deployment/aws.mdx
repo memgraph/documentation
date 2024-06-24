@@ -1,6 +1,6 @@
 ---
 title: Deploy Memgraph on AWS EC2 instance 
-description: Learn how to deploy your Memgraph instance on the AWS EC2 instance.
+description: Learn how to choose instance type, select OS, and configure the network for Memgraph deployment.
 ---
 
 import { Card, Cards, Tabs, Tab } from 'nextra/components'
@@ -31,48 +31,71 @@ pick a Linux distribution that Memgraph supports.
 Memgraph supports multiple Linux distributions. Memgraph packages for supported distributions and versions can be downloaded 
 from the [following page](/getting-started/install-memgraph/direct-download-links#linux)
 
+Running Memgraph natively will bring some speed improvements compared to the
+Docker version of Memgraph. 
 
-This way, you will manage the native installation of Memgraph, which can bring
-some of the speed benefits. 
+If you are going to use the Memgraph Docker image, pick any Linux.
 
-If you are going to use the Memgraph Docker image, you can pick any Linux
-distribution you prefer, as long as you can run Docker on it.
+Memgraph in Docker can be deployed both on x86 and ARM architecture. All native
+distributions work on x86 architecture. Some of the native distributions also
+work on ARM architecture (Debian, Ubuntu), some do not (Centos, Fedora). Check
+the [direct download
+links](/getting-started/install-memgraph/direct-download-links#linux) for
+detailed information.
 
 
 ### Picking the instance type
 
-When creating the EC2 instance, you need to pick the instance type. The process
-highly depends on your actuall workload. For heavy graph processing, consider
-using instances with more CPU and memory. 
 
-If you are running Memgraph in `IN_MEMORY_TRANSACTIONAL` (default mode) or in `IN_MEMORY_ANALYTICAL` storage mode, all data is stored in RAM. That means it would be good to first calculate [how much memory you will
-need](/fundamentals/storage-memory-usage#calculate-storage-memory-usage).
-There is also an [easy-to-use
+When creating the EC2 instance, you need to pick the instance type. If you run
+Memgraph in `IN_MEMORY_TRANSACTIONAL` (default mode) or in
+`IN_MEMORY_ANALYTICAL` storage mode, all data is stored in RAM. That means it
+would be good first to calculate [how much memory you will
+need](/fundamentals/storage-memory-usage#calculate-storage-memory-usage). There
+is also an [easy-to-use
 calulator](https://memgraph.com/enterprise#ram-calculator) for approximating
 memory usage. The good rule of thumb is to have double the memory of what your
 storage would take. You can go with less if you do not have a demanding
-workload.
-
+workload. A demanding workload would be a query that traverses half of the graph
+and returns a lot of data.
 
 AWS has specialized instances for [memory-optimized
 workloads](https://docs.aws.amazon.com/ec2/latest/instancetypes/mo.html) which
 are designed for in-memory databases, data analytics, and other memory-intensive
-applications. They also provide DDR5 memory, so you may consider using such instances to
-optimize for better performance. 
+applications. They provide a good cost per GB of RAM and performance for
+Memgrpah. Once you know how much memory you need, you can pick the instance from
+the memory-optimized instance pools based on your data needs and budget. 
+
+Instances vary based on the supported architectures, number of CPU cores,
+network bandwidth, block storage, etc. All metrics typically scale with the
+instance size. Memgraph is not demanding on rest of the metrics as long as there
+is sufficent RAM. The basic R5 or X1 instances families are good starting points
+for Memgraph. 
+
+If you are running Memgraph in `ON_DISK_TRANSACTIONAL` storage mode, you need to
+consider the instances [optimized for
+storage](https://docs.aws.amazon.com/ec2/latest/instancetypes/so.html).
 
 
 ### Setup the network
 
-When creating the EC2 instance, you need to set up the network access and
-security group. By default, Memgraph uses port 7687 for the Bolt protocol.
+When creating the EC2 instance, you need to set up the [network access and
+security group](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html). By default, Memgraph uses port 7687 for the Bolt protocol.
 You need to open this port for TCP traffic and to allow connections to Memgraph. 
 
 If you change the default Bolt port, make sure to update the security group
 accordingly.
 
-Also, if deploying Memgraph for [Replication](/clustering/replication#replication) or [High
-Availability](/clustering/high-availability#high-availability-enterprise), the ports for the
-replication and clustering should be open as well.
+Also, if deploying Memgraph for
+[Replication](/clustering/replication#replication) or [High
+Availability](/clustering/high-availability#high-availability-enterprise), the
+ports for the replication and cluster management should also be open. 
+In replication configuration each instance needs to have an open port 10000 for the
+replication. In a high availability configuration, each **data instance** needs to have an open
+port of 10000 for management and a port of 20000 for replication. Each **coordinator
+instance***, needs to have open port 12000. 
+
+All instances need to have open port 7687 for the Bolt protocol.
 
 
 ### Setup the storage 
@@ -82,13 +105,30 @@ Memgraph stores all data to working RAM, but for the [persistency between
 restarts](../fundamentals/data-durability) Memgraph uses the disk storage to
 store snapshots, configurations, etc.
 
-The sizing of the storage depends on the amount of data you are going to store
-in your Memgraph instance, and the quantity of the snapshots you want to keep
-alive. 
+It is recommended to use the [EBS volumes for
+storage](https://repost.aws/knowledge-center/instance-store-vs-ebs). EBS volumes
+are durable, scalable, and can be attached to the EC2 instance. They will be
+persistent even if the EC2 instance is stopped and restarted. Local storage can
+be used, but it is not recommended for production use cases since data loss can
+occur if the instance is stopped or terminated.
 
-The general rule of thumb is to double the storage and then the amount of data
-you will store. If you are going to store 100GB of data, you should have at
-least 200GB of disk storage. 
+Faster storage (SSDs) can lead to speedier snapshot creation and recovery times,
+which can be important on bigger scales (billion-sized graphs). Still, it is not
+critical for the Memgraph operating performance. Magnetic storage can also be
+used  
+on smaller scales.
+
+
+The storage size depends on the amount of data you are going to store in your
+Memgraph instance and the number of active snapshots you want to keep alive.
+Memgraph will periodically create snapshots of the data and store them on disk.
+As the new snapshot is created, the oldest one is deleted. The number of
+snapshots you want to keep alive is configurable in the Memgraph configuration
+file.
+
+The recommendation is to double the storage of the data you will store in
+Memgraph. If you are going to store 100GB of data in Memgraph, you should have
+at least 200GB of disk storage. 
 
 
 ## Installing Memgraph 
