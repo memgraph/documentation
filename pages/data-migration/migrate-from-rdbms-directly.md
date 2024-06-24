@@ -6,7 +6,7 @@ description: Easily transition from RDBMS to Memgraph using MAGE modules. Our de
 #  Migrate from RDBMS to Memgraph using MAGE modules
 
 This tutorial will help you import your data from a PostgreSQL database into Memgraph
-directly, using MAGE query modules.
+directly using MAGE query modules.
 
 This migration tutorial makes migration from an external source to Memgraph possible in one less step
 than described in [migrating from a RDBMS to Memgraph using CSV files](/data-migration/migrate-from-rdbms).
@@ -86,18 +86,20 @@ INSERT INTO BandMemberships (musician_id, band_id) VALUES
 (2, 4);  -- Jane Smith also sings in "Pop Sensations"
 ```
 
+Now we have populated all of the example data for the tutorial.
+
 The exercise is to migrate `Bands` and `Musicians` rows as nodes, and the mapping table as
 relationships. The steps below are provided so you can quickly glance at them at any time:
 
-1. Create necessary indices (important for relationship import)
+1. Create necessary indices. Indices will increase performance when creating relationships between the nodes.
 2. Switch to in-memory analytical mode (to eliminate memory overhead)
 3. Import nodes from corresponding tables
 4. Import relationships from corresponding tables
-5. Switch back to in-memory analytical mode
+5. Switch back to in-memory transactional mode
 
 ### 1. Create necessary indices
 In SQL databases, indices are mostly created after the import has finished, as they can slow down 
-importing times. However, in Memgraph it's necesssary to create indices beforehand. Reason for this
+importing times. However, in Memgraph it's necesssary to create indices beforehand. The reason for this
 is the relationship import, which needs to find 2 nodes (start node and end node) as its source and
 destination. For node import, if you're doing `CREATE` commands, it's irrelevant. However, if you're
 executing `MERGE` commands, it will still scan over all the nodes, so use corresponding indices in order
@@ -111,13 +113,14 @@ CREATE INDEX ON :Band(id);
 
 ### 2. Switch to in-memory analytical mode
 Memgraph currently offers 2 in-memory modes, transactional and analytical. Transactional is often used in
-production deployments. It has all the ACID guarantees and it's safe to use for transactional workloads.
+production deployments. It has all the [ACID guarantees](https://en.wikipedia.org/wiki/ACID)
+and it's safe to use for transactional workloads.
 However, when executing import for the first time and testing, it is beneficial to use in-memory analytical
 mode. 
 
-In-memory analytical mode offers less memory overhead than transactional mode. Also, in-memory analytical mode
+In-memory analytical mode offers less memory overhead than transactional mode. In-memory analytical mode
 is highly parallelizable when importing nodes and relationships in the way we will see below. However, it does
-not come with write-ahead logging, and it is therefore stripped of the ACID guarantees. More information
+not come with write-ahead logging, and it is therefore unable to make ACID guarantees. More information
 about analytical mode can be found on our [page about storage modes](/fundamentals/storage-memory-usage).
 
 In-memory storage mode is enabled with the following command:
@@ -130,23 +133,7 @@ One will be migrating the whole table from the RDBMS to Memgraph, and other will
 
 ### 3. Import nodes from corresponding tables
 The [migrate module](/advanced-algorithms/available-algorithms/migrate) in MAGE has an easy API how to migrate rows from a relational database to Memgraph. We
-can migrate the whole table and create our musician nodes with the following query:
-
-```cypher
-CALL migrate.postgresql('Musicians' , {
-  user:'postgres',
-  password:'xxxxxx',
-  host:'localhost',
-  database:'postgresdb'
-})
-YIELD row
-CREATE (n:Musician {id: row.musician_id, name: row.name, instrument: row.instrument});
-```
-
-We can see that the YIELD clause gives us multiple `row` objects, which are essentially a map which
-has the column name as the key, and the column value as the value.
-If we just issue the queries to return us the rows, so we can inspect the values, we can unwrap the maps
-with the following query:
+can migrate and inspect the table with the following query:
 
 ```cypher
 CALL migrate.postgresql('Musicians' , {
@@ -161,6 +148,21 @@ RETURN row.musician_id as id, row.name as name, row.instrument as instrument;
 
 On the picture we can see that the module has correctly extracted the columns from the table.
 ![](/pages/data-migration/migrate-from-rdbms-directly/migrate-from-rdbms-directly-musicians-row.png)
+
+The `YIELD` keyword will create the `row` objects, which are essentially a map which
+has the column name as the key, and the column value as the value. We can iterate over the row objects with
+the Cypher language to continue populating the database.
+
+```cypher
+CALL migrate.postgresql('Musicians' , {
+  user:'postgres',
+  password:'xxxxxx',
+  host:'localhost',
+  database:'postgresdb'
+})
+YIELD row
+CREATE (n:Musician {id: row.musician_id, name: row.name, instrument: row.instrument});
+```
 
 Similarly, we can inspect the returned rows from the `Bands` table:
 ```cypher
@@ -197,7 +199,7 @@ MATCH (n) RETURN n;
 ![](/pages/data-migration/migrate-from-rdbms-directly/migrate-from-rdbms-directly-raw-nodes.png)
 
 ### 4. Import relationships from corresponding tables
-We can not do any graph use cases without connections, so in this section, we will update the relationships.
+We can not do any graph use cases without connections between the nodes, so in this section, we will update the relationships.
 However, in the first argument we will provide a query that selects columns from the table.
 
 ```cypher
@@ -214,7 +216,7 @@ RETURN row.band_id AS band_id, row.musician_id AS musician_id;
 ![](/pages/data-migration/migrate-from-rdbms-directly/migrate-from-rdbms-directly-relationships-row.png)
 
 This query is useful as sometimes you don't need all the columns to be migrated to Memgraph, you only need a fraction
-of them. Although you can ommit creation of properties when the row is received, this approach consumes less memory on
+of them. Although you can omit creation of properties when the row is received, this approach consumes less memory on
 the row level. We can create the relationships by matching the source and destination node we migrated previously. Now,
 the indices will play a big role, as the graph can be connected effectively and with optimal performance.
 
@@ -226,8 +228,8 @@ CALL migrate.postgresql('SELECT * FROM BandMemberships' , {
   database:'postgresdb'
 })
 YIELD row
-MATCH (n:Musician {id: row.musician_id}), (m:Band {id: row.band_id})
-CREATE (n)-[:PERFORMS_IN]->(m);
+MATCH (m:Musician {id: row.musician_id}), (b:Band {id: row.band_id})
+CREATE (m)-[:PERFORMS_IN]->(b);
 ```
 
 After migrating the relationships, we can see how our graph looks like:
@@ -249,7 +251,7 @@ STORAGE MODE IN_MEMORY_TRANSACTIONAL;
 ## Benefits of direct migration from RDBMS to Memgraph
 We have shown how Memgraph can, with the easy integration of MAGE modules, migrate from an external
 source to its graph storage in a matter of few queries. That offers a significant improvement in the
-ease of use, than the CSV import we have provided previously. Users are encouraged to see for themselves
+ease of use than the CSV import we have provided previously. Users are encouraged to see for themselves
 which method suits them better.
 
 ## Frequently asked questions
@@ -259,21 +261,21 @@ We have already mentioned the in-memory analytical mode that has less memory ove
 strips Memgraph of some ACID guarantees.
 
 We will look at some other techniques which we use to lower memory:
-1. Ommitting unnecessary columns when migrating
+1. Omitting unnecessary columns when migrating
 2. Appropriate data type conversion
 
 ####  1. Ommitting unnecessary columns when migrating
-Usually, users will migrate the whole data to Memgraph. The columns in Postgres are meant to be stored on
-disk, and therefore users can carelessly add new columns which can be big in size. This mainly is a concern
-for unnecessary date strings, and urls. 
+Most users will want to migrate full rows to Memgraph, which can sometimes be inefficient.
+The columns in Postgres are meant to be stored on
+disk, and therefore users can add new columns which can be big in size. This mainly is a concern
+for unnecessary date strings and urls. 
 
-For graph use cases, you would want to keep the number of columns
-to a minimum which enables you to perform all your traversals efficiently.
+This can be optimized by processing the minimal set of necessary columns.
 
 #### 2. Appropriate data type conversion
 When receiving rows from RDBMS to Memgraph, be sure that the appropriate types are utilized. That namely
 is concerning converting strings to integers (`ToInteger`), floats (`ToFloat`), 
-booleans (`ToBoolean`), or date-time objects (`date()`, `localdatetime()`, and others.). For functions
+booleans (`ToBoolean`), or date-time objects (`date`, `localdatetime`, and `duration` constructors). For functions
 that do the conversions between strings and other types, please check the 
 pages for [functions](/querying/functions), as well
 as [temporal types](/fundamentals/data-types#temporal-types).
