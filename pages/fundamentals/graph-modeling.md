@@ -269,7 +269,7 @@ Another important thing worth considering when modeling a graph is property data
 
 Storing a local datetime takes up fewer resources if saved as a temporal type instead of a string. For example, if we have a “2021-10-05T14:15:00” value and store it as a string, it takes up 3B and at least 1B for each character. Since the string containing the date and time has 19 characters, the local datetime stored as a string will take at least 22B of memory. On the other hand, if that datetime is stored as temporal data in Memgraph, it will take 15B of memory. For more information on how much memory each data type occupies, check the [example with detailed calculation](/fundamentals/storage-memory-usage#the-calculation-in-detail).
 
-Know repeated values are better represented as enums that strings. They take fewer resources and faster to compare.
+Known repeated values are better represented as enums than strings. They take fewer resources and are faster to compare.
 
 ### Should I use property or relationship?
 
