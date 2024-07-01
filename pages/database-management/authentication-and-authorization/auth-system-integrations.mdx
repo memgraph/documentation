@@ -39,10 +39,22 @@ authentication and authorization mechanisms used by Memgraph.
 
  Flag                               | Description
 ------------------------------------|------------
- `--auth-module-executable`         | [DEPRECATED] Path to the executable that should be used for user authentication/authorization.
+ `--auth-module-mappings`           | Associates auth schemes to external modules. A mapping is structured as follows: `<scheme>:<absolute path to module>` and individual entries are separated with `;`. If the mapping contains whitespace, enclose the flag value with quotation marks.
+ `--auth-module-executable`         | [DEPRECATED] Path to the executable that should be used for user authentication/authorization. Superseded by `--auth-module-mappings=basic` from Memgraph 2.18.
  `--auth-module-timeout-ms`         | Specifies the maximum time that Memgraph will wait for a response from the external auth module.
  `--auth-password-permit-null`      | Can be set to false to disable null passwords.
  `--auth-password-strength-regex`   | The regular expression that should be used to match the entire entered password to ensure its strength.
+
+Auth schemes supported by Memgraph out-of-the-box have default module paths. To
+enable them, you don’t need to specify the auth module path, e.g.
+`--auth-module-mappings=basic;saml-entra-id;oidc-okta`. This applies to the
+following schemes:
+
+* `basic` (username + password authentication)
+* `saml-entra-id`
+* `saml-okta`
+* `oidc-entra-id`
+* `oidc-okta`
 
 ## Communication
 
@@ -58,14 +70,20 @@ The protocol used between Memgraph and the module is as follows:
    terminated by a `\n`.
  - Each auth response must be sent as a JSON encoded object in a single line
    that is terminated by a `\n`.
- - Auth requests are objects that contain the following keys:
-   - `username` - the user's username
-   - `password` - the user's password
- - Auth responses must be objects that contain the following keys:
+ - Auth requests are objects that contain the following fields:
+   - `basic` auth scheme:
+    - `username` - the user's username
+    - `password` - the user's password
+   - other auth schemes:
+    - `scheme` - the string containing the scheme
+    - `response` - the authentication response (e.g. SAML response or JWT)
+ - Auth responses must be objects that contain the following fields:
    - `authenticated` - a `bool` indicating whether the user is allowed to log
      in to the database
    - `role` - a `string` indicating which role the user should have (must be
      supplied)
+   - `errors` (optional) - if `authenticated` is false, Memgraph will put up a
+     warning with the error message returned by the module
 
 If the external auth module crashes during the processing of an auth request,
 Memgraph won't allow the user to log in to the database and will automatically
@@ -98,7 +116,7 @@ if __name__ == "__main__":
 
 In the example you can see how the communication protocol works and you can see
 the function that is used for authentication (and authorization). When writing
-your own modules you have to reimplement the `authenticate` function according
+your own modules, you have to reimplement the `authenticate` function according
 to your needs.
 
 Because the authentication (and authorization) function has a simple signature,
@@ -169,8 +187,7 @@ configuration file into the module configuration file.
 ### Database configuration
 
 In order to enable the use of the LDAP authentication and authorization module
-you have to set the flag `--auth-module-executable` to use
-`/usr/lib/memgraph/auth_module/ldap.py`.
+you have to set the following flag: `--auth-module-mappings=basic`.
 
 Other [flags](#configuration-flags) that change the behavior of the database to
 module integration can be specified according to your needs.
@@ -293,7 +310,7 @@ disconnect from the database and proceed with the LDAP integration.
 To enable LDAP integration specify the following flag:
 
 ```plaintext
---auth-module-executable=/usr/lib/memgraph/auth_module/ldap.py
+--auth-module-mappings=basic
 ```
 
 Also, add the following LDAP module configuration to
