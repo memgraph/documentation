@@ -346,6 +346,110 @@ MATCH path=(n {id: 0})-[*BFS (r, n, p | r.eu_border = false AND n.drinks_USD < 1
 RETURN path;
 ```
 
+## Constraining the expansion based on the number of hops
+
+### Overview
+Breadth-First Search (BFS), Depth-First Search (DFS), and expand query traversals can now be controlled by the number of hops (edges crossed). 
+Each unit of traversal, including filtering on edge types, edge properties, or visiting already processed nodes, is counted as a hop.
+
+<Callout>
+
+The hops limit does not affect the Weighted Shortest Path, All Shortest Paths, and expansions where relationships are created (CreateExpand operator).
+
+</Callout>
+
+### Syntax Usage
+The `USING HOPS LIMIT x` syntax is implemented as a query directive, similar to [Index Hints](/fundamentals/indexes#index-hinting). Users can apply the hops limit as follows:
+
+```cypher
+USING HOPS LIMIT x ...;
+```
+
+The hops limit is global for the entire query and can only be defined once. If you need to use both index hints and a hops limit, the directives can be chained:
+
+```cypher
+USING HOPS LIMIT x, :Label(property) ...;
+```
+
+### Implementation Variations
+
+<Callout>
+
+Keep in mind number of hops throughout the query could be different in different algorithms, due to differences in the implementation of different operators.
+Memgraph uses two different operators for bfs due to optimization reasons, and even with them, the number of hops can differ for the same paths.
+
+</Callout>
+
+### Controlling Partial Results
+
+By default, Memgraph will return partial results after the hops limit is reached. To control the retrieval of partial results, there is a runtime flag available:
+
+```cypher
+hops_limit_partial_results
+```
+
+If this value is set to false and the hops limit is reached, an exception will be thrown.
+
+### Example Usage
+
+Let's consider the next graph:
+
+<Tabs items={['Graph', 'Create dataset']}>
+
+  <Tab>
+    ![](/pages/advanced-algorithms/graph.png)
+  </Tab>
+
+  <Tab>
+    ```cypher
+    MATCH (n) DETACH DELETE n;
+    CREATE (n1:Node {name: "A"}), (n2:Node {name: "B"}), (n3:Node {name: "C"}), (n4:Node {name: "D"}), (n5:Node {name: "E"}),
+          (n1)-[:ConnectedTo]->(n2), (n1)-[:ConnectedTo]->(n3), (n2)-[:ConnectedTo]->(n3),
+          (n2)-[:ConnectedTo]->(n4), (n4)-[:ConnectedTo]->(n3), (n3)-[:ConnectedTo]->(n5);
+    ```
+  </Tab>
+
+</Tabs>
+
+To simplify the expansion process, we will create an index:
+
+```cypher
+CREATE INDEX ON :Node(name);
+```
+
+Now, let's try to find a path between Node A and Node C using the BFS.
+Running:
+
+```cypher
+USING HOPS LIMIT 2 MATCH path=(start:Node {name: 'A'})-[:ConnectedTo *BFS]->(end:Node {name: 'D'}) RETURN path;
+```
+
+The result is:
+
+```nocopy
+Empty set (0.001 sec)
+```
+
+That is because the Node D is not reachable to Node A within 2 hops.
+
+Let's increase the limit to 3 and see what happens:
+
+```cypher
+USING HOPS LIMIT 3 MATCH path=(start:Node {name: 'A'})-[:ConnectedTo *BFS]->(end:Node {name: 'D'}) RETURN path;
+```
+
+```plaintext
+
++---------------------------------------------------------------------------------------------+
+| path                                                                                        |
++---------------------------------------------------------------------------------------------+
+| (:Node {name: "A"})-[:ConnectedTo]->(:Node {name: "B"})-[:ConnectedTo]->(:Node {name: "D"}) |
++---------------------------------------------------------------------------------------------+
+
+```
+
+Now, a path is returned and we see that the Node D is reachable to Node A within the 3 hops using the BFS.
+
 ## Weighted shortest path
 
 In graph theory, the weighted shortest path problem is the problem of finding a path
