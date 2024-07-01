@@ -9,30 +9,27 @@ import { Tabs, Tab } from 'nextra/components'
 
 # Auth system integrations (Enterprise)
 
-Memgraph supports authentication and (optional) authorization using a **custom
-built external auth module**. The two supported operation modes are:
-- [DEPRECATED] authentication only (username/password verification)
-- authentication and authorization (username/password verification and user to
-  role mapping)
+Memgraph supports authentication and authorization using **external auth
+modules**. There’s built-in support for basic (username + password) auth via
+LDAP, and single-sign on over the SAML and OIDC protocols.
 
-When a user connects to Memgraph, the database will forward the user's supplied
-username and password to the external auth module and wait for it to deliver
-the authentication and authorization verdict back to the database. Based on
-the returned verdict, Memgraph will either close the connection to the
-connected user or will allow the connection and associate the connection 
-with the appropriate role.
-
-When Memgraph is switched to use the external auth module for authentication
-its internal users are automatically disabled. All users are authenticated only
-using the module, existing local users are ignored. In order to authorize query 
-execution, the auth module must return a role associated with the user. This 
-role must be registered locally on Memgraph.
+When a user is connecting, Memgraph will forward the user’s supplied
+credentials (username + password, or scheme and auth response) to the external
+auth module and retrieve its verdict. Based on that, Memgraph will let the user
+connect, or in case of failure, close the connection.
 
 As this is an Enterprise feature, once the Memgraph Enterprise license expires,
 newly created users will be granted all privileges. The existing users'
 privileges will still apply but you won't be able to manage them.
 
-## Configuration flags
+## Configuration
+
+### Roles
+
+User roles must be defined in Memgraph before using auth modules. This is
+because auth modules return the role associated with the user. 
+
+### Flags
 
 Use the following configuration flags to configure the external auth module
 authentication and authorization mechanisms used by Memgraph.
@@ -56,7 +53,15 @@ following schemes:
 * `oidc-entra-id`
 * `oidc-okta`
 
-## Communication
+### Environment variables
+
+The built-in auth modules (used with the `saml-entra-id`, `saml-okta`,
+`oidc-entra-id`, and `oidc-okta` auth schemes) are further configured using
+environment variables. See the individual SSO module sections for more detail.
+
+## Auth module architecture
+
+### Communication
 
 Memgraph uses inter-process pipes to communicate with the module. The module
 will receive auth requests on file descriptor `1000` and has to return auth
@@ -90,7 +95,7 @@ Memgraph won't allow the user to log in to the database and will automatically
 restart the auth module for the next auth request. All crash logs will be seen
 in Memgraph's output (typically in `systemd` logs using `journalctl`).
 
-## Example
+### Module example
 
 This very simple example auth module is written in Python, but any programming
 language can be used.
@@ -131,16 +136,22 @@ assert module.authenticate("sponge", "bob") == {"authenticated": True, "role": "
 assert module.authenticate("CHUCK", "NORRIS") == {"authenticated": True, "role": "admin"}
 ```
 
-## LDAP
+## Basic (username + password) auth
+
+When Memgraph is set up to use the external auth module for basic authentication
+(`--auth-module-mappings=basic`), its internal users are automatically disabled.
+Users are authenticated only using the module and existing local users are
+ignored.
+
+### LDAP
 
 Memgraph also supports authentication and authorization using LDAP with a
 built-in auth module that is packaged with Memgraph Enterprise.
 
-The module supports two operation modes:
-- authentication only (LDAP bind request)
-- authentication and authorization (LDAP bind and search requests)
+The module supports the authentication and authorization (LDAP bind and search
+requests) operation mode.
 
-### Authentication mode
+#### Mode of operation
 
 When using LDAP authentication the module builds the DN used for authentication
 using the user specified username and the following formula:
@@ -154,21 +165,18 @@ In most common situations the `prefix` will be `cn=` and the `suffix` will be
 equal to `cn=alice,dc=example,dc=com` which will then be used for the LDAP bind
 operation with the user specified password.
 
-### Authorization mode
-
-Authentication is performed in the same way as described above. After the user is
-authenticated, the module searches through the role mapping root DN object that
-contains role mappings. A role mapping object that has the current bound user
-as its `member` attribute is used as the user's role. The role that is mapped
-to the user is the `CN` attribute of the role mapping object.  The attribute
-that contains the user DN in the mapping object, as well as the attribute that
-contains the role name, can be changed in the module configuration file to
-accommodate your LDAP schema.
+After the user is authenticated, the module searches through the role mapping
+root DN object that contains role mappings. A role mapping object that has the
+current bound user as its `member` attribute is used as the user's role.
+The role that is mapped to the user is the `CN` attribute of the role mapping
+object. The attribute that contains the user DN in the mapping object, as well
+as the attribute that contains the role name, can be changed in the module
+configuration file to accommodate your LDAP schema.
 
 When searching for a role in directories that have thousands of roles,
 the search process could take some time, causing long login times.
 
-### Module requirements
+#### Module requirements
 
 The module is written in Python 3 and it must be installed on the server. The
 Python version should be at least `3.5`.  Also, you must have the following
@@ -176,7 +184,7 @@ Python 3 libraries installed:
  - `ldap3` - used to communicate with the LDAP server.
  - `PyYAML` - used to parse the configuration file.
 
-### Module configuration
+#### Module configuration
 
 The module configuration file is located at
 `/etc/memgraph/auth_module/ldap.yaml`.  An initial example configuration file
@@ -184,7 +192,7 @@ that has all settings documented and explained is located at
 `/etc/memgraph/auth_module/ldap.example.yaml`. For quick setup, you can copy the example
 configuration file into the module configuration file.
 
-### Database configuration
+#### Database configuration
 
 In order to enable the use of the LDAP authentication and authorization module
 you have to set the following flag: `--auth-module-mappings=basic`.
@@ -192,7 +200,7 @@ you have to set the following flag: `--auth-module-mappings=basic`.
 Other [flags](#configuration-flags) that change the behavior of the database to
 module integration can be specified according to your needs.
 
-### Example
+#### Example
 
 Organizations typically use an LDAP server to hold and manage the permissions.
 Because LDAP servers are already set-up in most large organizations, it is
