@@ -30,6 +30,7 @@ Procedures are more complex computations that may modify the graph, and their ou
 later processing steps in your query. A procedure may only be run from `CALL` clauses.
 The output is a stream of **records** that is made accessible with a `YIELD` clause.
 
+
 ### AddProcedure
 
 Add a procedure to your query module. The procedure is registered as `[QUERY_MODULE_NAME].[PROC_NAME]`
