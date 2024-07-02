@@ -92,19 +92,22 @@ Administrators manage multi-tenant privileges with:
 
 The `data-recovery-on-startup` flag replaces `storage-recover-on-startup`,
 facilitating recovery of individual databases and their contents during startup.
-`storage-recover-on-startup` is still functional but deprecated.
 
-If `storage-delete-on-drop` is set to true, the underlying directories
-associated with the dropped database will be deleted.
+### Connecting to a database
 
-### Using Neo4j Drivers
-
-Neo4j drivers interact with multi-tenant databases in two ways:
+The user can interact with multi-tenant databases in two ways:
 
 1. Through Cypher queries.
-2. By defining the `database` field. The `USE DATABASE` query is disabled when
-   the database field is defined. The query consistently runs against the
-   specified database.
+2. When using Neo4j drivers, by defining the `database` field. 
+   The `USE DATABASE` query is disabled when the database field is defined. 
+   All queries run against the specified database only.
+
+When connecting to Memgraph without defining a particular landing database, 
+you will be connected to the default database set for the user. In case the user
+does not have a default (main) database, a database-less connection will be 
+established. During this connection, the user can execute queries that do not 
+manipulate any data. User can still use multi-tenant queries and define a 
+database to use via the appropriate Cypher query.
 
 Example using Neo4j Python driver:
 

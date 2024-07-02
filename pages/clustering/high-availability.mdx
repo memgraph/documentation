@@ -103,9 +103,14 @@ docker run --name coord1 -p 7690:7687 -p 7445:7444 memgraph/memgraph-mage
 --bolt-port=7687 
 --coordinator-id=1 
 --experimental-enabled=high-availability
+--coordinator-hostname=localhost
 ```
 
 Coordinator IDs serve as identifiers, while the coordinator port is used for synchronization and log replication between coordinators. Coordinator IDs and coordinator ports must be different for all coordinators.
+
+Configuration option `--coordinator-hostname` must be set on all coordinator instances. It is used only in the `SHOW INSTANCES` query to correctly return networking information about
+the first leader (the coordinator instance on which you run registration queries). Setting this configuration flag to some random value will not cause issues in the cluster's capabilities
+but you will get misleading output when running `SHOW INSTANCES` query. 
 
 ### Env flags
 
@@ -117,6 +122,10 @@ environment variables or configuration flags:
 - coordinator port
 - coordinator id
 - management port
+- high availability durability
+- path to nuraft log file
+- coordinator hostname
+
 
 #### Data instances
 
@@ -128,7 +137,7 @@ export MEMGRAPH_MANAGEMENT_PORT=10011
 export MEMGRAPH_BOLT_PORT=7692
 ```
 
-When using either of these flags, configurations flags for `--bolt-port`, `--management-port` and `--experimental-enabled` will be ignored.
+When using any of these environment variables, flags `--bolt-port`, `--management-port` and `--experimental-enabled` will be ignored.
 
 
 #### Coordinator instances
@@ -138,8 +147,13 @@ export MEMGRAPH_EXPERIMENTAL_ENABLED=high-availability
 export MEMGRAPH_COORDINATOR_PORT=10111
 export MEMGRAPH_COORDINATOR_ID=1
 export MEMGRAPH_BOLT_PORT=7692
+export MEMGRAPH_HA_DURABILITY=true
+export MEMGRAPH_NURAFT_LOG_FILE="<path-to-log-file>"
+export MEMGRAPH_COORDINATOR_HOSTNAME="localhost"
 ```
-When using either of these flags, configurations flags for `--bolt-port`, `--coordinator-port`, `--coordinator-id` and `--experimental-enabled` will be ignored.
+
+When using any of these environment variables, flags for `--bolt-port`, `--coordinator-port`, `--coordinator-id`,`--coordinator-hostname` and `--experimental-enabled` will be ignored.
+
 
 There is an additional environment variable you can use to set the path to the file with cypher queries used to start a high availability cluster.
 Here, you can use queries we define in the next chapter called User API.
@@ -252,7 +266,7 @@ This operation will result in writing to the Raft log.
 
 You can check the state of the whole cluster using the `SHOW INSTANCES` query. The query will show which instances are visible in the cluster,
 which network ports they are using for managing cluster state, whether they are considered alive from the coordinator's
-perspective, their role (are they MAIN, REPLICA, coordinator or unknown if not alive) and the time elapsed in ms since the last successful response
+perspective, their role (are they MAIN, REPLICA, LEADER, FOLLOWER or unknown if not alive) and the time elapsed in ms since the last successful response
 from instances to the leader's ping. This query can be run both on leader and followers with the sole difference that followers cannot know the 
 health status of other instances and the time of last response since only the leader is pinging instances for their status.
 
@@ -304,8 +318,8 @@ the flag to more than `--instance-down-timeout-sec`, as it is needed first to co
 ### Determining instance's health
 
 Every `--instance-health-check-frequency-sec` seconds, the coordinator contacts each instance. 
-The instance is not considered to be down unless `--instance-down-timeout-sec` has passed and the instance hasn't responded to the coordinator in the meantime. Expectation currently is to set `--instance-health-check-frequency-sec`
-to be less than `--instance-down-timeout-sec` and for `--instance-down-timeout-sec` to be multiplier of `--instance-health-check-frequency-sec` with coefficient N.
+The instance is not considered to be down unless `--instance-down-timeout-sec` has passed and the instance hasn't responded to the coordinator in the meantime. Users must set `--instance-health-check-frequency-sec`
+to be less or equal to the `--instance-down-timeout-sec` but we advise users to set `--instance-down-timeout-sec` to a multiplier of `--instance-health-check-frequency-sec`.
 Set the multiplier coefficient to be N>=2. For example, set `--instance-down-timeout-sec=5` and `--instance-health-check-frequency-sec=1` which will result in coordinator
 contacting each instance every 1 second and the instance is considered dead after it doesn't respond 5 times (5 seconds / 1 second).
 
@@ -347,9 +361,15 @@ the cluster enters a state of force reset where the cluster is reset to the stat
 
 The leader coordinator executes a force reset of the cluster if the action isn't fully complete. Failure can happen anywhere, i.e. in the case of setting instance to MAIN,
 the RPC request to a REPLICA instance to promote itself to MAIN can succeed, but writing to the Raft log that the instance was promoted can fail. 
-Force reset includes demoting every alive instance to REPLICA, and executing the failover procedure once again. Such a procedure is needed as currently cluster doesn't track 
+Force reset includes demoting every alive instance to REPLICA, and executing the failover procedure once again. Such a procedure is needed as of this moment cluster doesn't track 
 where the action failed exactly, but only whether it fully succeded. Raft log is taken as a source of truth at all times. In case the leader coordinator dies while executing 
 the force reset, the next coordinator which is elected as the leader, will continue executing the force reset. Action is executed until it succeeds.
+
+<Callout type="info">
+
+It is important to note that if an action fails and all instances are down, the leader will attempt to execute a force reset until one instance is promoted to MAIN. Until then, no other actions are allowed on the cluster.
+
+</Callout>
 
 If an instance is down at the point of force reset, the leader coordinator writes in the Raft log that the instance needs to be demoted to REPLICA once it comes back up.
 
@@ -417,8 +437,69 @@ for each database on data instance. This way, MAIN can establish a connection to
 
 ### Coordinator instances restart
 
-In case the coordinator instance dies and it is restarted, it loses all data from the Raft log. Information about other coordinators and their endpoints is recovered from `high_availability/coordinator`  directory stored under 
-top level `--data-directory` folder. When the coordinator rejoins, it will communicate with other coordinators and receive updates from the current leader. It is important that at least one coordinator is alive at all the time so that data from the Raft log is not lost.
+In case the coordinator instance dies and it is restarted, it will not lose any data from the RAFT log or RAFT snapshots, since `--ha-durability` is enabled by default. For more details
+read about high availability durability in the durability chapter.
+
+
+## Durability
+
+High availability durability is enabled by default. Durability flag controls logs and snapshots. Details about other coordinators are always made durable
+since without that information, the coordinator can't rejoin the cluster.
+
+Information about logs and snapshots is stored under one RocksDB instance in the `high_availability/raft_data/logs` directory stored under 
+the top-level `--data-directory` folder. All the data stored there is recovered in case the coordinator restarts.
+
+Data about other coordinators and their endpoints is recovered from the `high_availability/raft_data/network` directory stored under 
+the top-level `--data-directory` folder. When the coordinator rejoins, it will communicate with other coordinators and receive updates from the current leader.
+
+In case durability is disabled, at least one coordinator must be alive at all times so that data from the Raft log is not lost.
+
+### First start 
+
+On the first start of coordinators, each will store the current version of the `logs` and `network` durability store. From that point on,
+each RAFT log that is sent to the coordinator is also stored on disk. For every new coordinator instance, the server config is updated. Logs are created 
+for each user action and failover action. Snapshots are created every N (N currently being 5) logs. 
+
+
+### Restart of coordinator 
+
+In case of failure of the coordinator, on the restart, it will read information about other coordinators stored under `high_availability/raft_data/network` 
+directory. 
+
+From the `network` directory we will recover the server state before the coordinator stopped, including the current term, for whom the coordinator voted, and whether 
+election timer is allowed.
+
+It will also recover the following server config information: 
+- other servers, including their endpoints, id, and auxiliary data
+- ID of the previous log 
+- ID of the current log 
+- additional data needed by nuRaft
+
+If durability is not disabled, the following information will be recovered from a common RocksDB `logs` instance: 
+- current version of `logs` durability store 
+- snapshots found with `snapshot_id_` prefix in database:
+  - coordinator cluster state - all data instances with their role (MAIN or REPLICA), UUID of MAIN instance which REPLICA is listening to 
+  - last log idx
+  - last log term
+  - last cluster config
+- logs found in the interval between the start index and the last log index 
+  - data - each log holds data on what has changed since the last state
+  - term - nuRAFT term 
+  - log type - nuRAFT log type
+
+
+### Handling of durability errors 
+
+If snapshots are not stored, an exception is thrown and left for the nuRAFT library to handle the issue. Logs can be missed and not stored since they are compacted and deleted
+every two snapshots and will be removed relatively fast. In case the log is missing on recovery, the coordinator will not start. In that case, it is best to start 
+a coordinator without durability and leave other coordinators to send missing data. Users are advised to use the same strategy in case a snapshot is missing on one 
+of the coordinators. 
+
+Memgraph throws an error in case of failure to store cluster config, which is updated in the `high_availability/raft_data/network` folder. 
+If this happens, it will happen only on the first cluster start when coordinators are connecting since 
+coordinators are configured only once at the start of the whole cluster. This is a non-recoverable error since in case the coordinator rejoins the cluster and has 
+the wrong state of other clusters, it can become a leader without being connected to other coordinators. 
+
 
 ## Recovering from errors
 
@@ -450,7 +531,7 @@ We support deploying Memgraph HA instances as part of the Kubernetes cluster. Yo
 
 The following example shows you how to setup Memgraph cluster using docker compose. The cluster will use user-defined bridge network.
 
-License file `license.cypherl` should be in the format:
+License file `license.cypher` should be in the format:
 
 ```
 
@@ -459,7 +540,7 @@ SET DATABASE SETTING 'enterprise.license' TO '<YOUR_ENTERPRISE_LICENSE>';
 
 ```
 
-You can directly use initialization file `HA_init.cypherl`:
+You can directly use initialization file `HA_register.cypher`:
 
 ```
 
@@ -494,7 +575,7 @@ services:
       - ./HA_register.cypher:/tmp/init/HA_register.cypher:ro
     environment:
       - MEMGRAPH_HA_CLUSTER_INIT_QUERIES=/tmp/init/HA_register.cypher
-    command: [ "--init-file=/tmp/init/license.cypher", "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord1", "--log-file=/tmp/coord1.log", "--also-log-to-stderr", "--coordinator-id=1", "--coordinator-port=10111", "--experimental-enabled=high-availability"]
+    command: [ "--init-file=/tmp/init/license.cypher", "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord1", "--log-file=/tmp/coord1.log", "--also-log-to-stderr", "--coordinator-id=1", "--coordinator-port=10111", "--coordinator-hostname=coord1", "--experimental-enabled=high-availability"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.4
@@ -504,7 +585,7 @@ services:
     container_name: coord2
     volumes:
       - ./license.cypher:/tmp/init/license.cypher:ro
-    command: [ "--init-file=/tmp/init/license.cypher", "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord2", "--log-file=/tmp/coord2.log", "--also-log-to-stderr", "--coordinator-id=2", "--coordinator-port=10112", "--experimental-enabled=high-availability"]
+    command: [ "--init-file=/tmp/init/license.cypher", "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord2", "--log-file=/tmp/coord2.log", "--also-log-to-stderr", "--coordinator-id=2", "--coordinator-port=10112", "--coordinator-hostname=coord2", "--experimental-enabled=high-availability"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.2
@@ -514,7 +595,8 @@ services:
     container_name: coord3
     volumes:
       - ./license.cypher:/tmp/init/license.cypher:ro
-    command: [ "--init-file=/tmp/init/license.cypher",  "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord3", "--log-file=/tmp/coord3.log", "--also-log-to-stderr", "--coordinator-id=3", "--coordinator-port=10113", "--experimental-enabled=high-availability"]
+    command: [ "--init-file=/tmp/init/license.cypher",  "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord3", "--log-file=/tmp/coord3.log", "--also-log-to-stderr", "--coordinator-id=3", "--coordinator-port=10113", "--coordinator-hostname=coord3", "--experimental-enabled=high-availability"]
+
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.3
@@ -563,17 +645,17 @@ This example will show how to set up a highly available cluster in Memgraph usin
 
 1. Start coordinator1:
 ```plaintext
-docker run  --name coord1 -p 7690:7690 -p 7444:7444 memgraph/memgraph-mage --bolt-port=7690 --log-level=TRACE --data-directory=/tmp/mg_data_coord1 --log-file=/tmp/coord1.log --also-log-to-stderr --coordinator-id=1 --coordinator-port=10111 --experimental-enabled=high-availability
+docker run  --name coord1 -p 7690:7690 -p 7444:7444 memgraph/memgraph-mage --bolt-port=7690 --log-level=TRACE --data-directory=/tmp/mg_data_coord3 --log-file=/tmp/coord1.log --also-log-to-stderr --coordinator-id=1 --coordinator-port=10111 --experimental-enabled=high-availability --coordinator-hostname=localhost
 ```
 
 2. Start coordinator2:
 ```plaintext
-docker run  --name coord2 -p 7691:7691 -p 7445:7444 memgraph/memgraph-mage --bolt-port=7691 --log-level=TRACE --data-directory=/tmp/mg_data_coord2 --log-file=/tmp/coord2.log --also-log-to-stderr --coordinator-id=2 --coordinator-port=10112 --experimental-enabled=high-availability
+docker run  --name coord2 -p 7691:7691 -p 7445:7444 memgraph/memgraph-mage --bolt-port=7691 --log-level=TRACE --data-directory=/tmp/mg_data_coord2 --log-file=/tmp/coord2.log --nuraft-log-file=/tmp/nuraft/coord2.log --also-log-to-stderr --coordinator-id=2 --coordinator-port=10112 --experimental-enabled=high-availability --coordinator-hostname=localhost
 ```
 
 3. Start coordinator3:
 ```plaintext
-docker run  --name coord3 -p 7692:7692 -p 7446:7444 memgraph/memgraph-mage --bolt-port=7692 --log-level=TRACE --data-directory=/tmp/mg_data_coord3 --log-file=/tmp/coord3.log --also-log-to-stderr --coordinator-id=3 --coordinator-port=10113 --experimental-enabled=high-availability
+docker run  --name coord3 -p 7692:7692 -p 7446:7444 memgraph/memgraph-mage --bolt-port=7692 --log-level=TRACE --data-directory=/tmp/mg_data_coord3 --log-file=/tmp/coord3.log --nuraft-log-file=/tmp/nuraft/coord1.log --also-log-to-stderr --coordinator-id=3 --coordinator-port=10113 --experimental-enabled=high-availability --coordinator-hostname=localhost
 ```
 
 4. Start instance1:
@@ -600,8 +682,8 @@ mgconsole --port=7690
 2. Connect the other two coordinator instances to the cluster.
 
 ```plaintext
-ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "127.0.0.1:7691", "coordinator_server": "127.0.0.1:10112"};
-ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "127.0.0.1:7692", "coordinator_server": "127.0.0.1:10113"};
+ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "localhost:7691", "coordinator_server": "localhost:10112"};
+ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "localhost:7692", "coordinator_server": "localhost:10113"};
 ```
 
 3. Register 3 data instances as part of the cluster:
@@ -613,9 +695,9 @@ Replace `<ip_address>` with the container's IP address. This is necessary for Do
 </Callout>
 
 ```plaintext
-REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "127.0.0.1:7687", "management_server": "127.0.0.1:10011", "replication_server": "127.0.0.1:10001"};
-REGISTER INSTANCE instance_2 WITH CONFIG {"bolt_server": "127.0.0.1:7688", "management_server": "127.0.0.1:10012", "replication_server": "127.0.0.1:10002"};
-REGISTER INSTANCE instance_3 WITH CONFIG {"bolt_server": "127.0.0.1:7689", "management_server": "127.0.0.1:10013", "replication_server": "127.0.0.1:10003"};
+REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "localhost:7687", "management_server": "localhost:10011", "replication_server": "localhost:10001"};
+REGISTER INSTANCE instance_2 WITH CONFIG {"bolt_server": "localhost:7688", "management_server": "localhost:10012", "replication_server": "localhost:10002"};
+REGISTER INSTANCE instance_3 WITH CONFIG {"bolt_server": "localhost:7689", "management_server": "localhost:10013", "replication_server": "localhost:10003"};
 ```
 
 4. Set instance_3 as MAIN:
@@ -626,27 +708,27 @@ SET INSTANCE instance_3 TO MAIN;
 
 5. Connect to the leader coordinator and check cluster state with `SHOW INSTANCES`;
 
-| name          | bolt_server    | coordinator_server | management_server | health | role        | last_succ_resp_ms |
-| ------------- | -------------- | ------------------ | ----------------- | ------ | ----------- | ----------------  |
-| coordinator_1 | 0.0.0.0:7690   | 127.0.0.1:10111    |       ""          | up     | coordinator |  0                |
-| coordinator_2 | 127.0.0.1:7691 | 127.0.0.1:10112    |       ""          | up     | coordinator |  16               |
-| coordinator_3 | 127.0.0.1:7692 | 127.0.0.1:10113    |       ""          | up     | coordinator |  25               |
-| instance_1    | 127.0.0.1:7687 |       ""           | 127.0.0.1:10011   | up     | replica     |  39               |
-| instance_2    | 127.0.0.1:7688 |       ""           | 127.0.0.1:10012   | up     | replica     |  21               |
-| instance_3    | 127.0.0.1:7689 |       ""           | 127.0.0.1:10013   | up     | main        |  91               |
+| name          | bolt_server    | coordinator_server | management_server | health | role     | last_succ_resp_ms |
+| ------------- | -------------- | ------------------ | ----------------- | ------ | -------- | ----------------  |
+| coordinator_1 | localhost:7690 | localhost:10111    |       ""          | up     | leader   |  0                |
+| coordinator_2 | localhost:7691 | localhost:10112    |       ""          | up     | follower |  16               |
+| coordinator_3 | localhost:7692 | localhost:10113    |       ""          | up     | follower |  25               |
+| instance_1    | localhost:7687 |       ""           | localhost:10011   | up     | replica  |  39               |
+| instance_2    | localhost:7688 |       ""           | localhost:10012   | up     | replica  |  21               |
+| instance_3    | localhost:7689 |       ""           | localhost:10013   | up     | main     |  91               |
 
 ### Check automatic failover
 
 Let's say that the current MAIN instance is down for some reason. After `--instance-down-timeout-sec` seconds, the coordinator will realize
 that and automatically promote the first alive REPLICA to become the new MAIN. The output of running `SHOW INSTANCES` on the leader coordinator could then look like:
 
-| name          | bolt_server    | coordinator_server | management_server | health | role        | last_succ_resp_ms |
-| ------------- | -------------- | ------------------ | ----------------- | ------ | ----------- | ------------------|
-| coordinator_1 | 0.0.0.0:7690   | 127.0.0.1:10111    |        ""         | up     | coordinator |  0                |
-| coordinator_2 | 127.0.0.1:7691 | 127.0.0.1:10112    |        ""         | up     | coordinator |  34               |
-| coordinator_3 | 127.0.0.1:7692 | 127.0.0.1:10113    |        ""         | up     | coordinator |  28               |
-| instance_1    | 127.0.0.1:7687 |       ""           | 127.0.0.1:10011   | up     | main        |  61               |
-| instance_2    | 127.0.0.1:7688 |       ""           | 127.0.0.1:10012   | up     | replica     |  74               |
-| instance_3    | 127.0.0.1:7689 |       ""           | 127.0.0.1:10013   | down   | unknown     |  71222            |
+| name          | bolt_server    | coordinator_server | management_server | health | role     | last_succ_resp_ms |
+| ------------- | -------------- | ------------------ | ----------------- | ------ | -------- | ------------------|
+| coordinator_1 | localhost:7690 | localhost:10111    |        ""         | up     | leader   |  0                |
+| coordinator_2 | localhost:7691 | localhost:10112    |        ""         | up     | follower |  34               |
+| coordinator_3 | localhost:7692 | localhost:10113    |        ""         | up     | follower |  28               |
+| instance_1    | localhost:7687 |       ""           | localhost:10011   | up     | main     |  61               |
+| instance_2    | localhost:7688 |       ""           | localhost:10012   | up     | replica  |  74               |
+| instance_3    | localhost:7689 |       ""           | localhost:10013   | down   | unknown  |  71222            |
 
 </Steps>

@@ -9,7 +9,7 @@ Learn how to configure, manage and monitor your Memgraph instance.
 
 ## [Authentication and authorization](/database-management/authentication-and-authorization)
 
-Memgraph supports managing users and roles as well as role-based and fine-grained access control. It is possible to integrate with third-party authentication systems, such as LDAP.
+Memgraph supports managing users and roles as well as role-based and fine-grained access control. It is possible to integrate with third-party authentication systems, such as LDAP, SAML and OIDC.
 
 ## [Backup and restore](/database-management/backup-and-restore) 
 

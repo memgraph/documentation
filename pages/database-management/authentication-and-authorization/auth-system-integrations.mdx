@@ -40,9 +40,6 @@ authentication and authorization mechanisms used by Memgraph.
  Flag                               | Description
 ------------------------------------|------------
  `--auth-module-executable`         | Path to the executable that should be used for user authentication/authorization.
- `--auth-module-create-missing-user`| DEPRECATED No authentication data is modified by the auth module
- `--auth-module-create-missing-role`| DEPRECATED No authentication data is modified by the auth module
- `--auth-module-manage-roles`       | DEPRECATED No authentication data is modified by the auth module
  `--auth-module-timeout-ms`         | Specifies the maximum time that Memgraph will wait for a response from the external auth module.
  `--auth-password-permit-null`      | Can be set to false to disable null passwords.
  `--auth-password-strength-regex`   | The regular expression that should be used to match the entire entered password to ensure its strength.
@@ -409,3 +406,89 @@ allowed to log in because her role (moderator) already exists. Carol and Dave
 won't be allowed to log in because their role (administrator) doesn't exist.
 
 </Steps>
+
+## OpenID Connect (OIDC)
+
+Memgraph also supports authentication and authorization using OIDC (OIDC + OAuth 2.0) protocol with a
+built-in auth module that is packaged with Memgraph Enterprise.
+
+The module currently supports the following SSO providers:
+- Microsoft Entra ID
+- Okta using a custom authorization server
+
+To use the built-in auth module run Memgraph with the `--auth-module-mappings` [flag](/database-management/configuration#auth-module) with the name of each provider and protocol you want to use separater with a semicolon (;).
+For example, to use OIDC with both Entra ID and Okta run Memgraph with `--auth-module-mappings=oidc-okta;oidc-entra-id`.
+
+For SSO provider setup see [this](/data-visualization/user-manual/single-sign-on).
+
+### Module requirements
+
+The module is written in Python 3 and requires the following libraries:
+ - `PyJWT` - used to validate tokens.
+ - `requests` - used to retrieve public keys for validating tokens.
+ - `cryptography` - used to parse tokens.
+
+The required packages are already installed in the docker image. If you are using a native build you to install the packages manually on your machine.
+The list of all required packages is located at `src/auth/reference_modules/requirements.txt`. You can install them by running `pip3 install -r /path/to/requirements.txt`.
+If you are running a native build make sure that you don't have the Python `JWT` library installed (you can check that with `pip freeze`) as `PyJWT` and `JWT` have some conflicts.
+
+### Module configuration
+
+The module is located at `/usr/lib/memgraph/auth_module/oidc.py`.
+The module has no configuration file. You have to run Memgraph with some environmental variables.
+To use multiple SSO providers you have to set the environmental variables associated with that provider.
+
+#### MS Entra ID
+For using OIDC with Microsoft Entra ID you have to set the following environmental variables:
+
+```bash
+MEMGRAPH_SSO_ENTRA_ID_OIDC_TENANT_ID=
+MEMGRAPH_SSO_ENTRA_ID_OIDC_CLIENT_ID=
+MEMGRAPH_SSO_ENTRA_ID_OIDC_ROLE_MAPPING=
+MEMGRAPH_SSO_ENTRA_ID_OIDC_USERNAME=
+```
+
+You can find the tenant and client ID in the app overview in Azure. For a more detailed explanation see [this](/pages/data-visualization/user-manual/single-sign-on.mdx).
+
+##### Role mapping
+Authorization is done by mapping the Entra ID roles from the roles field in the access token to the Memgraph roles.
+The role mapping is defined as a string where each individual mapping is separated by a semicolon (;). Within each mapping, the Entra ID role is separated from the corresponding Memgraph role by a colon (:).
+One example of a role mapping is `entra.admin:memadmin; entra.user:memuser` where the Entra ID role `entra.admin` is mapped to the Memgraph role `memadmin` and the Entra ID role `entra.user` is mapped to the Memgraph role `memuser`.
+Make sure that each user only has one role on Entra ID.
+
+##### Username
+The username variable tells the OIDC module what to use as the username. It has the format `token-type:field`. 
+Token type can be `id` or `access` depending on whether you want to use a field from the access or the ID token for the username. See the following to learn more about [access](https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens) and [id](https://learn.microsoft.com/en-us/entra/identity-platform/id-tokens) tokens.
+By default, it is set to `id:sub` as per the OIDC protocol it is recommended to use the `sub` field from the id token as it is non-mutable and globally unique for each application.
+For MS Entra ID one commonly used field is `id:preferred_username` which is usually the email of the user. For a list of all default claims look at [this](https://learn.microsoft.com/en-us/entra/identity-platform/access-token-claims-reference) and [this](https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference).
+You can also configure custom claims.
+
+#### Okta
+For using OIDC with Okta you have to set the following environmental variables:
+```bash
+MEMGRAPH_SSO_OKTA_OIDC_ISSUER=
+MEMGRAPH_SSO_OKTA_OIDC_CLIENT_ID=
+MEMGRAPH_SSO_OKTA_OIDC_AUTHORIZATION_SERVER=api://default
+MEMGRAPH_SSO_OKTA_OIDC_ROLE_MAPPING=
+MEMGRAPH_SSO_OKTA_OIDC_USERNAME=
+```
+
+Issuer is `https://{your-okta-domain}.okta.com/oauth2/default/`. You can find the client ID on the Admin panel -> Applications -> General. You can find the authorization server on the Admin panel -> Security -> API -> Authorization Servers -> Audience. By default, it is set to `api://default`.
+
+##### Role mapping
+Authorization is done by mapping the Okta groups from the `groups` field in the access token to the Memgraph roles.
+The role mapping is defined as a string where each individual mapping is separated by a semicolon (;). Within each mapping, the Entra ID role is separated from the corresponding Memgraph role by a colon (:).
+One example of a role mapping is `okta.admin:memadmin; okta.user:memuser` where the Okta group `okta.admin` is mapped to the Memgraph role `memadmin` and the Okta group `okta.user` is mapped to the Memgraph role `memuser`.
+The `groups` field does not exist in Okta by default and you have to set it up manually. More information on how to do that [here](https://developer.okta.com/docs/guides/customize-tokens-returned-from-okta/main/#add-a-custom-claim-to-a-token).
+Make sure that each user is only assigned to one group on Okta.
+
+##### Username 
+The username variable tells the OIDC module what to use as the username. It has the format `token-type:field`. 
+Token type can be `id` or `access` depending on whether you want to use a field from the access or the ID token for the username. See the following to learn more about [access](https://www.okta.com/identity-101/access-token/) and [id](https://developer.okta.com/docs/guides/validate-id-tokens/main/#id-tokens-vs-access-tokens) tokens.
+By default, it is set to `id:sub` as per the OIDC protocol it is recommended to use the `sub` field from the id token as it is non-mutable and globally unique for each application.
+For Okta one commonly used field is `access:sub` which is usually the email of the user. You can also configure [custom claims](https://developer.okta.com/docs/guides/customize-tokens-returned-from-okta/main/).
+
+### Database configuration
+
+OIDC is by default enabled using the Memgraph `oidc.py` module. To use a custom auth module use the `--auth-module-mappings` [flag](/database-management/configuration#auth-module) like the following:
+`--auth-module-mappings=oidc-entra-id:/path/to/oidc-entra-module;oidc-okta:/path/to/oidc-okta-module` depending on the SSO provider you want to use.
