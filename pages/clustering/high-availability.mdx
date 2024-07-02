@@ -26,10 +26,16 @@ The coordinator instance is a new addition to enable the high availability featu
 
 ## Cluster management
 
-Typical Memgraph's highly available cluster consists of 3 data instances (1 MAIN and 2 REPLICAS) and 3 coordinator instances backed up by Raft protocol. One coordinator instance
-is the leader whose job is to make sure there is always one writeable data instance (MAIN). The other two coordinator instances replicate changes done by the leader coordinator in its
-own Raft log. Operations saved into the Raft log are those that are related to cluster management. Memgraph doesn't have its implementation of the Raft protocol, 
-rather this task was offloaded to an industry-proven library [NuRaft](https://github.com/eBay/NuRaft).
+For achieving high availability, Memgraph uses Raft consensus protocol, which is very similar to Paxos in terms of performance and fault-tolerance but with a significant advantage that it is much easier to understand. It's important to say that Raft isn't a
+Byzantine fault-tolerant algorithm. You can learn more about Raft in the paper [In Search of an Understandable Consensus Algorithm](https://raft.github.io/raft.pdf).
+
+Typical Memgraph's highly available cluster consists of 3 data instances (1 MAIN and 2 REPLICAS) and 3 coordinator instances backed up by Raft protocol.
+Users can create more than 3 coordinators, but the replication factor (RF) of 3 is a de facto standard in distributed databases.
+
+One coordinator instance is the leader whose job is always to ensure one writeable data instance (MAIN). The other two coordinator instances replicate changes the leader coordinator did in its
+own Raft log. Operations saved into the Raft log are those that are related to cluster management. Memgraph doesn't have its implementation of the Raft protocol. 
+For this task, Memgraph uses an industry-proven library [NuRaft](https://github.com/eBay/NuRaft).
+
 You can start the coordinator instance by specifying `--coordinator-id` and 
 `--coordinator-port` flags. The coordinator instance only responds to
 queries related to high availability, so you cannot execute any data-oriented query on it. The coordinator port is used for the Raft protocol, which
@@ -44,29 +50,31 @@ The Raft consensus algorithm ensures that all nodes in a distributed system
 agree on a single source of truth, even in the presence of failures, by electing
 a leader to manage a replicated log. It simplifies the management of the
 replicated log across the cluster, providing a way to achieve consistency and
-coordination in a fault-tolerant manner.
+coordination in a fault-tolerant manner. Users are advised to use an odd number of instances
+since Raft, as a consensus algorithm, works by forming a majority in the decision making.
 
 </Callout>
 
+
 ## Bolt+routing
 
-Directly connecting to the MAIN instance isn't preferred in the HA cluster since the MAIN instance changes due to various failures. Because of that, Memgraph
-also supports bolt+routing so that users can always send write queries to the correct data instance. This protocol works in a way that the client
+Directly connecting to the MAIN instance isn't preferred in the HA cluster since the MAIN instance changes due to various failures. Because of that, users
+can use bolt+routing so that write queries can always be sent to the correct data instance. This protocol works so that the client
 first sends a ROUTE bolt message to any coordinator instance. The coordinator replies to the message by returning the routing table with three entries specifying
 from which instance can be data read, to which instance data can be written and which instances can behave as routers. In the Memgraph HA cluster, the MAIN
-data instance is the only writeable instance, REPLICAs are readable instances and COORDINATORs behave as routers. For more details check [Request message ROUTE](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route) documentation.
+data instance is the only writeable instance, REPLICAs are readable instances, and COORDINATORs behave as routers. For more details check [Request message ROUTE](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route) documentation.
 
-Users only need to change the scheme which they use for connecting to coordinators. This means instead of using `bolt://<main_ip_address>,` you should
+Users only need to change the scheme they use for connecting to coordinators. This means instead of using `bolt://<main_ip_address>,` you should
 use `neo4j://<coordinator_ip_adresss>` to get an active connection to the current MAIN instance in the cluster. You can find examples of how to 
 use bolt+routing in different programming languages [here](https://github.com/memgraph/memgraph/tree/master/tests/drivers).
 
-It is important to note that setting up the cluster (registration of data instances and coordinators, setting main) must be done using bolt connection since bolt+routing is only used for routing data-related
+It is important to note that setting up the cluster on one coordinator (registration of data instances and coordinators, setting main) must be done using bolt connection since bolt+routing is only used for routing data-related
 queries, not coordinator-based queries.
 
 ## Starting instances
 
-You can start the data instance and coordinator instance using either environment flags or configuration flags.
-The main difference between data instance and coordinator is that data instances have --management-port, whereas coordinators must have --coordinator-id and --coordinator-port. 
+You can start the data and coordinator instances using environment flags or configuration flags.
+The main difference between data instance and coordinator is that data instances have `--management-port`, whereas coordinators must have `--coordinator-id` and `--coordinator-port`. 
 
 ### Configuration Flags
 
@@ -97,14 +105,13 @@ docker run --name coord1 -p 7690:7687 -p 7445:7444 memgraph/memgraph-mage
 --experimental-enabled=high-availability
 ```
 
-Coordinator ID servers as identifiers and the coordinator port is used for synchronization and log replication between coordinators. Coordinator IDs and coordinator ports must be different for all coordinators.
+Coordinator IDs serve as identifiers, while the coordinator port is used for synchronization and log replication between coordinators. Coordinator IDs and coordinator ports must be different for all coordinators.
 
 ### Env flags
 
-There is an additional way to set high availability instances using only environment variables. When setting it up, you need to use set up high availability part for the coordinator and/or data instance 
-either using only environment variables or configuration flags.
+There is an additional way to set high availability instances using environment variables. It is important to say that for the following configuration options, you can either use
+environment variables or configuration flags:
 
-You can't mix and match different configuration flags with environment variables for the following settings:
 - experimental enabled
 - bolt port
 - coordinator port
@@ -162,6 +169,7 @@ This operation will result in writing to the Raft log.
 
 In case MAIN is already set in the cluster, a replica instance will also be registered on MAIN.
 
+
 ### Add coordinator instance
 
 The user can choose any coordinator instance and connect other two (or more) coordinator instances to the cluster. This can be done before or after registering data instances,
@@ -170,6 +178,19 @@ the order isn't important.
 ```plaintext
 ADD COORDINATOR coordinatorId WITH CONFIG {"bolt_server": boltServer, "coordinator_server": coordinatorServer}; 
 ```
+
+<Callout type="info">
+
+We need to inform the leader coordinator of the existence of other follower coordinators.
+If you are running `ADD COORDINATOR` Cypher queries on coordinator with --coordinator-id=1, you only need to add other two coordinator instances. For example, when using 3 
+coordinators you need to use two `ADD COORDINATOR` queries:
+
+```
+ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "127.0.0.1:7691", "coordinator_server": "127.0.0.1:10112"};
+ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "127.0.0.1:7692", "coordinator_server": "127.0.0.1:10113"};
+```
+
+</Callout>
 
 ### Set instance to MAIN
 
@@ -238,6 +259,14 @@ health status of other instances and the time of last response since only the le
 ```plaintext
 SHOW INSTANCES;
 ```
+
+<Callout type="warning">
+
+When `SHOW INSTANCES` is being run, bolt server of the 1st coordinator (coordinator on which you run registration queries) will always 
+show IP address set to 0.0.0.0 instead of machine's IP address (container/pod when running in Docker/Kubernetes). All communication will
+still work but the displayed output is wrong. This is a known bug and we are working on improving this.
+
+</Callout>
 
 ## Setting config for highly-available cluster
 
@@ -365,6 +394,14 @@ RPC request deletes all current data on all databases on a given instance and ac
 From follower coordinators you can only execute `SHOW INSTANCES`. Registration of data instance, unregistration of data instances, demoting instance, setting instance to MAIN and force reseting cluster state
 are all disabled. 
 
+<Callout type="warning">
+
+Under certain extreme scenarios, the current implementation of HA could lead to data loss. These are environments with high volume of transactions 
+where data is constantly changed, added, deleted... If you are operating in such scenarios, please open an issue on [GitHub](https://github.com/memgraph/memgraph/issues) 
+as we are eager to expand our support for this kind of workload.
+
+</Callout>
+
 ## Instances' restart
 
 ### Data instances' restart
@@ -380,17 +417,143 @@ for each database on data instance. This way, MAIN can establish a connection to
 
 ### Coordinator instances restart
 
-In case the coordinator instance dies and it is restarted, it loses all data from Raft log. Information about other coordinators and their endpoints is recovered from `high_availability/coordinator`  directory stored under 
-top level `--data-directory` folder. When the coordinator rejoins, it will communicate with other coordinators and receive updates from the current leader. It is important that at least one coordinator is alive at all the time
-so that data from the Raft log is not lost.
+In case the coordinator instance dies and it is restarted, it loses all data from the Raft log. Information about other coordinators and their endpoints is recovered from `high_availability/coordinator`  directory stored under 
+top level `--data-directory` folder. When the coordinator rejoins, it will communicate with other coordinators and receive updates from the current leader. It is important that at least one coordinator is alive at all the time so that data from the Raft log is not lost.
 
-## Handling errors
+## Recovering from errors
 
-Distributed systems can fail in various ways. The logic is implemented in a way that the Memgraph instance will be resilient to occasional network
-failures and independent machine failures. That's why there are parameters controlling the frequency of health checks from coordinator to replication
-instances and the time needed to realize the instance is down.
+Distributed systems can fail in numerous ways. With the current implementation, Memgraph instances are resilient to occasional network
+failures and independent machine failures. Byzantine failures aren't handled since the Raft consensus protocol cannot deal with them either. 
 
-## Example
+Recovery Time Objective (RTO) is an often used term for measuring the maximum tolerable length of time that an instance or cluster can be down.
+Since every highly available Memgraph cluster has two types of instances, we need to analyze the failures of each separately.
+
+Raft is a quorum-based protocol and it needs a majority of instances alive in order to stay functional. Hence, with just one coordinator instance down, RTO is 0 since
+the cluster stays available. With 2+ coordinator instances down
+(in a cluster with RF = 3), the RTO depends on the time needed for instances to come back.
+
+Failure of REPLICA data instance isn't very harmful since users can continue writing to MAIN data instance while reading from MAIN or other
+REPLICAs. The most important thing to analyze is what happens when MAIN gets down. In that case, the leader coordinator uses 
+user-controllable parameters related to the frequency of health checks from the leader to replication instances (`--instance-health-check-frequency-sec`) 
+and the time needed to realize the instance is down (`--instance-down-timeout-sec`). After collecting enough evidence, the leader concludes the MAIN is down and performs failover using just a handful of RPC
+messages (correct time depends on the distance between instances). It is important to mention that the whole failover is performed with a zero data-loss if the newly chosen MAIN (previously REPLICA)
+had all up-to-date data.
+
+Current deployment assumes the existence of only one datacenter, which automatically means that Memgraph won't be available in the case the whole datacenter goes down. We are actively
+working on 2 datacenter (2-DC) architecture.
+
+## Kubernetes
+
+We support deploying Memgraph HA instances as part of the Kubernetes cluster. You can see example configurations [here](/getting-started/install-memgraph/kubernetes#helm-chart-for-memgraph-high-availability-cluster).
+
+## Docker Compose
+
+The following example shows you how to setup Memgraph cluster using docker compose. The cluster will use user-defined bridge network.
+
+License file `license.cypherl` should be in the format:
+
+```
+
+SET DATABASE SETTING 'organization.name' TO '<YOUR_ORGANIZATION_NAME>';
+SET DATABASE SETTING 'enterprise.license' TO '<YOUR_ENTERPRISE_LICENSE>';
+
+```
+
+You can directly use initialization file `HA_init.cypherl`:
+
+```
+
+ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "coord2:7691", "coordinator_server": "coord2:10112"};
+ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "coord3:7692", "coordinator_server": "coord3:10113"};
+
+REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "instance1:7687", "management_server": "instance1:10011", "replication_server": "instance1:10001"};
+REGISTER INSTANCE instance_2 WITH CONFIG {"bolt_server": "instance2:7688", "management_server": "instance2:10012", "replication_server": "instance2:10002"};
+REGISTER INSTANCE instance_3 WITH CONFIG {"bolt_server": "instance3:7689", "management_server": "instance3:10013", "replication_server": "instance3:10003"};
+SET INSTANCE instance_3 TO MAIN;
+
+```
+
+You can directly use the following `docker-compose.yml` to start the cluster using `docker compose up`:
+
+```
+networks:
+  memgraph_ha:
+    name: memgraph_ha
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.21.0.0/16"
+
+services:
+  coord1:
+    image: "memgraph/memgraph"
+    container_name: coord1
+    volumes:
+      - ./license.cypher:/tmp/init/license.cypher:ro
+      - ./HA_register.cypher:/tmp/init/HA_register.cypher:ro
+    environment:
+      - MEMGRAPH_HA_CLUSTER_INIT_QUERIES=/tmp/init/HA_register.cypher
+    command: [ "--init-file=/tmp/init/license.cypher", "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord1", "--log-file=/tmp/coord1.log", "--also-log-to-stderr", "--coordinator-id=1", "--coordinator-port=10111", "--experimental-enabled=high-availability"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.4
+
+  coord2:
+    image: "memgraph/memgraph"
+    container_name: coord2
+    volumes:
+      - ./license.cypher:/tmp/init/license.cypher:ro
+    command: [ "--init-file=/tmp/init/license.cypher", "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord2", "--log-file=/tmp/coord2.log", "--also-log-to-stderr", "--coordinator-id=2", "--coordinator-port=10112", "--experimental-enabled=high-availability"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.2
+
+  coord3:
+    image: "memgraph/memgraph"
+    container_name: coord3
+    volumes:
+      - ./license.cypher:/tmp/init/license.cypher:ro
+    command: [ "--init-file=/tmp/init/license.cypher",  "--log-level=TRACE", "--data-directory=/tmp/mg_data_coord3", "--log-file=/tmp/coord3.log", "--also-log-to-stderr", "--coordinator-id=3", "--coordinator-port=10113", "--experimental-enabled=high-availability"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.3
+
+  instance1:
+    image: "memgraph/memgraph"
+    container_name: instance1
+    volumes:
+      - ./license.cypher:/tmp/init/license.cypher:ro
+    command: ["--init-file=/tmp/init/license.cypher","--data-recovery-on-startup=true", "--log-level=TRACE", "--data-directory=/tmp/mg_data_instance1", "--log-file=/tmp/instance1.log", "--also-log-to-stderr", "--management-port=10011", "--experimental-enabled=high-availability"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.6
+
+  instance2:
+    image: "memgraph/memgraph"
+    container_name: instance2
+    volumes:
+      - ./license.cypher:/tmp/init/license.cypher:ro
+    command: ["--init-file=/tmp/init/license.cypher","--data-recovery-on-startup=true", "--log-level=TRACE", "--data-directory=/tmp/mg_data_instance2", "--log-file=/tmp/instance2.log", "--also-log-to-stderr", "--management-port=10012", "--experimental-enabled=high-availability"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.7
+
+  instance3:
+    image: "memgraph/memgraph"
+    container_name: instance3
+    volumes:
+      - ./license.cypher:/tmp/init/license.cypher:ro
+    command: ["--init-file=/tmp/init/license.cypher","--data-recovery-on-startup=true", "--log-level=TRACE", "--data-directory=/tmp/mg_data_instance3", "--log-file=/tmp/instance3.log", "--also-log-to-stderr", "--management-port=10013", "--experimental-enabled=high-availability"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.8
+
+```
+
+Cluster can be shut-down using `docker compose down`.
+
+## Manual Docker setup
 
 This example will show how to set up a highly available cluster in Memgraph using three coordinators and 3 data instances.
 
@@ -415,17 +578,17 @@ docker run  --name coord3 -p 7692:7692 -p 7446:7444 memgraph/memgraph-mage --bol
 
 4. Start instance1:
 ```plaintext
-docker run  --name instance1 -p 7687:7687 -p 7447:7444 memgraph/memgraph-mage --bolt-port=7687 --log-level=TRACE --data-directory=/tmp/mg_data_instance1 --log-file=/tmp/instance1.log --also-log-to-stderr --management-port=10011 --experimental-enabled=high-availability
+docker run  --name instance1 -p 7687:7687 -p 7447:7444 memgraph/memgraph-mage --bolt-port=7687 --log-level=TRACE --data-directory=/tmp/mg_data_instance1 --log-file=/tmp/instance1.log --also-log-to-stderr --management-port=10011 --experimental-enabled=high-availability --data-recovery-on-startup=true
 ```
 
 5. Start instance2:
 ```plaintext
-docker run --name instance2 -p 7688:7688 -p 7448:7444 memgraph/memgraph-mage --bolt-port=7688 --log-level=TRACE --data-directory=/tmp/mg_data_instance2 --log-file=/tmp/instance2.log --also-log-to-stderr --management-port=10012 --experimental-enabled=high-availability
+docker run --name instance2 -p 7688:7688 -p 7448:7444 memgraph/memgraph-mage --bolt-port=7688 --log-level=TRACE --data-directory=/tmp/mg_data_instance2 --log-file=/tmp/instance2.log --also-log-to-stderr --management-port=10012 --experimental-enabled=high-availability --data-recovery-on-startup=true
 ```
 
 6. Start instance3:
 ```plaintext
-docker run --name instance3 -p 7689:7689  -p 7449:7444 memgraph/memgraph-mage --bolt-port=7689 --log-level=TRACE --data-directory=/tmp/mg_data_instance3 --log-file=/tmp/instance3.log --also-log-to-stderr --management-port=10013 --experimental-enabled=high-availability
+docker run --name instance3 -p 7689:7689  -p 7449:7444 memgraph/memgraph-mage --bolt-port=7689 --log-level=TRACE --data-directory=/tmp/mg_data_instance3 --log-file=/tmp/instance3.log --also-log-to-stderr --management-port=10013 --experimental-enabled=high-availability --data-recovery-on-startup=true
 ```
 
 ### Register instances
