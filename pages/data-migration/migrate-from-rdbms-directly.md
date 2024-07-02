@@ -123,17 +123,17 @@ is highly parallelizable when importing nodes and relationships in the way we wi
 not come with write-ahead logging, and it is therefore unable to make ACID guarantees. More information
 about analytical mode can be found on our [page about storage modes](/fundamentals/storage-memory-usage).
 
-In-memory storage mode is enabled with the following command:
+In-memory storage mode is set with the following command:
 ```cypher
 STORAGE MODE IN_MEMORY_ANALYTICAL;
 ```
 
 In the next two sections, we will provide you with different ways of migrating from an external data source.
-One will be migrating the whole table from the RDBMS to Memgraph, and other will be by issuing a query.
+One will be migrating the whole table from the RDBMS to Memgraph, and the other will be by issuing a query.
 
 ### 3. Import nodes from corresponding tables
 The [migrate module](/advanced-algorithms/available-algorithms/migrate) in MAGE has an easy API how to migrate rows from a relational database to Memgraph. We
-can migrate and inspect the table with the following query:
+can inspect the table with the following query:
 
 ```cypher
 CALL migrate.postgresql('Musicians' , {
@@ -151,7 +151,7 @@ On the picture we can see that the module has correctly extracted the columns fr
 
 The `YIELD` keyword will create the `row` objects, which are essentially a map which
 has the column name as the key, and the column value as the value. We can iterate over the row objects with
-the Cypher language to continue populating the database.
+the Cypher language to populate the Memgraph database.
 
 ```cypher
 CALL migrate.postgresql('Musicians' , {
@@ -215,10 +215,10 @@ RETURN row.band_id AS band_id, row.musician_id AS musician_id;
 
 ![](/pages/data-migration/migrate-from-rdbms-directly/migrate-from-rdbms-directly-relationships-row.png)
 
-This query is useful as sometimes you don't need all the columns to be migrated to Memgraph, you only need a fraction
+This query is useful as sometimes you don't need all the columns to be migrated to Memgraph, you only need a subset
 of them. Although you can omit creation of properties when the row is received, this approach consumes less memory on
-the row level. We can create the relationships by matching the source and destination node we migrated previously. Now,
-the indices will play a big role, as the graph can be connected effectively and with optimal performance.
+the row level. We can create the relationships by matching the source and destination node we migrated previously.
+The indices will play a big role, as the graph can be connected effectively and with optimal performance.
 
 ```cypher
 CALL migrate.postgresql('SELECT * FROM BandMemberships' , {
@@ -235,13 +235,13 @@ CREATE (m)-[:PERFORMS_IN]->(b);
 After migrating the relationships, we can see how our graph looks like:
 
 ```cypher
-MATCH (n)-[r]->(m) RETURN n, r, m;
+MATCH (m)-[p]->(b) RETURN m, p, b;
 ```
 
 ![](/pages/data-migration/migrate-from-rdbms-directly/migrate-from-rdbms-directly/connected-graph.png)
 
 ### 5. Switch back to in-memory transactional mode
-If we want to give back the transactional guarantees, we can do so by switching back from
+If we want to resume the transactional guarantees, we can do so by switching back from
 analytical to transactional mode with the query:
 ```cypher
 STORAGE MODE IN_MEMORY_TRANSACTIONAL;
@@ -270,7 +270,10 @@ The columns in Postgres are meant to be stored on
 disk, and therefore users can add new columns which can be big in size. This mainly is a concern
 for unnecessary date strings and urls. 
 
-This can be optimized by processing the minimal set of necessary columns.
+This can be optimized by processing the minimal set of necessary columns. Some of the columns which would
+be a good choice to migrate to Memgraph are those which will aid in graph matching, filtering, and traversing
+of the graph. Try to avoid list and map properties if there is no valid use case to keep them in 
+Memgraph, as they take more size other data types.
 
 #### 2. Appropriate data type conversion
 When receiving rows from RDBMS to Memgraph, be sure that the appropriate types are utilized. That namely
