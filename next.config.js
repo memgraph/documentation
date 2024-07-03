@@ -533,12 +533,12 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/how-to-guides/create-backup',
-        destination: '/configuration/data-durability-and-backup',
+        destination: '/fundamentals/data-durability',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/backup',
-        destination: '/configuration/data-durability-and-backup',
+        destination: '/fundamentals/data-durability',
         permanent: true
       },
       {
@@ -1108,7 +1108,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/install-memgraph-from-rpm',
-        destination: '/getting-started/install-memgraph/rpm-package',
+        destination: '/getting-started/install-memgraph',
         permanent: true
       },
       {
@@ -1761,7 +1761,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/database-functionalities/backup',
-        destination: '/configuration/data-durability-and-backup',
+        destination: '/fundamentals/data-durability',
         permanent: true
       },
       {
@@ -2211,7 +2211,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/getting-started/installation/rpm-installation',
-        destination: '/getting-started/install-memgraph/rpm-package',
+        destination: '/getting-started/install-memgraph',
         permanent: true
       },
       {
@@ -2790,7 +2790,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/2.2.1/install-memgraph-from-rpm',
-        destination: '/getting-started/install-memgraph/rpm-package',
+        destination: '/getting-started/install-memgraph',
         permanent: true
       },
       {
@@ -2880,7 +2880,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/2.6.0/how-to-guides/create-backup',
-        destination: '/configuration/data-durability-and-backup',
+        destination: '/fundamentals/data-durability',
         permanent: true
       },
       {
@@ -2989,9 +2989,121 @@ module.exports = withNextra({
         destination: '/getting-started',
         permanent: true
       },
+      //START Config - Deployment redirects
+      {
+        source: '/configuration/audit-log',
+        destination: '/database-management/logs',
+        permanent: true
+      },
+      {
+        source: '/configuration/auth-module',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations',
+        permanent: true
+      },
+      {
+        source: '/configuration/configuration-settings',
+        destination: '/database-management/configuration',
+        permanent: true
+      },
+      {
+        source: '/configuration/data-durability-and-backup',
+        destination: '/fundamentals/data-durability',
+        permanent: true
+      },
+      {
+        source: '/configuration/enabling-memgraph-enterprise',
+        destination: '/database-management/enabling-memgraph-enterprise',
+        permanent: true
+      },
+      {
+        source: '/configuration/high-availability',
+        destination: '/clustering/high-availability',
+        permanent: true
+      },
+      {
+        source: '/configuration/logs',
+        destination: '/database-management/logs',
+        permanent: true
+      },
+      {
+        source: '/configuration/metadata',
+        destination: '/database-management/query-metadata',
+        permanent: true
+      },
+      {
+        source: '/configuration/monitoring-server',
+        destination: '/database-management/monitoring',
+        permanent: true
+      },
+      {
+        source: '/configuration/multi-tenancy',
+        destination: '/database-management/multi-tenancy',
+        permanent: true
+      },
+      {
+        source: '/configuration/replication',
+        destination: '/clustering/replication',
+        permanent: true
+      },
+      {
+        source: '/configuration/replication/experimental-replication',
+        destination: '/clustering/replication/experimental-replication',
+        permanent: true
+      },
+      {
+        source: '/configuration/security',
+        destination: '/database-management/authentication-and-authorization/role-based-access-control',
+        permanent: true
+      },
+      {
+        source: '/configuration/server-stats',
+        destination: '/database-management/server-stats',
+        permanent: true
+      },
+      {
+        source: '/configuration/ssl-encryption',
+        destination: '/database-management/ssl-encryption',
+        permanent: true
+      },
+      {
+        source: '/configuration/text-search',
+        destination: '/querying/text-search',
+        permanent: true
+      },
+      {
+        source: '/configuration/system-configuration',
+        destination: '/database-management/system-configuration',
+        permanent: true
+      },
+      //END Config - Deployment redirects
       {
         source: '/advanced-algorithms/built-in-graph-algorithms',
         destination: '/advanced-algorithms/deep-path-traversal',
+        permanent: true
+      },
+      {
+        source: '/help-center/errors/serialization',
+        destination: '/help-center/errors/transactions',
+        permanent: true
+      },
+      {
+        source: '/fundamentals/querying/schema',
+        destination: '/querying/schema',
+        permanent: true
+      },
+      {
+        source: '/querying/getting-started/cli',
+        destination: '/getting-started/cli',
+        permanent: true
+      },
+      {
+        source: '/memgraph/2.2.0/reference-guide/query-modules/implement-custom-query-modules/overview',
+        destination: '/custom-query-modules',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/rpm-package',
+        destination: '/getting-started/install-memgraph',
         permanent: true
       }
     ];
