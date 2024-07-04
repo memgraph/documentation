@@ -1,0 +1,220 @@
+---
+title: Deploy Memgraph on Google Cloud Platform virtual machine 
+description: Learn how to choose instance type, select OS, and configure the network for Memgraph deployment.
+---
+
+import { Card, Cards, Tabs, Tab } from 'nextra/components'
+
+# Deploy Memgraph in the Google Cloud Platform (GCP)
+
+This guide will show you how to deploy Memgraph on a Google virtual machine
+(VM). The guide will cover only the specific bits that are different from the
+general deployment guide you can find for native [Linux](./linux.mdx) or
+[Docker](./docker.mdx) deployments.
+
+This guide assumes you have a Google Cloud Platform account and are familiar
+with the Google console. If you are not, you can follow the [GCP Linux VM quick
+start guide
+documentation](https://cloud.google.com/compute/docs/create-linux-vm-instance).
+
+## Creating a new GCP VM
+
+The first step is to have a VM running on GCP, where you will deploy Memgraph.
+Since Memgraph works nicely with Linux distributions, it is recommended to use
+Linux-based VMs.
+
+Below are some guidelines to consider if you are opening a new GCP VM for
+Memgraph. 
+
+### Picking the OS 
+
+During the VM creation, you need to pick the OS you wish to have on the VM. If
+you are going to use the Memgraph native installation, you need to pick a Linux
+distribution that Memgraph supports.
+
+Memgraph supports multiple Linux distributions. Memgraph packages for supported distributions and versions can be downloaded 
+from the [following page](/getting-started/install-memgraph/direct-download-links#linux)
+
+Running Memgraph natively will bring some speed improvements compared to the
+Docker version of Memgraph. 
+
+If you are going to use the Memgraph Docker image, pick the Linux you are most familiar with.
+
+Memgraph in Docker can be deployed both on x86 and ARM architecture. All native
+distributions work on x86 architecture. Some of the native distributions also
+work on ARM architecture (Debian, Ubuntu), some do not (Centos, Fedora). Check
+the [direct download
+links](/getting-started/install-memgraph/direct-download-links#linux) for
+detailed information.
+
+
+### Picking the VM type
+
+When creating the VM, you need to pick the VM type. If you run
+Memgraph in `IN_MEMORY_TRANSACTIONAL` (default mode) or in
+`IN_MEMORY_ANALYTICAL` storage mode, all data is stored in RAM. That means it
+would be good first to calculate [how much memory you will
+need](/fundamentals/storage-memory-usage#calculate-storage-memory-usage). There
+is also an [easy-to-use
+calulator](https://memgraph.com/enterprise#ram-calculator) for approximating
+memory usage. The good rule of thumb is for your server to have double the memory of what your
+storage was calculated to be. You can go with less if you do not have a demanding
+workload. A demanding workload would be a query that traverses half of the graph
+and returns half of the graph. 
+
+
+GCP has a collection of general purpose, memory-optimized, and compute-optimized
+instances. For more details on the instance types, you can check the [GCP
+documentation](https://cloud.google.com/compute/docs/machine-resource). 
+
+The general-purpose instances are suitable for a wide range of workloads, and
+are good starting point for Memgraph deployment
+
+
+The memory-optimized VMs are designed for large scale (> 1TB of RAM) in-memory
+databases, data analytics, and other memory-intensive applications. If you have
+a larger scale, consider using the memory-optimized instances since GCP offers
+them on TB scales. If your use-case requries lower memory configurations use general purpose instances, such
+as C4 family instances. 
+
+Instances vary based on the supported architectures, number of CPU cores,
+network bandwidth, block storage, etc. All hardware specs typically scale with the
+instance size. Memgraph is not demanding on the rest of the hardware specs as long as there
+is sufficent RAM. 
+
+If you are running Memgraph in `ON_DISK_TRANSACTIONAL` storage mode, you need to
+consider the instances [optimized for
+storage](https://cloud.google.com/compute/docs/storage-optimized-machines).
+
+
+### Network Setup
+
+When creating the VM, you need to set up the [firewall for network access](https://cloud.google.com/firewall/docs/using-firewalls) and
+inbound port rules. By default, Memgraph uses port 7687 for the Bolt
+protocol. You need to open this port for TCP traffic and to allow connections to
+Memgraph. 
+
+If you change the default Bolt port, make sure to update the inbound port rules
+accordingly.
+
+Also, if deploying Memgraph for
+[Replication](/clustering/replication#replication) or [High
+Availability](/clustering/high-availability#high-availability-enterprise), the
+ports for the replication and cluster management should also be open. 
+In replication configuration each instance needs to have an open port 10000 for the
+replication. In a high availability configuration, each **data instance** needs to have an open
+port of 10000 for management and a port of 20000 for replication. Each **coordinator
+instance***, needs to have open port 12000. 
+
+All instances need to have open port 7687 for the Bolt protocol.
+
+### Setup the storage 
+
+When creating the VM, you need to set up the disk storage. By default Memgraph
+stores all data to working RAM, but for the [persistency between
+restarts](/fundamentals/data-durability) Memgraph uses the disk storage to store
+snapshots, configurations, etc.
+
+It is recommended to use the [Persistent Disk 
+storage](https://cloud.google.com/compute/docs/disks). Persistent Disk volumes
+are durable, scalable, and can be attached to the VM. They will be
+persistent even if the VM is stopped and restarted. 
+
+Faster storage (SSDs) can lead to speedier snapshot creation and recovery times,
+which can be important on bigger scales (billion-sized graphs). Still, it is not
+critical for the Memgraph operating performance. Magnetic storage can also be
+used  
+on smaller scales.
+
+The storage size depends on the amount of data you are going to store in your
+Memgraph instance and the number of active snapshots you want to keep alive.
+Memgraph will periodically create snapshots of the data and store them on disk.
+As the new snapshot is created, the oldest one is deleted. The number of
+snapshots you want to keep alive is configurable in the Memgraph configuration
+file.
+
+The recommendation is to double the storage of the data you will store in
+Memgraph. If you are going to store 100GB of data in Memgraph, you should have
+at least 200GB of disk storage. 
+
+
+## Installing Memgraph 
+
+Depending on the way you want to deploy Memgraph, native or via Docker, you need
+to follow the steps below: 
+
+<Tabs items={["Docker" , "Linux"]}>
+
+ <Tab> 
+ 
+     If you will use the Memgraph Docker image, you need to have Docker installed on your GCP VM.
+
+    After Docker is installed, you can pull the Memgraph image and run it:
+
+        ```bash
+        docker run -p 7687:7687 memgraph/memgraph:latest
+        ```
+
+    This will run Memgraph on the default port 7687. You should be able to connect
+        to it via [Memgraph Lab](../data-visualization) or via [client
+    libraries](../client-libraries) using the Bolt protocol. If you are experiencing issues
+     while connecting to Memgraph remotely, make sure that the port 7687 is open in [the
+    firewall rules on your GCP VM](#Setup-the-network). 
+
+    For more information on how to install Memgraph via Docker, you can follow the [getting started guide](../getting-started/install-memgraph/docker.mdx).
+
+ </Tab>
+ 
+ <Tab>
+
+ Depending on the Linux distribution you are using, you can follow the guide for
+ installing Memgraph on each distribution: 
+
+    - [Ubuntu](../getting-started/install-memgraph/ubuntu.mdx)
+    - [Fedora](../getting-started/install-memgraph/fedora.mdx)
+    - [Debian](../getting-started/install-memgraph/debian.mdx)
+    - [Centos](../getting-started/install-memgraph/centos.mdx)
+    - [Amazon Linux](../getting-started/install-memgraph/amazon-linux.mdx)
+    - [RedHat](../getting-started/install-memgraph/redhat.mdx)
+    - [Rocky](../getting-started/install-memgraph/rocky.mdx)
+
+ </Tab> 
+ 
+ </Tabs>
+
+## Manage Memgraph deployment
+
+After Memgraph is installed and running on your GCP VM, Memgraph management in
+GCP VM is identical to the general guidelines that are described in the form of
+a native Linux Memgraph or Docker container Memgraph. 
+
+Depending on what you are using, you can follow the [Linux](./linux.mdx) or
+[Docker](./docker.mdx) deployment guide for more information on how to manage
+the Memgraph deployment.
+
+
+## Where to next? 
+
+Memgraph also supports deployment in the Kubernetes environment. If you are
+interested in deploying Memgraph in Kubernetes, you can follow the [Memgraph
+Kubernetes installation
+guide](../getting-started/install-memgraph/kubernetes.mdx). 
+
+To discuss GCP deployment and similar topics, [join our Discord
+community](https://www.discord.gg/memgraph).
+
+Schedule a 30-min session with our engineers to discuss how Memgraph fits with
+your architecture. Our engineers are highly experienced in helping companies of
+all sizes to integrate and get the most out of Memgraph in their projects. Talk
+to us about data modeling, optimizing queries, defining infrastructure
+requirements or migrating from your existing graph database. No nonsense or
+sales pitch, just tech.
+
+![](/pages/getting-started/memgraph-office-hours.svg)
+
+<Cards>
+  <Card
+    title="Book a call"
+    href="https://memgraph.com/office-hours"
+  />
+</Cards>

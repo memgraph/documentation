@@ -9,45 +9,60 @@ import { Tabs, Tab } from 'nextra/components'
 
 # Auth system integrations (Enterprise)
 
-Memgraph supports authentication and (optional) authorization using a **custom
-built external auth module**. The two supported operation modes are:
-- [DEPRECATED] authentication only (username/password verification)
-- authentication and authorization (username/password verification and user to
-  role mapping)
+Memgraph supports authentication and authorization using external auth modules.
+It includes built-in support for basic (username and password) authentication
+via LDAP, as well as single sign-on over the SAML and OIDC protocols.
 
-When a user connects to Memgraph, the database will forward the user's supplied
-username and password to the external auth module and wait for it to deliver
-the authentication and authorization verdict back to the database. Based on
-the returned verdict, Memgraph will either close the connection to the
-connected user or will allow the connection and associate the connection 
-with the appropriate role.
-
-When Memgraph is switched to use the external auth module for authentication
-its internal users are automatically disabled. All users are authenticated only
-using the module, existing local users are ignored. In order to authorize query 
-execution, the auth module must return a role associated with the user. This 
-role must be registered locally on Memgraph.
+When a user is connecting, Memgraph will forward the user’s supplied
+credentials (username and password, or scheme and auth response) to the
+external auth module and retrieve its verdict. Based on this verdict, Memgraph
+will either allow the user to connect or, in case of failure, close the
+connection.
 
 As this is an Enterprise feature, once the Memgraph Enterprise license expires,
 newly created users will be granted all privileges. The existing users'
 privileges will still apply but you won't be able to manage them.
 
-## Configuration flags
+## Configuration
+
+### Roles
+
+User roles must be defined in Memgraph before using auth modules because these
+modules return the role associated with the user.
+
+### Flags
 
 Use the following configuration flags to configure the external auth module
 authentication and authorization mechanisms used by Memgraph.
 
  Flag                               | Description
 ------------------------------------|------------
- `--auth-module-executable`         | Path to the executable that should be used for user authentication/authorization.
- `--auth-module-create-missing-user`| DEPRECATED No authentication data is modified by the auth module
- `--auth-module-create-missing-role`| DEPRECATED No authentication data is modified by the auth module
- `--auth-module-manage-roles`       | DEPRECATED No authentication data is modified by the auth module
+ `--auth-module-mappings`           | Associates auth schemes to external modules. A mapping is structured as follows: `<scheme>:<absolute path to module>` and individual entries are separated with `;`. If the mapping contains whitespace, enclose the flag value with quotation marks.
+ `--auth-module-executable`         | [DEPRECATED] Path to the executable that should be used for user authentication/authorization. Replaced by `--auth-module-mappings=basic` from Memgraph 2.18.
  `--auth-module-timeout-ms`         | Specifies the maximum time that Memgraph will wait for a response from the external auth module.
  `--auth-password-permit-null`      | Can be set to false to disable null passwords.
  `--auth-password-strength-regex`   | The regular expression that should be used to match the entire entered password to ensure its strength.
 
-## Communication
+Auth schemes that have built-in Memgraph support have default module paths. To
+enable them, you only need to list the auth schemes themselves, e.g.
+`--auth-module-mappings=basic;saml-entra-id;oidc-okta`.
+
+The schemes with built-in support are:
+* `basic` (username + password authentication with external module)
+* `saml-entra-id`
+* `saml-okta`
+* `oidc-entra-id`
+* `oidc-okta`
+
+### Environment variables
+
+The built-in auth modules (used with the `saml-entra-id`, `saml-okta`,
+`oidc-entra-id`, and `oidc-okta` auth schemes) are further configured using
+environment variables. See the individual SSO module sections for more detail.
+
+## Auth module architecture
+
+### Communication
 
 Memgraph uses inter-process pipes to communicate with the module. The module
 will receive auth requests on file descriptor `1000` and has to return auth
@@ -61,21 +76,27 @@ The protocol used between Memgraph and the module is as follows:
    terminated by a `\n`.
  - Each auth response must be sent as a JSON encoded object in a single line
    that is terminated by a `\n`.
- - Auth requests are objects that contain the following keys:
-   - `username` - the user's username
-   - `password` - the user's password
- - Auth responses must be objects that contain the following keys:
-   - `authenticated` - a `bool` indicating whether the user is allowed to log
+ - Auth requests are objects that contain the following fields:
+   - `basic` auth scheme:
+    - `username` - the user's username
+    - `password` - the user's password
+   - other auth schemes:
+    - `scheme` - the string representing the auth method, e.g. `oidc-entra-id`
+    - `response` - the authentication response (e.g. SAML response or JWT)
+ - Auth responses must be objects that contain the following fields:
+    - `authenticated` - a `bool` indicating whether the user is allowed to log
      in to the database
-   - `role` - a `string` indicating which role the user should have (must be
+    - `role` - a `string` indicating which role the user should have (must be
      supplied)
+    - `errors` (optional) - if `authenticated` is false, Memgraph will put up a
+     warning with the error message returned by the module
 
 If the external auth module crashes during the processing of an auth request,
 Memgraph won't allow the user to log in to the database and will automatically
 restart the auth module for the next auth request. All crash logs will be seen
 in Memgraph's output (typically in `systemd` logs using `journalctl`).
 
-## Example
+### Module example
 
 This very simple example auth module is written in Python, but any programming
 language can be used.
@@ -101,7 +122,7 @@ if __name__ == "__main__":
 
 In the example you can see how the communication protocol works and you can see
 the function that is used for authentication (and authorization). When writing
-your own modules you have to reimplement the `authenticate` function according
+your own modules, you have to reimplement the `authenticate` function according
 to your needs.
 
 Because the authentication (and authorization) function has a simple signature,
@@ -116,16 +137,178 @@ assert module.authenticate("sponge", "bob") == {"authenticated": True, "role": "
 assert module.authenticate("CHUCK", "NORRIS") == {"authenticated": True, "role": "admin"}
 ```
 
-## LDAP
+## Single sign-on
+
+Single sign-on (SSO) lets you use an external ID to log in to Memgraph from
+[Lab](data-visualization/user-manual/single-sign-on).
+
+The built-in SSO modules let you customize which data from the identity service
+supplies the username and password. Username configuration is service- and
+protocol-specific, whereas role configuration works universally via remapping.
+
+The `MEMGRAPH_SSO_{provider}_{protocol}_ROLE_MAPPING` flags define how the
+identity service roles correspond to Memgraph’s.
+
+The role mapping is defined as a string where individual mappings are separated
+by a semicolon `;`. Each mapping is structured as follows:
+`{identity service role}:{Memgraph role}`.
+
+For example, the `entra.admin:memadmin; entra.user:memuser` mapping defines
+that the identity service roles `entra.admin` and `entra.user` respectively map
+to Memgraph’s `memadmin` and `memuser` roles.
+
+<Callout type="info">
+
+For correct operation, the Memgraph roles defined in the mapping need to be
+created in the Memgraph DB beforehand.
+
+</Callout>
+
+### SAML
+
+Memgraph has built-in support for single sign-on (SSO) over the SAML protocol
+with the Microsoft Entra ID and Okta identity providers.
+
+#### Configuration
+
+To enable SAML SSO using the built-in auth modules, set the
+`--auth-module-mappings` with the `saml-entra-id` or `saml-okta` schemes, e.g.
+`--auth-module-mappings=saml-entra-id;saml-okta` (or just one of them).
+
+The following environment variables are used to configure the built-in SAML
+module:
+
+##### Entra ID
+
+* `MEMGRAPH_SSO_ENTRA_ID_SAML_CALLBACK_URL`: the same as
+  `AUTH_SAML_ENTRA_ID_CALLBACK_URL` for
+  [Memgraph Lab](data-visualization/user-manual/single-sign-on#set-up-lab-integration)
+* `MEMGRAPH_SSO_ENTRA_ID_SAML_ASSERTION_AUDIENCE`: the
+  [application audience](https://learn.microsoft.com/en-us/entra/identity-platform/msal-client-application-configuration#application-audience);
+  for single-tenant apps, equal to `spn:{tenant id}`
+* `MEMGRAPH_SSO_ENTRA_ID_SAML_SP_CERT`: the path to the application’s
+  [SAML certificate](https://learn.microsoft.com/en-us/entra/identity-platform/howto-create-service-principal-portal#set-up-authentication)
+* `MEMGRAPH_SSO_ENTRA_ID_SAML_IDP_ID`: equal to `https://sts.windows.net/{tenant id}/`
+* `MEMGRAPH_SSO_ENTRA_ID_SAML_USE_NAME_ID`: set to true in order to supply the
+  username from the SAML NameID attribute
+* `MEMGRAPH_SSO_ENTRA_ID_SAML_USERNAME_ATTRIBUTE`: if not using NameID, set the
+  name of the SAML response attribute that contains the username
+* `MEMGRAPH_SSO_ENTRA_ID_SAML_ROLE_MAPPING`: the [role mapping](#single-sign-on)
+
+##### Okta
+
+* `MEMGRAPH_SSO_OKTA_SAML_CALLBACK_URL`: the same as
+  `AUTH_SAML_OKTA_CALLBACK_URL` for
+  [Memgraph Lab](data-visualization/user-manual/single-sign-on#set-up-lab-integration)
+* `MEMGRAPH_SSO_OKTA_SAML_ASSERTION_AUDIENCE`: the
+  [application audience](https://help.okta.com/oag/en-us/content/topics/access-gateway/add-app-saml-pass-thru-add-okta.htm)
+* `MEMGRAPH_SSO_OKTA_SAML_SP_CERT`: the path to the application’s
+  [SAML certificate](https://help.okta.com/oie/en-us/content/topics/apps/manage-signing-certificates.htm)
+* `MEMGRAPH_SSO_OKTA_SAML_IDP_ID`: the
+  [Okta issuer URL](https://support.okta.com/help/s/article/What-is-theIssuerlocated-under-the-OpenID-Connect-ID-Token-app-settings-used-for)
+* `MEMGRAPH_SSO_OKTA_SAML_WANT_ATTRIBUTE_STATEMENT`: set to true if the Okta
+  SAML response should contain attributes
+* `MEMGRAPH_SSO_OKTA_SAML_USE_NAME_ID`: set to true in order to supply the
+  username from the SAML NameID attribute
+* `MEMGRAPH_SSO_OKTA_SAML_USERNAME_ATTRIBUTE`: if not using NameID, set the
+  name of the SAML response attribute that contains the username
+* `MEMGRAPH_SSO_OKTA_SAML_ROLE_ATTRIBUTE`: set the name of the SAML response
+  attribute that contains the user role
+* `MEMGRAPH_SSO_OKTA_SAML_ROLE_MAPPING`: the [role mapping](#single-sign-on)
+
+### OpenID Connect (OIDC)
+
+Memgraph also supports authentication and authorization using OIDC (OIDC + OAuth 2.0) protocol with a
+built-in auth module that is packaged with Memgraph Enterprise.
+
+The module currently supports the following SSO providers:
+- Microsoft Entra ID
+- Okta using a custom authorization server
+
+To use the built-in auth module run Memgraph with the `--auth-module-mappings` [flag](/database-management/configuration#auth-module) with the name of each provider and protocol you want to use separated with a semicolon (;).
+For example, to use OIDC with both Entra ID and Okta run Memgraph with `--auth-module-mappings=oidc-okta;oidc-entra-id`.
+
+For SSO provider setup see [this](/data-visualization/user-manual/single-sign-on).
+
+#### Module requirements
+
+The module is written in Python 3 and requires the following libraries:
+ - `PyJWT` - used to validate tokens.
+ - `requests` - used to retrieve public keys for validating tokens.
+ - `cryptography` - used to parse tokens.
+
+The required packages are already installed in the docker image. If you are using a native build you to install the packages manually on your machine.
+The list of all required packages is located at `src/auth/reference_modules/requirements.txt`. You can install them by running `pip3 install -r /path/to/requirements.txt`.
+If you are running a native build make sure that you don't have the Python `JWT` library installed (you can check that with `pip freeze`) as `PyJWT` and `JWT` have some conflicts.
+
+#### Module configuration
+
+The module is located at `/usr/lib/memgraph/auth_module/oidc.py`.
+The module has no configuration file. You have to run Memgraph with some environmental variables.
+To use multiple SSO providers you have to set the environmental variables associated with that provider.
+
+##### MS Entra ID
+For using OIDC with Microsoft Entra ID you have to set the following environmental variables:
+
+```bash
+MEMGRAPH_SSO_ENTRA_ID_OIDC_TENANT_ID=
+MEMGRAPH_SSO_ENTRA_ID_OIDC_CLIENT_ID=
+MEMGRAPH_SSO_ENTRA_ID_OIDC_ROLE_MAPPING=
+MEMGRAPH_SSO_ENTRA_ID_OIDC_USERNAME=
+```
+
+You can find the tenant and client ID in the app overview in Azure. For a more detailed explanation see [this](/pages/data-visualization/user-manual/single-sign-on.mdx).
+
+Role mapping is described [here](#single-sign-on).
+
+The username variable tells the OIDC module what to use as the username. It has the format `token-type:field`. 
+Token type can be `id` or `access` depending on whether you want to use a field from the access or the ID token for the username. See the following to learn more about [access](https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens) and [id](https://learn.microsoft.com/en-us/entra/identity-platform/id-tokens) tokens.
+By default, it is set to `id:sub` as per the OIDC protocol it is recommended to use the `sub` field from the id token as it is non-mutable and globally unique for each application.
+For MS Entra ID one commonly used field is `id:preferred_username` which is usually the email of the user. For a list of all default claims look at [this](https://learn.microsoft.com/en-us/entra/identity-platform/access-token-claims-reference) and [this](https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference).
+You can also configure custom claims.
+
+##### Okta
+
+For using OIDC with Okta you have to set the following environmental variables:
+```bash
+MEMGRAPH_SSO_OKTA_OIDC_ISSUER=
+MEMGRAPH_SSO_OKTA_OIDC_CLIENT_ID=
+MEMGRAPH_SSO_OKTA_OIDC_AUTHORIZATION_SERVER=api://default
+MEMGRAPH_SSO_OKTA_OIDC_ROLE_MAPPING=
+MEMGRAPH_SSO_OKTA_OIDC_USERNAME=
+```
+
+Role mapping is described [here](#single-sign-on).
+
+Issuer is `https://{your-okta-domain}.okta.com/oauth2/default/`. You can find the client ID on the Admin panel -> Applications -> General. You can find the authorization server on the Admin panel -> Security -> API -> Authorization Servers -> Audience. By default, it is set to `api://default`.
+
+##### Username 
+The username variable tells the OIDC module what to use as the username. It has the format `token-type:field`. 
+Token type can be `id` or `access` depending on whether you want to use a field from the access or the ID token for the username. See the following to learn more about [access](https://www.okta.com/identity-101/access-token/) and [id](https://developer.okta.com/docs/guides/validate-id-tokens/main/#id-tokens-vs-access-tokens) tokens.
+By default, it is set to `id:sub` as per the OIDC protocol it is recommended to use the `sub` field from the id token as it is non-mutable and globally unique for each application.
+For Okta one commonly used field is `access:sub` which is usually the email of the user. You can also configure [custom claims](https://developer.okta.com/docs/guides/customize-tokens-returned-from-okta/main/).
+
+#### Database configuration
+
+OIDC is by default enabled using the Memgraph `oidc.py` module. To use a custom auth module use the `--auth-module-mappings` [flag](/database-management/configuration#auth-module) like the following:
+`--auth-module-mappings=oidc-entra-id:/path/to/oidc-entra-module;oidc-okta:/path/to/oidc-okta-module` depending on the SSO provider you want to use.
+
+## Basic (username + password) auth
+
+When Memgraph is set up to use the external auth module for basic authentication
+(`--auth-module-mappings=basic`), its internal users are automatically disabled.
+Users are authenticated only using the module and existing local users are
+ignored.
+
+### LDAP
 
 Memgraph also supports authentication and authorization using LDAP with a
 built-in auth module that is packaged with Memgraph Enterprise.
 
-The module supports two operation modes:
-- authentication only (LDAP bind request)
-- authentication and authorization (LDAP bind and search requests)
+The module supports the authentication and authorization (LDAP bind and search
+requests) operation mode.
 
-### Authentication mode
+#### Mode of operation
 
 When using LDAP authentication the module builds the DN used for authentication
 using the user specified username and the following formula:
@@ -139,21 +322,18 @@ In most common situations the `prefix` will be `cn=` and the `suffix` will be
 equal to `cn=alice,dc=example,dc=com` which will then be used for the LDAP bind
 operation with the user specified password.
 
-### Authorization mode
-
-Authentication is performed in the same way as described above. After the user is
-authenticated, the module searches through the role mapping root DN object that
-contains role mappings. A role mapping object that has the current bound user
-as its `member` attribute is used as the user's role. The role that is mapped
-to the user is the `CN` attribute of the role mapping object.  The attribute
-that contains the user DN in the mapping object, as well as the attribute that
-contains the role name, can be changed in the module configuration file to
-accommodate your LDAP schema.
+After the user is authenticated, the module searches through the role mapping
+root DN object that contains role mappings. A role mapping object that has the
+current bound user as its `member` attribute is used as the user's role.
+The role that is mapped to the user is the `CN` attribute of the role mapping
+object. The attribute that contains the user DN in the mapping object, as well
+as the attribute that contains the role name, can be changed in the module
+configuration file to accommodate your LDAP schema.
 
 When searching for a role in directories that have thousands of roles,
 the search process could take some time, causing long login times.
 
-### Module requirements
+#### Module requirements
 
 The module is written in Python 3 and it must be installed on the server. The
 Python version should be at least `3.5`.  Also, you must have the following
@@ -161,7 +341,7 @@ Python 3 libraries installed:
  - `ldap3` - used to communicate with the LDAP server.
  - `PyYAML` - used to parse the configuration file.
 
-### Module configuration
+#### Module configuration
 
 The module configuration file is located at
 `/etc/memgraph/auth_module/ldap.yaml`.  An initial example configuration file
@@ -169,16 +349,15 @@ that has all settings documented and explained is located at
 `/etc/memgraph/auth_module/ldap.example.yaml`. For quick setup, you can copy the example
 configuration file into the module configuration file.
 
-### Database configuration
+#### Database configuration
 
 In order to enable the use of the LDAP authentication and authorization module
-you have to set the flag `--auth-module-executable` to use
-`/usr/lib/memgraph/auth_module/ldap.py`.
+you have to set the following flag: `--auth-module-mappings=basic`.
 
 Other [flags](#configuration-flags) that change the behavior of the database to
 module integration can be specified according to your needs.
 
-### Example
+#### Example
 
 Organizations typically use an LDAP server to hold and manage the permissions.
 Because LDAP servers are already set-up in most large organizations, it is
@@ -296,7 +475,7 @@ disconnect from the database and proceed with the LDAP integration.
 To enable LDAP integration specify the following flag:
 
 ```plaintext
---auth-module-executable=/usr/lib/memgraph/auth_module/ldap.py
+--auth-module-mappings=basic
 ```
 
 Also, add the following LDAP module configuration to
