@@ -532,3 +532,149 @@ relationships:
 ```cypher
 MATCH (n:WrongLabel) REMOVE n:WrongLabel, n.property;
 ```
+
+## Periodic execution
+
+Write queries use additional memory overhead when modifying data, since the query needs 
+to be reverted to its original state if it fails. The memory overhead is linear to the number
+of updates performed during the queries. These updates during query execution are called Delta
+objects, which you can refer [to on this page](/fundamentals/storage-memory-usage#in-memory-transactional-storage-mode-default). The number of created Delta
+objects grows during the execution of write queries, and that takes additional memory space, which
+can be significant if the user is restricted with RAM memory. Although Delta objects are temporary, and
+are being deleted by the GC at the transaction end, that is sometimes not enough as there is already a
+huge amount of deltas present in the system during the end.
+In the following example:
+
+```cypher
+MATCH (n) DETACH DELETE n;
+```
+
+The amount of created Delta overhead is the total number of nodes and edges in the graph. Every
+delta is around 56 bytes in size. For a dataset of 40 million entities, it piles up to 2.25GB, which
+is not insignificant. In practice, users experience bad behaviour when the number of allocated Delta objects
+is in the magnitude of millions, since they don't expect the total amount of memory to be rising, but either
+stay the same when updates are done, or go down if deletes are performed.
+
+Another example of an unusual spike in memory is during the creation of graph entities in the graph.
+Consider the following query:
+
+```cypher
+LOAD CSV FROM "/temp.csv" WITH HEADER AS row
+CREATE (:Node {id: row.id, name: row.name});
+```
+
+This command will create multiple Delta for every CSV row ingested:
+- 1 delta object for creating a node in the graph
+- 1 delta object for adding a label `Node`
+- 2 delta objects for adding properties `id` and `name`
+
+The memory overhead could be even larger than the delete example below, since this query is generating four
+Delta objects per row.
+
+For these purposes, periodic execution can be used to batch the query into smaller chunks, which enables
+the Delta objects to be also deallocated during query execution. The final benefit for the user is having
+a lot smaller amount of Delta objects allocated at a point in time (in the magnitude of thousands, and not
+in millions).
+
+### USING PERIODIC COMMIT <num_rows>
+
+`USING PERIODIC COMMIT num_rows` is a pre-query directive which one can use to specify how often
+will the query be batched. After each batch, the system will attempt to clear the Delta objects
+to release additional memory to the system. This will succeed if this query is the only one executing in
+the system at the time. The `num_rows` literal is a non-negative integer which signifies after how 
+many rows will the Delta objects be cleaned from the system. 
+
+Consider again the following `LOAD CSV` example, but with a modification
+
+```cypher
+USING PERIODIC COMMIT 1000
+LOAD CSV FROM "/temp.csv" WITH HEADER AS row
+CREATE (:Node {id: row.id, name: row.name});
+```
+
+The query execution plan for this query looks like this:
+
+```
++---------------------+
+| QUERY PLAN          |
++---------------------+
+| " * EmptyResult"    |
+| " * PeriodicCommit" |
+| " * CreateNode"     |
+| " * LoadCsv {row}"  |
+| " * Once"           |
++---------------------+
+```
+
+The query plan is read from bottom to top. Notice the `PeriodicCommit` operator at the end of the query used to count the number of rows produced through
+that operator. After the counter reaches the limit (in this case 1000), the query will be batched and committed, 
+and the Delta objects will potentially be released, if the query is the only one executing at the time.
+
+Since in the above paragraph we have said that we create four Delta objects per row in the query, and with a Delta
+objects consisting of about 56 bytes, we can expect around 224KB of additional memory overhead during query execution,
+rather than 2.24GB if there are 10 million entries in the CSV.
+
+
+### CALL { subquery } IN TRANSACTIONS OF num_rows ROWS
+
+The `CALL { subquery } IN TRANSACTIONS OF num_rows ROWS` is an additional syntax for periodic execution. The
+`num_rows` literal is the non-negative integer which specifies after how many pulls of the input branch will the
+query be batched.
+Consider this example:
+
+```cypher
+explain
+LOAD CSV FROM "/temp.csv" WITH HEADER AS row
+CALL {
+  WITH row
+  CREATE (:Node {id: row.id, name: row.name})
+} IN TRANSACTIONS OF 1000 rows;
+```
+
+The syntax is similar to the `USING PERIODIC COMMIT 1000`, but it offers a more fine-grained batching of the query.
+The query execution plan for this query is:
+
+```
++-----------------------+
+| QUERY PLAN            |
++-----------------------+
+| " * EmptyResult"      |
+| " * Accumulate"       |
+| " * PeriodicSubquery" |
+| " |\\ "               |
+| " | * EmptyResult"    |
+| " | * CreateNode"     |
+| " | * Produce {row}"  |
+| " | * Once"           |
+| " * LoadCsv {row}"    |
+| " * Once"             |
++-----------------------+
+```
+
+The `PeriodicSubquery` is the operator that is used in this case for batching the query and counting the number of rows. 
+Input branch of the `PeriodicSubquery` is the `LoadCsv`. After the number of rows have been consumed from the input branch,
+the query is batched and the Delta objects are potentially released.
+
+### Batching deletes
+At this point, batching of deletes only works with `USING PERIODIC COMMIT` syntax. If provided a `DELETE` operation
+with the `CALL {} IN TRANSACTIONS`, user will get an exception during the query planning. Users are advised to perform
+periodic delete in a similar manner to the below queries:
+
+For deleting nodes:
+```cypher
+USING PERIODIC COMMIT x
+MATCH (n:Node)
+DETACH DELETE n
+```
+
+For deleting edges:
+```cypher
+USING PERIODIC COMMIT x 
+MATCH (n)-[r]->(m)
+DELETE r
+```
+
+### ACID guarantees for periodic execution.
+Since the Delta objects are necessary for reverting the query, it is possible to only guarantee the ACID compliance with respect to the batches committed
+inside the query. If the query experiences a failure during execution, the query is reverted up to the latest committed batch. Most common failure of queries
+is during [write-write conflicts](/help-center/errors/handling-conflicting-transaction-and-serialization-error), and it is recommended that no other write operations are performed during periodic execution. 
