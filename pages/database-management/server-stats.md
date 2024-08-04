@@ -144,7 +144,6 @@ SHOW METRICS INFO;
 ```
 
 
-
 ## Build information
 
 Running the following query will return certain information about the build type of
@@ -154,6 +153,23 @@ the current instance:
 SHOW BUILD INFO;
 ```
 
+```console copy=false
 | Field      | Description                                         |
 |------------|-----------------------------------------------------|
 | build_type | The optimization level the instance was built with. |
+```
+
+## Active users information
+
+Running the following query will return certain information about the users that are currently logged in Memgraph,
+and the session information
+
+```cypher
+SHOW ACTIVE USERS INFO;
+```
+
+```console copy=false
+| username | session uuid                           | login timestamp       |
+|----------|----------------------------------------|-----------------------|
+| test     | "550e8400-e29b-41d4-a716-446655440000" | "2024-08-03 18:53:00" |
+```
