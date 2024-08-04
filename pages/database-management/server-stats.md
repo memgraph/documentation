@@ -153,11 +153,9 @@ the current instance:
 SHOW BUILD INFO;
 ```
 
-```console copy=false
 | Field      | Description                                         |
 |------------|-----------------------------------------------------|
 | build_type | The optimization level the instance was built with. |
-```
 
 ## Active users information
 
