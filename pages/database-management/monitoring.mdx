@@ -7,50 +7,93 @@ import { Callout } from 'nextra/components'
 
 # Monitoring
 
-In production systems, monitoring of applications is crucial, and that includes
-databases as well. Memgraph allows monitoring the database via WebSocket server and a
-HTTP server. 
+Monitoring applications and databases is essential to track the load, resources, logs, transactions, latency, etc. 
 
-## Monitoring via WebSocket server
+Memgraph currently supports:
+1. **Log tracking via WebSocket server**: Log tracking is helpful for debugging purposes and monitoring the database operations. 
+2. **Monitoring via HTTP server (Enterprise Edition)**: In the Enterprise edition, besides log tracking, Memgraph allows tracking information about transactions, query latencies, snapshot recovery latencies, triggers, bolt messages, indexes, and more, using an HTTP server.
 
-Connect to Memgraph's monitoring server via WebSocket to forwarded logs to all
-the connected clients.
+
+## Log tracking via WebSocket server 
+
+Connect to Memgraph's logging server via WebSocket to forward logs to all the
+connected clients.
+
+
+### Log messages
+
+Each log that is written to the [log file](logs.mdx#logs) is forwarded to the
+connected clients in the following format:
+
+```json
+{
+  event: "log",
+  level: "trace"|"debug"|"info"|"warning"|"error"|"critical",
+  message: "<log-message>"
+}
+```
+
 
 ### Connection
 
-To connect to Memgraph's WebSocket server use the following URL:
+To connect to Memgraph's WebSocket server, use the following URL:
 
 ```plaintext
 ws://host:port
 ```
 
-The default host is `localhost` but it can be changed using the
-`--monitoring-host` configuration flag.  
-The default port is `7444` but it can be changed using the `--monitoring-port`
+The default host is `0.0.0.0`, but it can be changed using the
+`--monitoring-address=` configuration flag.  
+
+The default port is `7444`, but it can be changed using the `--monitoring-port`
 configuration flag.
 
+To connect to Memgraph's WebSocket server using the default configuration and
+Python client, you can use the following code snippet:
+
+```python
+import asyncio
+import websockets
+
+HOST = 'localhost'
+PORT = '7444'
+
+# The WebSocket URL
+ws_url = f'ws://{HOST}:{PORT}'
+
+async def read_logs():
+    async with websockets.connect(ws_url) as websocket:
+        print(f"Connected to Memgraph at {ws_url}")
+        try:
+            # Keep reading messages (logs) from the server
+            while True:
+ log_message = await websocket.recv()
+                print(log_message)
+        except websockets.exceptions.ConnectionClosed:
+            print("Connection to Memgraph closed.")
+
+asyncio.run(read_logs())
+```
+
+The code structure is similar in other languages, depending on the WebSocket
+library used.
+
 If you want to connect with a WebSocket Secure (WSS) connection. Set the
-following configuration flags to enable
-an SSL connection: `--bolt-cert-file` and `--bolt-key-file`.
+following configuration flags to enable an SSL connection: `--bolt-cert-file`
+and `--bolt-key-file`.
 
 These flags are also used to set up an SSL connection when connecting via Bolt
 protocol, hence the name. Refer to the configuration page to learn how to
 [update the
-configuration](/database-management/configuration#changing-configuration)
-and to see the list of all available [configuration
+configuration](/database-management/configuration#changing-configuration) and to
+see the list of all available [configuration
 flags](/database-management/configuration#list-of-configuration-flags).
 
-If both of the configuration flags are set, use the following URL to connect to
-the WebSocket server:
-
-```plaintext
-wss://host:port
-```
 
 ### Authentication
 
-If authentication is not used (there are no users present in Memgraph),
-no authentication message is expected, and no response will be returned. 
+If authentication is not used (there are no users present in Memgraph), no
+authentication message is expected, and no response will be returned. 
 
 If the authentication is used, Memgraph won't send a message to a certain
 connection until it's authenticated.
@@ -75,7 +118,7 @@ message:
 }
 ```
 
-If they are invalid or the first message is in the invalid format, the
+If they are invalid or the first message is in an invalid format, the
 connection is dropped. As a response, the following message is sent:
 
 ```json
@@ -85,48 +128,122 @@ connection is dropped. As a response, the following message is sent:
 }
 ```
 
+To use WebSocket to authenticate, send the JSON message to the WebSocket server:
+
+```python
+import asyncio
+import json
+import websockets
+
+HOST = "localhost"
+PORT = "7444"
+USERNAME = "memgraph"
+PASSWORD = "memgraph"
+
+ws_url = f"ws://{HOST}:{PORT}"
+
+
+async def authenticate_and_read_logs(websocket):
+    # Send authentication credentials
+ credentials = json.dumps({"username": USERNAME, "password": PASSWORD})
+    await websocket.send(credentials)
+
+    # Wait for authentication response
+ response = await websocket.recv()
+ response_data = json.loads(response)
+    if response_data.get("success"):
+        print("Authentication successful!")
+    else:
+        print(f"Authentication failed: {response_data.get('message')}")
+        return  # Stop if authentication fails
+
+    # After successful authentication, start reading logs
+    try:
+        while True:
+ log_message = await websocket.recv()
+            print(log_message)
+    except websockets.exceptions.ConnectionClosed:
+        print("Connection to Memgraph closed.")
+
+
+async def connect_and_authenticate():
+    async with websockets.connect(ws_url) as websocket:
+        print(f"Connected to Memgraph at {ws_url}")
+        await authenticate_and_read_logs(websocket)
+
+
+asyncio.run(connect_and_authenticate())
+```
+
+
+
 #### Authorization (Enterprise)
 
 Permission for connecting through WebSocket is controlled by the [`WEBSOCKET`
 privilege](/database-management/authentication-and-authorization/role-based-access-control#privileges).
 
-### Log messages
-
-Each log that is written to the log file is forwarded to the connected clients
-in the following format:
-
-```json
-{
-  event: "log",
-  level: "trace"|"debug"|"info"|"warning"|"error"|"critical",
-  message: "<log-message>"
-}
-```
-
-Read more about [logs](/database-management/logs) in Memgraph.
 
 ## Monitoring via HTTP server (Enterprise)
 
 In the Enterprise Edition, Memgraph allows tracking information about
-transactions, query latencies, snapshot recovery latencies, triggers, bolt
-messages, indexes, streams, and many more using an HTTP server.
+transactions, query latencies, snapshot recovery latencies, triggers, Bolt
+messages, indexes, streams, and many more metrics using an HTTP server.
 
-To start the metrics HTTP server, [enter a valid Memgraph Enterprise license
-key](/database-management/enabling-memgraph-enterprise) and you will be able 
-to retrieve data from the HTTP server. 
-
-### Configure the HTTP endpoint
+To retrieve data from the HTTP server, [enter a valid Memgraph
+Enterprise license key](/database-management/enabling-memgraph-enterprise).  
 
 The default address and port for the metrics server is `0.0.0.0:9091`, and can
 be configured using the `--metrics-address` and `--metrics-port` [configuration
 flags](/database-management/configuration#list-of-configuration-flags).
 
+To retrieve the metrics, send a GET request to the following URL:
+
+```plaintext
+http://host:port
+```
+
+Here is an example of how to retrieve metrics using Python:
+
+```python
+import requests
+import json
+
+
+def fetch_memgraph_metrics():
+ metrics_url = "http://0.0.0.0:9091/metrics"
+
+    try:
+ response = requests.get(metrics_url, timeout=5) 
+
+        if response.status_code == 200:
+            try:
+ metrics_data = json.loads(response.text)
+ pretty_metrics = json.dumps(metrics_data, indent=4)
+                print("Memgraph Metrics:\n", pretty_metrics)
+            except json.JSONDecodeError:
+                print("Memgraph Metrics:\n", response.text)
+        else:
+            print(f"Failed to fetch metrics. Status code: {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred: {e}")
+
+
+fetch_memgraph_metrics()
+```
+
+The example above will print the metric similar to the [example
+response](#example-response) below.
+
+
 ### System metrics
 
-All system metrics measuring different parts of the system can be divided into three different types:
+All system metrics measuring different parts of the system can be divided into
+three different types:
 - **Gauge** - a single value of some variable in the system (e.g. memory usage)
-- **Counter (uint64_t)** - a value that can be incremented or decremented (e.g. number of active transactions in the system)
-- **Histogram (uint64_t)** - distribution of measured values (e.g. certain percentile of query latency on N measured queries)
+- **Counter (uint64_t)** - a value that can be incremented or decremented (e.g.
+ number of active transactions in the system)
+- **Histogram (uint64_t)** - distribution of measured values (e.g. certain
+ percentile of query latency on N measured queries)
 
 #### General metrics
 
@@ -137,6 +254,7 @@ All system metrics measuring different parts of the system can be divided into t
  | average_degree | Gauge (double)   | Average number of relationships of a single node.           |
  | memory_usage   | Gauge (uint64_t) | Amount of RAM used reported by the OS (in bytes).           |
  | disk_usage     | Gauge (uint64_t) | Amount of disk space used by the [data directory](/fundamentals/data-durability) (in bytes). |
+ | peak_memory_usage | Gauge (uint64_t) | Peak RAM memory usage in the system during the whole run (in bytes).  |
 
 #### Index metrics
 
@@ -144,13 +262,22 @@ All system metrics measuring different parts of the system can be divided into t
  | -------------------------- | ------- | ------------------------------------------------------ |
  | ActiveLabelIndices         | Counter | Number of active label indexes in the system.          |
  | ActiveLabelPropertyIndices | Counter | Number of active label property indexes in the system. |
+ | ActiveTextIndices          | Counter | Number of active text indexes in the system.           |
+
+#### Memory metrics
+
+ | Name          | Type             | Description                                |
+ | ------------- | ---------------- | ------------------------------------------ |
+ | PeakMemoryRes | Gauge (uint64_t) | Peak RAM memory usage in the system during the whole run (in bytes).      |
 
 #### Operator metrics
 
-Before a Cypher query is executed, it is converted into an internal form suitable for execution, known as a query plan.
-A query plan is a tree-like data structure describing a pipeline of operations that will be performed on the database in order to
-yield the results for a given query. Every node within a plan is known as
-[a logical operator](/querying/query-plan#query-plan-operators) and describes a particular operation.
+Before a Cypher query is executed, it is converted into an internal form
+suitable for execution, known as a query plan. A query plan is a tree-like data
+structure describing a pipeline of operations that will be performed on the
+database in order to yield the results for a given query. Every node within a
+plan is known as [a logical operator](/querying/query-plan#query-plan-operators)
+and describes a particular operation.
 
  | Name                                | Type    | Description                                                    |
  | ----------------------------------- | ------- | -------------------------------------------------------------- |
@@ -195,6 +322,9 @@ yield the results for a given query. Every node within a plan is known as
  | IndexedJoin                         | Counter | Number of times IndexedJoin operator was used.                 |
  | PeriodicCommit                      | Counter | Number of times PeriodicCommit operator was used.              |
  | PeriodicSubquery                    | Counter | Number of times PeriodicSubquery operator was used.            |
+ | RollUpApplyOperator                 | Counter | Number of times RollUpApply operator was used.                 |
+ | ScanAllByEdgeIdOperator             | Counter | Number of times ScanAllByEdgeId operator was used.             |
+ | ScanAllByEdgeTypeOperator           | Counter | Number of times ScanAllByEdgeType operator was used.           |
 
 #### Query metrics
 
@@ -249,6 +379,10 @@ yield the results for a given query. Every node within a plan is known as
  | CommitedTransactions   | Counter | Number of committed transactions.                                               |
  | RollbackedTransactions | Counter | Number of rollbacked transactions.                                              |
  | FailedQuery            | Counter | Number of times executing a query failed (either during parse time or runtime). |
+ | FailedPrepare          | Counter | Number of times preparing a query failed.                                       |
+ | FailedPull             | Counter | Number of times pulling a query failed.                                         |
+ | SuccessfulQuery        | Counter | Number of successful queries.                                                   |
+
 
 #### Trigger metrics
 
@@ -259,8 +393,9 @@ yield the results for a given query. Every node within a plan is known as
 
 ### Example response
 
-If there aren't any modifying configurations, by sending a GET request to `localhost:9091` in the 
-local Memgraph build will result in a response similar to the one below.
+If there aren't any modifying configurations, by sending a GET request to
+`localhost:9091` in the local Memgraph build will result in a response similar
+to the one below.
 
 ```json
 {
@@ -272,7 +407,7 @@ local Memgraph build will result in a response similar to the one below.
         "peak_memory_usage": 46329856,
         "unreleased_delta_objects": 0,
         "vertex_count": 0
-    },
+ },
     "Index": {
         "ActiveLabelIndices": 0,
         "ActiveLabelPropertyIndices": 0,
@@ -327,17 +462,17 @@ local Memgraph build will result in a response similar to the one below.
         "SkipOperator": 0,
         "UnionOperator": 0,
         "UnwindOperator": 0
-    },
+ },
     "Query": {
         "QueryExecutionLatency_us_50p": 0,
         "QueryExecutionLatency_us_90p": 0,
         "QueryExecutionLatency_us_99p": 0
-    },
+ },
     "QueryType": {
         "ReadQuery": 0,
         "ReadWriteQuery": 0,
         "WriteQuery": 0
-    },
+ },
     "Session": {
         "ActiveBoltSessions": 1,
         "ActiveSSLSessions": 0,
@@ -357,7 +492,7 @@ local Memgraph build will result in a response similar to the one below.
     "Stream": {
         "MessagesConsumed": 0,
         "StreamsCreated": 0
-    },
+ },
     "Transaction": {
         "ActiveTransactions": 0,
         "CommitedTransactions": 1,
@@ -370,6 +505,13 @@ local Memgraph build will result in a response similar to the one below.
     "Trigger": {
         "TriggersCreated": 0,
         "TriggersExecuted": 0
-    }
+ }
 }
 ```
+
+## Prometeus exporter
+
+Memgraph also supports exporting metrics in the
+[Prometheus](https://prometheus.io/) format. For more information on how to set
+up the Prometheus exporter, refer to the [Prometheus
+exporter](https://github.com/memgraph/prometheus-exporter) repository.
