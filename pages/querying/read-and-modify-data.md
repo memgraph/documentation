@@ -540,9 +540,9 @@ to be reverted to its original state if it fails. The memory overhead is linear 
 of updates performed during the queries. These updates during query execution are called Delta
 objects, which you can refer [to on this page](/fundamentals/storage-memory-usage#in-memory-transactional-storage-mode-default). The number of created Delta
 objects grows during the execution of write queries, and that takes additional memory space, which
-can be significant if the user is restricted with RAM memory. Although Delta objects are temporary, and
-are being deleted by the GC at the transaction end, that is sometimes not enough as there is already a
-huge amount of deltas present in the system during the end.
+can be significant if the user is restricted with RAM memory. There is always a thread allocated in Memgraph
+for garbage collection (GC) that cleans temporary allocated space during query execution. Although Delta objects are temporary, and are being deleted by the GC at the transaction end, that is sometimes not 
+enough as there is already a huge amount of deltas present in the system during the end.
 In the following example:
 
 ```cypher
@@ -550,8 +550,8 @@ MATCH (n) DETACH DELETE n;
 ```
 
 The amount of created Delta overhead is the total number of nodes and edges in the graph. Every
-delta is around 56 bytes in size. For a dataset of 40 million entities, it piles up to 2.25GB, which
-is not insignificant. In practice, users experience bad behaviour when the number of allocated Delta objects
+delta is around 56 bytes in size. For a dataset of 40 million entities, it adds up to 2.25GB, which
+is significant. In practice, users experience bad behaviour when the number of allocated Delta objects
 is in the magnitude of millions, since they don't expect the total amount of memory to be rising, but either
 stay the same when updates are done, or go down if deletes are performed.
 
@@ -568,7 +568,7 @@ This command will create multiple Delta for every CSV row ingested:
 - 1 delta object for adding a label `Node`
 - 2 delta objects for adding properties `id` and `name`
 
-The memory overhead could be even larger than the delete example below, since this query is generating four
+The memory overhead could be even larger than the delete example above, since this query is generating four
 Delta objects per row.
 
 For these purposes, periodic execution can be used to batch the query into smaller chunks, which enables
@@ -581,8 +581,8 @@ in millions).
 `USING PERIODIC COMMIT num_rows` is a pre-query directive which one can use to specify how often
 will the query be batched. After each batch, the system will attempt to clear the Delta objects
 to release additional memory to the system. This will succeed if this query is the only one executing in
-the system at the time. The `num_rows` literal is a non-negative integer which signifies after how 
-many rows will the Delta objects be cleaned from the system. 
+the system at the time. The `num_rows` literal is a positive integer which indicates the batch size of processed rows 
+after which the Delta objects be cleaned from the system. 
 
 Consider again the following `LOAD CSV` example, but with a modification
 
@@ -618,8 +618,8 @@ rather than 2.24GB if there are 10 million entries in the CSV.
 ### CALL { subquery } IN TRANSACTIONS OF num_rows ROWS
 
 The `CALL { subquery } IN TRANSACTIONS OF num_rows ROWS` is an additional syntax for periodic execution. The
-`num_rows` literal is the non-negative integer which specifies after how many pulls of the input branch will the
-query be batched.
+`num_rows` literal is the positive integer which indicates the input branch batch size, after which the periodic execution
+will start releasing Delta objects.
 Consider this example:
 
 ```cypher
