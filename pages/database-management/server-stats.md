@@ -18,8 +18,8 @@ SHOW VERSION;
 
 ## Storage information
 
-Running the following query will return certain information about the storage of
-the current instance:
+Running this query will provide information about currently logged-in Memgraph 
+users and their session details.
 
 ```cypher
 SHOW STORAGE INFO;
