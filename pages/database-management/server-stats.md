@@ -157,3 +157,17 @@ SHOW BUILD INFO;
 | Field      | Description                                         |
 |------------|-----------------------------------------------------|
 | build_type | The optimization level the instance was built with. |
+
+## Active users information
+
+Running this query will provide information about currently logged-in Memgraph users and their session details.
+
+```cypher
+SHOW ACTIVE USERS INFO;
+```
+
+```console copy=false
+| username | session uuid                           | login timestamp       |
+|----------|----------------------------------------|-----------------------|
+| test     | "550e8400-e29b-41d4-a716-446655440000" | "2024-08-03 18:53:00" |
+```
