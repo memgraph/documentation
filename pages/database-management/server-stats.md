@@ -144,6 +144,7 @@ SHOW METRICS INFO;
 ```
 
 
+
 ## Build information
 
 Running the following query will return certain information about the build type of
