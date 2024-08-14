@@ -159,8 +159,7 @@ SHOW BUILD INFO;
 
 ## Active users information
 
-Running the following query will return certain information about the users that are currently logged in Memgraph,
-and the session information
+Running this query will provide information about currently logged-in Memgraph users and their session details.
 
 ```cypher
 SHOW ACTIVE USERS INFO;
