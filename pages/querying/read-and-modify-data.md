@@ -582,7 +582,7 @@ in millions).
 will the query be batched. After each batch, the system will attempt to clear the Delta objects
 to release additional memory to the system. This will succeed if this query is the only one executing in
 the system at the time. The `num_rows` literal is a positive integer which indicates the batch size of processed rows 
-after which the Delta objects be cleaned from the system. 
+after which the Delta objects will be cleaned from the system. 
 
 Consider again the following `LOAD CSV` example, but with a modification
 
