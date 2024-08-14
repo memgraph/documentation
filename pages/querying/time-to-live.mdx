@@ -1,0 +1,160 @@
+---
+title: Time to live
+description: Learn how to use time-to-live in Memgraph.
+---
+
+import { Callout } from 'nextra/components'
+
+<Callout type="info">
+
+This is an ENTERPRISE feature.
+
+</Callout>
+
+# Time to live (Enterprise)
+
+Time-to-live allows a user to tag vertices with an expiration time. Once a vertex has expired, the vertex and all associated edges will be deleted.
+
+<Callout type="info">
+
+Time-to-live is implemented as a background job that periodically gets executed. 
+This is a best effort solution; meaning that even if a vertex expires, that does not mean it gets deleted right away, but eventually, once the background job gets executed.
+
+</Callout>
+
+## Usage
+
+In order to use the feature the user needs to:
+1. [Configure TTL](#configuration)
+2. [Tag vertices with an expiration time](#tagging-vertices)
+
+Once that is done, a background job will periodically delete expired vertices and associated edges.
+
+### What is indexed
+
+Time-to-live uses a label `TTL` and property `ttl` to tag vertices. A label+property value index is used to speed up query execution.
+
+### Executed query
+
+Time-to-live is implemented as a background job that execute the following query:
+
+```cypher
+MATCH (n:TTL) WHERE n.ttl < $now WITH n LIMIT $batch DETACH DELETE n;
+```
+
+The query DETACH DELETEs all vertices that have expired at this point in time.
+The query is batched to limit the serialization errors and lost work that the error might cause.
+
+<Callout type="warning">
+
+Since time-to-live is implemented as a query like any other, the user might get serialization errors.
+This can happen if the user is modifying an expired vertex.
+The chance of serialization errors can be minimized by limiting the duration of write transactions.
+In addition, the user can disable TTL before starting an important write transaction and re-enable it after commit. See [configuration](#configuration).
+
+</Callout>
+
+## Configuration
+
+Time to live is by default disabled. To enable it, run:
+
+```cypher
+ENABLE TTL [EVERY "period"] [AT "time"];
+```
+
+ * period: a string literal defining the period of execution. Format: "NdNhNmNs"
+ * time: a specific time at which the first ttl job will get executed. Format: "24:59:59"
+
+**NOTE:** If period is omitted while time is not, the default period value will be 1 day
+
+<Callout type="info">
+
+Time is converted between local and system time using the database defined timezone.
+
+</Callout>
+
+Examples demonstrating TTL setup:
+
+```cypher
+# Run TTL every dat at 14:30 (will run immediately once if started after 14:30)
+ENABLE TTL AT "14:30:00";
+# Run TTL every 2nd day at 4:00 (will run immediately once if started after 4:00)
+ENABLE TTL EVERY "2d" AT "04:00:00";
+# Run TTL every 3 hours, starting from 19:45 today (will run immediately once if started after 19:45)
+ENABLE TTL EVERY "3h" AT "19:45:00";
+```
+
+The time-to-live job can be stopped and re-enabled via:
+
+```cypher
+STOP TTL;
+ENABLE TTL;
+```
+
+**NOTE:** Once stopped, ttl can be re-enabled with the old configuration or a new one.
+
+To stop and drop any index created, run:
+
+```cypher
+DISABLE TTL;
+```
+
+**NOTE:** Once disabled, ttl has to be re-enabled with a new configuration.
+
+## Tagging vertices
+
+In order to tag a vertex for expiration, the user needs to add the `TTL` label and `ttl` property.
+`ttl` property defines when the vertex has expired as a number of microseconds since POSIX epoch.
+POSIX epoch defined as starting from 1st of January 1970. Negative values define time before, while positive numbers the time since.
+The user can simply input the number or can use builtin Memgraph functions to define the expiration time.
+
+Arbitrary time since epoch:
+```cypher
+MATCH (n) SET n:TTL, n.ttl=123;
+```
+
+Set vertex to expire now:
+```cypher
+MATCH (n) SET n:TTL, n.ttl=timestamp();
+```
+
+Set vertex to expire 11 hours and 25 minutes from now:
+```cypher
+MATCH (n) SET n:TTL, n.ttl=timestamp() + timestamp(duration({hour:11, minute:25}));
+```
+
+Set vertex to expire on July 15th 2024 at 14:15:
+```cypher
+MATCH (n) SET n:TTL, n.ttl=timestamp(LocalDateTime("2024-07-15T14:15:00"));
+```
+
+## Authorization
+
+Time-to-live configuration queries require permissions:
+1. CONFIG
+2. INDEX
+3. MATCH
+4. DELETE
+
+## Compatibility
+
+List of features and their supported status:
+
+| Feature                     | Support   |
+|-----------------------------|-----------|
+| Multitenancy                | yes       |
+| Durability                  | yes       |
+| Storage modes               | yes (all) |
+| Replication                 | yes       |
+| Concurrent transactions     | yes       |
+| Fine-grained access control | no        |
+
+### Multitenancy
+
+Time-to-live configuration is tenant based; meaning that the feature will need to be enabled and configured manually for each tenant.
+
+### Replication 
+
+Time-to-live background job will be execute only on MAIN and the changes will be replicated.
+While the TTL effect is replicated, the configuration is not. TTL needs to be configured manually on every instance that can become MAIN.
+If an instance is a REPLICA, the TTL background job will be paused until the instance becomes MAIN.
