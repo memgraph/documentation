@@ -2975,6 +2975,11 @@ module.exports = withNextra({
         permanent: true
       },
       {
+        source: '/configuration/experimental-replication',
+        destination: '/configuration/replication/experimental-replication',
+        permanent: true
+      },
+      {
         source: '/querying/performance-optimization',
         destination: '/querying/best-practices',
         permanent: true
@@ -3038,6 +3043,11 @@ module.exports = withNextra({
       {
         source: '/configuration/replication',
         destination: '/clustering/replication',
+        permanent: true
+      },
+      {
+        source: '/configuration/replication/experimental-replication',
+        destination: '/clustering/replication/experimental-replication',
         permanent: true
       },
       {
