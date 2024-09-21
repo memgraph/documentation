@@ -2976,7 +2976,7 @@ module.exports = withNextra({
       },
       {
         source: '/configuration/experimental-replication',
-        destination: '/configuration/replication/experimental-replication',
+        destination: '/configuration/replication',
         permanent: true
       },
       {
@@ -3047,7 +3047,7 @@ module.exports = withNextra({
       },
       {
         source: '/configuration/replication/experimental-replication',
-        destination: '/clustering/replication/experimental-replication',
+        destination: '/clustering/replication',
         permanent: true
       },
       {
