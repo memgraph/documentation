@@ -2937,13 +2937,13 @@ module.exports = withNextra({
         source: '/memgraph/2.1.0/getting-started',
         destination: '/getting-started',
         permanent: true
-      },      
+      },
       //END 404 links redirects
       {
         source: '/configuration/exposing-system-metrics',
         destination: '/configuration/monitoring-server',
         permanent: true
-      },       
+      },
       {
         source: '/configuration/ldap-security',
         destination: '/configuration/auth-module',
@@ -2958,12 +2958,12 @@ module.exports = withNextra({
         source: '/advanced-algorithms/available-algorithms/schema',
         destination: '/querying/functions#schema',
         permanent: true
-      },       
+      },
       {
         source: '/advanced-algorithms/available-algorithms/convert',
         destination: '/querying/functions#conversion-functions',
         permanent: true
-      },      
+      },
       {
         source: '/querying/functions#schema',
         destination: '/querying/schema',
@@ -2975,8 +2975,8 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/configuration/experimental-replication',
-        destination: '/configuration/replication/experimental-replication',
+        source: '/configuration/system-replication',
+        destination: '/configuration/replication/system-replication',
         permanent: true
       },
       {
@@ -3046,8 +3046,8 @@ module.exports = withNextra({
         permanent: true
       },
       {
-        source: '/configuration/replication/experimental-replication',
-        destination: '/clustering/replication/experimental-replication',
+        source: '/configuration/replication/system-replication',
+        destination: '/clustering/replication/system-replication',
         permanent: true
       },
       {

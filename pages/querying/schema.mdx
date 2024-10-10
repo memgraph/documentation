@@ -7,11 +7,252 @@ import { Callout } from 'nextra/components'
 
 # Schema
 
-Some queries are designed to retrieve information about the structure of the data within the database, for example, node labels and properties associated, as well as relationship types and properties.
+Schema queries are designed to retrieve information about the structure of the data within the database, for example, node labels and properties associated, as well as relationship types and properties.
 
-## Schema-related queries
+## Run-time schema tracking
 
-To use schema-associated queries, start Memgraph with the `--storage-enable-schema-metadata` [configuration flag](/configuration/configuration-settings#storage) set to `True`. The flag facilitates the utilization of a specialized cache designed to store specific metadata related to the database.   
+To use run-time schema tracking, start Memgraph with the `--schema-info-enabled` [configuration flag](/configuration/configuration-settings#other) set to `True`. Once enabled, every change to the data layout will be tracked, and a derived schema will be automatically updated. Note that enabling this feature may result in a slight performance decrease; for more details, refer to [Performance Tips](#performance-tips).
+
+### What Schema Information is Tracked?
+
+The runtime schema tracks all uniquely defined nodes and edges:
+
+* __Nodes__ are defined by their labels.
+* __Edges__ are defined by their type, and the labels of their source and destination nodes.
+
+For each unique object (node or edge), the schema tracks its count and categorizes stored properties by key and type.
+
+### Querying the Schema
+
+You can query the current schema by running  `SHOW SCHEMA INFO`. This returns a JSON representation of the schema, divided into six sections:
+
+* `nodes` - contains a set of uniquely identified nodes
+* `edges` - contains a set of uniquely identified edges
+* `node_constraints` - list of all currently defined node constraints
+* `node_indexes` - list of all currently defined node indexes
+* `edge_indexes` - list of all currently defined edge indexes
+* `enums` - list of all currently defined enums and their values
+
+#### Exceptions
+
+Exceptions that might be thrown while executing `SHOW SCHEMA INFO` query:
+* `Show schema info is not supported for OnDisk.` - Please use InMemory Transactional or Analytical mode instead.
+* `Show schema info cannot be executed in multicommand transactions.` - Show schema must be executed in an implicit (or auto-commit) transaction.
+* `SchemaInfo disabled.` - the flag `--schema-info-enabled` must be set to `True` when starting Memgraph.
+
+#### JSON definition
+
+The schema JSON output is structured as follows:
+```
+{
+  "nodes": [{
+    "labels": [""], "count": 1,
+    "properties": [{
+      "key": "property_key_0", "count": 1, "filling_factor": 100.00,
+      "types": [{ "type": "", "count": 1}]
+    }]
+  }],
+  "edges": [{
+    "type": "", "start_node_labels": [""], "end_node_labels": [""], "count": 1,
+    "properties": [...]
+  }],
+  "node_indexes": [
+      { "labels": [""], "properties": [""], "count": 0,
+        "type": "label|label+property|label+property_point|label_text|label+property_text" }
+  ],
+  "edge_indexes": [
+      { "edge_type": "", "properties": [""],  "count": 0,
+        "type": "edge_type|edge_type+property|edge_type+property_point|label_text|label+property_text" }
+  ],
+  "node_constraints": [
+      { "type": "unique|existence|data_type", "labels": [""], "properties": [""], "data_type": "" }
+  ],
+  "enums": [
+      { "name": "", "values": [""] }
+  ]
+}
+```
+
+*Supported property types:*
+* String
+* Boolean
+* Integer
+* Float
+* List
+* Map
+* Duration
+* Date
+* LocalTime
+* LocalDateTime
+* ZonedDateTime
+* Enum::Name
+* Point2D
+* Point3D
+
+#### Empty graph example
+
+Executing `SHOW SCHEMA INFO` on an empty graph will return the following result:
+```
+{
+  "nodes": [],
+  "edges": [],
+  "node_indexes": [],
+  "edge_indexes": [],
+  "node_constraints": [],
+  "enums": []
+}
+```
+
+#### Node JSON examples
+
+The following query adds a node without any edges, labels or properties.
+```
+CREATE ();
+```
+The nodes section of this simple schema is:
+```
+"nodes":[
+  {
+    "labels":[],
+    "count":1,
+    "properties":[]
+  }
+]
+```
+
+Adding a node with a single label:
+```
+CREATE (:L);
+```
+updates the nodes section of the schema to:
+```
+"nodes":[
+  {
+    "labels":[],
+    "count":1,
+    "properties":[]
+  },
+  {
+    "labels":["L"],
+    "count":1,
+    "properties":[]
+  }
+]
+```
+
+Adding properties to the previously defined node:
+```
+MATCH (n:L) SET n.p = 1;
+```
+will result in the nodes section of the schema:
+```
+"nodes":[
+  {
+    "labels":[],
+    "count":1,
+    "properties":[]
+  },
+  {
+    "labels":["L"],
+    "count":1,
+    "properties":[
+      {
+        "key":"p",
+        "count":1,
+        "filling_factor":100.00,
+        "types":[
+          {"type":"Integer", "count":1}
+        ]
+      }
+    ]
+  }
+]
+```
+
+Now consider the following queries:
+```
+MATCH (n) DELETE n;
+CREATE (:A:B);
+CREATE (:A:B);
+CREATE (:A:B);
+CREATE (:A:B);
+CREATE (:A:B{prop1:1});
+CREATE (:A:B{prop1:"str"});
+CREATE (:A:B{prop1:true});
+CREATE (:A:B{prop1:"str2", prop2:10.0});
+CREATE (:A:B{prop1:false,  prop2:20.0});
+CREATE (:A:B{prop1:false,  prop2:30.0});
+```
+
+The resulting nodes section of the schema will look like this:
+```
+"nodes":[
+  {
+    "labels":["A", "B"],
+    "count":10,
+    "properties":[
+      {
+        "key":"prop1",
+        "count":6,
+        "filling_factor":60.00,
+        "types":[
+          {"type":"Boolean", "count":3},
+          {"type":"Integer", "count":1},
+          {"type":"String", "count":2}
+        ]
+      },
+      {
+        "key":"prop2",
+        "count":3,
+        "filling_factor":30.00,
+        "types":[{"type":"Float", "count":3}]
+      }
+    ]
+  }
+]
+```
+
+#### Edge JSON examples
+
+Consider the following queries:
+```
+CREATE (:C:D)-[:EDGE]->();
+CREATE (:C:D)-[:EDGE{edge_prop:1}]->();
+CREATE (:C:D)-[:EDGE{edge_prop:2}]->();
+```
+
+The resulting edges section of the schema would look like this:
+```
+"edges":[
+  {
+    "type":":EDGE",
+    "start_node_labels":["C", "D"],
+    "end_node_labels":[],
+    "count":3,
+    "properties":[
+      {
+        "key":"edge_prop",
+        "count":2,
+        "filling_factor":66.67,
+        "types":[{"type":"Integer", "count":2}]
+      }
+    ]
+  }
+]
+```
+
+### Performance Considerations
+
+Enabling `--schema-info-enabled` incurs a performance cost because additional work is required after each query is committed (in transactional mode) or when data is modified (in analytical mode).
+
+#### Performance Tips
+* __Label Changes on Nodes with Edges__: Changing labels on a node with existing edges can invalidate large parts of the schema. To avoid blocking queries during schema updates, define node labels before adding edges. Queries such as `CREATE (:A)-[:EDGE]->(:B)` are also fine.
+* __Edge Property Type Changes__: Modifying the type of an edge's property may require scanning large portions of the graph. To avoid this, define edges and their properties in the same transaction and keep property types stable.
+* __Recovery Using WALs__: Recovering edges with properties via Write-Ahead Log (WAL) files can cause a significant performance hit. To mitigate this, use snapshots instead. Starting from v2.21, this issue will be alleviated, though not completely resolved.
+
+## Schema metadata
+
+Schema metadata is a light weight run-time schema tracking. To enable schema metadata queries, start Memgraph with the `--storage-enable-schema-metadata` [configuration flag](/configuration/configuration-settings#storage) set to `True`. The flag facilitates the utilization of a specialized cache designed to store specific metadata related to the database.
 
 ### Information about node labels
 
@@ -166,7 +407,7 @@ a unique constraints will be created on `(Person.name, Person.surname)` and
 the existence constraint on `:Person(id)` property.
 
 ```cypher
-CALL schema.assert({Person: ["", "id"]}, {Person: [["name", "surname"], ["id"]]}, {}, true) 
+CALL schema.assert({Person: ["", "id"]}, {Person: [["name", "surname"], ["id"]]}, {}, true)
 YIELD action, key, keys, label, unique
 RETURN action, key, keys, label, unique;
 ```
@@ -191,7 +432,7 @@ Results:
 +-----------------------------------------------------------------------------+
 ```
 
-#### Delete all node indexes 
+#### Delete all node indexes
 
 The `assert()` procedure can be used to delete all indexes and constraints, **except for edge-type indices**. By
 providing empty `indices_map`, `unique_constraints` and `existence_constraints` as
@@ -199,7 +440,7 @@ well as `drop_existing` set to `true`, ensure that there are no indexes or
 constraints in the database. Here is the query for deleting all indexes and constraints:
 
 ```cypher
-CALL schema.assert({}, {}, {}, true) 
+CALL schema.assert({}, {}, {}, true)
 YIELD action, key, keys, label, unique
 RETURN action, key, keys, label, unique;
 ```
