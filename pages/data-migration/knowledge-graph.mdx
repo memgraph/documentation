@@ -1,0 +1,577 @@
+---
+title: Memgraph as a Knoowledge Graph
+description: Learn how to create a Knowledge Graph using Memgraph.
+---
+
+import { Callout } from 'nextra/components'
+
+# Knowledge Graph
+
+CONTEXT: Why knowledge graph is important? What is the difference between a
+regular graph and a knowledge graph in theory?
+
+From the bussines perspective, Knowledge graph represents the way of organizing
+and representing your data so it encodes the knowledge about your use-case, that
+can be explored and feched. Knowledge is encoded in the structure of the graph
+in form of **nodes** and **relationships**. 
+
+From the operational and developer perspective, Knowledge graphs represent just
+a specific way of organizing and storing your data into the graph. Following
+particular organization techniques, you can encode complex relationships between
+different entities in your domain.
+
+Knowledge graphs help developers to:
+
+- **Understand complex relationships**: They reveal hidden patterns and
+  connections between entities, which might not be obvious in traditional
+  relational systems.
+- **Enhance data discovery**: By representing data as a graph, you can traverse
+  relationships and uncover new insights or trends in the data.
+- **Power AI applications**: KGs are foundational in building recommendation
+  engines, semantic search systems, and various agent-driven applications,
+  offering more context-aware and intelligent results.
+- **Enable flexible querying**: Queries can be more dynamic and powerful,
+  allowing for complex graph traversals and relationship-based searches that are
+  harder to achieve in SQL databases.
+
+
+This guide will help you understand how to create a Knowledge graph using
+Memgraph.
+
+## Memgraph as a Knowledge Graph
+
+CONTEXT: Why Memgraph is a good choice for creating a Knowledge graph?
+
+Memgraph is a database based on the label property graph (LPG), this makes it a
+perfect choice for creating a knowledge graph, because LPG is one of the most
+flexibiles ways you can describe your domain knowledge into the graph format.
+
+This shares the same basis with the general concepts of how the graph should be
+modeled and how the data should be stored. For more details of possibiliites of
+LPG modeling, you can check the [Graph
+Modeling](/fundamentals/graph-modeling.md) section.
+
+On top of being LPG database, Memgraph is also a high-performance, in-memory
+graph database that can handle complex queries and large datasets. AS hops are
+critical part of relevance expansion in the graph, Memgraph is optimized for
+fast graph traversals and complex queries, which are essential for knowledge
+graph applications.
+
+## Knowledge Graph example 
+
+CONTEXT: What is the example we are going to use to demonstrate how to create a
+Knowledge graph?
+
+For the purpose of this guide, we will use a simple example of a knowledge graph
+that represents a project management scenario. Let's  assume you have a dataset
+that contains information about people, their skills, companies they work for,
+tasks they need to do etc. Initally, this is our graph model: 
+
+- Person
+    - First name
+    - Last name 
+    - Skills
+    - Domain
+    - Cost per day
+
+- (Person)-[WORKS_ON]->(Task)
+
+- Task 
+    - Name
+    - Description
+    - Skills 
+    - Man Days
+    - Domain
+
+- (Task)-[PART_OF]->(Project)
+
+- Project 
+    - Name 
+    - Start date
+    - End date
+    - Skills 
+    - Domain
+    - Budget
+
+- (Project)-[REQUESTED]->(Client)
+
+- Client 
+    - Name 
+    - Size
+
+In this project management scenario, we have people with different skills, cost,
+and domain preference working on tasks that require specific skills, and has
+duration in man-day format. Task are part of the project, and project is
+requested by the client.
+
+Depending on the quesitons you want to ask your Knowledge graph, it can help you
+with different aspects of the project management, such as: 
+
+- Efficient Resource Allocation
+- Project Planning and Tracking
+- Skill Gap Analysis
+- Improved Client Management
+- Cross-Domain Expertise and Flexibility
+- Cost Optimization
+
+The focuse of the Knowledge graph could be to answer questions like: 
+
+- Do people have sufficient skills to perform all the tasks they are working on?
+- Are we able to execute all the projects?
+- Do we have missing gaps in skills that we need to fill?
+- Does the budget covers the cost of people that have sufficient skills to work
+  on that project?
+- Do employees work on tasks that match their domain preferences?
+
+
+
+### Answering questions without the Knowledge Graph
+
+As the question starts to pop up, you can probably start thinking about how to
+write a Cypher query that will help you to answer those questions. 
+
+Take the question: "Do people have sufficient skills to perform all the tasks
+they are working on?"
+
+You could do a match query that will return all the people that work on some
+tasks, and check if they have the skill to perform the task: the query would
+look like this:
+
+```cypher 
+MATCH (p:Person)-[:WORKS_ON]->(t:Task)
+WHERE all(skill IN t.Skills WHERE skill IN p.Skills)
+RETURN *
+```
+
+The problem with this approach is that you need to know the structure of the
+graph, what skills represent on the person and task nodes, and how are they even
+correlated correlated. 
+
+In this case the knowledge is build into the query that you as a data analytis
+or developer need to write, it was not natively encoded into the graph. On top
+of that, the knowledge was pre-defined in terms of questions you want to answer,
+so it was easier to infere knowledge from the graph mode.
+
+
+Imagine that you have decided to enable software agent in form of LLM to answer
+the same question. 
+
+This means that LLM needs to know how to write a query that will match that
+specific graph ontology. The second option would be to encode the knowledge into
+the graph so that LLM only needs to get the anchor place in the graph, do a
+relevance expansion and the question it needs to answer. 
+
+
+### Encoding knowledge into the graph
+
+Staying with the previous example about the skills and tasks, it is all a about
+the skills and relationship with employeess and tasks. To improve a graph
+ontology, the skill needs to become a class, or node in this case. 
+
+So now you have a graph mode looks like this:
+
+- Person
+    - First name
+    - Last name 
+    - Skills
+    - Domain
+    - Cost per day
+
+- (Person)-[WORKS_ON]->(Task)
+- (Person)-[HAS]->(Skill)
+
+- Skill
+    - Name
+
+- (Task)-[NEEDS]->(Skill)
+
+- Task 
+    - Name
+    - Description
+    - Skills 
+    - Man Days
+    - Domain
+
+- (Task)-[PART_OF]->(Project)
+
+- Project 
+    - Name 
+    - Start date
+    - End date
+    - Skills 
+    - Domain
+    - Budget
+
+- (Project)-[REQUESTED]->(Client)
+
+- Client 
+    - Name 
+    - Size
+
+
+In this case, the relationship of the skills with tasks and projects is encoded
+into the graph. This way the knowledge about the skills is encoded into the
+graph model. 
+
+Notice how the replationships between`HAS` between `Person` and `Skill` and
+`NEEDS` between `Task` and `Skill` are now sematically describing what is the
+meaning of the relationship.
+
+Now you can write a query that will answer the question: "Do people have
+sufficient skills to perform all the tasks they are working on?". 
+
+This are people that have sufficent skills to perform all the task theyt are
+working on:
+
+```cypher
+MATCH (p:Person)-[h:HAS]->(s:Skill)<-[n:NEEDS]-(t:Task)
+WHERE exists((p)-[:WORKS_ON]->(t))
+RETURN *
+```
+
+These are the people that do not have sufficent skills to perform the task they
+are working on:
+
+```cypher
+MATCH (p:Person)-[w:WORKS_ON]->(t:Task)-[n:NEEDS]->(s:Skill)
+WHERE NOT exists((p)-[:HAS]->(s))
+RETURN *
+```
+
+You still need to write the query to fetch the data, but the query is using more
+graph structure, and has the semantics of the graph model. This can be used to
+infere the knowledge from the graph, and it can be used to answer the questions
+that are not even defined in the first place.
+
+### Making the Knowledge Graph 
+
+The process of encoding the knowlege, typically includes modeling the graph so
+it represents the domain knowledge in the most accurate way. There is no
+one-size-fits-all approach to modeling a knowledge graph, as it depends on the
+specific use case and the questions you want to answer.
+
+In general, you want to extract all the entities and relationships that are
+relevant to your domain and represent them as nodes and edges in the graph. This
+often means pulling out nodes properties and relationships from the data and
+creating a graph schema that captures the connections between them.
+
+Here is a complete graph model that will help you to answer more questions: 
+
+- Person
+    - First name
+    - Last name 
+    - Cost per day
+
+- (Person)-[WORKS_ON]->(Task)
+- (Person)-[HAS]->(Skill)
+- (Person)-[PREFERS]->(Domain)
+
+- Domain
+    - Name
+
+- Skill 
+    - Name
+
+- Task 
+    - Name
+    - Description
+    - Man days
+
+- (Task)-[NEEDS]->(Skill)
+- (Task)-[RELATED]->(Domain)
+- (Task)-[PART_OF]->(Project)
+
+- Project 
+    - Name 
+    - Start date 
+    - End date
+    - Budget
+
+- (Project)-[REQURIES]->(Skill)
+- (Project)-[RELATED]->(Domain)
+
+- Client 
+    - Name 
+    - Size
+
+- (Client)-[REQUESTED]->(Project)
+
+
+Notice that form the intial model that had the same data inside, but only 4
+nodes and 3 relationships, now we have 6 nodes and 9 relationships. This graph
+model is more complex and semantically rich, and it can be used to answer more
+complex questions about the project management scenario.
+
+
+Here is an example of another quesiton you could ask: "Are we able to execute
+all the projects, do we have missing gaps in skills?"
+
+Without writing the query, it should be clear form the graph model how to answer
+this question. 
+
+For the sake of the example, here is the query: 
+
+```cypher
+MATCH (p:Project)-[:REQUIRES]->(s:Skill)
+OPTIONAL MATCH (person:Person)-[:HAS]->(s)
+WITH p, s, collect(person) AS peopleWithSkill
+WHERE size(peopleWithSkill) = 0
+RETURN p.name AS UnfulfillableProject, collect(s.name) AS MissingSkills;
+```
+
+AS you can see, there is a project that requires a skill that no one in the
+company has. This is the result of the query:
+
+```
++----------------------+----------------------+
+| UnfulfillableProject | MissingSkills        |
++----------------------+----------------------+
+| "AI Integration"     | ["Machine Learning"] |
++----------------------+----------------------+
+```
+
+But again, we have written the query to fetch the data, but the knowledge about
+the skills and projects is encoded into the graph model. 
+
+
+### Knowledge graph and AI agents
+
+Now without writing the logic in the query, try to pass the data into LLM model
+for particular project, take some relevance and ask some questions around. 
+
+```cypher
+MATCH path=(p:Project {name:"Data Preprocessing"})-[r *..2]-(n) RETURN path;
+```
+
+The query above will find the project "Data Preprocessing" and fetch the data 2
+hops away from the project. There is no specific question that we are asking,
+but we are pulling the data that is relevant to the project.
+
+ Now, passing that information ot the LLM model, we can ask questions like:
+
+"Are we able to execute this project?" 
+
+Here is the response of the LLM model (short version):
+
+```plaintext
+
+## Project Overview
+
+- **Project Name:** Data Preprocessing
+    - **Budget:** $50,000
+    - **Start Date:** 2024-10-01
+    - **End Date:** 2024-11-30
+    - **Total Duration:** 60 days
+
+## Tasks and Requirements
+
+- **Task Name:** Data Cleaning
+    - **Description:** Clean and preprocess raw data
+    - **Estimated Man-Days:** 10 days
+    - **Required Skill:** Data Analysis (inferred from the relationship)
+
+## Personnel Involved
+
+- **Person:** Jane Smith
+  - **Cost per Day:** $600
+  - **Skills:** Data Analysis (inferred from the relationship)
+
+## Conclusion
+
+Based on the analysis, the project does have a sufficient level of skilled
+personnel to fulfill the requirements, as Jane Smith is qualified for the
+necessary task. Additionally, the budget is adequate to cover her costs, with a
+significant amount remaining for any additional needs or tasks that may arise.
+```
+
+Now if you take a closer look, the the LLM model has inferred some knowledge
+from the Knowledge graph. It took skills that people have and are requried for
+task, and pe In a sense, without even thinking about sepcifc things you want to
+ask, it is inffering what is there in the knowledge graph. 
+
+Passing in the same data and asking the question: "Do employees work on tasks and 
+projects that match their domain preferences?"
+
+Here is the response of the LLM model:
+
+```
+Yes, it appears that people are working on tasks they are interested in:
+
+Task Interest Alignment: Jane Smith, who is assigned to work on the "Data
+Cleaning" task, has a preference for the Data Science domain, which is related
+to this task. This alignment suggests she is working within an area of interest.
+
+Skills and Preferences: Jane possesses the Data Analysis skill, which is also a
+requirement for the project and a direct need for the "Data Cleaning" task. This
+indicates that her skills and interests align with her assigned
+responsibilities. 
+
+This structure suggests that team members like Jane are indeed
+working on tasks that match both their skills and their domain preferences,
+which can enhance motivation and project outcomes.
+```
+
+## Memgraph's office hours
+
+Schedule a 30 min session with one of our engineers to discuss how Memgraph fits
+with your architecture. Our engineers are highly experienced in helping
+companies of all sizes to integrate and get the most out of Memgraph in their
+projects. Talk to us about data modeling, optimizing queries, defining
+infrastructure requirements or migrating from your existing graph database. No
+nonsense or sales pitch, just tech.
+
+![](/pages/getting-started/memgraph-office-hours.svg)
+
+<Cards>
+  <Card
+    title="Book a call"
+    href="https://memgraph.com/office-hours"
+  />
+</Cards>
+
+
+
+## Dataset for seeding the example
+
+
+// Create Persons with their attributes
+CREATE (john:Person {firstName: "John", lastName: "Doe", costPerDay: 500});
+CREATE (jane:Person {firstName: "Jane", lastName: "Smith", costPerDay: 600});
+
+// Create Skills
+CREATE (python:Skill {name: "Python"});
+CREATE (dataAnalysis:Skill {name: "Data Analysis"});
+
+// Create Domains
+CREATE (softwareDevelopment:Domain {name: "Software Development"});
+CREATE (dataScience:Domain {name: "Data Science"});
+
+// Create Tasks with their attributes
+CREATE (task1:Task {name: "Develop Backend", description: "Develop backend API using Python", manDays: 15});
+CREATE (task2:Task {name: "Data Cleaning", description: "Clean and preprocess raw data", manDays: 10});
+
+// Create Projects with their attributes
+CREATE (project1:Project {name: "Backend API Development", startDate: date("2024-11-01"), endDate: date("2024-12-15"), budget: 100000});
+CREATE (project2:Project {name: "Data Preprocessing", startDate: date("2024-10-01"), endDate: date("2024-11-30"), budget: 50000});
+
+// Create Clients with their attributes
+CREATE (client1:Client {name: "TechCorp", size: "Large"});
+CREATE (client2:Client {name: "DataSolutions", size: "Medium"});
+
+// Create Relationships
+
+// Match John and Python, then create HAS relationship
+MATCH (john:Person {firstName: "John", lastName: "Doe"}), (python:Skill {name: "Python"})
+CREATE (john)-[:HAS]->(python);
+
+// Match John and Software Development, then create PREFERS relationship
+MATCH (john:Person {firstName: "John", lastName: "Doe"}), (softwareDevelopment:Domain {name: "Software Development"})
+CREATE (john)-[:PREFERS]->(softwareDevelopment);
+
+// Match Jane and Data Analysis, then create HAS relationship
+MATCH (jane:Person {firstName: "Jane", lastName: "Smith"}), (dataAnalysis:Skill {name: "Data Analysis"})
+CREATE (jane)-[:HAS]->(dataAnalysis);
+
+// Match Jane and Data Science, then create PREFERS relationship
+MATCH (jane:Person {firstName: "Jane", lastName: "Smith"}), (dataScience:Domain {name: "Data Science"})
+CREATE (jane)-[:PREFERS]->(dataScience);
+
+// Match John and Task1, then create WORKS_ON relationship
+MATCH (john:Person {firstName: "John", lastName: "Doe"}), (task1:Task {name: "Develop Backend"})
+CREATE (john)-[:WORKS_ON]->(task1);
+
+// Match Jane and Task2, then create WORKS_ON relationship
+MATCH (jane:Person {firstName: "Jane", lastName: "Smith"}), (task2:Task {name: "Data Cleaning"})
+CREATE (jane)-[:WORKS_ON]->(task2);
+
+// Match Task1 and Python, then create NEEDS relationship
+MATCH (task1:Task {name: "Develop Backend"}), (python:Skill {name: "Python"})
+CREATE (task1)-[:NEEDS]->(python);
+
+// Match Task1 and Software Development, then create RELATED relationship
+MATCH (task1:Task {name: "Develop Backend"}), (softwareDevelopment:Domain {name: "Software Development"})
+CREATE (task1)-[:RELATED]->(softwareDevelopment);
+
+// Match Task1 and Project1, then create PART_OF relationship
+MATCH (task1:Task {name: "Develop Backend"}), (project1:Project {name: "Backend API Development"})
+CREATE (task1)-[:PART_OF]->(project1);
+
+// Match Task2 and Data Analysis, then create NEEDS relationship
+MATCH (task2:Task {name: "Data Cleaning"}), (dataAnalysis:Skill {name: "Data Analysis"})
+CREATE (task2)-[:NEEDS]->(dataAnalysis);
+
+// Match Task2 and Data Science, then create RELATED relationship
+MATCH (task2:Task {name: "Data Cleaning"}), (dataScience:Domain {name: "Data Science"})
+CREATE (task2)-[:RELATED]->(dataScience);
+
+// Match Task2 and Project2, then create PART_OF relationship
+MATCH (task2:Task {name: "Data Cleaning"}), (project2:Project {name: "Data Preprocessing"})
+CREATE (task2)-[:PART_OF]->(project2);
+
+// Match Project1 and Python, then create REQUIRES relationship
+MATCH (project1:Project {name: "Backend API Development"}), (python:Skill {name: "Python"})
+CREATE (project1)-[:REQUIRES]->(python);
+
+// Match Project1 and Software Development, then create RELATED relationship
+MATCH (project1:Project {name: "Backend API Development"}), (softwareDevelopment:Domain {name: "Software Development"})
+CREATE (project1)-[:RELATED]->(softwareDevelopment);
+
+// Match Project2 and Data Analysis, then create REQUIRES relationship
+MATCH (project2:Project {name: "Data Preprocessing"}), (dataAnalysis:Skill {name: "Data Analysis"})
+CREATE (project2)-[:REQUIRES]->(dataAnalysis);
+
+// Match Project2 and Data Science, then create RELATED relationship
+MATCH (project2:Project {name: "Data Preprocessing"}), (dataScience:Domain {name: "Data Science"})
+CREATE (project2)-[:RELATED]->(dataScience);
+
+// Match Client1 and Project1, then create REQUESTED relationship
+MATCH (client1:Client {name: "TechCorp"}), (project1:Project {name: "Backend API Development"})
+CREATE (client1)-[:REQUESTED]->(project1);
+
+// Match Client2 and Project2, then create REQUESTED relationship
+MATCH (client2:Client {name: "DataSolutions"}), (project2:Project {name: "Data Preprocessing"})
+CREATE (client2)-[:REQUESTED]->(project2);
+
+// Create a new Person without the appropriate skill and outside their domain of interest
+CREATE (mike:Person {firstName: "Mike", lastName: "Johnson", costPerDay: 400});
+
+// Create a new Skill that Mike does NOT have
+CREATE (java:Skill {name: "Java"});
+
+// Create a new Domain that Mike PREFERS
+CREATE (marketing:Domain {name: "Marketing"});
+
+// Create a new Task that requires a skill Mike does NOT have and is outside his domain of interest
+CREATE (task3:Task {name: "Develop Mobile App", description: "Develop a mobile app using Java", manDays: 20});
+
+// Create a new Domain for the Task that is different from Mike's preferred domain
+CREATE (mobileDevelopment:Domain {name: "Mobile Development"});
+
+// Create a new Project for this Task
+CREATE (project3:Project {name: "Mobile App Development", startDate: date("2024-12-01"), endDate: date("2025-01-30"), budget: 80000});
+
+// Create Relationships
+
+// Match Mike and Marketing, then create PREFERS relationship
+MATCH (mike:Person {firstName: "Mike", lastName: "Johnson"}), (marketing:Domain {name: "Marketing"})
+CREATE (mike)-[:PREFERS]->(marketing);
+
+// Match Task3 and Java (the skill Mike does NOT have), then create NEEDS relationship
+MATCH (task3:Task {name: "Develop Mobile App"}), (java:Skill {name: "Java"})
+CREATE (task3)-[:NEEDS]->(java);
+
+// Match Task3 and Mobile Development (a domain that Mike is NOT interested in), then create RELATED relationship
+MATCH (task3:Task {name: "Develop Mobile App"}), (mobileDevelopment:Domain {name: "Mobile Development"})
+CREATE (task3)-[:RELATED]->(mobileDevelopment);
+
+// Match Mike and Task3 (even though Mike lacks the appropriate skill and is working outside his preferred domain), then create WORKS_ON relationship
+MATCH (mike:Person {firstName: "Mike", lastName: "Johnson"}), (task3:Task {name: "Develop Mobile App"})
+CREATE (mike)-[:WORKS_ON]->(task3);
+
+// Match Task3 and Project3, then create PART_OF relationship
+MATCH (task3:Task {name: "Develop Mobile App"}), (project3:Project {name: "Mobile App Development"})
+CREATE (task3)-[:PART_OF]->(project3);
+
+
+
+
