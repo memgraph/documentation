@@ -29,11 +29,11 @@ export default function CodeSnippet(props: { code: string; page: string, os: str
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(props.code);
-    global.window.analytics.track("Docker Run Copied", {
-      source: "docs",
-      page: props.page,
-      os: props.os
-    });
+    // global.window.analytics.track("Docker Run Copied", {
+    //   source: "docs",
+    //   page: props.page,
+    //   os: props.os
+    // });
     document.getElementById(idCopy)?.classList.add("hidden");
     document.getElementById(idCopied)?.classList.remove("hidden");
     setTimeout(() => {
