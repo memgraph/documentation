@@ -18,22 +18,19 @@ New releases might affect your existing code, queries or configuration.
 Ensure they're updated to align with the latest updates and changes.
 
 
-### Upgrading to Memgraph v2.21.0
+### Upgrading to Memgraph v2.21.0 breaking change
 
 <Callout type="error">
 
-{<h3> Breaking change </h3>}
-
-Coordinator log store needs to be started from scratch.
+Coordinator log store directory in `--data-directory` needs to be started from scratch since new type of Raft log is added and some old ones
+were deleted. Memgraph could crash without deleting old logs from log store directory.
 
 </Callout>
 
 
-### Upgrading to Memgraph v2.20.0
+### Upgrading to Memgraph v2.20.0 breaking change
 
 <Callout type="error">
-
-{<h3> Breaking change </h3>}
 
 In this version of Memgraph, we have removed the experimental classification for
 system replication.  Going forward, the `--experimental-enabled` configuration
@@ -178,20 +175,35 @@ Memgraph (v2.11.1 and lower).
 
 </Callout>
 
-## Memgraph v2.21.0 - Nov 6, 2024
+## Memgraph v2.21.0 and MAGE v1.21.0 - Nov 6, 2024
 
 {<h3> New features and improvements </h3>}
 
-- TBD
+- Added planner optimization to replace `point.distance` filter with an index
+  scan. Queries like `WITH point({x:0,y:0}) AS a MATCH (m:L1) WHERE
+  point.distance(m.prop, a) < 1 RETURN m;`, should run faster if there is the
+  point index created. If you are dealing with spatial data, there is a high
+  chance you need such indexes to run your queries faster.
+  [#2362](https://github.com/memgraph/memgraph/pull/2362)
+- Significantly improved schema retrieval performance in both TRANSACTIONAL and
+  ANALYTICAL setups. Feel free to use `--schema-info-enabled=True` to get
+  schema instantly by running the `SHOW SCHEMA INFO;` query.
+  [#2383](https://github.com/memgraph/memgraph/pull/2383)
+- Added query metadata when logging incoming query. It's possible now, e.g., to
+  filter certain database log entries or search for specific items in the log.
+  [#2404](https://github.com/memgraph/memgraph/pull/2404)
 
 {<h3> Bug fixes </h3>}
 
-- Closing instance would crash due to streams and/or TTL running in the background. [#2361](https://github.com/memgraph/memgraph/pull/2361)
-- Add backticks around property keys in any \{key: value\} patterns. [#2371](https://github.com/memgraph/memgraph/pull/2371)
-- When replica gets promoted to main upon failover, it will use correctly incremented durable timestamp. [#2366](https://github.com/memgraph/memgraph/pull/2366)
-- schema.assert will throw an exception if ran inside the explicit transaction. [#2352](https://github.com/memgraph/memgraph/pull/2352)
-- All data instances now use one type of callbacks to simplify state reconciliation. [#2421](https://github.com/memgraph/memgraph/pull/2421)
-- Incomplete storage reset when MAIN force reset or applied snapshots to REPLICA. [#2422](https://github.com/memgraph/memgraph/pull/2422)
+- Closing instance would crash due to streams and/or TTL running in the
+  background. [#2361](https://github.com/memgraph/memgraph/pull/2361)
+- Add backticks around property keys in any \{key: value\} patterns.
+  [#2371](https://github.com/memgraph/memgraph/pull/2371)
+- When replica gets promoted to main upon failover, it will use correctly
+  incremented durable timestamp.
+  [#2366](https://github.com/memgraph/memgraph/pull/2366)
+- `schema.assert` will throw an exception if ran inside the explicit transaction.
+  [#2352](https://github.com/memgraph/memgraph/pull/2352)
 - Modifying `mgp::memory` is prohibited; use `MemoryDispatcherGuard` instead.
   Under C++ query modules, if module tries to set `mgp::memory` there will be a
   compilation error. Usually at the beginning of the `mgp_init_module`
@@ -199,10 +211,49 @@ Memgraph (v2.11.1 and lower).
   guard(memory);`. Usage examples could be found under [MAGE C++
   modules](https://github.com/memgraph/mage/tree/main/cpp).
   [#2424](https://github.com/memgraph/memgraph/pull/2424)
-- Coordinators now use one type of Raft logs to remove the need for distributed locks. Coordinator log store needs to be started from scratch, hence this change is a breaking one. [#2430](https://github.com/memgraph/memgraph/pull/2430)
-- Compilation error if module tries to set mgp::memory [#2424]()
+- Fixed incorrect usage of cv and stop token in scheduler and thread pool.
+  [#2452](https://github.com/memgraph/memgraph/pull/2452)
+- Fixed unreleased deltas counter. There was a missing case of tracking when
+  deltas were actually released. This gave the appearance in `SHOW STORAGE
+  INFO;` that we were not actually releasing them.
+  [#2446](https://github.com/memgraph/memgraph/pull/2446)
+- Fixed edge index not removing deleted edges. Edge index would not remove
+  deleted (obsolete) entries, while the GC would delete the edge object. Edge
+  type index was impacted, while the property type would detect that the object
+  was deleted due to it checking the property.
+  [#2439](https://github.com/memgraph/memgraph/pull/2439)
+- Removed usage of RTLD_DEEPBIND under query modules. Query modules, especially
+  the Python ones should work better in terms of correct module loading.
+  [#2347](https://github.com/memgraph/memgraph/pull/2347)
 
+{<h3> High-availability automatic failover improvements </h3>}
 
+There are a lot of efforts to make Memgraph HA rock-solid in the production
+environments. Under this release, the feature is still experimental, but
+getting very close to put the stable flag next to it. The full list if issues
+and improvements can be found
+[HERE](https://github.com/memgraph/memgraph/issues?q=label%3Ajepsen) (GH issues
+labeled with `jepsen`).
+
+- All data instances now use one type of callbacks to simplify state
+  reconciliation. [#2421](https://github.com/memgraph/memgraph/pull/2421)
+- Incomplete storage reset when MAIN force reset or applied snapshots to
+  REPLICA. [#2422](https://github.com/memgraph/memgraph/pull/2422)
+- Coordinators now use one type of Raft logs to remove the need for distributed
+  locks. Coordinator log store needs to be started from scratch, hence this
+  change is a breaking one.
+  [#2430](https://github.com/memgraph/memgraph/pull/2430)
+
+### MAGE v1.21.0
+
+{<h3> New features and improvements </h3>}
+
+- Added Leiden algorithm. The implementation is "static" in a sense that it's
+  operating on the whole graph. Leiden is a modern community detection
+  algorithm that in Memgraph's implementation provides hierarchies of
+  communities. A big use-cases for Leiden community detection is
+  [GraphRAG](/ai-ecosystem/graph-rag).
+  [#508](https://github.com/memgraph/mage/pull/508)
 
 ## Memgraph v2.20.1 - Oct 10, 2024
 
