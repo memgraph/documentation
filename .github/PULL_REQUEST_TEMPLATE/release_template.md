@@ -1,3 +1,8 @@
+---
+name: Release Pull Request Template
+about: Use this template for release-related pull requests
+---
+
 ### Release note
 
 Please briefly explain the changes you made which will be added to the changelog.
