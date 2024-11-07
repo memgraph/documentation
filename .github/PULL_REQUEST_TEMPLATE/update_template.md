@@ -1,3 +1,8 @@
+---
+name: Update Pull Request Template
+about: Use this template for updates or improvements
+---
+
 ### Description
 
 Please briefly explain the changes you made.
