@@ -51,6 +51,7 @@ the supported types. Below is a table of supported data types.
 | [`LocalDateTime`](#localdatetime) | Date and time without the timezone.                                                                 |
 | [`ZonedDateTime`](#zoneddatetime) | Date and time in a specific timezone.                                                               |
 | [`Enum`](#enum)                   | An enumeration value.                                                                               |
+| [`Point`](#point)                 | 2D or 3D point either in Cartesian or WGS format.                                                   |
 
 <Callout type="info">
 
@@ -771,6 +772,176 @@ recognize this conversion will convert the map back into a readable enum format
 and display it nicely in the client-side results.
 
 </Callout>
+
+## Point
+
+Point is a spatial data type consisting of 2D or 3D locations in the Cartesian
+or WGS84 system. The coordinates of the location are stored as a 64-bit `Float`
+numbers. Each point type has an associated coordinate reference system (CRS)
+and a spatial reference identifier (SRID). Points can be created with the
+[point function](#point-functions). For fast queries, points can
+leverage the [point index](/fundamentals/indexes#point-index).
+
+### Coordinate Reference Systems (CRS)
+
+Memgraph supports four Coordinate Reference Systems (CRS) for spatial data, divided into two categories:
+
+1. **WGS-84 CRS** models points on the Earth’s surface using longitude and latitude based on the [WGS84](https://epsg.io/4326) system.
+2. **Cartesian CRS** models points in Euclidean space using standard Cartesian coordinates.
+
+<Callout type="info">
+
+**CRS compatibility** - Points in different CRSs cannot be directly compared or converted into one another, even if they share the same type (e.g., both WGS-84 or Cartesian). For example, a 2D point cannot be used in a 3D range query.
+
+</Callout>
+
+#### WGS-84
+
+A WGS-84 point consists of longitude, latitude, and height if the point is 3D.
+Longitude and latitude are specified in degrees while height is specified in meters.
+Longitude has to be in the [-180, 180] range, latitude in the [-90, 90] range and height can be any `Float` value. 
+
+|    Point type      |  SRID        |    CRS     |
+| :---------------:  | :----------: | :--------: |
+|     WGS-84 2D      | 4326         |  wgs-84    |
+|     WGS-84 3D      | 4979         |  wgs-84-3d |
+
+
+#### Cartesian
+
+Two types of Cartesian Coordinate Reference Systems (CRS) are supported, defining points in a flat, Euclidean space.
+Cartesian points can be either 2D or 3D. They consist of coordinates x, y, and z if the point is 3D. All coordinates can be any `Float` value.
+
+|    Point type      |  SRID        |    CRS        |
+| :---------------:  | :----------: | :-----------: |
+|     Cartesian 2D   | 7203         |  cartesian    |
+|     Cartesian 3D   | 9157         |  cartesian-3d |
+
+
+### Point functions
+
+#### point(parameters: map) -> [null, point]
+
+Point function is used to create the point data type. It takes in a map of parameters to create the type. The point type can be specified using its `crs` or `srid`.
+If any of the parameters evaluates to null the point function returns null. Here are the examples of how to create a point, depending on the`crs` and `srd`:
+
+- **WGS-84 2D** - A 2D geographic point in the **WGS-84 CRS** can be created in one of two ways:
+
+  - **longitude** and **latitude** (if these are specified, and the `crs` is not, then the `crs` is assumed to be `WGS-84`).
+  ```cypher
+  RETURN point({longitude:-73.93, latitude:40.73}) AS new_york;
+  ```
+  - **x** and **y** (in this case, the `crs` or `srid` must be specified or will be assumed to be Cartesian).
+  ```cypher
+  RETURN point({x:-73.93, y:40.73, crs:'wgs-84'}) AS new_york;
+  ```
+
+- **WGS 84 3D** - A 3D geographic point in the **WGS-84 CRS** can be created in one of two ways:
+
+  - **longitude**, **latitude**, and either **height** or **z** (if these are specified, and the `crs` is not, then the `crs` is assumed to be `WGS-84-3D`).
+  ```cypher
+  RETURN point({longitude:-73.93, latitude:40.73, height:10}) AS new_york;
+  RETURN point({longitude:-73.93, latitude:40.73, z:10}) AS new_york;
+  ```
+  - **x**, **y**, and **z** (in this case, the `crs` or `srid` must be specified, or will be assumed to be Cartesian-3D).
+  ```cypher
+  RETURN point({x:-73.93, y:40.73, z:10, srid:4979}) AS new_york;
+  ```
+
+- **Cartesian 2D** - A 2D Cartesian point can be created by providing:
+
+  - **x** and **y** (when provided, the point is assumed to reside in a two-dimensional Cartesian system).
+  ```cypher
+  RETURN point({x:0, y:1}) AS cartesian_point;
+  ```
+
+- **Cartesian 3D** - A 3D Cartesian point can be created by providing:
+
+  - **x**, **y**, and **z** (when provided, the point is assumed to reside in a three-dimensional Cartesian system).
+  ```cypher
+  RETURN point({x:0, y:1, z:2}) AS cartesian_point;
+  ```
+
+#### point.distance(x: [null, point], y: [null, point]) -> [null, float]
+
+The point.distance function returns the distance between two points. Distance can only be calculated between points of the same type.
+For WGS-84 points the distance is calculated in meters and is calculated using the [Haversine](https://en.wikipedia.org/wiki/Haversine_formula) formula.
+For WGS-84 3D points the Haversine formula is applied to longitude and latitude and then the Pythagorean theorem is applied between the calculated distance and the height.
+For Cartesian points, the Pythagorean theorem is applied.
+If any of the arguments of the point.distance function evaluates to null or the point types don't match then the function returns null.
+
+{<h5> Usage: </h5>}
+
+Example of the distance between two points in WGS-84 2D:
+```cypher
+  WITH point({longitude: 51.51, latitude: -0.12}) as london,
+       point({longitude: 45.82, latitude: 15.97}) as zagreb
+  RETURN point.distance(london, zagreb) AS result;
+```
+```plaintext
++----------------------------+
+| result                     |
++----------------------------+
+| 1.88621e+06                |
++----------------------------+
+```
+
+Example of the distance between two points in 2D Cartesian space:
+```cypher
+  RETURN point.distance(
+              point({x: 0, y: 0}),
+              point({x: 3, y: 3})
+            ) AS result;
+```
+```plaintext
++----------------------------+
+| result                     |
++----------------------------+
+| 4.24264                    |
++----------------------------+
+```
+
+
+#### point.withinbbox(point: [null, point], lower_left_corner: [null, point], upper_right_corner: [null, point]) -> [null, boolean]
+
+The point.withinbbox function returns whether the given `point` is inside or on the edge of the bounding box created by `lower_left_corner` and `upper_right_corner`.
+For WGS-84 points this also works if crossing the the international date line.
+
+{<h5> Usage: </h5>}
+
+Example of a point inside the bounding box:
+```cypher
+  RETURN point.withinbbox(
+              point({x:   0, y:  0}),
+              point({x:  -1, y: -1}),
+              point({x:   1, y:  1})
+            ) AS result;
+```
+```plaintext
++----------------------------+
+| result                     |
++----------------------------+
+| true                       |
++----------------------------+
+```
+
+Example of crossing the international date line:
+```cypher
+  RETURN point.withinbbox(
+              point({longitude:  180, latitude: 58.0}),
+              point({longitude:  179, latitude: 57.0}),
+              point({longitude: -179, latitude: 59.0})
+            ) AS result;
+```
+```plaintext
++----------------------------+
+| result                     |
++----------------------------+
+| true                       |
++----------------------------+
+```
+
+If any of the arguments of the point.withinbbox function evaluates to null or the point types don't match then the function returns null.
 
 ## Procedures API
 
