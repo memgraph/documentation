@@ -6,30 +6,36 @@ description: Get your hands on the API documentation for mgp.hpp, covering decla
 # Query modules C++ API
 
 This is the API documentation for `mgp.hpp`, which contains declarations of all
-functions in the C++ API for implementing query module procedures and functions.
-The source file can be found in the Memgraph installation directory, under
-`/usr/include/memgraph`.
+functions in the C++ API for implementing query module procedures and
+functions. The source file can be found in the Memgraph installation directory,
+under `/usr/include/memgraph`.
 
-To see how to implement query modules in C++, take a look at
-[the example we provided](/custom-query-modules/python/python-example).
+To see how to implement query modules in C++, take a look at [the example we
+provided](/custom-query-modules/python/python-example).
 
 If you install any C++ modules after running Memgraph, you’ll need to [load
-them into Memgraph](/custom-query-modules/manage-query-modules#loading-query-modules) or restart
-Memgraph in order to use them.
+them into
+Memgraph](/custom-query-modules/manage-query-modules#loading-query-modules) or
+restart Memgraph in order to use them.
 
 ## Functions and procedures
 
-With this API it’s possible to extend your Cypher queries with **functions** and **procedures** with
-`AddProcedure` and `AddFunction`.
+With this API it’s possible to extend your Cypher queries with **functions**
+and **procedures** with `AddProcedure` and `AddFunction`.
 
-The API needs memory access to add procedures and functions, this can be done with either `mgp::MemoryDispatcherGuard guard(memory);` or `mgp::memory = memory;`, where the use of the former is advised since `mgp::memory = memory;` is not thread-safe and will be deprecated in the future.
+The API needs memory access to add procedures and functions, this can be done
+with `mgp::MemoryDispatcherGuard guard(memory);`. Old code used `mgp::memory =
+memory;`, but this is not thread-safe and has been deprecated. v2.18.1 onwards
+you should modify your C++ modules and recompile. v2.21 onwards setting
+`mgp::memory` will cause a compilation error, so the guard has to be used.
 
-Functions are simple operations that return a single value and can be used in any expression or predicate.
+Functions are simple operations that return a single value and can be used in
+any expression or predicate.
 
-Procedures are more complex computations that may modify the graph, and their output is available to
-later processing steps in your query. A procedure may only be run from `CALL` clauses.
-The output is a stream of **records** that is made accessible with a `YIELD` clause.
-
+Procedures are more complex computations that may modify the graph, and their
+output is available to later processing steps in your query. A procedure may
+only be run from `CALL` clauses. The output is a stream of **records** that is
+made accessible with a `YIELD` clause.
 
 ### AddProcedure
 

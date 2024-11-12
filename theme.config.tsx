@@ -15,11 +15,10 @@ const config: DocsThemeConfig = {
         alt="Memgraph Logo"
         style={{ height: "24px", verticalAlign: "middle", marginRight: "1em" }}
       />
-      <span>Memgraph Documentation</span>
     </>
   ),
   darkMode: true,
-  logoLink: "/",
+  logoLink: "https://memgraph.com",
   project: {
     link: "https://github.com/memgraph/memgraph",
   },
