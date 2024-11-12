@@ -79,7 +79,7 @@ unique conceptual identity.
 As you can see in the example further down, in the university model, a typical
 node could represent a university student, a professor, or a course.
 
-![graph-modeling-nodes](/pages/fundamentals/graph-modeling/graph-modeling-nodes.png)
+![graph-modeling-nodes](/pages/data-modeling/graph-modeling/graph-modeling-nodes.png)
 
 ### Relationships
 
@@ -95,7 +95,7 @@ In our example, the relationship between a `Student` node and a `Subject` node
 could be of the type `ATTENDS`, while the relationship between `Professor` and
 `Subject` is represented by the type `TEACHES`.
 
-![graph-modeling-relationships](/pages/fundamentals/graph-modeling/graph-modeling-relationships.png)
+![graph-modeling-relationships](/pages/data-modeling/graph-modeling/graph-modeling-relationships.png)
 
 ### Labels
 
@@ -111,7 +111,7 @@ The node in the example below demonstrates how an entity can belong to multiple
 groups. A university student can at the same time have the label `Person` and
 `Student`.
 
-![graph-modeling-labels](/pages/fundamentals/graph-modeling/graph-modeling-labels.png)
+![graph-modeling-labels](/pages/data-modeling/graph-modeling/graph-modeling-labels.png)
 
 ### Properties
 
@@ -132,7 +132,7 @@ properties would be:
 - What year of studies does the student attend? - `yearOfStudies`
 - How to get in touch with the professor? - `email`
 
-![graph-modeling-properties](/pages/fundamentals/graph-modeling/graph-modeling-properties.png)
+![graph-modeling-properties](/pages/data-modeling/graph-modeling/graph-modeling-properties.png)
 
 ## Designing a graph database schema
 
@@ -168,7 +168,7 @@ steps: nodes, labels, relationships, and properties.
 
 This will allow you to go from your whiteboard sketch to a full graph model.
 
-![graph-modeling-whiteboard](/pages/fundamentals/graph-modeling/graph-modeling-whiteboard.png)
+![graph-modeling-whiteboard](/pages/data-modeling/graph-modeling/graph-modeling-whiteboard.png)
 
 To make things not so abstract, imagine the following scenario that you will
 model:
@@ -193,7 +193,7 @@ pieces and then connect them:
 Now it is easy to piece them together to form a graph. Your final result should
 look something like the image below.
 
-![graph-modeling-describe-domain](/pages/fundamentals/graph-modeling/graph-modeling-describe-domain.png)
+![graph-modeling-describe-domain](/pages/data-modeling/graph-modeling/graph-modeling-describe-domain.png)
 
 ### Defining the requirements
 
@@ -245,7 +245,7 @@ relationships between the nodes: `(:Client)-[:OFFERS]->(:Course)`,
 Now that we know all of the relationships and node types, you can draw our graph
 schema.
 
-![graph-modeling-mapping-relationships](/pages/fundamentals/graph-modeling/graph-modeling-mapping-relationships.png)
+![graph-modeling-mapping-relationships](/pages/data-modeling/graph-modeling/graph-modeling-mapping-relationships.png)
 
 ### Properties to store
 
@@ -261,13 +261,13 @@ teacher’s name and surname, an e-mail address, the date of birth, and language
 they can teach. In a similar manner, we decide the data for the rest of the
 nodes. In the end, our graph should look like this:
 
-![graph-modeling-storing-properties](/pages/fundamentals/graph-modeling/graph-modeling-storing-properties.png)
+![graph-modeling-storing-properties](/pages/data-modeling/graph-modeling/graph-modeling-storing-properties.png)
 
 #### Memory considerations
 
 Another important thing worth considering when modeling a graph is property data types. Memgraph is an in-memory graph database, so you want to be considerate of memory resources. Using an integer is always the best option when choosing a data type for your properties. A boolean is another data type that doesn’t take up a lot of resources. 
 
-Storing a local datetime takes up fewer resources if saved as a temporal type instead of a string. For example, if we have a “2021-10-05T14:15:00” value and store it as a string, it takes up 3B and at least 1B for each character. Since the string containing the date and time has 19 characters, the local datetime stored as a string will take at least 22B of memory. On the other hand, if that datetime is stored as temporal data in Memgraph, it will take 15B of memory. For more information on how much memory each data type occupies, check the [example with detailed calculation](/fundamentals/storage-memory-usage#the-calculation-in-detail).
+Storing a local datetime takes up fewer resources if saved as a temporal type instead of a string. For example, if we have a “2021-10-05T14:15:00” value and store it as a string, it takes up 3B and at least 1B for each character. Since the string containing the date and time has 19 characters, the local datetime stored as a string will take at least 22B of memory. On the other hand, if that datetime is stored as temporal data in Memgraph, it will take 15B of memory. For more information on how much memory each data type occupies, check the [example with detailed calculation](/data-modeling/storage-memory-usage#the-calculation-in-detail).
 
 Known repeated values are better represented as enums than strings. They take fewer resources and are faster to compare.
 
@@ -302,7 +302,7 @@ want to avoid.
 So, if you model your categories as separate nodes and create a relationship
 between them, your model would get more complicated.
 
-![graph-modeling-property-or-relationship](/pages/fundamentals/graph-modeling/graph-modeling-property-or-relationship.png)
+![graph-modeling-property-or-relationship](/pages/data-modeling/graph-modeling/graph-modeling-property-or-relationship.png)
 
 It is also important to note that additional memory will be used if a new node, and consequently a relationship, is created for every property. Additionally, if that property is shared between many nodes in the dataset, then the node it translates might become a supernode, and those kinds of nodes are not good to have in a graph database. 
 
@@ -317,7 +317,7 @@ basic types:
   have no orientation. These relationships are sometimes referred to as
   **bi-directional**. The relationships in a directed graph have an orientation.
 
-![graph-modeling-undirected-graph](/pages/fundamentals/graph-modeling/graph-modeling-un-directed-graph.png)
+![graph-modeling-undirected-graph](/pages/data-modeling/graph-modeling/graph-modeling-un-directed-graph.png)
 
 - **Weighted And Unweighted Graphs** - A weighted graph has attributes on its
   relationships that specify their weight. For example, a relationship that
@@ -325,7 +325,7 @@ basic types:
   a relationship attribute. Unweighted graphs have no such relationship
   attributes and are sometimes referred to as **Non-Weighted Graphs**.
 
-![graph-modeling-weighted-graph](/pages/fundamentals/graph-modeling/graph-modeling-weighted-graph.png)
+![graph-modeling-weighted-graph](/pages/data-modeling/graph-modeling/graph-modeling-weighted-graph.png)
 
 On top of direction and graph can also have a **self-loop** (also called a loop
 or a buckle). Self-loop is a relationship that connects a node to itself, while
