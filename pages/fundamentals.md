@@ -25,11 +25,6 @@ Data types form the foundational architecture upon which the information within
 a database is built and processed. These categories categorize and define the
 nature of values stored within variables, fields, and structures. 
 
-## [Graph modeling](/fundamentals/graph-modeling)
-
-Graph modeling helps you map out nodes and relationships and how everything is
-linked together to enable analysis of complex interconnected information.
-
 ## [Indexes](/fundamentals/indexes)
 
 Indexes optimize database performance by organizing and providing quick access

@@ -1,0 +1,366 @@
+---
+title: Knowledge graph
+description: Learn how to create a knowledge graph using Memgraph.
+---
+
+import { Callout } from 'nextra/components'
+import { Card, Cards } from 'nextra/components'
+
+# Knowledge graph
+
+From the business perspective, a knowledge graph (KG) represents how you organize and
+represent your data. Hence, it encodes the knowledge about your use case, which
+can be explored and fetched. Knowledge is encoded in the graph's structure in
+the form of **nodes**, **relationships** and **properties**. 
+
+From the operational and developer perspective, knowledge graphs represent just
+a specific way of organizing and storing your data in the graph. Following
+particular organization techniques, you can encode complex relationships between
+different entities in your domain.
+
+Knowledge graphs help developers to:
+
+- **Understand complex relationships**: They reveal hidden patterns and
+ connections between entities, which might not be obvious in traditional
+ relational systems.
+- **Enhance data discovery**: By representing data as a graph, traverse
+ relationships and uncover new insights or trends in the data.
+- [**Power AI applications**](/ai-ecosystem/graph-rag): Knowledge graphs are foundational in
+ building recommendation engines, semantic search systems, and various
+ agent-driven applications,
+ offering more context-aware and intelligent results.
+- **Enable flexible querying**: Queries can be more dynamic and powerful,
+ allowing for complex graph traversals and relationship-based searches that are
+ harder to achieve with relational databases.
+
+
+This guide will help you understand how to model the knowledge and [store it
+into Memgraph](##storing-a-knowledge-graph-in-memgraph). With the
+[example](#example) below, get a sense of basic concepts when modeling a
+knowledge graph.
+
+
+## Storing a knowledge graph in Memgraph
+
+Memgraph is based on the [label property graph (LPG) model](/data-modeling),
+which is one of the most flexible ways to describe the domain knowledge in the
+graph format.
+
+Resource Description Framework (RDF) is another popular way to model knowledge,
+but it is more rigid and less flexible than LPG.
+
+On top of being an LPG database, Memgraph is also a high-performance, in-memory
+graph database that can handle complex queries and large datasets. It is
+optimized for fast and [deep path
+traversals](/advanced-algorithms/deep-path-traversal), which are essential for
+knowledge graph applications.
+
+To import your structured data into Memgraph, please follow the [import best
+practices](/data-migration/best-practices).
+
+In case you're dealing with unstructured data, you'll need a pipeline to
+structure it to the appropriate model before importing it into Memgraph. You can
+also try out one of our [integrations](/ai-ecosystem/graph-rag#integrations)
+with the popular AI frameworks for knowledge graph creation.
+
+## Example
+
+### Dataset
+
+In this example we'll go through a process of knowledge graph creation for a
+project management scenario. Let's assume you have a dataset that contains
+information about people, their skills, the companies they work for, tasks they
+need to do, tasks that are part of the project, and the project that the client
+requests. So, you have a network of nodes and relationships representing data
+without the added layer of meaning or semantics. Initially, this would be the
+graph model: 
+
+![Initial Graph
+Model](/pages/data-modeling/knowledge-graph/project-management-graph.png)
+
+The goal is to create a **knowledge graph** - a structured representation of
+information where entities and their relationships are organized to enable
+reasoning and insights.
+
+The main purpose of having a knowledge graph is to get valuable insights from
+data to improve the area of work you're dealing with. Another reason to have a
+knowledge graph is to enable LLM to answer the question for you
+([GraphRAG](/ai-ecosystem/graph-rag)). In this project management example,
+knowledge graph can help you with:
+
+- Efficient Resource Allocation
+- Project Planning and Tracking
+- Skill Gap Analysis
+- Improved Client Management
+- Cross-domain expertise and Flexibility
+- Cost Optimization
+
+The focus of the knowledge graph could be to answer questions like: 
+
+- Do people have sufficient skills to perform all the tasks they are working on?
+- Are we able to execute all the projects?
+- Do we have missing gaps in skills that we need to fill?
+- Does the budget cover the cost of people with sufficient skills to work on
+ that project?
+- Do employees work on tasks that match their domain preferences?
+
+
+### Answering questions without the knowledge graph
+
+Let's start with the initial model we have in the database. 
+
+To answer the question "Do people have sufficient skills to perform all the
+tasks they are working on?", first come up with a Cypher query. For example,
+match all the people that work on tasks, and then filter them by the necessary
+skill to perform the task.
+
+Here is how the query would look like:
+
+```cypher 
+MATCH (p:Person)-[:WORKS_ON]->(t:Task)
+WHERE all(skill IN t.Skills WHERE skill IN p.Skills)
+RETURN *;
+```
+
+It doesn't look like a complicated query, but a prerequisite to come up with it
+is to know the structure of the graph - what skills represent the person and
+task nodes, and how they are even correlated. The **knowledge is built into the
+query instead of being encoded in the graph**.  
+
+Cypher queries can become complex for complicated questions, but if you have a
+set of predefined questions and someone who knows Cypher, it's possible to deal
+with the graph as is by infering the knowledge from the graph model and writing
+specific queries to answer specific questions.
+
+Now imagine you decided to enable a software agent in the form of LLM to answer
+the same question. 
+
+One approach is to enrich the prompt for the LLM with the schema of the graph.
+This approach has its limitations due to the size of LLM's context window. 
+
+Another, and probably better approach would be to encode the knowledge into the
+graph. LLM then needs to find a part of the graph to focus on, based on the
+question asked, and expand the relevant context further by traversing across the
+graph. In GraphRAG terms, you need to find a **pivot point** and perform
+**relevance expansion**. Pivot point is usually found by performing **vector
+search** - finding nodes in the graph most similar to the question which is
+embedded in the same space. The relevance expansion is the process of expanding
+the data around the pivot point and providing additional relevant context to the
+LLM model to ground it. For example, the relevance expansion can be done by
+performing two hops in the graph from the pivot point. Learn more about these
+terms in our [GraphRAG docs](/ai-ecosystem/graph-rag).
+
+### Encoding knowledge into the graph
+
+Based on the previous example, it is all about skills, relationships with
+employees, and tasks. In order to improve a graph ontology, the skill needs to
+become a class, or node in this case. 
+
+The improved graph model looks like this:
+
+![Improved knowledge
+graph](/pages/data-modeling/knowledge-graph/project-management-progression-graph.png)
+
+Now the knowledge about skills and how they're related to people and tasks is
+encoded into the graph model.
+
+Notice how the relationships `HAS` between `Person` and `Skill` and the
+relationship `NEEDS` between `Task` and `Skill` are now semantically describing
+the relationship's meaning. You can basically read sentences from the graph
+model.
+
+Here is the updated Cypher query that answers the question "Do people have
+sufficient skills to perform all the tasks they are working on?" based on the
+new graph model: 
+
+```cypher
+MATCH (p:Person)-[h:HAS]->(s:Skill)<-[n:NEEDS]-(t:Task)
+WHERE exists((p)-[:WORKS_ON]->(t))
+RETURN *
+```
+
+Here is the query that answers the question "Which people don't have sufficient skills to perform the tasks they
+are working on?":
+
+```cypher
+MATCH (p:Person)-[w:WORKS_ON]->(t:Task)-[n:NEEDS]->(s:Skill)
+WHERE NOT exists((p)-[:HAS]->(s))
+RETURN *
+```
+
+Although you still need to write the query to fetch the data, the query uses
+graph structure and has the semantics of the graph model. That can be used to
+infer knowledge from the graph and more easily find the answers to questions
+that were not even defined in the first place.
+
+### Knowledge graph creation
+
+The process of encoding the knowledge includes modeling the graph to represent
+the domain knowledge accurately. There is no a one-size-fits-all approach to
+modeling a knowledge graph, as it depends on the specific use case and the
+questions you want to answer.
+
+In general, you want to extract all the entities and relationships that are
+relevant to your domain and represent them as nodes and relationships in the
+graph. This often means pulling out node properties and relationships from the
+data and creating a graph schema that captures their connections.
+
+Here is a complete graph model from the previous example that will help answer
+more domain questions: 
+
+![Complete knowledge
+graph](/pages/data-modeling/knowledge-graph/project-management-full-graph.png)
+
+Notice how the graph model grew - from four node labels and three relationship
+types to six node labels and nine relationship types - and all with same data.
+This graph model is more complex and semantically rich, and it can be used to
+answer more complicated questions about the project management scenario. Even just
+by glancing at the model, you have a better understanding of what is happening. 
+
+Now it's possible to answer this question: "For all the projects, do we have
+gaps in skills missing?". Without writing the query, it should be clear from the
+graph model how to answer it. 
+
+Here is the query: 
+
+```cypher
+MATCH (p:Project)-[:REQUIRES]->(s:Skill)
+OPTIONAL MATCH (person:Person)-[:HAS]->(s)
+WITH p, s, collect(person) AS peopleWithSkill
+WHERE size(peopleWithSkill) = 0
+RETURN p.name AS UnfulfillableProject, collect(s.name) AS MissingSkills;
+```
+
+In the example dataset, there is a project that requires a skill that no one in
+the company has. This is the result of the above query:
+
+```
++----------------------+----------------------+
+| UnfulfillableProject | MissingSkills        |
++----------------------+----------------------+
+| "AI Integration"     | ["Machine Learning"] |
++----------------------+----------------------+
+```
+
+Although we again wrote the query to fetch the data, the knowledge about the
+skills and projects is encoded into the graph model. 
+
+<Callout type="info">
+If you want to create this knowledge graph in Memgraph,
+run the queries from our
+[repository](https://github.com/memgraph/best-practices/blob/main/datasets/kg/project-management.cypherl).
+</Callout>
+
+### Knowledge graphs and LLMs
+
+By combining knowledge graphs with LLMs, you're creating a
+[GraphRAG](/ai-ecosystem/graph-rag) system.
+
+For GraphRAG, it is important that the underlying graph model really captures
+the semantics of the business and questions needed to answer. There are various
+pieces to the GraphRAG puzzle, as it combines knowledge graphs and LLMs, but one
+way of improving the system is to plan how to model the knowledge graph properly
+and to iterate until you get it right. 
+
+To return back to the example, let's say LLM needs to answer the question "Are
+we able to execute Data Preprocessing project?".
+
+In the background, the question gets embedded, vector search is performed and
+pivot node is found. In this case, the pivot node is `(:Project {name:"Data
+Preprocessing"})`. The next step is relevance expansion, which is performed with
+the following query:
+
+```cypher
+MATCH path=(p:Project {name:"Data Preprocessing"})-[r *..2]-(n) RETURN path;
+```
+
+All that's returned is considered relevant information which is then forwarded
+to the LLM within the prompt. 
+
+Here is the example of the LLM response:
+
+```plaintext
+
+Project Overview
+
+- Project Name: Data Preprocessing
+ - Budget: $50,000
+ - Start Date: 2024-10-01
+ - End Date: 2024-11-30
+ - Total Duration: 60 days
+
+Tasks and Requirements
+
+- Task Name: Data Cleaning
+ - Description: Clean and preprocess raw data
+ - Estimated Man-Days: 10 days
+ - Required Skill: Data Analysis (inferred from the relationship)
+
+Personnel Involved
+
+- Person: Jane Smith
+ - Cost per Day: $600
+ - Skills: Data Analysis (inferred from the relationship)
+
+Conclusion
+
+Based on the analysis, the project does have a sufficient level of skilled
+personnel to fulfill the requirements, as Jane Smith is qualified for the
+necessary task. Additionally, the budget is adequate to cover her costs, with a
+significant amount remaining for any additional needs or tasks that may arise.
+```
+
+If you look closely, the LLM has inferred knowledge from the knowledge graph.
+Without even thinking about specific things you want to ask, it predicts what
+the answer is based on the data in the knowledge graph.
+
+Passing in the same data and asking the question: "Do employees work on tasks
+and projects that match their domain preferences?"
+
+Here is the response from the LLM:
+
+```plaintext
+Yes, it appears that people are working on tasks they are interested in:
+
+Task Interest Alignment: Jane Smith, who is assigned to work on the "Data
+Cleaning" task, has a preference for the Data Science domain, which is related
+to this task. This alignment suggests she is working within an area of interest.
+
+Skills and Preferences: Jane possesses the Data Analysis skill, which is also a
+requirement for the project and a direct need for the "Data Cleaning" task. This
+indicates that her skills and interests align with her assigned
+responsibilities. 
+
+This structure suggests that team members like Jane are indeed
+working on tasks that match both their skills and their domain preferences,
+which can enhance motivation and project outcomes.
+```
+
+## Want to learn more?
+
+Check out our [knowledge graph
+whitepaper](https://memgraph.com/white-paper/knowledge-graphs) to learn the
+importance of graphs in Enterprises.
+
+If you're more of a visual type, watch the [guide on Memgraph
+Academy](https://memgraph.com/academy/enhancing-ai-with-graph-databases-and-llms)
+and see how combining graph databases with LLMs can make AI more effective. 
+
+In case you need help, schedule a 30 min session with one of our engineers to
+discuss how Memgraph fits with your architecture. Our engineers are highly
+experienced in helping companies of all sizes to integrate and get the most out
+of Memgraph in their projects. Talk to us about data modeling, optimizing
+queries, defining infrastructure requirements or migrating from your existing
+graph database. No nonsense or sales pitch, just tech.
+
+![](/pages/getting-started/memgraph-office-hours.svg)
+
+<Cards>
+  <Card
+    title="Book a call"
+    href="https://memgraph.com/office-hours"
+  />
+</Cards>
+
+
+
