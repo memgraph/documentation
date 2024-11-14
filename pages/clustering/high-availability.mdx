@@ -8,13 +8,6 @@ import { Steps } from 'nextra/components'
 
 # High availability (Enterprise)
 
-<Callout type="warning">
-
-High availability currently **works only in the in-memory transactional [storage mode](/fundamentals/storage-memory-usage)**.
-
-</Callout>
-
-
 A cluster is considered highly available if, at any point, there is some instance that can respond to a user query. Our high availability 
 relies on replication. The cluster consists of:
 - The MAIN instance on which the user can execute write queries
@@ -26,15 +19,16 @@ The coordinator instance is a new addition to enable the high availability featu
 
 ## Cluster management
 
-For achieving high availability, Memgraph uses Raft consensus protocol, which is very similar to Paxos in terms of performance and fault-tolerance but with a significant advantage that it is much easier to understand. It's important to say that Raft isn't a
+For achieving high availability, Memgraph uses Raft consensus protocol, which is very similar to Paxos in terms of performance and fault-tolerance but with 
+a significant advantage that it is much easier to understand. It's important to say that Raft isn't a
 Byzantine fault-tolerant algorithm. You can learn more about Raft in the paper [In Search of an Understandable Consensus Algorithm](https://raft.github.io/raft.pdf).
 
 Typical Memgraph's highly available cluster consists of 3 data instances (1 MAIN and 2 REPLICAS) and 3 coordinator instances backed up by Raft protocol.
 Users can create more than 3 coordinators, but the replication factor (RF) of 3 is a de facto standard in distributed databases.
 
-One coordinator instance is the leader whose job is to always ensure one writeable data instance (MAIN). The other two coordinator instances replicate changes the leader coordinator did in its
-own Raft log. Operations saved into the Raft log are those that are related to cluster management. Memgraph doesn't have its implementation of the Raft protocol. 
-For this task, Memgraph uses an industry-proven library [NuRaft](https://github.com/eBay/NuRaft).
+One coordinator instance is the leader whose job is to always ensure one writeable data instance (MAIN). The other two coordinator instances replicate
+changes the leader coordinator did in its own Raft log. Operations saved into the Raft log are those that are related to cluster management. Memgraph doesn't have its 
+implementation of the Raft protocol. For this task, Memgraph uses an industry-proven library [NuRaft](https://github.com/eBay/NuRaft).
 
 You can start the coordinator instance by specifying `--coordinator-id`, 
 `--coordinator-port` and `--management-port` flags. Followers ping the leader on the `--management-port` to get health state of the cluster. The coordinator instance only responds to
@@ -62,14 +56,15 @@ Directly connecting to the MAIN instance isn't preferred in the HA cluster since
 can use bolt+routing so that write queries can always be sent to the correct data instance. This protocol works so that the client
 first sends a ROUTE bolt message to any coordinator instance. The coordinator replies to the message by returning the routing table with three entries specifying
 from which instance can be data read, to which instance data can be written and which instances can behave as routers. In the Memgraph HA cluster, the MAIN
-data instance is the only writeable instance, REPLICAs are readable instances, and COORDINATORs behave as routers. For more details check [Request message ROUTE](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route) documentation.
+data instance is the only writeable instance, REPLICAs are readable instances, and COORDINATORs behave as routers. 
+For more details check [Request message ROUTE](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route) documentation.
 
 Users only need to change the scheme they use for connecting to coordinators. This means instead of using `bolt://<main_ip_address>,` you should
 use `neo4j://<coordinator_ip_adresss>` to get an active connection to the current MAIN instance in the cluster. You can find examples of how to 
 use bolt+routing in different programming languages [here](https://github.com/memgraph/memgraph/tree/master/tests/drivers).
 
-It is important to note that setting up the cluster on one coordinator (registration of data instances and coordinators, setting main) must be done using bolt connection since bolt+routing is only used for routing data-related
-queries, not coordinator-based queries.
+It is important to note that setting up the cluster on one coordinator (registration of data instances and coordinators, setting main) must be done using bolt connection 
+since bolt+routing is only used for routing data-related queries, not coordinator-based queries.
 
 ## Starting instances
 
@@ -100,13 +95,14 @@ docker run --name coord1 -p 7690:7687 -p 7445:7444 memgraph/memgraph-mage
 --management-port=12121
 ```
 
-Coordinator IDs serve as identifiers, the coordinator port is used for synchronization and log replication between coordinators and management port is used to get health state of cluster from leader coordinator. 
-Coordinator IDs, coordinator ports and management ports must be different for all coordinators.
+Coordinator IDs serve as identifiers, the coordinator port is used for synchronization and log replication between coordinators and management port is used to get health state of 
+cluster from leader coordinator. Coordinator IDs, coordinator ports and management ports must be different for all coordinators.
 
-Configuration option `--coordinator-hostname` must be set on all coordinator instances. It is used on followers to ping the leader coordinator on the correct IP address and return the health state about
-the cluster. You can set this configuration flag to the IP address, the fully qualified domain name (FQDN), or even the DNS name. The suggested approach is to use DNS, otherwise, in case the IP address changes, network communication between instances in the cluster will stop working.
+Configuration option `--coordinator-hostname` must be set on all coordinator instances. It is used on followers to ping the leader coordinator on the correct IP address and return 
+the health state about the cluster. You can set this configuration flag to the IP address, the fully qualified domain name (FQDN), or even the DNS name. 
+The suggested approach is to use DNS, otherwise, in case the IP address changes, network communication between instances in the cluster will stop working.
 
-In local setup example would be to set `--coordinator-hostname` for each instance to `localhost`. 
+When testing on a local setup, the flag `--coordinator-hostname` should be set to `localhost` for each instance.
 
 ### Env flags
 
@@ -174,7 +170,7 @@ REGISTER INSTANCE instanceName WITH CONFIG {"bolt_server": boltServer, "manageme
 
 This operation will result in writing to the Raft log.
 
-In case MAIN is already set in the cluster, a replica instance will also be registered on MAIN.
+In case the MAIN instance already exists in the cluster, a replica instance will also be registered on MAIN.
 
 
 ### Add coordinator instance
@@ -189,7 +185,7 @@ ADD COORDINATOR coordinatorId WITH CONFIG {"bolt_server": boltServer, "coordinat
 <Callout type="info">
 
 We need to inform the leader coordinator of the existence of other follower coordinators.
-If you are running `ADD COORDINATOR` Cypher queries on coordinator with --coordinator-id=1, you only need to add other two coordinator instances. For example, when using 3 
+If you are running `ADD COORDINATOR` cypher queries on coordinator with --coordinator-id=1, you only need to add other two coordinator instances. For example, when using 3 
 coordinators you need to use two `ADD COORDINATOR` queries:
 
 ```
@@ -243,7 +239,8 @@ This operation will result in writing to the Raft log.
 
 ### Force reset cluster state
 
-In case the cluster gets stuck there is an option to do the force reset of the cluster. You need to execute a command on the leader coordinator. This command will result in the following actions:
+In case the cluster gets stuck there is an option to do the force reset of the cluster. You need to execute a command on the leader coordinator. 
+This command will result in the following actions:
 
 1. The coordinator instance will demote each alive instance to REPLICA.
 2. From the alive instance it will choose a new MAIN instance.
@@ -311,42 +308,32 @@ the flag to more than `--instance-down-timeout-sec`, as it is needed first to co
 ### Determining instance's health
 
 Every `--instance-health-check-frequency-sec` seconds, the coordinator contacts each instance. 
-The instance is not considered to be down unless `--instance-down-timeout-sec` has passed and the instance hasn't responded to the coordinator in the meantime. Users must set `--instance-health-check-frequency-sec`
-to be less or equal to the `--instance-down-timeout-sec` but we advise users to set `--instance-down-timeout-sec` to a multiplier of `--instance-health-check-frequency-sec`.
-Set the multiplier coefficient to be N>=2. For example, set `--instance-down-timeout-sec=5` and `--instance-health-check-frequency-sec=1` which will result in coordinator
-contacting each instance every 1 second and the instance is considered dead after it doesn't respond 5 times (5 seconds / 1 second).
+The instance is not considered to be down unless `--instance-down-timeout-sec` has passed and the instance hasn't responded to the coordinator in the meantime. 
+Users must set `--instance-health-check-frequency-sec` to be less or equal to the `--instance-down-timeout-sec` but we advise users to set `--instance-down-timeout-sec` to 
+a multiplier of `--instance-health-check-frequency-sec`. Set the multiplier coefficient to be N>=2. 
+For example, set `--instance-down-timeout-sec=5` and `--instance-health-check-frequency-sec=1` which will result in coordinator contacting each instance every second and 
+the instance is considered dead after it doesn't respond 5 times (5 seconds / 1 second).
 
-In case a REPLICA doesn't respond to a health check, the leader coordinator will try to contact it again every `--instance-health-check-frequency-sec`. When the REPLICA instance rejoins the cluster (comes back up), 
-it always rejoins as REPLICA. For MAIN instance, there are two options. If it is down for less than `--instance-down-timeout-sec`, it will rejoin as MAIN because it is still considered alive. If it is down for more than
-`--instance-down-timeout-sec`, failover procedure is initiated. Whether MAIN will rejoin as MAIN depends on the success of the failvoer procedure. If the failover procedure succeeds, now old MAIN
+In case a REPLICA doesn't respond to a health check, the leader coordinator will try to contact it again every `--instance-health-check-frequency-sec`. 
+When the REPLICA instance rejoins the cluster (comes back up), it always rejoins as REPLICA. For MAIN instance, there are two options. 
+If it is down for less than `--instance-down-timeout-sec`, it will rejoin as MAIN because it is still considered alive. If it is down for more than `--instance-down-timeout-sec`, 
+the failover procedure is initiated. Whether MAIN will rejoin as MAIN depends on the success of the failover procedure. If the failover procedure succeeds, now old MAIN
 will rejoin as REPLICA. If failover doesn't succeed, MAIN will rejoin as MAIN once it comes back up.
 
 ### Failover procedure - high level description
 
 From alive REPLICAs coordinator chooses a new potential MAIN.
-This instance is a potential MAIN as the failover procedure can still fail due to various factors (networking issues, promote to MAIN fails, any alive REPLICA failing to accept an RPC message, etc). 
-Before promoting REPLICA to MAIN, the coordinator sends a RPC request to each alive REPLICA
-to stop listening to the old MAIN. Once each alive REPLICA acknowledges that it stopped listening to the old MAIN,
-the coordinator sends an RPC request to the potential new MAIN, which is still in REPLICA state, to promote itself to the MAIN instance with info
+This instance is only potentially new MAIN as the failover procedure can still fail due to various factors (networking issues, promote to MAIN fails, any alive REPLICA failing to 
+accept an RPC message, etc). The coordinator sends an RPC request to the potential new MAIN, which is still in REPLICA state, to promote itself to the MAIN instance with info
 about other REPLICAs to which it will replicate data. Once that request succeeds, the new MAIN can start replication to the other instances and accept write queries.
 
 
 ### Choosing new MAIN from available REPLICAs
 
-When failover is happening some REPLICAs can also be down. From the list of alive REPLICAs, a new MAIN is chosen. First, the leader coordinator contacts each alive REPLICA to get info about each database's last commit timestamp.
-In the case of enabled multi-tenancy, from each instance coordinator will get info on all databases and their last commit timestamp. Currently, the coordinator chooses an instance to become a new MAIN by comparing the latest commit timestamp 
-only of the default database for every instance. If multiple instances have the same latest commit timestamp, the instance that was registered earlier will be chosen as a new MAIN. 
-
-
-<Callout type="info">
-
-It is important to note that if an action fails and all instances are down, the leader will attempt to execute a force reset until one instance is promoted to MAIN. Until then, no other actions are allowed on the cluster.
-
-</Callout>
-
-If an instance is down at the point of force reset, the leader coordinator writes in the Raft log that the instance needs to be demoted to REPLICA once it comes back up.
-
-If all instances are down at the point of force reset, the action won't succeed as a new MAIN instance can't be chosen.
+When failover is happening, some REPLICAs can also be down. From the list of alive REPLICAs, a new MAIN is chosen. First, the leader coordinator contacts each alive REPLICA
+to get info about each database's last commit timestamp. In the case of enabled multi-tenancy, from each instance coordinator will get info on all databases and their last commit
+timestamp. Currently, the coordinator chooses an instance to become a new MAIN by comparing the latest commit timestamp only of the default database for every instance. 
+If multiple instances have the same latest commit timestamp, the instance that was registered earlier will be chosen as a new MAIN. 
 
 
 ### Old MAIN rejoining to the cluster
@@ -356,18 +343,16 @@ Once the old MAIN gets back up, the coordinator sends an RPC request to demote t
 The leader coordinator sends two RPC requests in the given order to demote old MAIN to REPLICA:
 1. Demote MAIN to REPLICA RPC request
 2. A request to store the UUID of the current MAIN, which the old MAIN, now acting as a REPLICA instance, must listen to.
-If the MAIN gets demoted, but the RPC request to change the UUID of the new MAIN doesn't succeed, the coordinator will retry both actions until success.
 
 ### How REPLICA knows which MAIN to listen
 
-Each REPLICA has a UUID of MAIN it listens. If a network partition happens where MAIN can talk to a REPLICA but the coordinator can't talk to the MAIN, from the coordinator's point of view that MAIN is down.
-From REPLICA's point of view, the MAIN instance is still alive. The coordinator will start the failover procedure, and we can end up with multiple MAINs where REPLICAs can listen to both MAINs.
-To prevent such an issue, before failover happens to a new MAIN, each REPLICA gets a new UUID that no current MAIN has. The coordinator generates the new UUID, 
-which the new MAIN will get to use once each alive replica acknowledges it received the new UUID. In RPC's
-request to promote itself to MAIN, the new potential MAIN instance will receive the generated UUID, which REPLICAs are ready to listen to.
+Each REPLICA has a UUID of MAIN it listens to. If a network partition happens where MAIN can talk to a REPLICA but the coordinator can't talk to the MAIN, from the coordinator's
+point of view that MAIN is down. From REPLICA's point of view, the MAIN instance is still alive. The coordinator will start the failover procedure, and we can end up with multiple MAINs
+where REPLICAs can listen to both MAINs. To prevent such an issue, each REPLICA gets a new UUID that no current MAIN has. The coordinator generates the new UUID, 
+which the new MAIN will get to use on its promotion to MAIN. 
 
-If REPLICA was down at one point, MAIN could have changed. When REPLICA gets back up, it doesn't listen to any MAIN until the coordinator sends an RPC request to REPLICA to start listening to MAIN
-with the given UUID.
+If REPLICA was down at one point, MAIN could have changed. When REPLICA gets back up, it doesn't listen to any MAIN until the coordinator sends an RPC request to REPLICA to start
+listening to MAIN with the given UUID.
 
 ### Replication concerns
 
@@ -377,15 +362,16 @@ On failover, the current logic is to choose the most-up-to-date instance from al
 to successfully happen, the new MAIN figures out if REPLICA is behind (has less up-to-date data) or has data that the new MAIN doesn't have.
 If REPLICA has data that MAIN doesn't have, in that case REPLICA is in a diverged-from-MAIN state. If at least one REPLICA is in diverged-from-MAIN
 state, failover won't succeed as MAIN can't replicate data to diverged-from-MAIN REPLICA.
-When choosing a new MAIN in the failover procedure from the list of available REPLICAs, the instance with the latest commit timestamp for the default database is chosen as the new MAIN. In case some other instance
-had more up-to-date data when the failover procedure was choosing a new MAIN but was down at that point when rejoining the cluster, the new MAIN instance sends a force sync RPC request to such instance. Force sync
-RPC request deletes all current data on all databases on a given instance and accepts data from the current MAIN. This way cluster will always follow the current MAIN. 
+When choosing a new MAIN in the failover procedure from the list of available REPLICAs, the instance with the latest commit timestamp for the default database is chosen as the new MAIN. 
+In case some other instance had more up-to-date data when the failover procedure was choosing a new MAIN but was down at that point when rejoining the cluster, 
+the new MAIN instance sends a force sync RPC request to such instance. Force sync RPC request deletes all current data on all databases on a given instance and accepts data from the 
+current MAIN. This way cluster will always follow the current MAIN. 
 
 
 ## Actions on follower coordinators
 
-From follower coordinators you can only execute `SHOW INSTANCES`. Registration of data instance, unregistration of data instances, demoting instance, setting instance to MAIN and force reseting cluster state
-are all disabled. 
+From follower coordinators you can only execute `SHOW INSTANCES`. Registration of data instance, unregistration of data instances, demoting instance, setting instance to MAIN and 
+force reseting cluster state are all disabled. 
 
 <Callout type="warning">
 
@@ -402,15 +388,10 @@ Data instances can fail both as MAIN and as REPLICA. When an instance that was R
 responsible peer. This should happen automatically when the coordinator's ping to the instance passes. When the MAIN instance comes back, any writing to the MAIN instance will be 
 forbidden until a ping from the coordinator passes. 
 
-Since the instance can die and get back up, use `--replication-state-at-startup=true` to restore the last replication state. This configuration will restore the instance to
-the state it was last, and everything should function normally from that point on. If this flag is not set, every instance will restart as MAIN and that case is not handled.
-Furthermore, it is important for data instances to have `--data-recovery-on-startup=true`, which recovers data from the data directory. It also recovers important information
-for each database on data instance. This way, MAIN can establish a connection to REPLICAs and replicate data to the correct databases.
-
 ### Coordinator instances restart
 
-In case the coordinator instance dies and it is restarted, it will not lose any data from the RAFT log or RAFT snapshots, since `--ha-durability` is enabled by default. For more details
-read about high availability durability in the durability chapter.
+In case the coordinator instance dies and it is restarted, it will not lose any data from the RAFT log or RAFT snapshots, since `--ha-durability` is enabled by default. 
+For more details read about high availability durability in the durability chapter.
 
 
 ## Durability
@@ -435,8 +416,7 @@ for each user action and failover action. Snapshots are created every N (N curre
 
 ### Restart of coordinator 
 
-In case of failure of the coordinator, on the restart, it will read information about other coordinators stored under `high_availability/raft_data/network` 
-directory. 
+In case of coordinator's failure, on the restart, it will read information about other coordinators stored under `high_availability/raft_data/network` directory. 
 
 From the `network` directory we will recover the server state before the coordinator stopped, including the current term, for whom the coordinator voted, and whether 
 election timer is allowed.
@@ -488,25 +468,26 @@ the cluster stays available. With 2+ coordinator instances down
 Failure of REPLICA data instance isn't very harmful since users can continue writing to MAIN data instance while reading from MAIN or other
 REPLICAs. The most important thing to analyze is what happens when MAIN gets down. In that case, the leader coordinator uses 
 user-controllable parameters related to the frequency of health checks from the leader to replication instances (`--instance-health-check-frequency-sec`) 
-and the time needed to realize the instance is down (`--instance-down-timeout-sec`). After collecting enough evidence, the leader concludes the MAIN is down and performs failover using just a handful of RPC
-messages (correct time depends on the distance between instances). It is important to mention that the whole failover is performed with a zero data-loss if the newly chosen MAIN (previously REPLICA)
-had all up-to-date data.
+and the time needed to realize the instance is down (`--instance-down-timeout-sec`). After collecting enough evidence, the leader concludes the MAIN is down and performs failover
+using just a handful of RPC messages (correct time depends on the distance between instances). It is important to mention that the whole failover is performed with a zero data-loss 
+if the newly chosen MAIN (previously REPLICA) had all up-to-date data.
 
 Current deployment assumes the existence of only one datacenter, which automatically means that Memgraph won't be available in the case the whole datacenter goes down. We are actively
 working on 2 datacenter (2-DC) architecture.
 
 ## Raft configuration parameters
 
-Several Raft-related parameters are important for the correct functioning of the cluster.  The leader coordinator sends a heartbeat
+Several Raft-related parameters are important for the correct functioning of the cluster. The leader coordinator sends a heartbeat
 message to other coordinators every second to determine their health. This configuration option is connected with leader election timeout which
 is a randomized value from the interval [2000ms, 4000ms] and which is used by followers to decide when to trigger new election process. Leadership
-expiration is set to 1800ms so that cluster can never get into situation where multiple leaders exist. These specific values give a cluster
+expiration is set to 2000ms so that cluster can never get into situation where multiple leaders exist. These specific values give a cluster
 the ability to survive occasional network hiccups without triggering leadership changes.
 
 
 ## Kubernetes
 
-We support deploying Memgraph HA instances as part of the Kubernetes cluster. You can see example configurations [here](/getting-started/install-memgraph/kubernetes#helm-chart-for-memgraph-high-availability-cluster).
+We support deploying Memgraph HA instances as part of the Kubernetes cluster. 
+You can see example configurations [here](/getting-started/install-memgraph/kubernetes#helm-chart-for-memgraph-high-availability-cluster).
 
 ## Docker Compose
 
