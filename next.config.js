@@ -1128,7 +1128,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/tutorials/graph-modeling',
-        destination: '/fundamentals/graph-modeling',
+        destination: '/data-modeling',
         permanent: true
       },
       {
@@ -2845,7 +2845,7 @@ module.exports = withNextra({
       },
       {
         source: '/memgraph/2.4.1/tutorials/graph-modeling',
-        destination: '/fundamentals/graph-modeling',
+        destination: '/data-modeling',
         permanent: true
       },
       {
@@ -3104,6 +3104,11 @@ module.exports = withNextra({
       {
         source: '/getting-started/install-memgraph/rpm-package',
         destination: '/getting-started/install-memgraph',
+        permanent: true
+      },
+      {
+        source: '/fundamentals/graph-modeling',
+        destination: '/data-modeling',
         permanent: true
       }
     ];

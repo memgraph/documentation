@@ -87,9 +87,9 @@ docker run --name instance1 -p 7687:7687 -p 7444:7444 memgraph/memgraph-mage
 #### Coordinator instance 
 
 ```
-docker run --name coord1 -p 7690:7687 -p 7445:7444 memgraph/memgraph-mage
+docker run --name coord1 -p 7691:7691 -p 7445:7444 memgraph/memgraph-mage
 --coordinator-port=10111 
---bolt-port=7687 
+--bolt-port=7691
 --coordinator-id=1 
 --coordinator-hostname=localhost
 --management-port=12121
@@ -103,6 +103,8 @@ the health state about the cluster. You can set this configuration flag to the I
 The suggested approach is to use DNS, otherwise, in case the IP address changes, network communication between instances in the cluster will stop working.
 
 When testing on a local setup, the flag `--coordinator-hostname` should be set to `localhost` for each instance.
+
+It is important that in the host you set the bolt ports distinct for every instance, regardless of them being a data instance, or a coordinator instance.
 
 ### Env flags
 
@@ -189,8 +191,8 @@ If you are running `ADD COORDINATOR` cypher queries on coordinator with --coordi
 coordinators you need to use two `ADD COORDINATOR` queries:
 
 ```
-ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "127.0.0.1:7691", "coordinator_server": "127.0.0.1:10112", "management_server": "127.0.0.1:12112"};
-ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "127.0.0.1:7692", "coordinator_server": "127.0.0.1:10113", "management_server": "127.0.0.1:12113"};
+ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "127.0.0.1:7692", "coordinator_server": "127.0.0.1:10112", "management_server": "127.0.0.1:12112"};
+ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "127.0.0.1:7693", "coordinator_server": "127.0.0.1:10113", "management_server": "127.0.0.1:12113"};
 ```
 
 </Callout>
@@ -493,7 +495,7 @@ You can see example configurations [here](/getting-started/install-memgraph/kube
 
 The following example shows you how to setup Memgraph cluster using docker compose. The cluster will use user-defined bridge network.
 
-License file `license.cypher` should be in the format:
+License file `license.cypherl` should be in the format:
 
 ```
 
@@ -502,12 +504,12 @@ SET DATABASE SETTING 'enterprise.license' TO '<YOUR_ENTERPRISE_LICENSE>';
 
 ```
 
-You can directly use initialization file `HA_register.cypher`:
+You can directly use initialization file `HA_register.cypherl`:
 
 ```
 
-ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "coord2:7691", "coordinator_server": "coord2:10112", "management_server": "coord2:12122"};
-ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "coord3:7692", "coordinator_server": "coord3:10113", "management_server": "coord3:12123"};
+ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "coord2:7692", "coordinator_server": "coord2:10112", "management_server": "coord2:12122"};
+ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "coord3:7693", "coordinator_server": "coord3:10113", "management_server": "coord3:12123"};
 
 REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "instance1:7687", "management_server": "instance1:13011", "replication_server": "instance1:10001"};
 REGISTER INSTANCE instance_2 WITH CONFIG {"bolt_server": "instance2:7688", "management_server": "instance2:13012", "replication_server": "instance2:10002"};
@@ -547,77 +549,101 @@ services:
     image: "memgraph/memgraph"
     container_name: coord1
     volumes:
-      - ./license.cypher:/tmp/init/license.cypher:ro
-      - ./HA_register.cypher:/tmp/init/HA_register.cypher:ro
+      - ./license.cypherl:/tmp/init/license.cypherl:ro
+      - ./HA_register.cypherl:/tmp/init/HA_register.cypherl:ro
       - mg_lib1:/var/lib/memgraph
       - mg_log1:/var/log/memgraph
     environment:
-      - MEMGRAPH_HA_CLUSTER_INIT_QUERIES=/tmp/init/HA_register.cypher
-    command: [ "--init-file=/tmp/init/license.cypher", "--log-level=TRACE", "--also-log-to-stderr", "--coordinator-id=1", "--coordinator-port=10111", "--management-port=12121", "--coordinator-hostname=coord1"]
+      - MEMGRAPH_HA_CLUSTER_INIT_QUERIES=/tmp/init/HA_register.cypherl
+    command: [ "--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7691", "--coordinator-id=1", "--coordinator-port=10111", "--management-port=12121", "--coordinator-hostname=coord1", "--nuraft-log-file=/var/log/memgraph/nuraft"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.4
+    ports:
+      - "7691:7691"
+    depends_on:
+      - instance1
+      - instance2
+      - instance3
 
   coord2:
     image: "memgraph/memgraph"
     container_name: coord2
     volumes:
-      - ./license.cypher:/tmp/init/license.cypher:ro
+      - ./license.cypherl:/tmp/init/license.cypherl:ro
       - mg_lib2:/var/lib/memgraph
       - mg_log2:/var/log/memgraph
-    command: [ "--init-file=/tmp/init/license.cypher", "--log-level=TRACE", "--also-log-to-stderr", "--coordinator-id=2", "--coordinator-port=10112", "--management-port=12122", "--coordinator-hostname=coord2"]
+    command: [ "--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7692", "--coordinator-id=2", "--coordinator-port=10112", "--management-port=12122", "--coordinator-hostname=coord2" , "--nuraft-log-file=/var/log/memgraph/nuraft"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.2
+    ports:
+      - "7692:7692"
+    depends_on:
+      - instance1
+      - instance2
+      - instance3
 
   coord3:
     image: "memgraph/memgraph"
     container_name: coord3
     volumes:
-      - ./license.cypher:/tmp/init/license.cypher:ro
+      - ./license.cypherl:/tmp/init/license.cypherl:ro
       - mg_lib3:/var/lib/memgraph
       - mg_log3:/var/log/memgraph
-    command: [ "--init-file=/tmp/init/license.cypher",  "--log-level=TRACE", "--also-log-to-stderr", "--coordinator-id=3", "--coordinator-port=10113", "--management-port=12123", "--coordinator-hostname=coord3"]
+    command: [ "--init-file=/tmp/init/license.cypherl",  "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7693", "--coordinator-id=3", "--coordinator-port=10113", "--management-port=12123", "--coordinator-hostname=coord3" , "--nuraft-log-file=/var/log/memgraph/nuraft"]
 
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.3
+    ports:
+      - "7693:7693"
+    depends_on:
+      - instance1
+      - instance2
+      - instance3
 
   instance1:
     image: "memgraph/memgraph"
     container_name: instance1
     volumes:
-      - ./license.cypher:/tmp/init/license.cypher:ro
+      - ./license.cypherl:/tmp/init/license.cypherl:ro
       - mg_lib4:/var/lib/memgraph
       - mg_log4:/var/log/memgraph
-    command: ["--init-file=/tmp/init/license.cypher","--data-recovery-on-startup=true", "--log-level=TRACE", "--also-log-to-stderr", "--management-port=13011"]
+    command: ["--init-file=/tmp/init/license.cypherl","--data-recovery-on-startup=true", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7687", "--management-port=13011"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.6
+    ports:
+      - "7687:7687"
 
   instance2:
     image: "memgraph/memgraph"
     container_name: instance2
     volumes:
-      - ./license.cypher:/tmp/init/license.cypher:ro
+      - ./license.cypherl:/tmp/init/license.cypherl:ro
       - mg_lib5:/var/lib/memgraph
       - mg_log5:/var/log/memgraph
-    command: ["--init-file=/tmp/init/license.cypher","--data-recovery-on-startup=true", "--log-level=TRACE", "--also-log-to-stderr", "--management-port=13012"]
+    command: ["--init-file=/tmp/init/license.cypherl","--data-recovery-on-startup=true", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7688", "--management-port=13012"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.7
+    ports:
+      - "7688:7688"
 
   instance3:
     image: "memgraph/memgraph"
     container_name: instance3
     volumes:
-      - ./license.cypher:/tmp/init/license.cypher:ro
+      - ./license.cypherl:/tmp/init/license.cypherl:ro
       - mg_lib6:/var/lib/memgraph
       - mg_log6:/var/log/memgraph
-    command: ["--init-file=/tmp/init/license.cypher","--data-recovery-on-startup=true", "--log-level=TRACE", "--also-log-to-stderr", "--management-port=13013"]
+    command: ["--init-file=/tmp/init/license.cypherl","--data-recovery-on-startup=true", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7689", "--management-port=13013"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.8
+    ports:
+      - "7689:7689"
 ```
 
 Cluster can be shut-down using `docker compose down`.
@@ -632,45 +658,45 @@ This example will show how to set up a highly available cluster in Memgraph usin
 
 1. Start coordinator1:
 ```plaintext
-docker run  --name coord1 -p 7690:7690 -p 7444:7444 -v mg_lib1:/var/lib/memgraph -v mg_log1:/var/log/memgraph memgraph/memgraph --bolt-port=7690 --log-level=TRACE --also-log-to-stderr --coordinator-id=1 --coordinator-port=10111 --management-port=12121 --coordinator-hostname=localhost --nuraft-log-file=/var/log/memgraph/nuraft
+docker run  --name coord1 --network=host -p 7691:7691 -p 7444:7444 -v mg_lib1:/var/lib/memgraph -v mg_log1:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>"  memgraph/memgraph --bolt-port=7691 --log-level=TRACE --also-log-to-stderr --coordinator-id=1 --coordinator-port=10111 --management-port=12121--coordinator-hostname=localhost --nuraft-log-file=/var/log/memgraph/nuraft
 ```
 
 2. Start coordinator2:
 ```plaintext
-docker run  --name coord2 -p 7691:7691 -p 7445:7444 -v mg_lib2:/var/lib/memgraph -v mg_log2:/var/log/memgraph memgraph/memgraph --bolt-port=7691 --log-level=TRACE --also-log-to-stderr --coordinator-id=2 --coordinator-port=10112 --management-port=12122 --coordinator-hostname=localhost --nuraft-log-file=/var/log/memgraph/nuraft
+docker run  --name coord2 --network=host -p 7692:7692 -p 7445:7444 -v mg_lib2:/var/lib/memgraph -v mg_log2:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7692 --log-level=TRACE --also-log-to-stderr --coordinator-id=2 --coordinator-port=10112 --management-port=12122--coordinator-hostname=localhost --nuraft-log-file=/var/log/memgraph/nuraft
 ```
 
 3. Start coordinator3:
 ```plaintext
-docker run  --name coord3 -p 7692:7692 -p 7446:7444 -v mg_lib3:/var/lib/memgraph -v mg_log3:/var/log/memgraph memgraph/memgraph --bolt-port=7692 --log-level=TRACE --also-log-to-stderr --coordinator-id=3 --coordinator-port=10113 --management-port=12123 --coordinator-hostname=localhost --nuraft-log-file=/var/log/memgraph/nuraft
+docker run  --name coord3 --network=host -p 7693:7693 -p 7446:7444 -v mg_lib3:/var/lib/memgraph -v mg_log3:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7693 --log-level=TRACE --also-log-to-stderr --coordinator-id=3 --coordinator-port=10113 --management-port=12123--coordinator-hostname=localhost --nuraft-log-file=/var/log/memgraph/nuraft
 ```
 
 4. Start instance1:
 ```plaintext
-docker run  --name instance1 -p 7687:7687 -p 7447:7444 -v mg_lib4:/var/lib/memgraph -v mg_log4:/var/log/memgraph memgraph/memgraph --bolt-port=7687 --log-level=TRACE --also-log-to-stderr --management-port=13011 --data-recovery-on-startup=true
+docker run  --name instance1 --network=host -p 7687:7687 -p 7447:7444 -v mg_lib4:/var/lib/memgraph -v mg_log4:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7687 --log-level=TRACE --also-log-to-stderr --management-port=13011--data-recovery-on-startup=true
 ```
 
 5. Start instance2:
 ```plaintext
-docker run --name instance2 -p 7688:7688 -p 7448:7444 -v mg_lib5:/var/lib/memgraph -v mg_log5:/var/log/memgraph memgraph/memgraph --bolt-port=7688 --log-level=TRACE --also-log-to-stderr --management-port=13012 --data-recovery-on-startup=true
+docker run --name instance2 --network=host -p 7688:7688 -p 7448:7444 -v mg_lib5:/var/lib/memgraph -v mg_log5:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7688 --log-level=TRACE --also-log-to-stderr --management-port=13012--data-recovery-on-startup=true
 ```
 
 6. Start instance3:
 ```plaintext
-docker run --name instance3 -p 7689:7689 -p 7449:7444 -v mg_lib6:/var/lib/memgraph -v mg_log6:/var/log/memgraph memgraph/memgraph --bolt-port=7689 --log-level=TRACE --also-log-to-stderr --management-port=13013 --data-recovery-on-startup=true
+docker run --name instance3 --network=host -p 7689:7689 -p 7449:7444 -v mg_lib6:/var/lib/memgraph -v mg_log6:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7689 --log-level=TRACE --also-log-to-stderr --management-port=13013--data-recovery-on-startup=true
 ```
 
 ### Register instances
 
 1. Start communication with any Memgraph client on any coordinator. Here we chose coordinator 1.
 ```plaintext
-mgconsole --port=7690
+mgconsole --port=7691
 ```
 2. Connect the other two coordinator instances to the cluster.
 
 ```plaintext
-ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "localhost:7691", "coordinator_server": "localhost:10112", "management_server": "localhost:12122"};
-ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "localhost:7692", "coordinator_server": "localhost:10113", "management_server": "localhost:12123"};
+ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "localhost:7692", "coordinator_server": "localhost:10112", "management_server": "localhost:12122"};
+ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "localhost:7693", "coordinator_server": "localhost:10113", "management_server": "localhost:12123"};
 ```
 
 3. Register 3 data instances as part of the cluster:
@@ -697,9 +723,9 @@ SET INSTANCE instance_3 TO MAIN;
 
 | name          | bolt_server    | coordinator_server | management_server | health | role     | last_succ_resp_ms |
 | ------------- | -------------- | ------------------ | ----------------- | ------ | -------- | ----------------  |
-| coordinator_1 | localhost:7690 | localhost:10111    | localhost:12121   | up     | leader   |  0                |
-| coordinator_2 | localhost:7691 | localhost:10112    | localhost:12122   | up     | follower |  16               |
-| coordinator_3 | localhost:7692 | localhost:10113    | localhost:12123   | up     | follower |  25               |
+| coordinator_1 | localhost:7691 | localhost:10111    | localhost:12121   | up     | leader   |  0                |
+| coordinator_2 | localhost:7692 | localhost:10112    | localhost:12122   | up     | follower |  16               |
+| coordinator_3 | localhost:7693 | localhost:10113    | localhost:12123   | up     | follower |  25               |
 | instance_1    | localhost:7687 |       ""           | localhost:13011   | up     | replica  |  39               |
 | instance_2    | localhost:7688 |       ""           | localhost:13012   | up     | replica  |  21               |
 | instance_3    | localhost:7689 |       ""           | localhost:13013   | up     | main     |  91               |
@@ -711,9 +737,9 @@ that and automatically promote the first alive REPLICA to become the new MAIN. T
 
 | name          | bolt_server    | coordinator_server | management_server | health | role     | last_succ_resp_ms |
 | ------------- | -------------- | ------------------ | ----------------- | ------ | -------- | ------------------|
-| coordinator_1 | localhost:7690 | localhost:10111    | localhost:12121   | up     | leader   |  0                |
-| coordinator_2 | localhost:7691 | localhost:10112    | localhost:12122   | up     | follower |  34               |
-| coordinator_3 | localhost:7692 | localhost:10113    | localhost:12123   | up     | follower |  28               |
+| coordinator_1 | localhost:7691 | localhost:10111    | localhost:12121   | up     | leader   |  0                |
+| coordinator_2 | localhost:7692 | localhost:10112    | localhost:12122   | up     | follower |  34               |
+| coordinator_3 | localhost:7693 | localhost:10113    | localhost:12123   | up     | follower |  28               |
 | instance_1    | localhost:7687 |       ""           | localhost:13011   | up     | main     |  61               |
 | instance_2    | localhost:7688 |       ""           | localhost:13012   | up     | replica  |  74               |
 | instance_3    | localhost:7689 |       ""           | localhost:13013   | down   | unknown  |  71222            |
