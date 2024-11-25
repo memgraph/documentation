@@ -22,7 +22,7 @@ export function CommunityLinks() {
       />
       <SocialCard 
         icon={<Calendar />}
-        title="Support"
+        title="Office hours"
         body="Talk with Memgraph engineers"
         href="https://memgraph.com/office-hours"
       />
