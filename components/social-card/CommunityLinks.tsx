@@ -7,6 +7,7 @@ import Calendar from '../icons/Calendar';
 export function CommunityLinks() {
   return (
     <div>
+    <hr className="border-t-1 border-[#e3e6e8] mt-12" />
     <SocialCards>
       <SocialCard 
         icon={<Discord />}
