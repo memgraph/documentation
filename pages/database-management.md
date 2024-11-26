@@ -29,6 +29,10 @@ needs.
 
 Check how to enable Memgraph Enterprise to get access to advanced features. 
 
+## [Experimental features](/database-management/experimental-features) 
+
+Experimental features in Memgraph represent the forefront of our innovation, offering cutting-edge functionality as we continuously enhance our product. Learn how to try them out.
+
 ## [Logs](/database-management/logs)
 
 Check how to access logs and change log tracking level. Learn about query audit logging in Memgraph Enterprise.
