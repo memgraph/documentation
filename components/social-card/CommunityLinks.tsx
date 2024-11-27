@@ -17,7 +17,7 @@ export function CommunityLinks() {
       />
       <SocialCard 
         icon={<GitHub />}
-        title="Github"
+        title="GitHub"
         body="Ask a question"
         href="https://github.com/memgraph/memgraph/discussions"
       />
