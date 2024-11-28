@@ -7,8 +7,6 @@ import { Callout } from 'nextra/components'
 
 # Kubernetes
 
-## Available charts
-
 Memgraph can be deployed on Kubernetes. Currently, supported deployment methods for Memgraph
 are:
 
@@ -21,32 +19,90 @@ There is also support for deploying Memgraph Lab on Kubernetes:
 - [**Helm chart for Memgraph Lab**](#helm-chart-for-memgraph-lab)
 
 For details on the implementation of the Helm charts, you can go to [**Memgraph
-Helm charts repository**](https://github.com/memgraph/helm-charts). Due to
-numerous possible use cases and deployment setups via Kubernetes, the provided
-Helm charts are a starting point you can modify according to your needs. 
+Helm charts repository**](https://github.com/memgraph/helm-charts).
 
-This docs page contains the basic information on how to deploy Memgraph or
-Memgraph Lab on Kubernetes using Helm charts.
+Due to numerous possible use cases and deployment setups via Kubernetes, the
+provided Helm charts are a starting point you can modify according to your
+needs. This page will highlight some of the specific parts of the Helm charts
+that you might want to adjust. 
+
 
 ## Helm chart for standalone Memgraph
 
-Since [Helm chart for standalone
+Memgraph is a stateful application (database), hence the [Helm chart for
+standalone
 Memgraph](https://github.com/memgraph/helm-charts/tree/main/charts/memgraph) is
-configured to deploy Memgraph as a Kubernetes `StatefulSet` workload, it is also
-necessary to define a `PersistentVolumeClaims` to store [the data
+configured to deploy Memgraph as a Kubernetes `StatefulSet` workload. 
+
+It will deploy a single Memgraph instance in a single pod.
+
+Typically, when deploying a stateful application like Memgraph, a `StatefulSet`
+workload is used to ensure that each pod has a unique identity and stable
+network identity. When deploying Memgraph,  it is also necessary to define a
+`PersistentVolumeClaims` to store [the data
 directory](/configuration/data-durability-and-backup) (`/var/lib/memgraph`).
 This enables the data to be persisted even if the pod is restarted or deleted. 
 
-If you don't require data persistence or your dataset is static, using the
-`StatefulSet` workload is unnecessary. Stateful applications are more complex to
-set up and maintain, as they require more attention when handling storage
-information and security.
+
+### Storage configuration
+
+By default, the Helm chart will create a `PersistentVolumeClaim` for storage and
+logs. The storage class is not defined by default, Memgraph will use the default
+storage class of the Kubernetes cluster. If your storage class does not have
+`Retain` reclaim policy, you will lose the data once the `PersistentVolumeClaim`
+is deleted because the data will be deleted with the `PersistentVolume`.
+
+If you want to use a specific storage class to set the reclaim policy or storage
+type, you can define it in the `values.yaml` file.
+
+An example of a storage class for AWS EBS volumes: 
+```yaml
+storageClass:
+  name: "gp2"
+  provisioner: "kubernetes.io/aws-ebs"
+  storageType: "gp2"
+  fsType: "ext4"
+  reclaimPolicy: "Retain"
+  volumeBindingMode: "Immediate"
+```
+
+Default template for a storage class is part of the Helm chart and can be found 
+in the repository. 
+
+More details on the configuration options can be found in the [Configuration
+part](#configuration-options).
+
+### Secrets
+
+The Helm chart allows you to use Kubernetes secrets to store Memgraph
+credentials. By default, the secrets are disabled. If you want to use secrets,
+you can enable them in the `values.yaml` file.
+
+The secrets are prepared to work to be used for environment variables `MEMGRAPH_USER` and `MEMGRAPH_PASSWORD`. 
+
+
+### System configuration
+
+The Helm chart will set the linux kernel `vm.max_map_count` parameter to `262144` by default 
+to ensure Memgraph won't run into issues with memory mapping. 
+
+<Callout type="info">
+The vm.max_map_count parameter is a kernel parameter that specifies the maximum number of memory map areas a process may have.
+This change will be applied to all nodes in the cluster. If you want to disable this feature, you can set `sysctlInitContainer.enabled` to `false` in the `values.yaml` file.
+</Callout>
+
+
+### Installing Memgraph standalone Helm chart
 
 To include a standalone Memgraph as a part of your Kubernetes cluster, you need
 to [**add the repository**](#add-the-repository) and [**install
 Memgraph**](#install-memgraph).
 
-### Add the repository
+The steps below will work in the Minikube environment, but you can also use them
+in other Kubernetes environments with minor adjustments.
+
+
+#### Add the repository
 
 Add the Memgraph Helm chart repository to your local Helm setup by running the
 following command:
@@ -61,7 +117,7 @@ Make sure to update the repository to fetch the latest Helm charts available:
 helm repo update
 ```
 
-### Install Memgraph
+#### Install Memgraph
 
 To install Memgraph Helm Chart, run the following command:
 ```
@@ -69,14 +125,14 @@ helm install <release-name> memgraph/memgraph
 ```
 Replace `<release-name>` with the name of the release you chose.
 
-### Access Memgraph
+#### Access Memgraph
 
 Once Memgraph is installed, you can access it using the provided services and
 endpoints, such as various [client libraries](/client-libraries), command-line
 interface [`mgconsole`](/getting-started/cli) or visual user interface [Memgraph
 Lab](/data-visualization).
 
-### Configuration options
+#### Configuration options
 
 The following table lists the configurable parameters of the Memgraph chart and
 their default values.
