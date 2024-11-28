@@ -18,6 +18,7 @@ interface ProjectSize {
 
 interface Item {
   id: string;
+  cloudCode: string;
   regionId: string;
   projectSizeId: string;
   priceRamPerHour: string;
@@ -99,16 +100,15 @@ const PricingCalculator: React.FC = () => {
   }, [selectedRegionId, selectedSizeId, items]);
 
   return (
-    <div className="p-5 max-w-lg mx-auto">
-      <h1 className="text-xl font-bold mb-4">Monthly Pricing Estimate</h1>
-
-      <label className="block mb-2 font-semibold">Select Cloud Region</label>
+    <div className="my-10 p-10 flex xl:flex-row flex-col gap-20 bg-[#f9f9f9]">
+      <div>
+      <label className="mb-2 font-semibold">Cloud region</label>
       <select
         value={selectedRegionId || ''}
         onChange={(e) => setSelectedRegionId(e.target.value)}
         className="border rounded w-full p-2 mb-4"
       >
-        <option value="">-- Select a Region --</option>
+        <option value="">-- Select region --</option>
         {regions.map(region => (
           <option key={region.id} value={region.id}>
             {region.name}
@@ -116,13 +116,13 @@ const PricingCalculator: React.FC = () => {
         ))}
       </select>
 
-      <label className="block mb-2 font-semibold">Select Project Size</label>
+      <label className="mb-2 font-semibold">Project size</label>
       <select
         value={selectedSizeId || ''}
         onChange={(e) => setSelectedSizeId(e.target.value)}
         className="border rounded w-full p-2 mb-4"
       >
-        <option value="">-- Select a Project Size --</option>
+        <option value="">-- Select project size --</option>
         {sizes.map(size => (
           <option key={size.id} value={size.id}>
             {size.name}
@@ -130,22 +130,46 @@ const PricingCalculator: React.FC = () => {
         ))}
       </select>
 
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold mb-2">Cost Breakdown</h2>
-        {hourlyComputeCost !== null && (
-          <p>Compute cost: ${hourlyComputeCost.toFixed(4)} / hour</p>
+      </div>
+      <div>
+        <div className="flex flex-col">
+          <div className='text-lg font-semibold'>
+            Monthly Estimate:
+          </div>
+          <div className='text-2xl'>
+          ~${monthlyEstimate.toFixed(2)}
+          </div>
+      </div>
+      <div className="my-4 flex flex-col gap-2">
+          <h2 className="text-sm font-normal">BREAKDOWN</h2>
+          <div className='flex flex-row gap-8'>
+            {hourlyComputeCost !== null && (
+              <div className='text-[#919092] text-sm flex flex-col'>
+              <div>COMPUTE COST:</div>
+                <div>${hourlyComputeCost.toFixed(4)}/h</div>
+                </div>
         )}
-        {hourlyStorageCost !== null && (
-          <p>Storage cost: ${hourlyStorageCost.toFixed(4)} / hour</p>
+            {hourlyStorageCost !== null && (
+              <div className='text-[#919092] text-sm flex flex-col'>
+              <div>STORAGE COST:</div>
+                <div>${hourlyStorageCost.toFixed(4)}/h</div>
+                </div>
         )}
         {perGBNetworkCost !== null && (
-          <p>Network cost: ${perGBNetworkCost.toFixed(2)} / GB</p>
-        )}
-      </div>
+              <div className='text-[#919092] text-sm flex flex-col'>
+                <div>NETWORK COST:</div>
+                <div>
+                  ${perGBNetworkCost.toFixed(2)}/GB</div>
+                </div>
+            )}
+          </div>
 
-      <div className="text-lg font-bold">
-        Monthly Estimate: ${monthlyEstimate.toFixed(2)}
+          <div className='mt-4 text-xs'>
+          <hr></hr><br></br>
+          Shown prices are only estimates. Your actual fees will depend on the usage of Memgraph Cloud and the number of running projects. Don't worry, you will always be able to check your balance.
+          </div>
       </div>
+        </div>
     </div>
   );
 };
