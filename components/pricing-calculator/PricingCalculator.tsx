@@ -100,7 +100,7 @@ const PricingCalculator: React.FC = () => {
   }, [selectedRegionId, selectedSizeId, items]);
 
   return (
-    <div className="my-10 p-10 flex xl:flex-row flex-col gap-20 bg-[#f9f9f9]">
+    <div className="my-10 p-10 flex xl:flex-row flex-col gap-20 bg-[#f9f9f9] dark:bg-[#3a3436]">
       <div>
       <label className="mb-2 font-semibold">Cloud region</label>
       <select
