@@ -1,12 +1,6 @@
 <h1 align="center"><a href="https://memgraph.com/docs/">Memgraph Documentation</a></h1>
 
 <p align="center">
-  <a href="https://memgraph.com/documentation/" alt="Documentation">
-    <img src="https://img.shields.io/badge/documentation-Memgraph-orange" />
-  </a>
-</p>
-
-<p align="center">
   <a href="https://memgr.ph/join-discord">
     <img src="https://img.shields.io/badge/Discord-7289DA?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/>
   </a>
