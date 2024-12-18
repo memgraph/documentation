@@ -99,17 +99,135 @@ the libraries integrated with Memgraph.
 {<h4>LangChain</h4>}
 
 LangChain is a framework for developing applications powered by large language
-models (LLMs). Currently, with Memgraph's LangChain integration you can query
-your graph database with natural language. The example can be found on the
-[LangChain
-documentation](https://python.langchain.com/docs/integrations/graphs/memgraph/). 
+models (LLMs). Currently, with Memgraph's LangChain integration supports
+creating a knowledge graph from unstructured data and querying with natural
+language. You can follow the example on [LangChain
+docs](https://python.langchain.com/docs/integrations/graphs/memgraph/) or go
+through quick start below.
 
-<Callout type="info">
-We are in the process of updating and improving the integration. We added a
-support to build a knowledge graph from unstructured data and improved schema
-generation speed. To track progress and speed things up, please upvote the [PR on LangChain
-GitHub](https://github.com/langchain-ai/langchain/pull/27017) 👍.
-</Callout>
+{<h5>Installation</h5>}
+
+To install all the required packages, run:
+
+```shell
+pip install langchain langchain-openai neo4j --user
+```
+
+{<h5>Environment setup</h5>}
+
+Before you get started, make sure you have [Memgraph](/getting-started) running
+in the background.
+
+Then, instantiate `MemgraphGraph` in your Python code. This object holds the
+connection to the running Memgraph instance. Make sure to set up all the
+environment variables properly.
+
+```python
+import os
+
+from langchain_community.chains.graph_qa.memgraph import MemgraphQAChain
+from langchain_community.graphs import MemgraphGraph
+from langchain_core.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
+
+url = os.environ.get("MEMGRAPH_URI", "bolt://localhost:7687")
+username = os.environ.get("MEMGRAPH_USERNAME", "")
+password = os.environ.get("MEMGRAPH_PASSWORD", "")
+
+graph = MemgraphGraph(
+    url=url, username=username, password=password, refresh_schema=False
+)
+```
+
+The `refresh_schema` is initially set to `False` because there is still no data in
+the database and we want to avoid unnecessary database calls.
+
+To interact with the LLM, you must configure it. Here is how you can set API key as an
+environment variable for OpenAI:
+
+```python
+os.environ["OPENAI_API_KEY"] = "your-key-here"
+```
+
+{<h5>Dataset</h5>}
+
+For the dataset, we'll use the following text about Charles Darwin:
+
+```python
+text = """
+    Charles Robert Darwin was an English naturalist, geologist, and biologist,
+    widely known for his contributions to evolutionary biology. His proposition that
+    all species of life have descended from a common ancestor is now generally
+    accepted and considered a fundamental scientific concept. In a joint
+    publication with Alfred Russel Wallace, he introduced his scientific theory that
+    this branching pattern of evolution resulted from a process he called natural
+    selection, in which the struggle for existence has a similar effect to the
+    artificial selection involved in selective breeding. Darwin has been
+    described as one of the most influential figures in human history and was
+    honoured by burial in Westminster Abbey.
+"""
+```
+
+{<h5>Graph construction</h5>}
+
+To construct the graph, first initialize `LLMGraphTransformer` from the desired
+LLM and convert the document to the graph structure.
+
+```python
+llm = ChatOpenAI(temperature=0, model_name="gpt-4-turbo")
+llm_transformer = LLMGraphTransformer(llm=llm)
+documents = [Document(page_content=text)]
+graph_documents = llm_transformer.convert_to_graph_documents(documents)
+```
+
+The graph structure in the `GraphDocument` format can be forwarded to the
+`add_graph_documents` procedure to import in into Memgraph. That method
+transforms the list of `graph_documents` into appropriate Cypher queries that need
+to be executed in Memgraph.
+
+```python
+# Make sure the database is empty
+graph.query("STORAGE MODE IN_MEMORY_ANALYTICAL")
+graph.query("DROP GRAPH")
+graph.query("STORAGE MODE IN_MEMORY_TRANSACTIONAL")
+
+# Create KG
+graph.add_graph_documents(graph_documents)
+```
+
+In the below image, you can see how the text was transformed into a knowledge
+graph and stored into Memgraph.
+
+![langchain-kg](/pages/ai-ecosystem/langchain-kg-creation.png)
+
+For [additional
+options](https://python.langchain.com/docs/integrations/graphs/memgraph/#additional-options),
+check the full guide on the LangChain docs. 
+
+{<h5>Querying</h5>}
+
+In the end, you can query the knowledge graph:
+
+```python
+chain = MemgraphQAChain.from_llm(
+    ChatOpenAI(temperature=0),
+    graph=graph,
+    model_name="gpt-4-turbo",
+    allow_dangerous_requests=True,
+)
+print(chain.invoke("Who Charles Robert Darwin collaborated with?")["result"])
+```
+Here is the result:
+```
+MATCH (:Person {id: "Charles Robert Darwin"})-[:COLLABORATION]->(collaborator)
+RETURN collaborator;
+Alfred Russel Wallace
+```
+
+In the image below, you can see what's happening under the hood to get the
+answer. 
+
+![langchain-query](/pages/ai-ecosystem/langchain-retrieval.png)
 
 {<h4>LlamaIndex</h4>}
 
