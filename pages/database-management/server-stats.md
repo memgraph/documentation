@@ -43,8 +43,7 @@ The result will contain the following fields:
 | global_isolation_level       | The current `global` isolation level.<br/>For more info, check out [isolation levels](/fundamentals/transactions#isolation-levels).                                                       |
 | session_isolation_level      | The current `session` isolation level.                                                                                                                                                        |
 | next_session_isolation_level | The current `next` isolation level.                                                                                                                                                           |
-| storage_mode                 | The current storage mode.<br/>For more info, check out [storage modes](/fundamentals/storage-memory-usage#storage-modes).         
-                                                        |
+| storage_mode                 | The current storage mode.<br/>For more info, check out [storage modes](/fundamentals/storage-memory-usage#storage-modes).       |
 
 
 ## License information
