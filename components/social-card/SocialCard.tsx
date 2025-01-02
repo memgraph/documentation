@@ -1,7 +1,7 @@
-import type { ReactElement } from 'react';
+import type { ReactNode } from 'react';
 
 interface SocialCardProps {
-  icon: ReactElement;
+  icon: ReactNode;
   title: string;
   href: string;
   body: string;

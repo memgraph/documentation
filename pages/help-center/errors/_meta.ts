@@ -1,4 +1,4 @@
-{
+export default {
   "auth": "Auth",
   "durability": "Durability",
   "memory": "Memory",
