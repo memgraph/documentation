@@ -25,11 +25,6 @@ const config: DocsThemeConfig = {
   navigation: true,
   gitTimestamp: true,
   backgroundColor: { light: "#FFFFFF", dark: "#231F20" },
-  useNextSeoProps() {
-    return {
-      titleTemplate: "%s",
-    };
-  },
 };
 
 export default config;
