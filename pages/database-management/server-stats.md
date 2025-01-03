@@ -43,7 +43,29 @@ The result will contain the following fields:
 | global_isolation_level       | The current `global` isolation level.<br/>For more info, check out [isolation levels](/fundamentals/transactions#isolation-levels).                                                       |
 | session_isolation_level      | The current `session` isolation level.                                                                                                                                                        |
 | next_session_isolation_level | The current `next` isolation level.                                                                                                                                                           |
-| storage_mode                 | The current storage mode.<br/>For more info, check out [storage modes](/fundamentals/storage-memory-usage#storage-modes).                                                                 |
+| storage_mode                 | The current storage mode.<br/>For more info, check out [storage modes](/fundamentals/storage-memory-usage#storage-modes).       |
+
+
+## License information
+
+Running the following query will return certain information about the Memgraph 
+Enterprise License that was injected into the system.
+
+```cypher
+SHOW LICENSE INFO;
+```
+
+| Field             | Description                                         |
+|-------------------|-----------------------------------------------------|
+| organization_name | Organization name for the enterprise license.       |
+| license_key       | Encoded license key.                                |
+| is_valid          | Brief flag whether the license is currently valid.  |
+| license_type      | Enterprise / OEM                                    |
+| valid_until       | Date when the license expires.                      |
+| memory_limit      | Memory limit (in GiB).                              |
+| status            | Descriptive status of the license validity.         |
+
+
 
 ## Metrics information
 
