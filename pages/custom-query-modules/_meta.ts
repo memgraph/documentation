@@ -1,4 +1,4 @@
-{
+export default {
   "c": "C",
   "cpp": "C++",
   "python": "Python",

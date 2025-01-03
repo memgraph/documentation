@@ -1,4 +1,4 @@
-{
+export default {
   "index": "Home",
   "getting-started": "Getting started",
   "client-libraries": "Client libraries",

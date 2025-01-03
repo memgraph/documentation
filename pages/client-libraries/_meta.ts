@@ -1,4 +1,4 @@
-{
+export default {
   "c-sharp": "C#",
   "go": "Go",
   "graphql": "GraphQL",

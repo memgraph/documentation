@@ -1,4 +1,4 @@
-{
+export default {
   "best-practices": "Best practices",
   "differences-in-cypher-implementations": "Differences in Cypher implementations",
   "create-graph-objects": "Create graph objects",
