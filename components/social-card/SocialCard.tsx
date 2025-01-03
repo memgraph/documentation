@@ -11,6 +11,7 @@ export function SocialCard({ icon, title, href, body }: SocialCardProps) {
   return (
     <a
       href={href}
+      target='_blank'
       className="social-card group flex flex-col justify-start overflow-hidden rounded-lg border border-gray-200 text-current no-underline dark:shadow-none hover:shadow-gray-100 dark:hover:shadow-none shadow-gray-100 active:shadow-sm active:shadow-gray-200 transition-all duration-200 hover:border-gray-300 bg-transparent shadow-sm dark:border-neutral-800 hover:bg-slate-50 hover:shadow-md dark:hover:border-neutral-700 dark:hover:bg-neutral-900"
     >
       <div className="p-4 flex flex-col gap-2 dark:bg-[#3a3436]">
