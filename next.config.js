@@ -1,22 +1,14 @@
-import nextra from 'nextra'
-
-const withNextra = nextra({
+const withNextra = require('nextra')({
   theme: 'nextra-theme-docs',
   themeConfig: './theme.config.tsx',
   latex: true,
-  search: {
-    codeblocks: false
-  },
   defaultShowCopyCode: true
 })
 
-
-
-export default withNextra({
+module.exports = withNextra({
 	trailingSlash: false,
 	basePath: '/docs',
-  assetPrefix: '/docs',
-  reactStrictMode: true,
+	assetPrefix: '/docs',
   async redirects() {
     return [
       {
