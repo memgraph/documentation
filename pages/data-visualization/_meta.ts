@@ -1,4 +1,4 @@
-{
+export default {
   "install-and-connect": "Install and connect",
   "user-manual": "User manual",
   "graph-style-script": "Graph style script",
