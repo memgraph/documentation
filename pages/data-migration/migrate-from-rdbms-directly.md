@@ -238,8 +238,7 @@ After migrating the relationships, we can see how our graph looks like:
 MATCH (m)-[p]->(b) RETURN m, p, b;
 ```
 
-![](/pages/data-migration/migrate-from-rdbms-directly/migrate-from-rdbms-directly-connected-graph.png)
-
+![](/pages/data-migration/migrate-from-rdbms-directly/migrate-from-rdbms-directly/connected-graph.png)
 
 ### 5. Switch back to in-memory transactional mode
 If we want to resume the transactional guarantees, we can do so by switching back from
