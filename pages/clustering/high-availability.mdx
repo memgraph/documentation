@@ -58,7 +58,8 @@ Directly connecting to the MAIN instance isn't preferred in the HA cluster since
 can use bolt+routing so that write queries can always be sent to the correct data instance. This protocol works so that the client
 first sends a ROUTE bolt message to any coordinator instance. The coordinator replies to the message by returning the routing table with three entries specifying
 from which instance can be data read, to which instance data can be written and which instances can behave as routers. In the Memgraph HA cluster, the MAIN
-data instance is the only writeable instance, REPLICAs are readable instances, and COORDINATORs behave as routers. 
+data instance is the only writeable instance, REPLICAs are readable instances, and COORDINATORs behave as routers. Bolt+routing is the client-side routing protocol
+which means that the resolution of network endpoints happens inside drivers.
 For more details check [Request message ROUTE](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route) documentation.
 
 Users only need to change the scheme they use for connecting to coordinators. This means instead of using `bolt://<main_ip_address>,` you should
@@ -193,7 +194,7 @@ In case the MAIN instance already exists in the cluster, a replica instance will
 
 ### Add coordinator instance
 
-The user can choose any coordinator instance and connect other two (or more) coordinator instances to the cluster. This can be done before or after registering data instances,
+The user can choose any coordinator instance to run cluster setup queries. This can be done before or after registering data instances,
 the order isn't important. 
 
 ```plaintext
@@ -202,11 +203,10 @@ ADD COORDINATOR coordinatorId WITH CONFIG {"bolt_server": boltServer, "coordinat
 
 <Callout type="info">
 
-We need to inform the leader coordinator of the existence of other follower coordinators.
-If you are running `ADD COORDINATOR` cypher queries on coordinator with --coordinator-id=1, you only need to add other two coordinator instances. For example, when using 3 
-coordinators you need to use two `ADD COORDINATOR` queries:
+`ADD COORDINATOR` query needs to be run for all coordinators in the cluster.
 
 ```
+ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "127.0.0.1:7691", "coordinator_server": "127.0.0.1:10111", "management_server": "127.0.0.1:12111"};
 ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "127.0.0.1:7692", "coordinator_server": "127.0.0.1:10112", "management_server": "127.0.0.1:12112"};
 ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "127.0.0.1:7693", "coordinator_server": "127.0.0.1:10113", "management_server": "127.0.0.1:12113"};
 ```
@@ -285,7 +285,7 @@ This operation will result in writing to the Raft log.
 
 You can check the state of the whole cluster using the `SHOW INSTANCES` query. The query will display all the Memgraph servers visible in the cluster. With
 each server you can see the following information:
- 1. Network ports they are using for managing cluster state
+ 1. Network endpoints they are using for managing cluster state
  2. Health state of server
  3. Role - MAIN, REPLICA, LEADER, FOLLOWER or unknown if not alive
  4. The time passed since the last response time to the leader's health ping 
@@ -301,6 +301,7 @@ followers will execute actions in this exact order:
 SHOW INSTANCES;
 ```
 
+
 ### Show instance
 
 You can check the state of the current coordinator to which you are connected by running the following query:
@@ -315,6 +316,8 @@ This query will return the information about:
 3. coordinator server over which Raft communication is done 
 4. management server which is also used for inter-coordinators communication and 
 5. cluster role: whether the coordinator is currently a leader of the follower.
+
+If the query `ADD COORDINATOR` wasn't run for the current instance, the value of the bolt server will be "".
 
 
 ## Setting config for highly-available cluster
@@ -341,11 +344,6 @@ pass before the coordinator starts considering the instance to be down.
 Consider the instance to be down only if several consecutive pings fail because a single ping can fail because of a large number of different reasons in distributed systems.
 
 </Callout>
-
-There is an additional flag, `--instance-get-uuid-frequency-sec`, which sets 
-how often the coordinator should check on REPLICA instances if they follow the correct MAIN instance. REPLICA may die and get back up
-before the coordinator notices that. In that case, REPLICA will not follow MAIN for `--instance-get-uuid-frequency-sec` seconds. It is advisable to set 
-the flag to more than `--instance-down-timeout-sec`, as it is needed first to confirm the instance was down and not that there was some networking issue.
 
 
 ## Failover
@@ -475,7 +473,7 @@ It will also recover the following server config information:
 If durability is not disabled, the following information will be recovered from a common RocksDB `logs` instance: 
 - current version of `logs` durability store 
 - snapshots found with `snapshot_id_` prefix in database:
-  - coordinator cluster state - all data instances with their role (MAIN or REPLICA), UUID of MAIN instance which REPLICA is listening to 
+  - coordinator cluster state - all data instances with their role (MAIN or REPLICA), all coordinator instances and UUID of MAIN instance which REPLICA is listening to 
   - last log idx
   - last log term
   - last cluster config
@@ -551,6 +549,7 @@ You can directly use initialization file `HA_register.cypherl`:
 
 ```
 
+ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "coord1:7691", "coordinator_server": "coord1:10111", "management_server": "coord2:12121"};
 ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "coord2:7692", "coordinator_server": "coord2:10112", "management_server": "coord2:12122"};
 ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "coord3:7693", "coordinator_server": "coord3:10113", "management_server": "coord3:12123"};
 
@@ -653,7 +652,7 @@ services:
       - ./license.cypherl:/tmp/init/license.cypherl:ro
       - mg_lib4:/var/lib/memgraph
       - mg_log4:/var/log/memgraph
-    command: ["--init-file=/tmp/init/license.cypherl","--data-recovery-on-startup=true", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7687", "--management-port=13011"]
+    command: ["--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7687", "--management-port=13011"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.6
@@ -667,7 +666,7 @@ services:
       - ./license.cypherl:/tmp/init/license.cypherl:ro
       - mg_lib5:/var/lib/memgraph
       - mg_log5:/var/log/memgraph
-    command: ["--init-file=/tmp/init/license.cypherl","--data-recovery-on-startup=true", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7688", "--management-port=13012"]
+    command: ["--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7688", "--management-port=13012"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.7
@@ -681,7 +680,7 @@ services:
       - ./license.cypherl:/tmp/init/license.cypherl:ro
       - mg_lib6:/var/lib/memgraph
       - mg_log6:/var/log/memgraph
-    command: ["--init-file=/tmp/init/license.cypherl","--data-recovery-on-startup=true", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7689", "--management-port=13013"]
+    command: ["--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7689", "--management-port=13013"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.8
@@ -716,17 +715,17 @@ docker run  --name coord3 --network=host -p 7693:7693 -p 7446:7444 -v mg_lib3:/v
 
 4. Start instance1:
 ```plaintext
-docker run  --name instance1 --network=host -p 7687:7687 -p 7447:7444 -v mg_lib4:/var/lib/memgraph -v mg_log4:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7687 --log-level=TRACE --also-log-to-stderr --management-port=13011--data-recovery-on-startup=true
+docker run  --name instance1 --network=host -p 7687:7687 -p 7447:7444 -v mg_lib4:/var/lib/memgraph -v mg_log4:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7687 --log-level=TRACE --also-log-to-stderr --management-port=13011
 ```
 
 5. Start instance2:
 ```plaintext
-docker run --name instance2 --network=host -p 7688:7688 -p 7448:7444 -v mg_lib5:/var/lib/memgraph -v mg_log5:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7688 --log-level=TRACE --also-log-to-stderr --management-port=13012--data-recovery-on-startup=true
+docker run --name instance2 --network=host -p 7688:7688 -p 7448:7444 -v mg_lib5:/var/lib/memgraph -v mg_log5:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7688 --log-level=TRACE --also-log-to-stderr --management-port=13012
 ```
 
 6. Start instance3:
 ```plaintext
-docker run --name instance3 --network=host -p 7689:7689 -p 7449:7444 -v mg_lib6:/var/lib/memgraph -v mg_log6:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7689 --log-level=TRACE --also-log-to-stderr --management-port=13013--data-recovery-on-startup=true
+docker run --name instance3 --network=host -p 7689:7689 -p 7449:7444 -v mg_lib6:/var/lib/memgraph -v mg_log6:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7689 --log-level=TRACE --also-log-to-stderr --management-port=13013
 ```
 
 ### Register instances
@@ -735,9 +734,10 @@ docker run --name instance3 --network=host -p 7689:7689 -p 7449:7444 -v mg_lib6:
 ```plaintext
 mgconsole --port=7691
 ```
-2. Connect the other two coordinator instances to the cluster.
+2. Add coordinator instances to the cluster.
 
 ```plaintext
+ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "localhost:7691", "coordinator_server": "localhost:10111", "management_server": "localhost:12121"};
 ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "localhost:7692", "coordinator_server": "localhost:10112", "management_server": "localhost:12122"};
 ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "localhost:7693", "coordinator_server": "localhost:10113", "management_server": "localhost:12123"};
 ```
