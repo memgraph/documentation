@@ -132,7 +132,6 @@ environment variables or configuration flags:
 - coordinator port
 - coordinator id
 - management port
-- high availability durability
 - path to nuraft log file
 - coordinator hostname
 
@@ -154,7 +153,6 @@ When using any of these environment variables, flags `--bolt-port` and `--manage
 export MEMGRAPH_COORDINATOR_PORT=10111
 export MEMGRAPH_COORDINATOR_ID=1
 export MEMGRAPH_BOLT_PORT=7687
-export MEMGRAPH_HA_DURABILITY=true
 export MEMGRAPH_NURAFT_LOG_FILE="<path-to-log-file>"
 export MEMGRAPH_COORDINATOR_HOSTNAME="localhost"
 export MEMGRAPH_MANAGEMENT_PORT=12121
@@ -433,22 +431,20 @@ forbidden until a ping from the coordinator passes.
 
 ### Coordinator instances restart
 
-In case the coordinator instance dies and it is restarted, it will not lose any data from the RAFT log or RAFT snapshots, since `--ha-durability` is enabled by default. 
+In case the coordinator instance dies and it is restarted, it will not lose any data from the RAFT log or RAFT snapshots, since coordinator data is always backed-up by a durable storage. 
 For more details read about high availability durability in the durability chapter.
 
 
 ## Durability
 
-High availability durability is enabled by default. Durability flag controls logs and snapshots. Details about other coordinators are always made durable
-since without that information, the coordinator can't rejoin the cluster.
+All NuRaft data is made durable by default. This includes all Raft logs, Raft snapshots and information about cluster connectivity. 
+The details about the cluster connectivity are made durable since without that information, the coordinator can't rejoin the cluster on its restart.
 
 Information about logs and snapshots is stored under one RocksDB instance in the `high_availability/raft_data/logs` directory stored under 
 the top-level `--data-directory` folder. All the data stored there is recovered in case the coordinator restarts.
 
-Data about other coordinators and their endpoints is recovered from the `high_availability/raft_data/network` directory stored under 
-the top-level `--data-directory` folder. When the coordinator rejoins, it will communicate with other coordinators and receive updates from the current leader.
-
-In case durability is disabled, at least one coordinator must be alive at all times so that data from the Raft log is not lost.
+Data about other coordinators is recovered from the `high_availability/raft_data/network` directory stored under 
+the top-level `--data-directory` folder. When the coordinator rejoins, it will reestablish the communication with other coordinators and receive updates from the current leader.
 
 ### First start 
 
@@ -459,7 +455,7 @@ for each user action and failover action. Snapshots are created every N (N curre
 
 ### Restart of coordinator 
 
-In case of coordinator's failure, on the restart, it will read information about other coordinators stored under `high_availability/raft_data/network` directory. 
+In case of the coordinator's failure, on the restart, it will read information about other coordinators stored under `high_availability/raft_data/network` directory. 
 
 From the `network` directory we will recover the server state before the coordinator stopped, including the current term, for whom the coordinator voted, and whether 
 election timer is allowed.
@@ -470,7 +466,7 @@ It will also recover the following server config information:
 - ID of the current log 
 - additional data needed by nuRaft
 
-If durability is not disabled, the following information will be recovered from a common RocksDB `logs` instance: 
+The following information will be recovered from a common RocksDB `logs` instance: 
 - current version of `logs` durability store 
 - snapshots found with `snapshot_id_` prefix in database:
   - coordinator cluster state - all data instances with their role (MAIN or REPLICA), all coordinator instances and UUID of MAIN instance which REPLICA is listening to 
@@ -485,12 +481,10 @@ If durability is not disabled, the following information will be recovered from 
 
 ### Handling of durability errors 
 
-If snapshots are not stored, an exception is thrown and left for the nuRAFT library to handle the issue. Logs can be missed and not stored since they are compacted and deleted
-every two snapshots and will be removed relatively fast. In case the log is missing on recovery, the coordinator will not start. In that case, it is best to start 
-a coordinator without durability and leave other coordinators to send missing data. Users are advised to use the same strategy in case a snapshot is missing on one 
-of the coordinators. 
+If snapshots are not correctly stored, the exception is thrown and left for the nuRAFT library to handle the issue. Logs can be missed and not stored since they are compacted and 
+deleted every two snapshots and will be removed relatively fast.
 
-Memgraph throws an error in case of failure to store cluster config, which is updated in the `high_availability/raft_data/network` folder. 
+Memgraph throws an error when failing to store cluster config, which is updated in the `high_availability/raft_data/network` folder. 
 If this happens, it will happen only on the first cluster start when coordinators are connecting since 
 coordinators are configured only once at the start of the whole cluster. This is a non-recoverable error since in case the coordinator rejoins the cluster and has 
 the wrong state of other clusters, it can become a leader without being connected to other coordinators. 
@@ -549,7 +543,7 @@ You can directly use initialization file `HA_register.cypherl`:
 
 ```
 
-ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "coord1:7691", "coordinator_server": "coord1:10111", "management_server": "coord2:12121"};
+ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "coord1:7691", "coordinator_server": "coord1:10111", "management_server": "coord1:12121"};
 ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "coord2:7692", "coordinator_server": "coord2:10112", "management_server": "coord2:12122"};
 ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "coord3:7693", "coordinator_server": "coord3:10113", "management_server": "coord3:12123"};
 
