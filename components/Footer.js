@@ -3,21 +3,24 @@ import Image from "next/image";
 import Link from "next/link";
 
 const ExternalLink = ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="external-link">
-      <span className="external-link-text">{children}</span>
-      <Image
-        src="/docs/external-link.svg"
-        alt="External Link"
-        width={16}
-        height={17}
-      />
-    </a>
+  <Link
+    href={href}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="external-link"
+  >
+    <span className="external-link-text">{children}</span>
+    <Image
+      src="/docs/external-link.svg"
+      alt="External Link"
+      width={16}
+      height={17}
+    />
+  </Link>
 );
 
-const Footer = () => {
-  return (
-    <div className="whole-footer-wrapper">
-     <footer className="flex flex-col pt-[56px] lg:pt-[107px] px-[40px] lg:px-[156px] h-full lg:h-[511px] bg-[#F9F9F9] dark:bg-[#231F20] items-center">
+const Footer = () => (
+  <footer className="flex flex-col pt-[56px] lg:pt-[107px] px-[40px] lg:px-[156px] h-full lg:h-[511px] bg-[#F9F9F9] dark:bg-[#231F20] items-center">
     <div className="flex flex-col lg:flex-row gap-[40px] lg:gap-[80px] mb-[45px]">
       <div className="flex flex-col mr-[140px] w-[162px] h-[56px]">
         <a href="https://memgraph.com">
@@ -102,8 +105,6 @@ const Footer = () => {
       Copyright © {new Date().getFullYear()} Memgraph
     </div>
   </footer>
-    </div>
-  );
-};
+);
 
 export default Footer;
