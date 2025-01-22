@@ -77,7 +77,7 @@ please see the [information about monitoring via HTTP server](/database-manageme
 SHOW METRICS INFO;
 ```
 
-```console copy=false
+```copy=false
 +---------------------------------------+---------------+-------------+----------+
 | name                                  | type          | metric type | value    |
 +---------------------------------------+---------------+-------------+----------+
@@ -188,7 +188,7 @@ Running this query will provide information about currently logged-in Memgraph u
 SHOW ACTIVE USERS INFO;
 ```
 
-```console copy=false
+```copy=false
 | username | session uuid                           | login timestamp       |
 |----------|----------------------------------------|-----------------------|
 | test     | "550e8400-e29b-41d4-a716-446655440000" | "2024-08-03 18:53:00" |
