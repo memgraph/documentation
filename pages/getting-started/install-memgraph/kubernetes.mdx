@@ -7,46 +7,104 @@ import { Callout } from 'nextra/components'
 
 # Kubernetes
 
-## Available charts
+Memgraph can be deployed on Kubernetes. The easiest way to do that is with
+[Helm](https://helm.sh/), the package manager for Kubernetes. Helm uses a
+packaging format called [charts](https://helm.sh/docs/topics/charts/). A chart
+is a collection of files that describe a related set of Kubernetes resources.
 
-Memgraph can be deployed on Kubernetes. Currently, supported deployment methods for Memgraph
-are:
+Currently, we prepared and released the following charts:
 
-- [**Helm chart for standalone Memgraph**](#helm-chart-for-standalone-memgraph)
-- [**Helm chart for Memgraph high availability
-  cluster**](#helm-chart-for-memgraph-high-availability-cluster) (Enterprise)
+- [Helm chart for standalone Memgraph](#helm-chart-for-standalone-memgraph)
+- [Helm chart for Memgraph high availability
+  cluster](#helm-chart-for-memgraph-high-availability-cluster) (Enterprise)
+- [Helm chart for Memgraph Lab](#helm-chart-for-memgraph-lab)
 
-There is also support for deploying Memgraph Lab on Kubernetes:
+The Helm charts are published on [Artifact
+Hub](https://artifacthub.io/packages/search?org=memgraph&sort=relevance&page=1).
+For details on the implementation of the Helm charts, check [Memgraph Helm
+charts repository](https://github.com/memgraph/helm-charts).
 
-- [**Helm chart for Memgraph Lab**](#helm-chart-for-memgraph-lab)
+Due to numerous possible use cases and deployment setups via Kubernetes, the
+provided Helm charts are a starting point you can modify according to your
+needs. This page will highlight some of the specific parts of the Helm charts
+that you might want to adjust. 
 
-For details on the implementation of the Helm charts, you can go to [**Memgraph
-Helm charts repository**](https://github.com/memgraph/helm-charts). Due to
-numerous possible use cases and deployment setups via Kubernetes, the provided
-Helm charts are a starting point you can modify according to your needs. 
-
-This docs page contains the basic information on how to deploy Memgraph or
-Memgraph Lab on Kubernetes using Helm charts.
 
 ## Helm chart for standalone Memgraph
 
-Since [Helm chart for standalone
+Memgraph is a stateful application (database), hence the [Helm chart for
+standalone
 Memgraph](https://github.com/memgraph/helm-charts/tree/main/charts/memgraph) is
-configured to deploy Memgraph as a Kubernetes `StatefulSet` workload, it is also
-necessary to define a `PersistentVolumeClaims` to store [the data
+configured to deploy Memgraph as a Kubernetes `StatefulSet` workload. 
+
+It will deploy a single Memgraph instance in a single pod.
+
+Typically, when deploying a stateful application like Memgraph, a `StatefulSet`
+workload is used to ensure that each pod has a unique identity and stable
+network identity. When deploying Memgraph,  it is also necessary to define a
+`PersistentVolumeClaims` to store [the data
 directory](/configuration/data-durability-and-backup) (`/var/lib/memgraph`).
 This enables the data to be persisted even if the pod is restarted or deleted. 
 
-If you don't require data persistence or your dataset is static, using the
-`StatefulSet` workload is unnecessary. Stateful applications are more complex to
-set up and maintain, as they require more attention when handling storage
-information and security.
 
-To include a standalone Memgraph as a part of your Kubernetes cluster, you need
-to [**add the repository**](#add-the-repository) and [**install
-Memgraph**](#install-memgraph).
+### Storage configuration
 
-### Add the repository
+By default, the Helm chart will create a `PersistentVolumeClaim` (PVC) for
+storage and logs. If the storage class for PVC is not defined, PVC will use the
+default one available in the cluster. The storage class can be configured in the
+`values.yaml` file. To avoid losing your data, make sure you have `Retain`
+reclaim policy. If you delete `PersistentVolumeClaim` without having `Retain`
+reclaim policy, you will lose your data because `PersistentVolume` will be
+deleted.
+
+An example of a storage class for AWS EBS volumes: 
+```yaml
+storageClass:
+  name: "gp2"
+  provisioner: "kubernetes.io/aws-ebs"
+  storageType: "gp2"
+  fsType: "ext4"
+  reclaimPolicy: "Retain"
+  volumeBindingMode: "Immediate"
+```
+
+Default template for a storage class is part of the Helm chart and can be found 
+in the repository. 
+
+More details on the configuration options can be found in the [configuration
+section](#configuration-options).
+
+### Secrets
+
+The Helm chart allows you to use Kubernetes secrets to store Memgraph
+credentials. By default, the secrets are disabled. If you want to use secrets,
+you can enable them in the `values.yaml` file.
+
+The secrets are prepared to work for environment variables `MEMGRAPH_USER` and `MEMGRAPH_PASSWORD`. 
+
+
+### System configuration
+
+The Helm chart will set the linux kernel `vm.max_map_count` parameter to `262144` by default 
+to ensure Memgraph won't run into issues with memory mapping. 
+
+<Callout type="info">
+The vm.max_map_count parameter is a kernel parameter that specifies the maximum number of memory map areas a process may have.
+This change will be applied to all nodes in the cluster. If you want to disable this feature, you can set `sysctlInitContainer.enabled` to `false` in the `values.yaml` file.
+</Callout>
+
+
+### Installing Memgraph standalone Helm chart
+
+To include a standalone Memgraph into your Kubernetes cluster, you need
+to [add the repository](#add-the-repository) and [install
+Memgraph](#install-memgraph).
+
+The steps below will work in the [Minikube](https://minikube.sigs.k8s.io/docs/)
+environment, but you can also use them in other Kubernetes environments with
+minor adjustments.
+
+#### Add the repository
 
 Add the Memgraph Helm chart repository to your local Helm setup by running the
 following command:
@@ -61,80 +119,90 @@ Make sure to update the repository to fetch the latest Helm charts available:
 helm repo update
 ```
 
-### Install Memgraph
+#### Install Memgraph
 
-To install Memgraph Helm Chart, run the following command:
+To install Memgraph Helm chart, run the following command:
 ```
 helm install <release-name> memgraph/memgraph
 ```
 Replace `<release-name>` with the name of the release you chose.
 
-### Access Memgraph
+#### Access Memgraph
 
 Once Memgraph is installed, you can access it using the provided services and
 endpoints, such as various [client libraries](/client-libraries), command-line
 interface [`mgconsole`](/getting-started/cli) or visual user interface [Memgraph
 Lab](/data-visualization).
 
-### Configuration options
+#### Configuration options
 
 The following table lists the configurable parameters of the Memgraph chart and
 their default values.
 
-| Parameter                                   | Description                                                                                         | Default                                 |
-|---------------------------------------------|-----------------------------------------------------------------------------------------------------|-----------------------------------------|
-| `image.repository`                          | Memgraph Docker image repository                                                                    | `memgraph/memgraph`                     |
-| `image.tag`                                 | Specific tag for the Memgraph Docker image. Overrides the image tag whose default is chart version. | `""` (Defaults to chart's app version)  |
-| `image.pullPolicy`                          | Image pull policy                                                                                   | `IfNotPresent`                          |
-| `useImagePullSecrets`                       | Override the default imagePullSecrets                                                               | `false`                                 |
-| `imagePullSecrets`                          | Specify image pull secrets                                                                          | `- name: regcred`                       |
-| `replicaCount`                              | Number of Memgraph instances to run. Note: no replication or HA support.                            | `1`                                     |
-| `affinity.nodeKey`                          | Key for node affinity (Preferred)                                                                   | `""`                                    |
-| `affinity.nodeValue`                        | Value for node affinity (Preferred)                                                                 | `""`                                    |
-| `nodeSelector`                              | Constrain which nodes your Memgraph pod is eligible to be scheduled on, based on the labels on the nodes. Left empty by default.              | `{}`                                    |
-| `tolerations`                               | A toleration is applied to a pod and allows the pod to be scheduled on nodes with matching taints. Left empty by default.                                                         | `[]`                                    |
-| `service.type`                              | Kubernetes service type                                                                             | `ClusterIP`                             |
-| `service.enableBolt`                        | Enable Bolt protocol                                                                                | `true`                                  |
-| `service.boltPort`                          | Bolt protocol port                                                                                  | `7687`                                  |
-| `service.boltProtocol`                      | Protocol used by Bolt                                                                               | `TCP`                                   |
-| `service.enableWebsocketMonitoring`         | Enable WebSocket monitoring                                                                         | `false`                                 |
-| `service.websocketPortMonitoring`           | WebSocket monitoring port                                                                           | `7444`                                  |
-| `service.websocketPortMonitoringProtocol`   | Protocol used by WebSocket monitoring                                                               | `TCP`                                   |
-| `service.enableHttpMonitoring`              | Enable HTTP monitoring                                                                              | `false`                                 |
-| `service.httpPortMonitoring`                | HTTP monitoring port                                                                                | `9091`                                  |
-| `service.httpPortMonitoringProtocol`        | Protocol used by HTTP monitoring                                                                    | `http`                                  |
-| `service.annotations`                       | Annotations to add to the service                                                                   | `{}`                                    |
-| `persistentVolumeClaim.createStorageClaim`  | Enable creation of a Persistent Volume Claim for storage                                            | `true`                                  |
-| `persistentVolumeClaim.storageClassName`    | Storage class name for the persistent volume claim                                                  | `""`                                    |
-| `persistentVolumeClaim.storageSize`         | Size of the persistent volume claim for storage                                                     | `10Gi`                                  |
-| `persistentVolumeClaim.existingClaim`       | Use an existing Persistent Volume Claim                                                              | `memgraph-0`                            |
-| `persistentVolumeClaim.storageVolumeName`   | Name of an existing Volume to create a PVC for                                                      | `""`                                    |
-| `persistentVolumeClaim.createLogStorage`    | Enable creation of a Persistent Volume Claim for logs                                               | `true`                                  |
-| `persistentVolumeClaim.logStorageClassName` | Storage class name for the persistent volume claim for logs                                         | `""`                                    |
-| `persistentVolumeClaim.logStorageSize`      | Size of the persistent volume claim for logs                                                        | `1Gi`                                   |
-| `memgraphConfig`                            | List of strings defining Memgraph configuration settings                                            | `["--also-log-to-stderr=true"]`         |
-| `secrets.enabled`                           | Enable the use of Kubernetes secrets for Memgraph credentials                                       | `false`                                 |
-| `secrets.name`                              | The name of the Kubernetes secret containing Memgraph credentials                                   | `memgraph-secrets`                      |
-| `secrets.userKey`                           | The key in the Kubernetes secret for the Memgraph user, the value is passed to the `MEMGRAPH_USER` env                                             | `USER`                         |
-| `secrets.passwordKey`                       | The key in the Kubernetes secret for the Memgraph password, the value is passed to the `MEMGRAPH_PASSWORD`                                          | `PASSWORD`                     |
-| `memgraphEnterpriseLicense`                 | Memgraph Enterprise License                                                                         | `""`                                    |
-| `memgraphOrganizationName`                  | Organization name for Memgraph Enterprise License                                                   | `""`                                    |
-| `statefulSetAnnotations`                    | Annotations to add to the stateful set                                                              | `{}`                                    |
-| `podAnnotations`                            | Annotations to add to the pod                                                                       | `{}`                                    |
-| `resources`                                 | CPU/Memory resource requests/limits. Left empty by default.                                         | `{}`                                    |
-| `serviceAccount.create`                     | Specifies whether a service account should be created                                               | `true`                                  |
-| `serviceAccount.annotations`                | Annotations to add to the service account                                                           | `{}`                                    |
-| `serviceAccount.name`                       | The name of the service account to use. If not set and create is true, a name is generated.         | `""`                                    |
-| `container.terminationGracePeriodSeconds`   | Grace period for pod termination                                                                    | `1800`                                  |
-| `probes.liveliness.initialDelaySeconds`     | Initial delay for liveliness probe                                                                  | `10`                                    |
-| `probes.liveliness.periodSeconds`           | Period seconds for liveliness probe                                                                 | `60`                                    |
-| `probes.liveliness.failureThreshold`        | Failure threshold for liveliness probe                                                              | `3`                                     |
-| `probes.readiness.initialDelaySeconds`      | Initial delay for readiness probe                                                                   | `10`                                    |
-| `probes.readiness.periodSeconds`            | Period seconds for readiness probe                                                                  | `30`                                    |
-| `probes.readiness.failureThreshold`         | Failure threshold for readiness probe                                                               | `3`                                     |
-| `probes.startup.initialDelaySeconds`        | Initial delay for startup probe                                                                     | `10`                                    |
-| `probes.startup.periodSeconds`              | Period seconds for startup probe                                                                    | `10`                                    |
-| `probes.startup.failureThreshold`           | Failure threshold for startup probe                                                                 | `30`                                    |
+| Parameter                                   | Description                                                                                                                      | Default                                |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `image.repository`                          | Memgraph Docker image repository                                                                                                 | `memgraph/memgraph`                    |
+| `image.tag`                                 | Specific tag for the Memgraph Docker image. Overrides the image tag whose default is chart version.                              | `""` (Defaults to chart's app version) |
+| `image.pullPolicy`                          | Image pull policy                                                                                                                | `IfNotPresent`                         |
+| `useImagePullSecrets`                       | Override the default imagePullSecrets                                                                                            | `false`                                |
+| `imagePullSecrets`                          | Specify image pull secrets                                                                                                       | `- name: regcred`                      |
+| `replicaCount`                              | Number of Memgraph instances to run. Note: no replication or HA support.                                                         | `1`                                    |
+| `affinity.nodeKey`                          | Key for node affinity (Preferred)                                                                                                | `""`                                   |
+| `affinity.nodeValue`                        | Value for node affinity (Preferred)                                                                                              | `""`                                   |
+| `nodeSelector`                              | Constrain which nodes your Memgraph pod is eligible to be scheduled on, based on the labels on the nodes. Left empty by default. | `{}`                                   |
+| `service.type`                              | Kubernetes service type                                                                                                          | `ClusterIP`                            |
+| `service.enableBolt`                        | Enable Bolt protocol                                                                                                             | `true`                                 |
+| `service.boltPort`                          | Bolt protocol port                                                                                                               | `7687`                                 |
+| `service.boltProtocol`                      | Protocol used by Bolt                                                                                                            | `TCP`                                  |
+| `service.enableWebsocketMonitoring`         | Enable WebSocket monitoring                                                                                                      | `false`                                |
+| `service.websocketPortMonitoring`           | WebSocket monitoring port                                                                                                        | `7444`                                 |
+| `service.websocketPortMonitoringProtocol`   | Protocol used by WebSocket monitoring                                                                                            | `TCP`                                  |
+| `service.enableHttpMonitoring`              | Enable HTTP monitoring                                                                                                           | `false`                                |
+| `service.httpPortMonitoring`                | HTTP monitoring port                                                                                                             | `9091`                                 |
+| `service.httpPortMonitoringProtocol`        | Protocol used by HTTP monitoring                                                                                                 | `http`                                 |
+| `service.annotations`                       | Annotations to add to the service                                                                                                | `{}`                                   |
+| `persistentVolumeClaim.createStorageClaim`  | Enable creation of a Persistent Volume Claim for storage                                                                         | `true`                                 |
+| `persistentVolumeClaim.storageClassName`    | Storage class name for the persistent volume claim                                                                               | `""`                                   |
+| `persistentVolumeClaim.storageSize`         | Size of the persistent volume claim for storage                                                                                  | `10Gi`                                 |
+| `persistentVolumeClaim.existingClaim`       | Use an existing Persistent Volume Claim                                                                                          | `memgraph-0`                           |
+| `persistentVolumeClaim.storageVolumeName`   | Name of an existing Volume to create a PVC for                                                                                   | `""`                                   |
+| `persistentVolumeClaim.createLogStorage`    | Enable creation of a Persistent Volume Claim for logs                                                                            | `true`                                 |
+| `persistentVolumeClaim.logStorageClassName` | Storage class name for the persistent volume claim for logs                                                                      | `""`                                   |
+| `persistentVolumeClaim.logStorageSize`      | Size of the persistent volume claim for logs                                                                                     | `1Gi`                                  |
+| `memgraphConfig`                            | List of strings defining Memgraph configuration settings                                                                         | `["--also-log-to-stderr=true"]`        |
+| `secrets.enabled`                           | Enable the use of Kubernetes secrets for Memgraph credentials                                                                    | `false`                                |
+| `secrets.name`                              | The name of the Kubernetes secret containing Memgraph credentials                                                                | `memgraph-secrets`                     |
+| `secrets.userKey`                           | The key in the Kubernetes secret for the Memgraph user, the value is passed to the `MEMGRAPH_USER` env                           | `USER`                                 |
+| `secrets.passwordKey`                       | The key in the Kubernetes secret for the Memgraph password, the value is passed to the `MEMGRAPH_PASSWORD`                       | `PASSWORD`                             |
+| `memgraphEnterpriseLicense`                 | Memgraph Enterprise License                                                                                                      | `""`                                   |
+| `memgraphOrganizationName`                  | Organization name for Memgraph Enterprise License                                                                                | `""`                                   |
+| `statefulSetAnnotations`                    | Annotations to add to the stateful set                                                                                           | `{}`                                   |
+| `podAnnotations`                            | Annotations to add to the pod                                                                                                    | `{}`                                   |
+| `resources`                                 | CPU/Memory resource requests/limits. Left empty by default.                                                                      | `{}`                                   |
+| `tolerations`                               | A toleration is applied to a pod and allows the pod to be scheduled on nodes with matching taints. Left empty by default.        | `[]`                                   |
+| `serviceAccount.create`                     | Specifies whether a service account should be created                                                                            | `true`                                 |
+| `serviceAccount.annotations`                | Annotations to add to the service account                                                                                        | `{}`                                   |
+| `serviceAccount.name`                       | The name of the service account to use. If not set and create is true, a name is generated.                                      | `""`                                   |
+| `container.terminationGracePeriodSeconds`   | Grace period for pod termination                                                                                                 | `1800`                                 |
+| `probes.liveliness.initialDelaySeconds`     | Initial delay for liveliness probe                                                                                               | `10`                                   |
+| `probes.liveliness.periodSeconds`           | Period seconds for liveliness probe                                                                                              | `60`                                   |
+| `probes.liveliness.failureThreshold`        | Failure threshold for liveliness probe                                                                                           | `3`                                    |
+| `probes.readiness.initialDelaySeconds`      | Initial delay for readiness probe                                                                                                | `10`                                   |
+| `probes.readiness.periodSeconds`            | Period seconds for readiness probe                                                                                               | `30`                                   |
+| `probes.readiness.failureThreshold`         | Failure threshold for readiness probe                                                                                            | `3`                                    |
+| `probes.startup.initialDelaySeconds`        | Initial delay for startup probe                                                                                                  | `10`                                   |
+| `probes.startup.periodSeconds`              | Period seconds for startup probe                                                                                                 | `10`                                   |
+| `probes.startup.failureThreshold`           | Failure threshold for startup probe                                                                                              | `30`                                   |
+| `nodeSelectors`                             | Node selectors for pod. Left empty by default.                                                                                   | `{}`                                   |
+| `customQueryModules`                        | List of custom Query modules that should be mounted to Memgraph Pod                                                              | `[]`                                   |
+| `sysctlInitContainer.enabled`               | Enable the init container to set sysctl parameters                                                                               | `true`                                 |
+| `sysctlInitContainer.maxMapCount`           | Value for `vm.max_map_count` to be set by the init container                                                                     | `262144`                               |
+| `storageClass.name`                         | Name of the StorageClass                                                                                                         | `"memgraph-generic-storage-class"`     |
+| `storageClass.provisioner`                  | Provisioner for the StorageClass                                                                                                 | `""`                                   |
+| `storageClass.storageType`                  | Type of storage for the StorageClass                                                                                             | `""`                                   |
+| `storageClass.fsType`                       | Filesystem type for the StorageClass                                                                                             | `""`                                   |
+| `storageClass.reclaimPolicy`                | Reclaim policy for the StorageClass                                                                                              | `Retain`                               |
+| `storageClass.volumeBindingMode`            | Volume binding mode for the StorageClass                                                                                         | `Immediate`                            |
 
 To change the default chart values, provide your own `values.yaml` file during
 the installation:
@@ -170,36 +238,101 @@ reference guide](/database-management/configuration).
 
 </Callout>
 
-<Callout type="info">
-
-Since Memgraph Docker image has root privileges on the data located on volumes
-and log directories, it is necessary that `runAsUser` is set to `0` in the
-`securityContext` section of the pod to override the `memgraph` user from the
-Docker image. Currently, Memgraph must have root privileges on the volumes. 
-
-</Callout>
 
 ## Helm chart for Memgraph high availability cluster (Enterprise)
 
-A Helm Chart for deploying Memgraph in [high availability
-setup](https://memgraph.com/docs/clustering/high-availability). This helm chart requires an enterprise version of Memgraph.
+A Helm chart for deploying Memgraph in [high availability
+setup](/clustering/high-availability). This helm chart requires [Memgraph
+Enterprise license](/database-management/enabling-memgraph-enterprise).
 
-Memgraph HA cluster includes 3 coordinators, 2 data instances by default. The
-cluster setup is performed via the cluster-setup job. The HA cluster is still
-work in progress and started with `--experimental-enabled=high-availability`.
-The cluster is started in the configuration without the node selector, which
-means that in the current configuration, it is not highly available if the node
-fails.
+Memgraph HA cluster includes 3 coordinators and 2 data instances by default. Since 
+multiple instances are deployed, you need to have multiple workers nodes in Kubernetes
+to deploy the Memgraph HA cluster.
+
+Most of the features and configurations discussed in the [Helm chart for
+Standalone Memgraph](#helm-chart-for-standalone-memgraph) are also applicable to
+the Memgraph HA Helm chart if the configuration is not specific to the
+standalone setup. Differences can be observed in the [configuration
+options](#configuration-options-1) section.
+
+### Node affinity 
+
+Since HA Memgraph deploys multiple pods, you can control how they are
+distributed in the cluster. 
+
+The Memgraph HA Helm chart provides the following node affinity options:
+
+- `default`:  Default affinity will try to schedule the data pods and
+ coordinator pods on the nodes where there is no other pod with the same role.
+ If there is no such node, the pods will still be scheduled on the same node,
+ and deployment will not fail. 
+- `unique`: This is achieved with the `memgraph.affinity.unique` set to `true`.
+  This option will try to deploy the data pods and coordinator pods on different
+ nodes in the cluster so that each pod is on a unique node. If there are no
+ sufficient nodes, this deployment will fail.
+- `parity`: This is achieved with the `memgraph.affinity.parity` set to `true`.
+  This option will try to deploy the data pods and coordinator pods on the same node
+ with maximum one coordinator and one data pod on the node. If there are no
+ sufficient nodes to deploy the pods, this deployment will fail. Coordinators
+ get scheduled first. After that, data pods are looking for the nodes with
+ coordinators. 
+- `nodeSelection`: This is achieved with the `memgraph.affinity.nodeSelection`
+  set to `true`. This option will try to deploy the data pods and coordinator
+ pods on the nodes with specific labels. You can set the labels with the
+ `memgraph.affinity.dataNodeLabelValue` and
+  `memgraph.affinity.coordinatorNodeLabelValue` parameters. If all the nodes
+ with labels are occupied by the pods with the same role, the deployment will
+ fail. 
+
+<Callout type="info"> 
+During the usage of `nodeSelection` affinity, make sure that the nodes are
+properly labeled, the default key for the role label is `role`, and default
+values are `data-node` and `coordinator-node`. Labels can be added to nodes
+using the `kubectl label nodes <node-name> <key>=<value>` command.
+[Here](https://github.com/memgraph/helm-charts/tree/main/charts/memgraph-high-availability/aks)
+is an example of how to deploy Memgraph HA cluster in AKS.
+</Callout>
 
 ### Installing the Memgraph HA Helm Chart
-To install the Memgraph HA Helm Chart, follow the steps below:
+
+
+To include Memgraph HA cluster as a part of your Kubernetes cluster, you need to
+[add the repository](#add-the-repository-1) and [install
+Memgraph](#install-memgraph-ha).
+
+The steps below will work in the Minikube environment, but you can also use them
+in other Kubernetes environments with minor adjustments.
+
+To test affinity, you can use minikube in multi-node mode. 
+
+#### Add the repository
+
+Add the Memgraph Helm chart repository to your local Helm setup by running the
+following command:
+
+```
+helm repo add memgraph https://memgraph.github.io/helm-charts
+```
+
+Make sure to update the repository to fetch the latest Helm charts available:
+
+```
+helm repo update
+```
+
+#### Install Memgraph HA
+
+Since Memgraph HA requires an Enterprise license, you need to provide the license and organization name during the installation.
+
 ```
 helm install <release-name> memgraph/memgraph-high-availability --set memgraph.env.MEMGRAPH_ENTERPRISE_LICENSE=<your-license>,memgraph.env.MEMGRAPH_ORGANIZATION_NAME=<your-organization-name>
 ```
-Replace `<release-name>` with a name of your choice for the release and set the
-enterprise license.
 
-### Changing the default chart values
+Replace `<release-name>` with a name of your choice for the release and set the
+Enterprise license.
+
+#### Changing the default chart values
+
 To change the default chart values, run the command with the specified set of
 flags:
 ```
@@ -207,11 +340,12 @@ helm install <resource-name> memgraph/memgraph-high-availability --set <flag1>=<
 ```
 Or you can modify a `values.yaml` file and override the desired values:
 ```
-helm install <resource-name> memgraph/memgraph-high-availability-f values.yaml
+helm install <resource-name> memgraph/memgraph-high-availability -f values.yaml
 ```
 
 
-### Configuration Options
+
+#### Configuration options
 
 The following table lists the configurable parameters of the Memgraph chart and
 their default values.
@@ -219,7 +353,7 @@ their default values.
 | Parameter                                   | Description                                                                                         | Default                                 |
 |---------------------------------------------|-----------------------------------------------------------------------------------------------------|-----------------------------------------|
 | `memgraph.image.repository`                 | Memgraph Docker image repository                                                                    | `memgraph/memgraph`                     |
-| `memgraph.image.tag`                        | Specific tag for the Memgraph Docker image. Overrides the image tag whose default is chart version. | `2.17.0`                                |
+| `memgraph.image.tag`                        | Specific tag for the Memgraph Docker image. Overrides the image tag whose default is chart version. | `2.22.0`                                |
 | `memgraph.image.pullPolicy`                 | Image pull policy                                                                                   | `IfNotPresent`                          |
 | `memgraph.env.MEMGRAPH_ENTERPRISE_LICENSE`  | Memgraph enterprise license                                                                         | `<your-license>`                        |
 | `memgraph.env.MEMGRAPH_ORGANIZATION_NAME`   | Organization name                                                                                   | `<your-organization-name>`              |
@@ -237,20 +371,26 @@ their default values.
 | `memgraph.coordinators.volumeClaim.storagePVCSize` | Size of the storage PVC for coordinators                                                         | `1Gi`                                   |
 | `memgraph.coordinators.volumeClaim.logPVC`  | Enable log PVC for coordinators                                                                     | `false`                                 |
 | `memgraph.coordinators.volumeClaim.logPVCSize` | Size of the log PVC for coordinators                                                              | `256Mi`                                 |
-| `memgraph.affinity.enabled`                 | Each pod and instance is deployed to unique node in the cluster                                        | `true`                                 |
+| `memgraph.externalAccess.coordinator.serviceType`  | NodePort, CommonLoadBalancer or LoadBalancer. Use LoadBalancer for Cloud production deployment and NodePort for local testing. 'CommonLoadBalancer' will open one load balancer for all coordinators while 'LoadBalancer' will open one load balancer for each coordinators. | `NodePort` |
+| `memgraph.externalAccess.dataInstance.serviceType` | NodePort or LoadBalancer. Use LoadBalancer for Cloud production deployment and NodePort for local testing. | `NodePort`             |
+| `memgraph.ports.boltPort`                   | Bolt port used on coordinator and data instances.                                                   | `7687`                                  |
+| `memgraph.ports.managementPort`             | Management port used on coordinator and data instances.                                             | `10000`                                 |
+| `memgraph.ports.replicationPort`            | Replication port used on data instances.                                                            | `20000`                                 |
+| `memgraph.ports.coordinatorPort`            | Coordinator port used on coordinators.                                                              | `12000`                                 |
+| `memgraph.affinity.unique`                         | Schedule pods on different nodes in the cluster                                                     | `false`                    |
+| `memgraph.affinity.parity`                         | Schedule pods on the same node with maximum one coordinator and one data node                       | `false`                    |
+| `memgraph.affinity.nodeSelection`                  | Schedule pods on nodes with specific labels                                                         | `false`                    |
+| `memgraph.affinity.roleLabelKey`                   | Label key for node selection                                                                        | `role`                     |
+| `memgraph.affinity.dataNodeLabelValue`             | Label value for data nodes                                                                          | `data-node`                |
+| `memgraph.affinity.coordinatorNodeLabelValue`      | Label value for coordinator nodes                                                                   | `coordinator-node`         |
 | `data`                                      | Configuration for data instances                                                                    | See `data` section                      |
 | `coordinators`                              | Configuration for coordinator instances                                                             | See `coordinators` section              |
 
-For the `data` and `coordinators` sections, each item in the list has the
-following parameters:
+For the `data` and `coordinators` sections, each item in the list has the following parameters:
 
 | Parameter                                   | Description                                                                                         | Default                                 |
 |---------------------------------------------|-----------------------------------------------------------------------------------------------------|-----------------------------------------|
 | `id`                                        | ID of the instance                                                                                  | `0` for data, `1` for coordinators      |
-| `boltPort`                                  | Bolt port of the instance                                                                           | `7687`                                  |
-| `managementPort` (data only)                | Management port of the data instance                                                                | `10000`                                 |
-| `replicationPort` (data only)               | Replication port of the data instance                                                               | `20000`                                 |
-| `coordinatorPort` (coordinators only)       | Coordinator port of the coordinator instance                                                        | `12000`                                 |
 | `args`                                      | List of arguments for the instance                                                                  | See `args` section                      |
 
 The `args` section contains a list of arguments for the instance. The default
@@ -262,23 +402,22 @@ values are the same for all instances:
 - "--replication-restore-state-on-startup=true"
 ```
 
-For all available database settings, refer to the [Configuration settings
-reference
-guide](https://memgraph.com/docs/memgraph/reference-guide/configuration).
+For all available database settings, refer to the [configuration settings
+docs](/database-management/configuration).
 
 
-## Helm Chart for Memgraph Lab 
+## Helm chart for Memgraph Lab 
 
-A Helm Chart for deploying Memgraph Lab on Kubernetes.
+A Helm chart for deploying Memgraph Lab on Kubernetes.
 
-### Installing the Memgraph Lab Helm Chart
-To install the Memgraph Lab Helm Chart, follow the steps below:
+### Installing the Memgraph Lab Helm chart
+To install the Memgraph Lab Helm chart, follow the steps below:
 ```
 helm install <release-name> memgraph/memgraph-lab
 ```
 Replace `<release-name>` with a name of your choice for the release.
 
-### Changing the default chart values
+#### Changing the default chart values
 To change the default chart values, run the command with the specified set of
 flags:
 ```
@@ -289,7 +428,7 @@ Or you can modify a `values.yaml` file and override the desired values:
 helm install <resource-name> memgraph/memgraph-lab -f values.yaml
 ```
 
-### Configuration Options
+#### Configuration options
 
 The following table lists the configurable parameters of the Memgraph Lab chart
 and their default values.

@@ -400,7 +400,7 @@ Example:
 
 Sets the element's background to be an image from the image URL. Supported
 format are `png`, `jpeg`, `gif` (static, not dynamic), `webp` or base 64 encoded
-image using `inline data:image/png;base64`.
+image using inline `data:image/png;base64`.
 
 
  It will
@@ -418,7 +418,7 @@ Examples:
 
 Sets the element's background to be an image from the image URL on mouse select
 event. Supported format are `png`, `jpeg`, `gif` (static, not dynamic), `webp`
-or base 64 encoded image using `inline data:image/png;base64`. It will override
+or base 64 encoded image using inline `data:image/png;base64`. It will override
 the value defined with the property `color-selected`.
 
 Example:
