@@ -355,7 +355,7 @@ All instances which are part of Memgraph HA cluster use the internal Cluster IP 
 Since Memgraph HA works with client-side routing, the resolution of all DNS entries happens outside internal Cluster IP network. Because of that, we need one more type of network
 which will be used for clients accessing instances inside the cluster. 
 
-- `IngressNginx`: Using only one load balancer you can access all instances from outside. [Read more](https://github.com/memgraph/helm-charts/tree/main/charts/memgraph-high-availability/aks#service-type--ingressnginx) on how to use it and set-up on the Azure AKS cloud platform.
+- `IngressNginx`: Using only one load balancer you can access all instances from outside.
 - `NodePort`: The cheapest option because it will open port on each node. For this to work, you need to enable public IPs on each node.
 - `LoadBalancer`: This option will use one load balancer for each instance in the cluster. Load balancer is mostly interesting here because it comes with public IP out of the box.
 
@@ -446,11 +446,11 @@ Note that the only part which you need to change from the above template is the
 Bolt server address. The value of the Bolt server address depends on the type of
 the external network you are using for accessing instances from outside. 
 
-#### Example of using Memgraph HA chart with `IngressNginx` resource
+#### Using Memgraph HA chart with `IngressNginx` resource
 
 The most cost-friendly way to manage a Memgraph HA cluster in K8s is using a `IngressNginx` contoller. This controller is capable of routing TCP messages on Bolt level protocol 
 to the K8s Memgraph services. To achieve this, it uses only a single `LoadBalancer` which means there is only a single external IP for connecting to the cluster. Users can connect 
-to any coordinator or data instance by distinguishing bolt ports. The first step is to install Memgraph HA chart:
+to any coordinator or data instance by distinguishing bolt ports. The only step required is to install Memgraph HA chart:
 
 ```
 helm install mem-ha-test ./charts/memgraph-high-availability --set \
@@ -459,76 +459,7 @@ env.MEMGRAPH_ORGANIZATION_NAME=<organization>,affinity.nodeSelection=true,\
 externalAccessConfig.dataInstance.serviceType=IngressNginx,externalAccessConfig.coordinator.serviceType=IngressNginx
 ```
 
-Next, install `IngressNginx` resource using:
-
-```
-helm upgrade --install ingress-nginx ingress-nginx \
---repo https://kubernetes.github.io/ingress-nginx \
---namespace ingress-nginx --create-namespace \
---set controller.tcp.services.configMapNamespace=ingress-nginx \
---set controller.tcp.services.configMapName=tcp-services
-```
-
-After installing Memgraph HA chart and `IngressNginx` resource, we need to customize a configuration of the newly created Controller and Deployment K8s object. 
-Open the `ingress-nginx-controller` service for editing by running:
-
-```
-kubectl edit svc ingress-nginx-controller -n ingress-nginx
-```
-
-Locate the `spec.ports` section and append the following services configuration:
-
-```
-- name: data-0
-  port: 9000
-  targetPort: 9000
-  protocol: TCP
-- name: data-1
-  port: 9001
-  targetPort: 9001
-  protocol: TCP
-- name: coord-1
-  port: 9011
-  targetPort: 9011
-  protocol: TCP
-- name: coord-2
-  port: 9012
-  targetPort: 9012
-  protocol: TCP
-- name: coord-3
-  port: 9013
-  targetPort: 9013
-  protocol: TCP
-```
-
-After you are done, save and close the file. Next, open the `ingress-nginx-controller` deployment by running:
-
-```
-kubectl edit deployment ingress-nginx-controller -n ingress-nginx
-```
-
-Locate the `args` section and append the following configuration option:
-
-```
-- --tcp-services-configmap=ingress-nginx/tcp-services
-```
-
-If you get stuck, more info can be found on the [Kubernetes user guide](https://kubernetes.github.io/ingress-nginx/user-guide/exposing-tcp-udp-services/). Save and close the file. 
-The only remaining step is to connect Memgraph instances. For that, we need to find out which external IP will a `LoadBalancer` use. 
-You can find that out by running:
-
-```
-kubectl get svc -o=wide -A
-```
-Setup queries:
-```
-ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "<external-ip>:9011", "management_server":  "memgraph-coordinator-1.default.svc.cluster.local:10000", "coordinator_server":  "memgraph-coordinator-1.default.svc.cluster.local:12000"};
-ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "<external-ip>:9012", "management_server":  "memgraph-coordinator-2.default.svc.cluster.local:10000", "coordinator_server":  "memgraph-coordinator-2.default.svc.cluster.local:12000"};
-ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "<external-ip>:9013", "management_server":  "memgraph-coordinator-3.default.svc.cluster.local:10000", "coordinator_server":  "memgraph-coordinator-3.default.svc.cluster.local:12000"};
-REGISTER INSTANCE instance_0 WITH CONFIG {"bolt_server": "<external-ip>:9000", "management_server": "memgraph-data-0.default.svc.cluster.local:10000", "replication_server": "memgraph-data-0.default.svc.cluster.local:20000"};
-REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "<external-ip>:9001", "management_server": "memgraph-data-1.default.svc.cluster.local:10000", "replication_server": "memgraph-data-1.default.svc.cluster.local:20000"};
-SET INSTANCE instance_1 TO MAIN;
-```
+The chart will also install IngressNginx automatically with all required configuration.
 
 #### Configuration options
 
