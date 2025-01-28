@@ -3118,6 +3118,11 @@ export default withNextra({
         source: '/fundamentals/graph-modeling',
         destination: '/data-modeling',
         permanent: true
+      },
+      {
+        source: '/advanced-algorithms/available-algorithms#streaming-graph-algorithms',
+        destination: '/advanced-algorithms/available-algorithms#dynamic-graph-algorithms-enterprise',
+        permanent: true
       }
     ];
   },
