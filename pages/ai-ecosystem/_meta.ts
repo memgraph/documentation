@@ -1,4 +1,6 @@
 export default {
     "graph-rag": "GraphRAG",
-    "machine-learning": "Machine learning"
+    "integrations": "Integrations",
+    "graphchat": "GraphChat",
+    "machine-learning": "Machine learning",
 }
