@@ -1786,6 +1786,7 @@ List(List &&other) noexcept
 | `Empty`                                   | Returns whether the list is empty.                    |
 | `Append`                                  | Appends the given `value` to the list.                |
 | `AppendExtend`                            | Extends the list and appends the given `value` to it. |
+| `Reserve`                                 | Ensure underlying capacity is at least `n`.           |
 | `begin`<br/>`end`<br/>`cbegin`<br/>`cend` | Returns the beginning/end of the `List` iterator.     |
 | `ToString`                                | Returns the list's string representation.             |
 
