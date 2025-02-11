@@ -52,11 +52,29 @@ By default, the Helm chart will create a `PersistentVolumeClaim` (PVC) for
 storage and logs. If the storage class for PVC is not defined, PVC will use the
 default one available in the cluster. The storage class can be configured in the
 `values.yaml` file. To avoid losing your data, make sure you have `Retain`
-reclaim policy. If you delete `PersistentVolumeClaim` without having `Retain`
-reclaim policy, you will lose your data because `PersistentVolume` will be
-deleted.
+reclaim policy set on your storage class. If you delete `PersistentVolumeClaim` without having `Retain`
+reclaim policy, you will lose your data because `PersistentVolume` will get
+deleted too. The other option except creating new storage class is to patch your existing
+storage class with the `Retain` policy since the default K8s policy is `Delete`. The patching
+can be done using the following bash script:
+
+```bash
+#!/bin/bash
+
+# Get all Persistent Volume names
+PVS=$(kubectl get pv --no-headers -o custom-columns=":metadata.name")
+
+# Loop through each PV and patch it
+for pv in $PVS; do
+  echo "Patching PV: $pv"
+  kubectl patch pv $pv -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+done
+
+echo
+
 
 An example of a storage class for AWS EBS volumes: 
+
 ```yaml
 storageClass:
   name: "gp2"
@@ -68,7 +86,8 @@ storageClass:
 ```
 
 Default template for a storage class is part of the Helm chart and can be found 
-in the repository. 
+in the repository. If you don't want to create a new storage class, set
+storageClass.create to `false`.
 
 More details on the configuration options can be found in the [configuration
 section](#configuration-options).
@@ -196,6 +215,7 @@ their default values.
 | `customQueryModules`                        | List of custom Query modules that should be mounted to Memgraph Pod                                                              | `[]`                                   |
 | `sysctlInitContainer.enabled`               | Enable the init container to set sysctl parameters                                                                               | `true`                                 |
 | `sysctlInitContainer.maxMapCount`           | Value for `vm.max_map_count` to be set by the init container                                                                     | `262144`                               |
+| `storageClass.create`                       | If set to true, new StorageClass will be created.                                                                                | `false`                                |
 | `storageClass.name`                         | Name of the StorageClass                                                                                                         | `"memgraph-generic-storage-class"`     |
 | `storageClass.provisioner`                  | Provisioner for the StorageClass                                                                                                 | `""`                                   |
 | `storageClass.storageType`                  | Type of storage for the StorageClass                                                                                             | `""`                                   |
