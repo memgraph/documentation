@@ -4,6 +4,8 @@ description: Learn how to model your existing data using dummy data before impor
 ---
 
 import { Cards } from 'nextra/components'
+import { Callout } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
 
 # Model a graph from CSV file
 
@@ -26,7 +28,7 @@ This guide is designed for:
   https://install.memgraph.com | sh` and for Windows run `iwr
   https://windows.memgraph.com | iex`. Read detailed instructions
   in the [getting started guide](https://memgraph.com/docs/getting-started).
-- A CSV file containing your data [stored in the running Memgraph container](/getting-started/first-steps-with-docker#copy-files-from-and-to-a-docker-container). For this guide, we provide a [dummy file with
+- A CSV file containing your data [stored in a running Memgraph container](/getting-started/first-steps-with-docker#copy-files-from-and-to-a-docker-container). For this guide, we provide a [dummy file with
   random
   data](https://public-assets.memgraph.com/import-data/data-modeling/random_data.csv).
 - Basic knowledge of databases (helpful but not mandatory).
@@ -75,6 +77,10 @@ Our goal is to show you how to:
 1. Import this data into Memgraph.
 2. Use it for analysis.
 3. Apply techniques you learned to your own data.
+
+If you'd like to skip the data modeling guide and head over to [querying the
+dataset](#test-and-optimize-the-queries), run the [import Cypher
+queries](#dataset-import-queries). 
 
 ## Analyze and break down data
 
@@ -160,7 +166,7 @@ Let’s break it down:
   more details about the entity. Properties are often used for analytics or
   filtering.
 - **Cypher automatically handles data types** for you, so there’s no need to
-  specify them—Memgraph takes care of that.
+  specify them -- Memgraph takes care of that.
 
 
 <h3 className="custom-header">Creating relationships</h3>
@@ -224,10 +230,49 @@ retrieves the connected nodes without needing to store redundant information.
 This is a key difference from traditional SQL databases, where relationships
 often require separate tables with duplicated data.
 
-## Create nodes
+## Data import
 
 The next step is to import the dummy CSV file into Memgraph using the [`LOAD
-CSV`](/querying/clauses/load-csv) clause and create `Person` nodes.
+CSV`](/querying/clauses/load-csv) clause.
+
+### Create indexes
+
+In Memgraph, indexes are not created in advance and creating constraints does
+not imply index creation. By creating label or label-property indexes,
+relationships between nodes will be created much faster and consequently speed
+up data import. A good rule of thumb is to create indexes for the label or label
+and property being matched in Cypher queries. 
+
+Indices are a great tool in Memgraph, particularly when dealing with large
+datasets and frequent queries. Here's why:
+
+- **Faster node lookup** - Label indices make it quicker to find nodes of a
+  specific type.
+- **Efficient Filtering** - Label-property indices improve the speed of filtering
+  operations, especially on frequently queried properties like `name`.
+
+For our example, it might be good to create the following indexes:
+
+```cypher
+CREATE INDEX ON :Person;
+CREATE INDEX ON :Person(name);
+```
+
+When running queries, it is good to filter data as much as possible. The most
+common approach is to filter by label. Since all of our nodes are labeled with
+`:Person`, this index is not that important. But, if you expand your database
+and have various labels, indexing them will increase query performance
+significantly. 
+
+Later on, when creating relationships, we'll filter data by the `name` property
+(name: "Cheryl" or name: "Jeanne"), and that's why we created such
+label-property index. It will significantly speed up filtering, especially if
+there are a lot of different names in the dataset. You can decide on which
+indexes to create after you design the import queries.
+
+### Create nodes
+
+Next, let's create `Person` nodes.
 
 **Objective:** Detect data that needs to be cleaned or trasformed for proper
 data import (e.g., convert strings to integers or dates).
@@ -238,7 +283,7 @@ Memgraph’s [temporal types](/fundamentals/data-types#temporal-types) come in
 Cypher, you can transform a date string into a temporal object using
 the `date()` function, which makes date comparisons easier and more efficient.
 
-Let’s create a `Person` node with a temporal date of birth:
+Here is an example of how a `Person` node can be created with a temporal date of birth:
 
 ```cypher
 CREATE (:Person {
@@ -249,32 +294,71 @@ CREATE (:Person {
 });
 ```
 
-If you run the following query:
+By storing the birthdate as a temporal type, `date_of_birth` field becomes an
+object with separate fields for the year, month, and day, all stored as
+integers. This makes date comparisons much simpler. 
+
+Comparing dates is far more practical with temporal than string types. Here is
+an example query that returns all `Person` nodes with a date of birth after
+January 1, 1990:
 
 ```cypher
-MATCH (p:Person) RETURN p;
+MATCH (p:Person) 
+WHERE p.date_of_birth > date('1990-01-01') RETURN p;
 ```
 
-You’ll notice that the `date_of_birth` field is now an object with separate
-fields for the year, month, and day, all stored as integers. This makes date
-comparisons much simpler. For example, you can easily compare dates like this:
+You can also make more granular comparisons. If you’re interested in finding all
+people born on the 10th day of any month, use the following query:
 
 ```cypher
-MATCH (p:Person) WHERE p.date_of_birth > date('1990-01-01') RETURN p;
+MATCH (p:Person) 
+WHERE p.date_of_birth.day = 10 RETURN p;
 ```
 
-This query will return all `Person` nodes with a date of birth after January 1,
-1990. You can also make more granular comparisons. If you’re interested in
-finding all people born on the 10th day of any month, run the following query:
+Taking this into account, we'll use temporal data type for birthdate instead of
+string and create nodes in Memgraph using the `LOAD CSV` clause. 
+
+The following query will create 1M `Person` nodes from the provided
+`random_data.csv` file:
 
 ```cypher
-MATCH (p:Person) WHERE p.date_of_birth.day = 10 RETURN p;
+LOAD CSV FROM 'usr/lib/memgraph/random_data.csv' WITH HEADER AS row
+CREATE (:Person {
+    name: row.Name,
+    surname: row.Surname,
+    age: toInteger(row.Age),
+    date_of_birth: date(row.Date_of_Birth)
+});
 ```
 
-This is far more practical than working with strings, and it makes your Cypher
-easier to read and maintain.
+Notice how we used `toInteger` function which will store the age as an integer,
+instead of the default string. Having integer instead of string eases the future
+comparisons.
 
-## Create relationships
+<h4 className="custom-header">Inspect the created nodes</h4>
+
+To verify the created nodes and visualize the results, run the following
+query:
+
+```cypher
+MATCH (n)
+RETURN n
+LIMIT 10;
+```
+
+Here’s more information on the query:
+
+1. `MATCH` clause:
+    - Retrieves all nodes (`n`).
+2. `RETURN` clause:
+    - Returns all nodes (`n`).
+3. `LIMIT` clause:
+    - Displays only the first 10 nodes for simplicity and quick
+      validation.
+
+[IMAGE]
+
+### Create relationships
 
 The next step is to create relationships between the `Person` nodes based on
 logical assumptions (e.g., people born in the same year could be considered
@@ -283,31 +367,17 @@ friends).
 **Objective:** Learn how to model relationships by identifying
 implicit or explicit connections.
 
-**Example:**
-
+Here is an example of a simple query that creates a relationship between two
+people born on the same day:
 ```cypher
-MATCH (p1:Person), (p2:Person) WHERE p1.date_of_birth = p2.date_of_birth
+MATCH (p1:Person), (p2:Person) 
+WHERE p1.date_of_birth = p2.date_of_birth
 CREATE (p1)-[:FRIENDS_WITH]->(p2);
 ```
 
-<h3 className="custom-header">Creating relationships between people with the same name in Memgraph</h3>
-
-After successfully importing `Person` nodes and interacting with them, it's time
-to create relationships between these nodes. In this example, we will model
-friendships based on a simple rule: people are considered friends if they share
-the same name.
-
-For demonstration purposes, we’ll focus on individuals named "John" and limit
-the number of created relationships to 100,000 to ensure efficiency and clarity.
-Here's how you can implement this logic in Memgraph using Cypher.
-
-<h4 className="custom-header">Step 1: Create relationships between friends</h4>
-
-The following query identifies all pairs of nodes labeled `Person` with the name
-"John" and creates a `FRIENDS_WITH` relationship between them. To avoid
-self-loops, the query ensures that a node cannot create a relationship with
-itself (`p1 <> p2`). Additionally, a `LIMIT` is applied to restrict the total
-number of relationships created to 100,000:
+Here is another example of a query that identifies all pairs of nodes labeled
+`Person` with the name "John" and creates a `FRIENDS_WITH` relationship between
+them:
 
 ```cypher
 MATCH (p1:Person {name: "John"}), (p2:Person {name: "John"})
@@ -317,21 +387,40 @@ LIMIT 100000
 CREATE (p1)-[:FRIENDS_WITH]->(p2);
 ```
 
+To avoid self-loops, the query ensures that a node cannot create a
+relationship with itself (`p1 <> p2`). Additionally, a `LIMIT` is applied to
+restrict the total number of relationships created to 100,000.
+
+After successfully importing `Person` nodes with the `LOAD CSV` clause and
+interacting with them, it's time to create relationships between these nodes. In
+this example, we will model friendships based on a simple rule: every Cherly
+and Jeanne are considered friends.
+
+There are 2,121 Cheryl and 245 Jeanne in the database. That means there are
+519,645 pairs of Cheryl and Jeanne `Person` nodes in the database. We plan to
+create `FRIENDS_WITH` relationship between every pair, meaning that we will
+create 519,645 relationships. 
+
+Here is a query to create all relationships:
+```cypher
+MATCH (p1:Person {name: "Cheryl"}), (p2:Person {name: "Jeanne"})
+WITH p1, p2
+MERGE (p1)-[:FRIENDS_WITH]->(p2);
+```
+
 Here’s more information:
 
-1. **`MATCH` clause**:
-    - Identifies all `Person` nodes with the name "John."
-    - Creates combinations of pairs (`p1` and `p2`), ensuring that `p1` and `p2` are not the same person (`p1 <> p2`) to
-      prevent self-loops.
-2. **`WITH` clause**:
-    - Passes the node pairs (`p1` and `p2`) to the next part of the query while
-      applying the `LIMIT` constraint.
-3. **`LIMIT` clause**:
-    - Restricts the total number of relationships created to 100,000.
-4. **`CREATE` clause**:
-    - Establishes the `FRIENDS_WITH` relationship between the selected pairs.
+1. `MATCH` clause:
+    - Identifies two `Person` nodes from the graph and creates such pair (`p1`
+      and `p2`). One node has property name Cheryl and another Jeanne. 
+2. `WITH` clause
+    - Passes the node pairs (`p1` and `p2`) to the next part of the query.
+3. `MERGE` clause:
+    - Establishes the `FRIENDS_WITH` relationship between the selected pairs,
+      making sure that no new nodes are create (`CREATE` would create
+      duplicates)
 
-<h4 className="custom-header">Step 2: Inspect the created relationships</h4>
+<h4 className="custom-header">Inspect the created relationships</h4>
 
 To verify the created relationships and visualize the results, run the following
 query:
@@ -342,158 +431,36 @@ RETURN n, r, m
 LIMIT 10;
 ```
 
-[ADD VISUAL]
+[ADD IMAGE]
 
-Here’s more information:
+Here’s more information on the query:
 
-1. **`MATCH` Clause**:
-    - Retrieves all nodes (`n` and `m`) connected by a `[:FRIENDS_WITH]`
+1. `MATCH` clause:
+    - Retrieves all nodes (`n` and `m`) connected by the `FRIENDS_WITH`
       relationship.
-2. **`RETURN` Clause**:
+2. `RETURN` clause:
     - Returns the starting node (`n`), the relationship (`r`), and the ending
       node (`m`) for inspection.
-3. **`LIMIT 10`**:
+3. `LIMIT` clause:
     - Displays only the first 10 relationships for simplicity and quick
       validation.
-
-By running these queries, you can
-
-- Model friendships between individuals who share the same name in Memgraph.
-- Limit the number of relationships created for efficiency.
-- Visualize and inspect the newly created `[:FRIENDS_WITH]` relationships to
-  confirm your data modeling logic.
 
 This approach demonstrates how easy it is to build and explore relationships
 within your graph database using Memgraph.
 
-## **CHAPTER 8: Optimize with indexes**
 
-**Task:** Create indexes to speed up querying on frequently used properties.
+## Test and optimize queries
 
-**Objective:** Learn how indexes improve query performance, especially for
-larger datasets.
+<Callout type="info">
+Make sure you have imported the dataset before you try out the queries below. If
+you want to import the data quickly, run the [import Cypher
+queries](#dataset-import-queries). 
+</Callout>
+The goal now is to write and test queries on the dummy data to ensure
+the best performance and structure.
 
-**Example:**
-
-```
-cypher
-
-CREATE INDEX ON :Person(name);
-CREATE INDEX ON :Person(surname);
-```
-
-### Optimizing relationship creation with indices in Memgraph
-
-Creating relationships in Memgraph is already fast compared to many other
-technologies, but it can be further optimized using indices. 
-
-### Initial performance without indices
-
-In our earlier example, we modeled friendships between people with the same
-name, specifically "John." The query we used was:
-
-```
-cypher
-
-MATCH (p1:Person {name: "John"}), (p2:Person {name: "John"})
-WHERE p1 <> p2
-WITH p1, p2
-LIMIT 100000
-CREATE (p1)-[:FRIENDS_WITH]->(p2);
-```
-
-Executing this query without any indices took approximately **3.5 seconds**,
-which is already fast for processing large datasets. However, we can make this
-even faster by introducing indices.
-
-### Step 1: Adding indices to improve performance
-
-Memgraph supports two types of indices that can improve query performance:
-
-- **Label index -** Speeds up searches based on the label of a node.
-- **Property index -** Enhances performance when filtering nodes based on a
-  specific property.
-
-To create indices in Memgraph, use the `CREATE INDEX` syntax. Here’s how we can
-optimize our query:
-
-**Create an index on the `Person` label**:
-
-```
-cypher
-
-CREATE INDEX ON :Person;
-```
-
-This ensures faster lookup of nodes labeled as `Person`.
-
-**Create an index on the `name` property**:
-
-```
-cypher
-
-CREATE INDEX ON :Person(name);
-```
-
-Since we filter by the `name` property (`name: "John"` or `name: "Anna"`), this
-index will significantly speed up filtering.
-
----
-
-### Step 2: Running the query after indexing
-
-With the indices in place, we can rerun the query, this time focusing on people
-named "Anna":
-
-```
-cypher
-
-MATCH (p1:Person {name: "Anna"}), (p2:Person {name: "Anna"})
-WHERE p1 <> p2
-WITH p1, p2
-LIMIT 100000
-CREATE (p1)-[:FRIENDS_WITH]->(p2);
-```
-
-### Results and performance comparison
-
-After adding indices, the same query that previously took **3.5 seconds** to
-execute now runs in just **676 milliseconds**. That’s a **5x performance
-improvement**!
-
-Why indices matter?
-
-Indices are a great tool in Memgraph, particularly when dealing with large
-datasets and frequent queries. Here's why:
-
-- **Faster node lookup -** Label indices make it quicker to find nodes of a
-  specific type.
-- **Efficient Filtering -** Property indices improve the speed of filtering
-  operations, especially on frequently queried properties like `name`.
-
-```
-cypher
-
-CREATE (:Person {name: 'Alice', surname: 'Wong', important_dates: [date('1992-01-01'), date('2020-05-15')]});
-
-```
-
-## **CHAPTER 9: Test and optimize queries**
-
-**Task:** Write and test queries on the dummy data to ensure performance and
-structure.
-
-**Objective:** Learn how to query efficiently and test if their re-modeled data
+**Objective:** Learn how to query efficiently and test if the re-modeled data
 performs as expected in Memgraph.
-
-**Example:**
-
-```
-cypher
-
-MATCH (p:Person) WHERE p.age > 30 RETURN p;
-MATCH (p:Person) WHERE p.date_of_birth = date('1990-01-01') RETURN p;
-```
 
 When working with large datasets in Memgraph, even simple queries can benefit
 significantly from optimization. Let’s walk through an example where we retrieve
@@ -503,9 +470,7 @@ indices to improve query performance.
 Here’s the initial query we used to retrieve all people with an `age` of 35 or
 older:
 
-```
-cypher
-
+```cypher
 MATCH (p1:Person)
 WHERE p1.age >= 35
 RETURN p1;
@@ -513,23 +478,18 @@ RETURN p1;
 
 Result:
 
-- Number of nodes found: 792,500 people.
-- Execution time: 14.68 seconds.
+- Number of nodes found: 792,750 `Person` nodes.
+- Execution time: 2.7 seconds.
 
 While this query is straightforward and correct, the execution time can be
-optimized, especially when dealing with such a large dataset.
-
-### Step 1: Optimization through indexing
-
-Since the bottleneck in this query comes from filtering the `Person` nodes by
-their `age` property, adding an index on the `age` property will allow Memgraph
-to locate matching nodes more efficiently.
+optimized, especially when dealing with such a large dataset. Since the
+bottleneck in this query comes from filtering the `Person` nodes by their `age`
+property, adding an index on the `age` property will allow Memgraph to locate
+matching nodes more efficiently.
 
 To create the index, run the following query:
 
-```
-cypher
-
+```cypher
 CREATE INDEX ON :Person(age);
 ```
 
@@ -541,13 +501,9 @@ Why indexing helps?
 - **Scalability -** Indexing ensures that the query performs better as the
   dataset grows, making it a critical optimization for large-scale graphs.
 
-### Step 2: Re-running the query with the index
-
 After creating the index on the `age` property, we re-ran the same query:
 
-```
-cypher
-
+```cypher
 MATCH (p1:Person)
 WHERE p1.age >= 35
 RETURN p1;
@@ -555,19 +511,56 @@ RETURN p1;
 
 Results:
 
-- Execution time: 13.55 seconds.
-- Improvement: Execution time was reduced by 8%, saving over 1.1 seconds on a
-  query processing nearly 800,000 nodes.
+- Execution time: 2.531 seconds.
+- Improvement: Execution time was reduced by 6%.
 
-<aside>
-💡
+Another step in the speed improvement is to return a specific property you're interested in, instead of the whole node object:
+```cypher
+MATCH (p1:Person)
+WHERE p1.age >= 35
+RETURN p1.name;
+```
 
-**PRO TIP**
+Results:
 
+- Execution time: 1.514 seconds.
+- Improvement: Execution time was reduced by additional 40%.
+
+<Callout>
+**PRO TIPS**
 - Optimization on simple queries matters.
 - Indexing is a low-cost, high-impact optimization.
-- Scalability benefits as your data size increases.
-</aside>
+- Return the subset of data you're interested in. 
+</Callout>
+
+## Dataset import queries
+
+To create the database in Memgraph from the provided dummy data, run the Cypher
+queries provided below. The prerequisite is to [copy the CSV file into the
+container](/getting-started/first-steps-with-docker#copy-files-from-and-to-a-docker-container)
+where Memgraph is running in the `usr/lib/memgraph` directory.
+
+<details>
+  <summary>**Cypher import queries**</summary>
+
+  ```cypher
+  CREATE INDEX ON :Person(name);
+  CREATE INDEX ON :Person;
+
+  LOAD CSV FROM 'usr/lib/memgraph/random_data.csv' WITH HEADER AS row
+  CREATE (:Person {
+      name: row.Name,
+      surname: row.Surname,
+      age: toInteger(row.Age),
+      date_of_birth: date(row.Date_of_Birth)
+  });
+
+  MATCH (p1:Person {name: "Cheryl"}), (p2:Person {name: "Jeanne"})
+  WITH p1, p2
+  MERGE (p1)-[:FRIENDS_WITH]->(p2);
+  ```
+</details>
+
 
 ## Next steps
 
@@ -577,3 +570,22 @@ how you can re-model your own dataset.
 If you have any questions, comments, or are unsure how to proceed, join our
 [Memgraph Discord community](https://discord.com/invite/memgraph) and we and
 other users will be happy to help.
+
+Don't forget, it is important to follow the best practices to ensure the best performance. Find our guides below:
+
+<Cards>
+  <Cards.Card
+    title="Graph data modeling"
+    href="/data-modeling/best-practices"
+  />
+    <Cards.Card
+    title="Import"
+    href="/data-migration/best-practices"
+  />
+    <Cards.Card
+    title="Querying"
+    href="/querying/best-practices"
+  />
+</Cards>
+
+<CommunityLinks/>
