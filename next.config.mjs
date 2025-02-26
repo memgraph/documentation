@@ -3128,7 +3128,13 @@ export default withNextra({
         source: '/advanced-algorithms/available-algorithms#streaming-graph-algorithms',
         destination: '/advanced-algorithms/available-algorithms#dynamic-graph-algorithms-enterprise',
         permanent: true
+      },
+      {
+        source: '/data-modeling/knowledge-graph',
+        destination: '/data-modeling/modeling-guides/model-a-knowledge-graph',
+        permanent: true
       }
     ];
   },
 });
+
