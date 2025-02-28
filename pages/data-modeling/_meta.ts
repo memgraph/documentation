@@ -1,3 +1,5 @@
 export default {
-    "knowledge-graph": "Knowledge graph"
+    "graph-data-model": "Graph data model",
+    "modeling-guides": "Modeling guides",
+    "best-practices": "Best practices"
 }
