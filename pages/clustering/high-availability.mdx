@@ -418,14 +418,15 @@ listening to MAIN with the given UUID.
 
 #### Force sync of data 
 
-On failover, the current logic is to choose the most-up-to-date instance from all available instances to promote to the new MAIN. For promotion to the MAIN
-to successfully happen, the new MAIN figures out if REPLICA is behind (has less up-to-date data) or has data that the new MAIN doesn't have.
-If REPLICA has data that MAIN doesn't have, in that case REPLICA is in a diverged-from-MAIN state. If at least one REPLICA is in diverged-from-MAIN
-state, failover won't succeed as MAIN can't replicate data to diverged-from-MAIN REPLICA.
-When choosing a new MAIN in the failover procedure from the list of available REPLICAs, the instance with the latest commit timestamp for the default database is chosen as the new MAIN. 
-In case some other instance had more up-to-date data when the failover procedure was choosing a new MAIN but was down at that point when rejoining the cluster, 
-the new MAIN instance sends a force sync RPC request to such instance. Force sync RPC request deletes all current data on all databases on a given instance and accepts data from the 
-current MAIN. This way cluster will always follow the current MAIN. 
+On failover, the current logic is to choose the most-up-to-date alive instance for the new MAIN. When choosing a new MAIN in the failover procedure from the list of available REPLICAs, 
+the instance with the latest commit timestamp for the default database is chosen as the new MAIN. 
+In the scenario where some other instance had more up-to-date data when the failover procedure was choosing a new MAIN but was down at that point, when rejoining the cluster, 
+the new MAIN instance will recover that replica in a specific way when the replica comes back alive. The recovery process will first clear replica's storage and then apply all the 
+commits from the new MAIN. All replica's old durability files will get preserved in `.old` directory so that admin can recover the data if something goes wrong. When looking at the 
+CAP theorem, Memgraph's current implementation leans more towards availability than consistency. Memgraph tries to be as consistent as possible but because of the logic which will
+promote the most-up-to-date alive REPLICA (which doesn't need to have all commits as previous MAIN), Recovery Point Objective (RPO) is != 0. The current decision is done so that
+MAIN is writeable for as much time as possible. If you have an environment in which consistency is the top priority and you don't care as much about being constantly available to 
+writes, contact us and we are eager to expand our support for fully synchronous mode.
 
 
 ## Actions on follower coordinators
@@ -433,13 +434,6 @@ current MAIN. This way cluster will always follow the current MAIN.
 From follower coordinators you can only execute `SHOW INSTANCES`. Registration of data instance, unregistration of data instances, demoting instance, setting instance to MAIN and 
 force reseting cluster state are all disabled. 
 
-<Callout type="warning">
-
-Under certain extreme scenarios, the current implementation of HA could lead to having Recovery Point Objective (RPO) != 0 (aka data loss). These are environments with high volume of transactions 
-where data is constantly changed, added, deleted... If you are operating in such scenarios, please open an issue on [GitHub](https://github.com/memgraph/memgraph/issues) 
-as we are eager to expand our support for this kind of workload.
-
-</Callout>
 
 ## Instances' restart
 
