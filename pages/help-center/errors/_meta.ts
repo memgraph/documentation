@@ -1,5 +1,6 @@
 export default {
   "auth": "Auth",
+  "connection": "Connection",
   "durability": "Durability",
   "memory": "Memory",
   "modules": "Modules",
