@@ -363,16 +363,30 @@ for which the timeout is used is the following:
 - HeartbeatReq -> main sending to replica
 - TimestampReq -> main sending to replica
 
-Bounding execution time of the replication RPC messages AppendDeltasRpc, CurrentWalRpc and WALFilesRpc with a timeout doesn't make sense since the time needed on replica to 
-process such requests directly depends on the size of data being transferred. Because of that, the replica sends a RPC message to the main 
-saying that the progress is made for every batch of 100k deltas it processed. Processing 100k deltas should always take approximately the same time so we can put a timeout on that. 
-The default timeout is set to 30s for these 3 RPC messages. In reality, the processsing of 100k deltas should take < 3s.
 
-SnapshotRpc is also considered a replication RPC message. Bounding its execution time works in a way in which replica sends an update to main for every 1'000'000 units of work performed.
-Processing vertices, edges, vertices inside label index, vertices inside property index, edges inside edge type index and edges inside edge type property index is worth one unit of work. 
-Processing vertices inside point and text indices takes a bit more time so it's worth 10 units of work. 
-The processing of vertices inside vector indices takes longest so it's worth 1000 units of work. Using such configuration, the replica instance is expected to update MAIN on its progress
-made every 2-3s. Hence, a timeout of 60s should be more than enough to not cause network instability.
+For replication-related RPC messages — AppendDeltasRpc, CurrentWalRpc, and
+WALFilesRpc — it is not practical to set a strict execution timeout. The
+processing time on the replica side is directly proportional to the amount of
+data being transferred. To handle this, the replica sends periodic progress
+updates to the main instance after processing every 100,000 deltas. Since
+processing 100,000 deltas is expected to take a relatively consistent amount of
+time, we can enforce a timeout based on this interval. The default timeout for
+these RPC messages is 30 seconds, though in practice, processing 100,000 deltas
+typically takes less than 3 seconds.
+
+SnapshotRpc is also a replication-related RPC message, but its execution time
+is tracked differently. The replica sends an update to the main instance after
+completing 1,000,000 units of work. The work units are assigned as follows:
+
+- Processing nodes, edges, or indexed entities (label index, label-property index,
+  edge type index, edge type property index) = 1 unit
+- Processing a node inside a point or text index = 10 units
+- Processing a node inside a vector index (most computationally expensive) =
+  1,000 units
+
+With this unit-based tracking system, the replica is expected to report progress
+every 2–3 seconds. Given this, a timeout of 60 seconds is set to avoid
+unnecessary network instability while ensuring responsiveness.
 
 ## Failover
 
