@@ -367,7 +367,8 @@ Consider the instance to be down only if several consecutive pings fail because 
 
 For the majority of RPC messages, Memgraph uses a default timeout of 10s. This is to ensure that when sending a RPC request, the client 
 will not block indefinitely before receiving a response if the communication between the client and the server is broken. The list of RPC messages
-for which the timeout is used is the following:
+for which the timeout is used is the following: 
+
 - ShowInstancesReq -> coordinator sending to coordinator
 - DemoteMainToReplicaReq -> coordinator sending to data instances
 - PromoteToMainReq -> coordinator sending to data instances 
@@ -385,6 +386,30 @@ for which the timeout is used is the following:
 - ForceResetStorageReq -> main sending to replica. The timeout is set to 60s.
 - SystemRecoveryReq -> main sending to replica. The timeout set to 5s.
 
+
+For replication-related RPC messages — AppendDeltasRpc, CurrentWalRpc, and
+WalFilesRpc — it is not practical to set a strict execution timeout. The
+processing time on the replica side is directly proportional to the amount of
+data being transferred. To handle this, the replica sends periodic progress
+updates to the main instance after processing every 100,000 deltas. Since
+processing 100,000 deltas is expected to take a relatively consistent amount of
+time, we can enforce a timeout based on this interval. The default timeout for
+these RPC messages is 30 seconds, though in practice, processing 100,000 deltas
+typically takes less than 3 seconds.
+
+SnapshotRpc is also a replication-related RPC message, but its execution time
+is tracked differently. The replica sends an update to the main instance after
+completing 1,000,000 units of work. The work units are assigned as follows:
+
+- Processing nodes, edges, or indexed entities (label index, label-property index,
+  edge type index, edge type property index) = 1 unit
+- Processing a node inside a point or text index = 10 units
+- Processing a node inside a vector index (most computationally expensive) =
+  1,000 units
+
+With this unit-based tracking system, the replica is expected to report progress
+every 2–3 seconds. Given this, a timeout of 60 seconds is set to avoid
+unnecessary network instability while ensuring responsiveness.
 
 ## Failover
 
