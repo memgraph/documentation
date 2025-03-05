@@ -418,15 +418,36 @@ listening to MAIN with the given UUID.
 
 #### Force sync of data 
 
-On failover, the current logic is to choose the most-up-to-date alive instance for the new MAIN. When choosing a new MAIN in the failover procedure from the list of available REPLICAs, 
-the instance with the latest commit timestamp for the default database is chosen as the new MAIN. 
-In the scenario where some other instance had more up-to-date data when the failover procedure was choosing a new MAIN but was down at that point, when rejoining the cluster, 
-the new MAIN instance will recover that replica in a specific way when the replica comes back alive. The recovery process will first clear replica's storage and then apply all the 
-commits from the new MAIN. All replica's old durability files will get preserved in `.old` directory so that admin can recover the data if something goes wrong. When looking at the 
-CAP theorem, Memgraph's current implementation leans more towards availability than consistency. Memgraph tries to be as consistent as possible but because of the logic which will
-promote the most-up-to-date alive REPLICA (which doesn't need to have all commits as previous MAIN), Recovery Point Objective (RPO) is != 0. The current decision is done so that
-MAIN is writeable for as much time as possible. If you have an environment in which consistency is the top priority and you don't care as much about being constantly available to 
-writes, contact us and we are eager to expand our support for fully synchronous mode.
+During a failover event, Memgraph selects the most up-to-date, alive instance to
+become the new MAIN. The selection process works as follows:
+1. From the list of available REPLICA instances, Memgraph chooses the one with
+the latest commit timestamp for the default database. 
+2. If an instance that had more recent data was down during this selection
+process, it will not be considered for promotion to MAIN.
+
+If a previously down instance had more up-to-date data but was unavailable
+during failover, it will go through a specific recovery process upon rejoining
+the cluster:
+- The new MAIN will clear the returning replica’s storage.
+- The returning replica will then receive all commits from the new MAIN to
+  synchronize its state.
+- The replica's old durability files will be preserved in a `.old` directory in
+  `data_directory/snapshots` and `data_directory/wal` folders, allowing admins
+  to manually recover data if needed.
+
+Memgraph prioritizes availability over strict consistency (leaning towards AP in
+the CAP theorem). While it aims to maintain consistency as much as possible, the
+current failover logic can result in a non-zero Recovery Point Objective (RPO)
+because:
+- The promoted MAIN might not have received all commits from the previous MAIN
+  before the failure.
+- This design ensures that the MAIN remains writable for the maximum possible
+  time.
+
+If your environment requires strong consistency and can tolerate write
+unavailability, [reach out to
+us](https://github.com/memgraph/memgraph/discussions). We are actively exploring
+support for a fully synchronous mode.
 
 
 ## Actions on follower coordinators
