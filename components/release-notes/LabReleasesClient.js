@@ -12,7 +12,7 @@ const sectionNameByType = {
     'fix': 'Bug fixes',
 }
 
-export default function LabReleases({ filterValue }) {
+export default function LabReleasesClient() {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -27,6 +27,7 @@ export default function LabReleases({ filterValue }) {
                 console.error("Error fetching release notes:", error);
                 setData([]);
                 setLoading(false);
+                return <></>;
             } finally {
                 setLoading(false);
             }
@@ -44,24 +45,21 @@ export default function LabReleases({ filterValue }) {
         return <></>;
     }
 
-    const filteredDataArray = data.filter(item => item.version === filterValue && item.type in Object.keys(sectionNameByType));
+    const filteredData = data[0];
+    const releasedAt = new Date(filteredData.releasedAt);
 
-    if (filteredDataArray.length === 0) {
-        return <></>;
-    }
-
-    const filteredData = filteredDataArray[0];
+    console.log(filteredData)
 
     return (
         <div>
-            <h2>Release Notes for Version {filteredData.version}</h2>
+            <h2>Lab v{filteredData.version} - {`${releasedAt.toLocaleString('default', { month: 'short' })} ${releasedAt.getDate()}, ${releasedAt.getFullYear()}`}</h2>
 
             {filteredData.sections.map((section, index) => (
                 <div key={index}>
-                    <h3>{sectionEmojiByType[section.type.toLowerCase()] || ''}{sectionNameByType[section.type.toLowerCase()] || ''}</h3>
-                    <ul className="ml-6 list-disc">
+                    <h4 className="custom-header">{sectionEmojiByType[section.type.toLowerCase()] || ''}{sectionNameByType[section.type.toLowerCase()] || ''}</h4>
+                    <ul className="list-disc ltr:ml-6 rtl:mr-6">
                         {section.items.map((itemGroup, i) => (
-                            <li key={i}>
+                            <li className={`my-3 ${i === 0 ? 'mt-6' : ''}`} key={i}>
                                 {itemGroup.map((entry, j) => (
                                     <span key={j}>
                                         {entry.type === "code" ? <code>{entry.value}</code> : entry.value}
