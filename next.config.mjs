@@ -835,93 +835,93 @@ export default withNextra({
         permanent: true
       },
       {
-        source: '/memgraph-lab',
-        destination: '/data-visualization/',
+        source: '/data-visualization',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/graph-style-script-language',
-        destination: '/data-visualization/graph-style-script',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/reference-guide',
-        destination: '/data-visualization/graph-style-script',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-colors',
-        destination: '/data-visualization/graph-style-script/built-in-elements',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-functions',
-        destination: '/data-visualization/graph-style-script/built-in-elements',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-variables',
-        destination: '/data-visualization/graph-style-script/built-in-elements',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-edgestyle-directive',
-        destination: '/data-visualization/graph-style-script/directive-properties',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-nodestyle-directive',
-        destination: '/data-visualization/graph-style-script/directive-properties',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-viewstyle-directive',
-        destination: '/data-visualization/graph-style-script/directive-properties',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-viewstyle-map-directive',
-        destination: '/data-visualization/graph-style-script/directive-properties',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/connect-to-memgraph',
-        destination: '/data-visualization/install-and-connect',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/installation',
-        destination: '/data-visualization/install-and-connect',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/installation/linux',
-        destination: '/data-visualization/install-and-connect',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/installation/macos',
-        destination: '/data-visualization/install-and-connect',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/installation/windows',
-        destination: '/data-visualization/install-and-connect',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/font-awesome-for-node-images',
-        destination: '/data-visualization/style-your-graphs-in-memgraph-lab',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph/tutorials/style-your-graphs-in-memgraph-lab',
-        destination: '/data-visualization/style-your-graphs-in-memgraph-lab',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/user-manual',
-        destination: '/data-visualization/user-manual',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
@@ -2069,22 +2069,22 @@ export default withNextra({
       },
       {
         source: '/memgraph-lab/style_script',
-        destination: '/data-visualization/graph-style-script',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/quick-start',
-        destination: '/data-visualization/graph-style-script',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/how_to_install_memgraph_lab_on_macos',
-        destination: '/data-visualization/install-and-connect',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
         source: '/memgraph-lab/installation/overview',
-        destination: '/data-visualization/install-and-connect',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
@@ -2938,7 +2938,7 @@ export default withNextra({
       },
       {
         source: '/memgraph-lab/how_to_install_memgraph_lab_on_macos)',
-        destination: '/data-visualization/install-and-connect',
+        destination: '/memgraph-lab',
         permanent: true
       },
       {
