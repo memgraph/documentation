@@ -1,0 +1,163 @@
+---
+title: Migrate Iceberg tables from a Data Lake using Dremio
+description: Memgraph is able to also query data lake files using Dremio as the query engine. This allows for graph analytics on top of data lake storage for seamless enablement of new graph use cases on your data. 
+---
+
+import { Cards } from 'nextra/components'
+import { Callout } from 'nextra/components'
+
+# Migrating Data Lake Data from Apache Iceberg to Memgraph Using Dremio
+
+## Overview
+Migrating data from an **Apache Iceberg** table stored in a data lake to **Memgraph** can be efficiently done using **Dremio** as a query 
+engine and Memgraph’s **migrate module**. This setup eliminates the need for manual data exports and enables real-time data streaming into Memgraph.
+
+### Why Apache Iceberg?
+Apache Iceberg is a high-performance table format designed for **data lakes**. It provides:
+- **Schema evolution** without rewriting files.
+- **Time travel** for querying historical data versions.
+- **Partition evolution** to optimize queries.
+- **ACID transactions** for reliability.
+
+### Why Use Dremio?
+Dremio acts as a **query engine** for your Iceberg data stored in **MinIO** or another object storage solution. It provides:
+- **Federated querying** across multiple data sources.
+- **SQL-based access** to Iceberg tables.
+- **Optimized query performance** through Apache Arrow.
+
+### Benefits of Using Arrow Flight for Migration
+Arrow Flight is a **high-performance data transport** built on **gRPC**. It enables:
+- **Efficient data streaming** from Dremio to Memgraph.
+- **Compression over the network**, reducing bandwidth usage.
+- **Parallel execution** of queries for faster ingestion.
+- **Schema-aware migration**, preserving types and structures.
+
+With Memgraph’s **migrate module**, we can directly stream **Apache Iceberg** data from Dremio into Memgraph **without using CSV exports**.
+
+---
+
+## Setting Up MinIO and Dremio
+We will use **Docker Compose** to set up **MinIO** (for object storage) and **Dremio** (for querying the data lake).
+
+### Docker Compose Configuration
+```yaml
+version: '3.8'
+
+services:
+  minio:
+    image: minio/minio
+    container_name: minio
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  dremio:
+    image: dremio/dremio-oss
+    container_name: dremio
+    ports:
+      - "9047:9047"  # Dremio Web UI
+      - "31010:31010" # JDBC port
+      - "32010:32010" # ODBC port
+      - "45678:45678" # Internal port
+    environment:
+      - DREMIO_JAVA_SERVER_EXTRA_OPTS=-Dservices.coordinator.enabled=true -Dservices.executor.enabled=true
+      - DREMIO_USERNAME=admin
+      - DREMIO_PASSWORD=admin
+    volumes:
+      - dremio_data:/opt/dremio/data
+      - dremio_conf:/opt/dremio/conf
+
+volumes:
+  minio_data:
+  dremio_data:
+  dremio_conf:
+```
+
+1. **Start MinIO and Dremio**:
+   ```sh
+   docker-compose up -d
+   ```
+2. **Access MinIO** at `http://localhost:9001` and create an **Iceberg** bucket.
+
+We will first create a bucket in the MinIO object storage.
+![](/pages/data-migration/migrate-from-datalake-using-dremio/create-minio-bucket.png)
+
+We can see that the bucket is successfully added to MinIO
+![](/pages/data-migration/migrate-from-datalake-using-dremio/observe-minio-bucket.png)
+
+3. **Connect MinIO to Dremio** through the **Dremio UI** at `http://localhost:9047`.
+
+Log in to Dremio:
+![](/pages/data-migration/migrate-from-datalake-using-dremio/login-dremio.png)
+
+Create a MinIO datasource. MinIO is an S3-compatible object storage so the datasource selected is `Amazon S3`.
+![](/pages/data-migration/migrate-from-datalake-using-dremio/create-minio-datasource.png)
+
+In order to connect to MinIO, we need to:
+- tick the `Enable compatibility mode`
+- add property `fs.s3a.path.style.access` and set it to `true`
+- add property `fs.s3a.endpoint` and set it to `minio:9000` since that is our network name in docker compose
+![](/pages/data-migration/migrate-from-datalake-using-dremio/additional-minio-datasource-options.png)
+
+For this example, we will create a dummy table using Dremio and populate it with 2 persons:
+![](/pages/data-migration/migrate-from-datalake-using-dremio/querying-in-dremio.png)
+
+
+---
+
+## Migrating Iceberg Data to Memgraph
+
+Once MinIO and Dremio are set up, and an **Iceberg table** (`persons`) is available, 
+we can use Memgraph’s **migrate module** to transfer the data. We will use the `Arrow Flight`
+migration module since that enables fast transfer of Arrow compatible format using gRPC protocol.
+
+### Executing the Migration Query in Memgraph Lab
+Run the following Cypher query in **Memgraph Lab**:
+
+```cypher
+CALL migrate.arrow_flight(
+  "SELECT * FROM minio.iceberg.persons;", 
+  {
+    host: "localhost", 
+    port: 32010, 
+    username: "admin", 
+    password: "admin1!!"
+  }
+) YIELD row
+WITH row
+CREATE (:Person {age: row.age, name: row.name});
+```
+
+### Explanation:
+- **`SELECT * FROM minio.iceberg.persons;`** → Queries the Iceberg table in **Dremio**.
+- **Arrow Flight is used** for streaming the results efficiently into Memgraph.
+- **Memgraph ingests** each row and creates **`Person`** nodes with `age` and `name` properties.
+
+---
+
+## Visualizing the Migration
+
+Once executed, you will see **nodes successfully ingested into Memgraph**:
+
+![](/pages/data-migration/migrate-from-datalake-using-dremio/migrate-from-dremio.png)
+
+---
+
+## Conclusion
+By using **Apache Iceberg**, **Dremio**, and **Memgraph’s migrate module**, we achieve:
+- **Streaming data ingestion without CSV exports**.
+- **Fast, compressed data transfers** over Arrow Flight.
+- **Real-time migration from object storage** to Memgraph.
+- **Seamless integration with modern data lakes**.
+
+## What's next?
+Memgraph’s flexible migration capabilities allow you to **connect to any data source** and ingest data in real-time. 🚀
+For the list of supported data sources, please check our [migrate module](/advanced-algorithms/available-algorithms/migrate).
+
+Don't see an available data source? **Please contact us on Discord and we will enable you in the matter of days!**
