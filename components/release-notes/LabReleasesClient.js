@@ -1,3 +1,4 @@
+import { MDXProvider } from "nextra/mdx";
 import { useEffect, useState } from "react";
 
 const sectionEmojiByType = {
@@ -56,7 +57,7 @@ export default function LabReleasesClient() {
 
             {filteredData.sections.map((section, index) => (
                 <div key={index}>
-                    <h4 className="custom-header">{sectionEmojiByType[section.type.toLowerCase()] || ''}{sectionNameByType[section.type.toLowerCase()] || ''}</h4>
+                    <h4 className="custom-header">{sectionEmojiByType[section.type.toLowerCase()] || ''} {sectionNameByType[section.type.toLowerCase()] || ''}</h4>
                     <ul className="list-disc ltr:ml-6 rtl:mr-6">
                         {section.items.map((itemGroup, i) => (
                             <li className={`my-3 ${i === 0 ? 'mt-6' : ''}`} key={i}>
