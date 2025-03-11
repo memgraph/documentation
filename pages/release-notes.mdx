@@ -55,8 +55,123 @@ image](https://hub.docker.com/r/memgraph/memgraph-platform) is no longer being
 updated.
 </Callout>
 
-
 ## 🚀 Latest release
+
+### Memgraph v3.1.0 - Mar 12th, 2025
+
+{<h4 className="custom-header">⚠️ Breaking changes</h4>}
+
+- Improved error messages might result in a `breaking` outcome under your
+  applications if the application assumes the exact content of error messages.
+  [#2379](https://github.com/memgraph/memgraph/pull/2379)
+
+{<h4 className="custom-header">✨ New features</h4>}
+
+- Added toSet() function for removing duplicates from a list. The ordering of
+  the list items is not preserved. This extension enables users to have more
+  manipulation over List item objects in the query planner. Users can call the
+  toSet(list) if they need to remove any duplicate values from the list.
+  [#2659](https://github.com/memgraph/memgraph/pull/2659)
+- Add custom authentication scheme for using OIDC Single Sign-On. Any OIDC
+  scheme that exposes a public key for validating tokens using RSA is supported
+  using Neo4j drivers. [#2715](https://github.com/memgraph/memgraph/pull/2715)
+- Enterprise Feature: Impersonate User. Allows the user to impersonate a
+  different user while executing queries. Users or roles with the correct
+  permissions can define the target user for a session and execute queries as
+  if the target user was logged in.
+  [#2742](https://github.com/memgraph/memgraph/pull/2742)
+
+{<h4 className="custom-header">🛠️ Improvements</h4>}
+
+- Optimise `EdgeAccessor::IsVisible` such that connectivity check is only done
+  when --storage-properties-on-edges=false. This gives better performance over
+  queries involving edges.
+  [#2769](https://github.com/memgraph/memgraph/pull/2769)
+- Added fast retrieval of approximate vertex and edge counts in the C API with
+  `mgp_graph_approximate_vertex_count` and `mgp_graph_approximate_edge_count`.
+  Users can now use these functions to optimize certain data structures more
+  efficiently. For example, they can use this information to preallocate memory
+  for `std::vector`. [#2762](https://github.com/memgraph/memgraph/pull/2762)
+- The timeout is added to the SnapshotRpc message. A replica will now update
+  the main on its progress when applying the snapshot received as part of the
+  recovery process. [#2701](https://github.com/memgraph/memgraph/pull/2701)
+- The timeout is added to the following RPC messages: AppendDeltasRpc,
+  WalFilesRpc and CurrentWalRpc. The replica will now, for every 100k processed
+  deltas, send the RPC message saying that the progress is made. Main will wait
+  for at most 30s for the replica reply, after which it will drop the
+  connection. [#2690](https://github.com/memgraph/memgraph/pull/2690)
+- SHOW REPLICAS query uses a best estimation of the REPLICA's state instead of
+  querying the REPLICA for its current state. The SHOW REPLICAS query now
+  returns immediately, as it does not need to wait for the REPLICA response.
+  This means the query is lightweight, and users can query it more frequently.
+  [#2679](https://github.com/memgraph/memgraph/pull/2679)
+- Improved error messages that get sent to the user in cases of query failure.
+  Better understanding of the issue that caused a query to fail and easier
+  debugging. Better error messages also improve final results when in an AI
+  pipeline. [#2379](https://github.com/memgraph/memgraph/pull/2379)
+- SHOW/USE DATABASE reclassified as a non-system query. Multiple such queries
+  can be executed in parallel. Since the queries do not require unique access
+  anymore, users can execute them much more frequently and without impacting
+  performance. [#2674](https://github.com/memgraph/memgraph/pull/2674)
+
+{<h4 className="custom-header">🐞 Bug fixes</h4>}
+
+- When a failover is done on the replica which doesn't contain all commits as
+  the old main, ForceResetRpc won't be sent anymore to the old main (now
+  replica). Instead, the new main will handle the old main (now replica)'s
+  history through recovery. The old main's durability files will be saved
+  inside the .old directory (data_directory/snapshots and data_directory/wals)
+  so that admins can always recover the newer state if needed.
+  [#2727](https://github.com/memgraph/memgraph/pull/2727)
+- When started in a single-tenant mode, hidden files won't be symlinked in a
+  default database directory anymore. This should enable people to use Memgraph
+  in K8s with various storage systems under the hood.
+  [#2748](https://github.com/memgraph/memgraph/pull/2748)
+- Vector index will now correctly index only vertices with the desired label
+  for indexing in the dataset where there exist vertices with different labels
+  but with the shared property used for indexing.
+  [#2701](https://github.com/memgraph/memgraph/pull/2701)
+- Coordinators will not deadlock anymore when the user requests unregistration
+  of data instances. At the moment of unregistration, the cluster now needs to
+  have alive main instance so that the success of the requested unregistration
+  operation can be guaranteed.
+  [#2735](https://github.com/memgraph/memgraph/pull/2735)
+- Fixed a segmentation fault that could occur in certain scenarios when parsing
+  the vector index configuration map during vector index creation.
+  [#2720](https://github.com/memgraph/memgraph/pull/2720)
+- Misaligned snapshot and wal timestamps cause data loss. Replication via
+  snapshot and wals could lead to data loss due to misaligned timestamps.
+  [#2697](https://github.com/memgraph/memgraph/pull/2697)
+- Queries that access storage can now timeout if storage access cannot be
+  granted. Fixes potential deadlock under heavy load. Users could see a new
+  error, the access timeout. In such cases, they can retry later on or make
+  sure there are no conflicting queries.
+  [#2561](https://github.com/memgraph/memgraph/pull/2651)
+- The action for unregistering the replication instance wasn't durable before,
+  so after restarting the coordinator instance, the replication instance would
+  be observed again. [#2673](https://github.com/memgraph/memgraph/pull/2673)
+- Parallel recovery didn't work with WAL files. Index and constraints recovery
+  would use data batches calculated from the snapshot data. This would lead to
+  a failure if the snapshot is not present or partial recovery if the snapshot
+  and WALs were present. Users can now recover all data correctly and in
+  parallel. [#2658](https://github.com/memgraph/memgraph/pull/2658)
+- If finding steps needed to recover a replica fail, the database won't be
+  crashed. The replica will remain in MAYBE_BEHIND state and get recovered
+  later. [#2639](https://github.com/memgraph/memgraph/pull/2639)
+- Resolved issues with reloading `numpy` and `dgl` modules, which could cause
+  unexpected behavior when loaded multiple times. This fix ensures
+  compatibility with the latest versions of these packages.
+  [#2638](https://github.com/memgraph/memgraph/pull/2638)
+
+### MAGE v3.1.0 - Mar 12th, 2025
+
+{<h4 className="custom-header">⚠️ Breaking changes</h4>}
+
+{<h4 className="custom-header">✨ New features</h4>}
+
+{<h4 className="custom-header">🛠️ Improvements</h4>}
+
+{<h4 className="custom-header">🐞 Bug fixes</h4>}
 
 ### Lab v3.1.0 - Mar 12th, 2025
 
