@@ -130,8 +130,8 @@ export default withNextra({
         permanent: true
       },
       {
-        source: '/mage/query-modules/cpp/conditional-execution',
-        destination: '/advanced-algorithms/available-algorithms/conditional_execution',
+        source: '/mage/query-modules/cpp/do',
+        destination: '/advanced-algorithms/available-algorithms/do',
         permanent: true
       },
       {

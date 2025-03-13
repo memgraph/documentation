@@ -8,7 +8,7 @@ export default {
   "collections": "collections",
   "community_detection_online": "community_detection_online",
   "community_detection": "community_detection",
-  "conditional_execution": "conditional_execution",
+  "do": "do",
   "create": "create",
   "cugraph": "cugraph",
   "cycles": "cycles",
