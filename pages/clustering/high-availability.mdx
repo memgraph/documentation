@@ -58,7 +58,8 @@ Directly connecting to the MAIN instance isn't preferred in the HA cluster since
 can use bolt+routing so that write queries can always be sent to the correct data instance. This protocol works so that the client
 first sends a ROUTE bolt message to any coordinator instance. The coordinator replies to the message by returning the routing table with three entries specifying
 from which instance can be data read, to which instance data can be written and which instances can behave as routers. In the Memgraph HA cluster, the MAIN
-data instance is the only writeable instance, REPLICAs are readable instances, and COORDINATORs behave as routers. 
+data instance is the only writeable instance, REPLICAs are readable instances, and COORDINATORs behave as routers. Bolt+routing is the client-side routing protocol
+which means that the resolution of network endpoints happens inside drivers.
 For more details check [Request message ROUTE](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route) documentation.
 
 Users only need to change the scheme they use for connecting to coordinators. This means instead of using `bolt://<main_ip_address>,` you should
@@ -81,6 +82,26 @@ setting the level of security mechanism to permissive.
 
 This rule could also apply to CentOS and Fedora, but at the moment it's not tested and verified.
  </Callout>
+
+## Authentication
+
+When using authentication features for high availability, there are a couple of
+things to consider first.
+
+Currently, it is not possible to create users with the query `CREATE USER` on
+**coordinators**. Instead, for the direct Bolt connection to coordinators to work as
+expected, create user by [setting environment
+variables](/database-management/configuration#environment-variables)
+`MEMGRAPH_USER` and `MEMGRAPH_PASSWORD`.
+
+On the other hand, users can be created using the `CREATE USER` query on the
+**main data instance**. Such user will be replicated to other replica data instances
+but coordinators won't know about this user. 
+
+When using the **bolt+routing** type of connection, the drivers are using the same
+authentication arguments for connecting to coordinators and data instances.
+Because of that, for bolt+routing connections, the user created on data
+instances needs to exist on coordinators too. 
 
 ## Starting instances
 
@@ -131,7 +152,6 @@ environment variables or configuration flags:
 - coordinator port
 - coordinator id
 - management port
-- high availability durability
 - path to nuraft log file
 - coordinator hostname
 
@@ -153,7 +173,6 @@ When using any of these environment variables, flags `--bolt-port` and `--manage
 export MEMGRAPH_COORDINATOR_PORT=10111
 export MEMGRAPH_COORDINATOR_ID=1
 export MEMGRAPH_BOLT_PORT=7687
-export MEMGRAPH_HA_DURABILITY=true
 export MEMGRAPH_NURAFT_LOG_FILE="<path-to-log-file>"
 export MEMGRAPH_COORDINATOR_HOSTNAME="localhost"
 export MEMGRAPH_MANAGEMENT_PORT=12121
@@ -193,7 +212,7 @@ In case the MAIN instance already exists in the cluster, a replica instance will
 
 ### Add coordinator instance
 
-The user can choose any coordinator instance and connect other two (or more) coordinator instances to the cluster. This can be done before or after registering data instances,
+The user can choose any coordinator instance to run cluster setup queries. This can be done before or after registering data instances,
 the order isn't important. 
 
 ```plaintext
@@ -202,11 +221,10 @@ ADD COORDINATOR coordinatorId WITH CONFIG {"bolt_server": boltServer, "coordinat
 
 <Callout type="info">
 
-We need to inform the leader coordinator of the existence of other follower coordinators.
-If you are running `ADD COORDINATOR` cypher queries on coordinator with --coordinator-id=1, you only need to add other two coordinator instances. For example, when using 3 
-coordinators you need to use two `ADD COORDINATOR` queries:
+`ADD COORDINATOR` query needs to be run for all coordinators in the cluster.
 
 ```
+ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "127.0.0.1:7691", "coordinator_server": "127.0.0.1:10111", "management_server": "127.0.0.1:12111"};
 ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "127.0.0.1:7692", "coordinator_server": "127.0.0.1:10112", "management_server": "127.0.0.1:12112"};
 ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "127.0.0.1:7693", "coordinator_server": "127.0.0.1:10113", "management_server": "127.0.0.1:12113"};
 ```
@@ -246,7 +264,11 @@ network communication could be set up incorrectly, etc. The user can remove the 
 UNREGISTER INSTANCE instanceName;
 ```
 
-At the moment of registration, the instance that you want to unregister must not be MAIN because unregistering MAIN could lead to an inconsistent cluster state. 
+When unregistering an instance, ensure that the instance being unregistered is
+**not** the MAIN instance. Unregistering MAIN can lead to an inconsistent
+cluster state. Additionally, the cluster must have an **alive** MAIN instance
+during the unregistration process. If no MAIN instance is available, the
+operation cannot be guaranteed to succeed.
 
 The instance requested to be unregistered will also be unregistered from the current MAIN's REPLICA set.
 
@@ -285,7 +307,7 @@ This operation will result in writing to the Raft log.
 
 You can check the state of the whole cluster using the `SHOW INSTANCES` query. The query will display all the Memgraph servers visible in the cluster. With
 each server you can see the following information:
- 1. Network ports they are using for managing cluster state
+ 1. Network endpoints they are using for managing cluster state
  2. Health state of server
  3. Role - MAIN, REPLICA, LEADER, FOLLOWER or unknown if not alive
  4. The time passed since the last response time to the leader's health ping 
@@ -300,6 +322,7 @@ followers will execute actions in this exact order:
 ```plaintext
 SHOW INSTANCES;
 ```
+
 
 ### Show instance
 
@@ -316,6 +339,8 @@ This query will return the information about:
 4. management server which is also used for inter-coordinators communication and 
 5. cluster role: whether the coordinator is currently a leader of the follower.
 
+If the query `ADD COORDINATOR` wasn't run for the current instance, the value of the bolt server will be "".
+
 
 ## Setting config for highly-available cluster
 
@@ -327,7 +352,7 @@ responding to the coordinator's RPC messages.
 
 RPC (Remote Procedure Call) is a protocol for executing functions on a remote
 system. RPC enables direct communication in distributed systems and is crucial
-for replication and high availability tasks.
+for replication and high availability tasks. 
 
 </Callout>
 
@@ -342,11 +367,53 @@ Consider the instance to be down only if several consecutive pings fail because 
 
 </Callout>
 
-There is an additional flag, `--instance-get-uuid-frequency-sec`, which sets 
-how often the coordinator should check on REPLICA instances if they follow the correct MAIN instance. REPLICA may die and get back up
-before the coordinator notices that. In that case, REPLICA will not follow MAIN for `--instance-get-uuid-frequency-sec` seconds. It is advisable to set 
-the flag to more than `--instance-down-timeout-sec`, as it is needed first to confirm the instance was down and not that there was some networking issue.
+### RPC timeouts
 
+For the majority of RPC messages, Memgraph uses a default timeout of 10s. This is to ensure that when sending a RPC request, the client 
+will not block indefinitely before receiving a response if the communication between the client and the server is broken. The list of RPC messages
+for which the timeout is used is the following: 
+
+- ShowInstancesReq -> coordinator sending to coordinator
+- DemoteMainToReplicaReq -> coordinator sending to data instances
+- PromoteToMainReq -> coordinator sending to data instances 
+- RegisterReplicaOnMainReq -> coordinator sending to data instances 
+- UnregisterReplicaReq -> coordinator sending to data instances 
+- EnableWritingOnMainReq -> coordinator sending to data instances 
+- GetInstanceUUIDReq -> coordinator sending to data instances
+- GetDatabaseHistoriesReq -> coordinator sending to data instances
+- StateCheckReq -> coordinator sending to data instances
+- SwapMainUUIDReq -> coordinator sending to data instances
+- FrequentHeartbeatReq -> coordinator sending to data instances
+- HeartbeatReq -> main sending to replica
+- TimestampReq -> main sending to replica
+- SystemHeartbeatReq -> main sending to replica
+- ForceResetStorageReq -> main sending to replica. The timeout is set to 60s.
+- SystemRecoveryReq -> main sending to replica. The timeout set to 5s.
+
+
+For replication-related RPC messages — AppendDeltasRpc, CurrentWalRpc, and
+WalFilesRpc — it is not practical to set a strict execution timeout. The
+processing time on the replica side is directly proportional to the amount of
+data being transferred. To handle this, the replica sends periodic progress
+updates to the main instance after processing every 100,000 deltas. Since
+processing 100,000 deltas is expected to take a relatively consistent amount of
+time, we can enforce a timeout based on this interval. The default timeout for
+these RPC messages is 30 seconds, though in practice, processing 100,000 deltas
+typically takes less than 3 seconds.
+
+SnapshotRpc is also a replication-related RPC message, but its execution time
+is tracked differently. The replica sends an update to the main instance after
+completing 1,000,000 units of work. The work units are assigned as follows:
+
+- Processing nodes, edges, or indexed entities (label index, label-property index,
+  edge type index, edge type property index) = 1 unit
+- Processing a node inside a point or text index = 10 units
+- Processing a node inside a vector index (most computationally expensive) =
+  1,000 units
+
+With this unit-based tracking system, the replica is expected to report progress
+every 2–3 seconds. Given this, a timeout of 60 seconds is set to avoid
+unnecessary network instability while ensuring responsiveness.
 
 ## Failover
 
@@ -403,14 +470,36 @@ listening to MAIN with the given UUID.
 
 #### Force sync of data 
 
-On failover, the current logic is to choose the most-up-to-date instance from all available instances to promote to the new MAIN. For promotion to the MAIN
-to successfully happen, the new MAIN figures out if REPLICA is behind (has less up-to-date data) or has data that the new MAIN doesn't have.
-If REPLICA has data that MAIN doesn't have, in that case REPLICA is in a diverged-from-MAIN state. If at least one REPLICA is in diverged-from-MAIN
-state, failover won't succeed as MAIN can't replicate data to diverged-from-MAIN REPLICA.
-When choosing a new MAIN in the failover procedure from the list of available REPLICAs, the instance with the latest commit timestamp for the default database is chosen as the new MAIN. 
-In case some other instance had more up-to-date data when the failover procedure was choosing a new MAIN but was down at that point when rejoining the cluster, 
-the new MAIN instance sends a force sync RPC request to such instance. Force sync RPC request deletes all current data on all databases on a given instance and accepts data from the 
-current MAIN. This way cluster will always follow the current MAIN. 
+During a failover event, Memgraph selects the most up-to-date, alive instance to
+become the new MAIN. The selection process works as follows:
+1. From the list of available REPLICA instances, Memgraph chooses the one with
+the latest commit timestamp for the default database. 
+2. If an instance that had more recent data was down during this selection
+process, it will not be considered for promotion to MAIN.
+
+If a previously down instance had more up-to-date data but was unavailable
+during failover, it will go through a specific recovery process upon rejoining
+the cluster:
+- The new MAIN will clear the returning replica’s storage.
+- The returning replica will then receive all commits from the new MAIN to
+  synchronize its state.
+- The replica's old durability files will be preserved in a `.old` directory in
+  `data_directory/snapshots` and `data_directory/wal` folders, allowing admins
+  to manually recover data if needed.
+
+Memgraph prioritizes availability over strict consistency (leaning towards AP in
+the CAP theorem). While it aims to maintain consistency as much as possible, the
+current failover logic can result in a non-zero Recovery Point Objective (RPO),
+that is, data loss, because:
+- The promoted MAIN might not have received all commits from the previous MAIN
+  before the failure.
+- This design ensures that the MAIN remains writable for the maximum possible
+  time.
+
+If your environment requires strong consistency and can tolerate write
+unavailability, [reach out to
+us](https://github.com/memgraph/memgraph/discussions). We are actively exploring
+support for a fully synchronous mode.
 
 
 ## Actions on follower coordinators
@@ -418,13 +507,6 @@ current MAIN. This way cluster will always follow the current MAIN.
 From follower coordinators you can only execute `SHOW INSTANCES`. Registration of data instance, unregistration of data instances, demoting instance, setting instance to MAIN and 
 force reseting cluster state are all disabled. 
 
-<Callout type="warning">
-
-Under certain extreme scenarios, the current implementation of HA could lead to having Recovery Point Objective (RPO) != 0 (aka data loss). These are environments with high volume of transactions 
-where data is constantly changed, added, deleted... If you are operating in such scenarios, please open an issue on [GitHub](https://github.com/memgraph/memgraph/issues) 
-as we are eager to expand our support for this kind of workload.
-
-</Callout>
 
 ## Instances' restart
 
@@ -435,22 +517,20 @@ forbidden until a ping from the coordinator passes.
 
 ### Coordinator instances restart
 
-In case the coordinator instance dies and it is restarted, it will not lose any data from the RAFT log or RAFT snapshots, since `--ha-durability` is enabled by default. 
+In case the coordinator instance dies and it is restarted, it will not lose any data from the RAFT log or RAFT snapshots, since coordinator data is always backed-up by a durable storage. 
 For more details read about high availability durability in the durability chapter.
 
 
 ## Durability
 
-High availability durability is enabled by default. Durability flag controls logs and snapshots. Details about other coordinators are always made durable
-since without that information, the coordinator can't rejoin the cluster.
+All NuRaft data is made durable by default. This includes all Raft logs, Raft snapshots and information about cluster connectivity. 
+The details about the cluster connectivity are made durable since without that information, the coordinator can't rejoin the cluster on its restart.
 
 Information about logs and snapshots is stored under one RocksDB instance in the `high_availability/raft_data/logs` directory stored under 
 the top-level `--data-directory` folder. All the data stored there is recovered in case the coordinator restarts.
 
-Data about other coordinators and their endpoints is recovered from the `high_availability/raft_data/network` directory stored under 
-the top-level `--data-directory` folder. When the coordinator rejoins, it will communicate with other coordinators and receive updates from the current leader.
-
-In case durability is disabled, at least one coordinator must be alive at all times so that data from the Raft log is not lost.
+Data about other coordinators is recovered from the `high_availability/raft_data/network` directory stored under 
+the top-level `--data-directory` folder. When the coordinator rejoins, it will reestablish the communication with other coordinators and receive updates from the current leader.
 
 ### First start 
 
@@ -461,7 +541,7 @@ for each user action and failover action. Snapshots are created every N (N curre
 
 ### Restart of coordinator 
 
-In case of coordinator's failure, on the restart, it will read information about other coordinators stored under `high_availability/raft_data/network` directory. 
+In case of the coordinator's failure, on the restart, it will read information about other coordinators stored under `high_availability/raft_data/network` directory. 
 
 From the `network` directory we will recover the server state before the coordinator stopped, including the current term, for whom the coordinator voted, and whether 
 election timer is allowed.
@@ -472,10 +552,10 @@ It will also recover the following server config information:
 - ID of the current log 
 - additional data needed by nuRaft
 
-If durability is not disabled, the following information will be recovered from a common RocksDB `logs` instance: 
+The following information will be recovered from a common RocksDB `logs` instance: 
 - current version of `logs` durability store 
 - snapshots found with `snapshot_id_` prefix in database:
-  - coordinator cluster state - all data instances with their role (MAIN or REPLICA), UUID of MAIN instance which REPLICA is listening to 
+  - coordinator cluster state - all data instances with their role (MAIN or REPLICA), all coordinator instances and UUID of MAIN instance which REPLICA is listening to 
   - last log idx
   - last log term
   - last cluster config
@@ -487,12 +567,10 @@ If durability is not disabled, the following information will be recovered from 
 
 ### Handling of durability errors 
 
-If snapshots are not stored, an exception is thrown and left for the nuRAFT library to handle the issue. Logs can be missed and not stored since they are compacted and deleted
-every two snapshots and will be removed relatively fast. In case the log is missing on recovery, the coordinator will not start. In that case, it is best to start 
-a coordinator without durability and leave other coordinators to send missing data. Users are advised to use the same strategy in case a snapshot is missing on one 
-of the coordinators. 
+If snapshots are not correctly stored, the exception is thrown and left for the nuRAFT library to handle the issue. Logs can be missed and not stored since they are compacted and 
+deleted every two snapshots and will be removed relatively fast.
 
-Memgraph throws an error in case of failure to store cluster config, which is updated in the `high_availability/raft_data/network` folder. 
+Memgraph throws an error when failing to store cluster config, which is updated in the `high_availability/raft_data/network` folder. 
 If this happens, it will happen only on the first cluster start when coordinators are connecting since 
 coordinators are configured only once at the start of the whole cluster. This is a non-recoverable error since in case the coordinator rejoins the cluster and has 
 the wrong state of other clusters, it can become a leader without being connected to other coordinators. 
@@ -532,11 +610,11 @@ the ability to survive occasional network hiccups without triggering leadership 
 ## Kubernetes
 
 We support deploying Memgraph HA instances as part of the Kubernetes cluster. 
-You can see example configurations [here](/getting-started/install-memgraph/kubernetes#helm-chart-for-memgraph-high-availability-cluster).
+You can see example configurations [here](/getting-started/install-memgraph/kubernetes#memgraph-high-availability-helm-chart).
 
 ## Docker Compose
 
-The following example shows you how to setup Memgraph cluster using docker compose. The cluster will use user-defined bridge network.
+The following example shows you how to setup Memgraph cluster using Docker Compose. The cluster will use user-defined bridge network.
 
 License file `license.cypherl` should be in the format:
 
@@ -551,15 +629,19 @@ You can directly use initialization file `HA_register.cypherl`:
 
 ```
 
-ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "coord2:7692", "coordinator_server": "coord2:10112", "management_server": "coord2:12122"};
-ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "coord3:7693", "coordinator_server": "coord3:10113", "management_server": "coord3:12123"};
+ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "localhost:7691", "coordinator_server": "coord1:10111", "management_server": "coord1:12121"};
+ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "localhost:7692", "coordinator_server": "coord2:10112", "management_server": "coord2:12122"};
+ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "localhost:7693", "coordinator_server": "coord3:10113", "management_server": "coord3:12123"};
 
-REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "instance1:7687", "management_server": "instance1:13011", "replication_server": "instance1:10001"};
-REGISTER INSTANCE instance_2 WITH CONFIG {"bolt_server": "instance2:7688", "management_server": "instance2:13012", "replication_server": "instance2:10002"};
-REGISTER INSTANCE instance_3 WITH CONFIG {"bolt_server": "instance3:7689", "management_server": "instance3:13013", "replication_server": "instance3:10003"};
+REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "localhost:7687", "management_server": "instance1:13011", "replication_server": "instance1:10001"};
+REGISTER INSTANCE instance_2 WITH CONFIG {"bolt_server": "localhost:7688", "management_server": "instance2:13012", "replication_server": "instance2:10002"};
+REGISTER INSTANCE instance_3 WITH CONFIG {"bolt_server": "localhost:7689", "management_server": "instance3:13013", "replication_server": "instance3:10003"};
 SET INSTANCE instance_3 TO MAIN;
 
 ```
+
+Since the host can't resolve the IP for coordinators and data instances, Bolt
+servers in Docker Compose setup require `bolt_server` set to `localhost:<port>`.
 
 You can directly use the following `docker-compose.yml` to start the cluster using `docker compose up`:
 
@@ -653,7 +735,7 @@ services:
       - ./license.cypherl:/tmp/init/license.cypherl:ro
       - mg_lib4:/var/lib/memgraph
       - mg_log4:/var/log/memgraph
-    command: ["--init-file=/tmp/init/license.cypherl","--data-recovery-on-startup=true", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7687", "--management-port=13011"]
+    command: ["--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7687", "--management-port=13011"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.6
@@ -667,7 +749,7 @@ services:
       - ./license.cypherl:/tmp/init/license.cypherl:ro
       - mg_lib5:/var/lib/memgraph
       - mg_log5:/var/log/memgraph
-    command: ["--init-file=/tmp/init/license.cypherl","--data-recovery-on-startup=true", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7688", "--management-port=13012"]
+    command: ["--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7688", "--management-port=13012"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.7
@@ -681,7 +763,7 @@ services:
       - ./license.cypherl:/tmp/init/license.cypherl:ro
       - mg_lib6:/var/lib/memgraph
       - mg_log6:/var/log/memgraph
-    command: ["--init-file=/tmp/init/license.cypherl","--data-recovery-on-startup=true", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7689", "--management-port=13013"]
+    command: ["--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7689", "--management-port=13013"]
     networks:
       memgraph_ha:
         ipv4_address: 172.21.0.8
@@ -716,17 +798,17 @@ docker run  --name coord3 --network=host -p 7693:7693 -p 7446:7444 -v mg_lib3:/v
 
 4. Start instance1:
 ```plaintext
-docker run  --name instance1 --network=host -p 7687:7687 -p 7447:7444 -v mg_lib4:/var/lib/memgraph -v mg_log4:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7687 --log-level=TRACE --also-log-to-stderr --management-port=13011--data-recovery-on-startup=true
+docker run  --name instance1 --network=host -p 7687:7687 -p 7447:7444 -v mg_lib4:/var/lib/memgraph -v mg_log4:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7687 --log-level=TRACE --also-log-to-stderr --management-port=13011
 ```
 
 5. Start instance2:
 ```plaintext
-docker run --name instance2 --network=host -p 7688:7688 -p 7448:7444 -v mg_lib5:/var/lib/memgraph -v mg_log5:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7688 --log-level=TRACE --also-log-to-stderr --management-port=13012--data-recovery-on-startup=true
+docker run --name instance2 --network=host -p 7688:7688 -p 7448:7444 -v mg_lib5:/var/lib/memgraph -v mg_log5:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7688 --log-level=TRACE --also-log-to-stderr --management-port=13012
 ```
 
 6. Start instance3:
 ```plaintext
-docker run --name instance3 --network=host -p 7689:7689 -p 7449:7444 -v mg_lib6:/var/lib/memgraph -v mg_log6:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7689 --log-level=TRACE --also-log-to-stderr --management-port=13013--data-recovery-on-startup=true
+docker run --name instance3 --network=host -p 7689:7689 -p 7449:7444 -v mg_lib6:/var/lib/memgraph -v mg_log6:/var/log/memgraph -e MEMGRAPH_ORGANIZATION_NAME=<YOUR ORGANIZATION NAME> -e MEMGRAPH_ENTERPRISE_LICENSE="<YOUR ENTERPRISE LICENSE>" memgraph/memgraph --bolt-port=7689 --log-level=TRACE --also-log-to-stderr --management-port=13013
 ```
 
 ### Register instances
@@ -735,9 +817,10 @@ docker run --name instance3 --network=host -p 7689:7689 -p 7449:7444 -v mg_lib6:
 ```plaintext
 mgconsole --port=7691
 ```
-2. Connect the other two coordinator instances to the cluster.
+2. Add coordinator instances to the cluster.
 
 ```plaintext
+ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "localhost:7691", "coordinator_server": "localhost:10111", "management_server": "localhost:12121"};
 ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "localhost:7692", "coordinator_server": "localhost:10112", "management_server": "localhost:12122"};
 ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "localhost:7693", "coordinator_server": "localhost:10113", "management_server": "localhost:12123"};
 ```

@@ -53,7 +53,7 @@ void AddProcedure(
     mgp_memory *memory);
 ```
 
-{<h4> Input: </h4>}
+{<h4 className="custom-header"> Input: </h4>}
 
 - `callback`: procedure callback
 - `name`: procedure name
@@ -88,7 +88,7 @@ void AddBatchProcedure(
     mgp_memory *memory);
 ```
 
-{<h4> Input: </h4>}
+{<h4 className="custom-header"> Input: </h4>}
 
 - `callback`: procedure callback, invoked through OpenCypher
 - `initializer`: procedure initializer, invoked before callback
@@ -122,7 +122,7 @@ void AddFunction(
     mgp_memory *memory);
 ```
 
-{<h4> Input: </h4>}
+{<h4 className="custom-header"> Input: </h4>}
 
 - `callback`: function callback
 - `name`: function name
@@ -384,7 +384,15 @@ Sets a return value of given type.
 ```
 
 ```cpp
+  void SetValue(List &&value)
+```
+
+```cpp
   void SetValue(const Map &value)
+```
+
+```cpp
+  void SetValue(Map &&value)
 ```
 
 ```cpp
@@ -668,7 +676,7 @@ explicit Node(const mgp_vertex *const_ptr)
 Copy and move constructors:
 
 ```cpp
-Node(const Node &other) noexcept
+Node(const Node &other)
 Node(Node &&other) noexcept
 ```
 
@@ -852,7 +860,7 @@ explicit Relationship(const mgp_edge *const_ptr)
 Copy and move constructors:
 
 ```cpp
-Relationship(const Relationship &other) noexcept
+Relationship(const Relationship &other)
 Relationship(Relationship &&other) noexcept
 ```
 
@@ -1069,7 +1077,7 @@ explicit Labels(mgp_vertex *node_ptr)
 Copy and move constructors:
 
 ```cpp
-Labels(const Labels &other) noexcept
+Labels(const Labels &other)
 Labels(Labels &&other) noexcept
 ```
 
@@ -1137,7 +1145,7 @@ Date(int year, int month, int day)
 Copy and move constructors:
 
 ```cpp
-Date(const Date &other) noexcept
+Date(const Date &other)
 Date(Date &&other) noexcept
 ```
 
@@ -1260,7 +1268,7 @@ LocalTime(int hour, int minute, int second, int millisecond, int microsecond)
 Copy and move constructors:
 
 ```cpp
-LocalTime(const LocalTime &other) noexcept
+LocalTime(const LocalTime &other)
 LocalTime(LocalTime &&other) noexcept
 ```
 
@@ -1394,7 +1402,7 @@ LocalDateTime(int year, int month, int day, int hour, int minute, int second, in
 Copy and move constructors:
 
 ```cpp
-LocalDateTime(const LocalDateTime &other) noexcept
+LocalDateTime(const LocalDateTime &other)
 LocalDateTime(LocalDateTime &&other) noexcept
 ```
 
@@ -1561,7 +1569,7 @@ Duration(double day, double hour, double minute, double second, double milliseco
 Copy and move constructors:
 
 ```cpp
-Duration(const Duration &other) noexcept
+Duration(const Duration &other)
 Duration(Duration &&other) noexcept
 ```
 
@@ -1634,7 +1642,7 @@ explicit Path(const Node &start_node)
 Copy and move constructors:
 
 ```cpp
-Path(const Path &other) noexcept
+Path(const Path &other)
 Path(Path &&other) noexcept
 ```
 
@@ -1759,7 +1767,7 @@ explicit List(std::initializer_list<Value> list)
 Copy and move constructors:
 
 ```cpp
-List(const List &other) noexcept
+List(const List &other)
 List(List &&other) noexcept
 ```
 
@@ -1778,6 +1786,7 @@ List(List &&other) noexcept
 | `Empty`                                   | Returns whether the list is empty.                    |
 | `Append`                                  | Appends the given `value` to the list.                |
 | `AppendExtend`                            | Extends the list and appends the given `value` to it. |
+| `Reserve`                                 | Ensure underlying capacity is at least `n`.           |
 | `begin`<br/>`end`<br/>`cbegin`<br/>`cend` | Returns the beginning/end of the `List` iterator.     |
 | `ToString`                                | Returns the list's string representation.             |
 
@@ -1813,26 +1822,12 @@ Appends the given `value` to the list. The `value` is copied.
 void Append(const Value &value)
 ```
 
-Appends the given `value` to the list. Takes ownership of `value` by moving it.
-The behavior of accessing `value` after performing this operation is undefined.
-
-```cpp
-void Append(Value &&value)
-```
-
 ##### AppendExtend
 
 Extends the list and appends the given `value` to it. The `value` is copied.
 
 ```cpp
 void AppendExtend(const Value &value)
-```
-
-Extends the list and appends the given `value` to it. Takes ownership of `value` by moving it.
-The behavior of accessing `value` after performing this operation is undefined.
-
-```cpp
-void AppendExtend(Value &&value)
 ```
 
 ##### ToString
@@ -1852,7 +1847,7 @@ std::string ToString() const
 
 ##### operator[]
 
-Returns the value at the given `index`.
+Returns the reference of the value at the given `index`.
 
 ```cpp
 Value operator[](size_t index) const
@@ -1900,7 +1895,7 @@ Map(std::initializer_list<std::pair<std::string_view, Value>> items)
 Copy and move constructors:
 
 ```cpp
-Map(const Map &other) noexcept
+Map(const Map &other)
 Map(Map &&other) noexcept
 ```
 
@@ -2022,7 +2017,7 @@ bool KeyExists(std::string_view key) const;
 
 ##### operator[]
 
-Returns the value at the given `key`.
+Returns the reference of the value at the given `key`.
 
 ```cpp
 Value operator[](std::string_view key) const
@@ -2068,6 +2063,21 @@ Creates a Value from the copy of the given `mgp_value`.
 
 ```cpp
 explicit Value(mgp_value *ptr)
+```
+
+Create a reference type Value
+```cpp
+explicit Value(RefType /**/, mgp_value *ptr)
+```
+
+Create a reference type Value
+```cpp
+explicit Value(RefType /**/, mgp_value *ptr)
+```
+
+Create a Value by moving the given mgp_value ptr
+```cpp
+explicit Value(StealType /**/, mgp_value *ptr)
 ```
 
 Creates a null Value.
@@ -2122,19 +2132,20 @@ explicit Value(Duration &&value)
 Copy and move constructors:
 
 ```cpp
-Value(const Value &other) noexcept
+Value(const Value &other)
 Value(Value &&other) noexcept
 ```
 
 #### Member functions
 
-| Name          | Description                                 |
-| ------------- | ------------------------------------------- |
-| `ptr`         | Returns the pointer to the stored value.    |
-| `Type`        | Returns the type of the value.              |
-| `Value[TYPE]` | Returns a value of given type.              |
-| `Is[TYPE]`    | Returns whether the value is of given type. |
-| `ToString`    | Returns the value's string representation.  |
+| Name          | Description                                   |
+| ------------- | --------------------------------------------- |
+| `ptr`         | Returns the pointer to the stored value.      |
+| `Type`        | Returns the type of the value.                |
+| `Value[TYPE]` | Returns a value of given type.                |
+| `Is[TYPE]`    | Returns whether the value is of given type.   |
+| `ToString`    | Returns the value's string representation.    |
+| `IsRef`       | Returns whether the value is a reference type |
 
 ##### Type
 
@@ -2314,6 +2325,14 @@ Returns the value's string representation. It does this by finding the type of t
 
 ```cpp
 std::string ToString() const
+```
+
+##### IsRef
+
+Returns whether the value is a reference type.
+
+```cpp
+bool Value::IsRef() const
 ```
 
 #### Operators
