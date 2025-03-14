@@ -6,6 +6,7 @@ export default {
   "bipartite_matching": "bipartite_matching",
   "bridges": "bridges",
   "collections": "collections",
+  "csv_utils": "csv_utils",
   "community_detection_online": "community_detection_online",
   "community_detection": "community_detection",
   "do": "do",
