@@ -130,7 +130,7 @@ export default withNextra({
         permanent: true
       },
       {
-        source: '/mage/query-modules/cpp/csv_utils',
+        source: '/mage/query-modules/cpp/csv-utils',
         destination: '/advanced-algorithms/available-algorithms/csv_utils',
         permanent: true
       },
