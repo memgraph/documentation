@@ -158,9 +158,71 @@ work together in real-world applications with these interactive demos:
 ## LangChain
 
 LangChain is a framework for developing applications powered by large language
-models (LLMs). Currently, Memgraph's LangChain integration supports
-creating a knowledge graph from unstructured data and querying with natural
-language. You can follow the example on [LangChain
+models (LLMs). 
+
+Memgraph has an [integration with
+LangChain](https://github.com/memgraph/langchain-memgraph), The integration
+supports **LangGraph toolkit** for building agentic application, **MemgraphQA chain**
+for querying via natural language and **Knowledge graph construction** from
+unstructured data.
+
+{<h4 className="custom-header">LangGraph Toolkit</h4>}
+
+```python
+import os
+from getpass import getpass
+
+import pytest
+from dotenv import load_dotenv
+from langchain.chat_models import init_chat_model
+from langgraph.prebuilt import create_react_agent
+
+from langchain_memgraph import MemgraphToolkit
+from langchain_memgraph.graphs.memgraph import Memgraph
+
+
+"""Setup Memgraph connection fixture."""
+url = os.getenv("MEMGRAPH_URI", "bolt://localhost:7687")
+username = os.getenv("MEMGRAPH_USERNAME", "")
+password = os.getenv("MEMGRAPH_PASSWORD", "")
+
+graph = Memgraph(
+    url=url, username=username, password=password, refresh_schema=False
+)
+
+"""Set up Memgraph agent with React pattern."""
+if not os.environ.get("OPENAI_API_KEY"):
+    os.environ["OPENAI_API_KEY"] = getpass("Enter API key for OpenAI: ")
+
+llm = init_chat_model("gpt-4o-mini", model_provider="openai")
+
+db = Memgraph(url=url, username=username, password=password)
+toolkit = MemgraphToolkit(db=db, llm=llm)
+
+agent_executor = create_react_agent(
+    llm,
+    toolkit.get_tools(),
+    prompt="You will get a cypher query, try to execute it on the Memgraph database.",
+)
+
+query = """
+    CREATE (c:Character {name: 'Jon Snow', house: 'Stark', title: 'King in the North'})
+"""
+memgraph_connection.query(query)
+memgraph_connection.refresh_schema()
+
+# Verify nodes exist
+game_exists = memgraph_connection.query(
+    """MATCH (c:Character {name: 'Jon Snow'}) RETURN c"""
+)
+
+
+
+
+
+{<h4 className="custom-header">Knowledge graph construction</h4>}
+
+You can follow the example on [LangChain
 docs](https://python.langchain.com/docs/integrations/graphs/memgraph/) or go
 through quick start below.
 
@@ -169,7 +231,7 @@ through quick start below.
 To install all the required packages, run:
 
 ```shell
-pip install langchain langchain-openai neo4j --user
+pip install langchain langchain-openai langchain-memgraph langchain-experimental
 ```
 
 {<h4 className="custom-header">Environment setup</h4>}
@@ -177,16 +239,17 @@ pip install langchain langchain-openai neo4j --user
 Before you get started, make sure you have [Memgraph](/getting-started) running
 in the background.
 
-Then, instantiate `MemgraphGraph` in your Python code. This object holds the
+Then, instantiate `Memgraph` in your Python code. This object holds the
 connection to the running Memgraph instance. Make sure to set up all the
 environment variables properly.
 
 ```python
 import os
-
-from langchain_community.chains.graph_qa.memgraph import MemgraphQAChain
-from langchain_community.graphs import MemgraphGraph
 from langchain_openai import ChatOpenAI
+from langchain_experimental.graph_transformers import LLMGraphTransformer
+from langchain_memgraph.graphs.graph_document import Document
+from langchain_memgraph.chains.graph_qa import MemgraphQAChain
+from langchain_memgraph.graphs.memgraph import Memgraph
 
 url = os.environ.get("MEMGRAPH_URI", "bolt://localhost:7687")
 username = os.environ.get("MEMGRAPH_USERNAME", "")
