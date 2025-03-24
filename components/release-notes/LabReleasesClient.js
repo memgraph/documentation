@@ -44,7 +44,7 @@ export default function LabReleasesClient({ version }) {
         return <>Could not load release notes for version {version}.</>;
     }
 
-    const filteredDataArray = data.filter(item => item.version === filterValue);
+    const filteredDataArray = data.filter(item => item.version === version);
 
     if (filteredDataArray.length === 0) {
         return <p>No release notes found for version {version}.</p>;
