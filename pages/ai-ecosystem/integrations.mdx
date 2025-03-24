@@ -162,11 +162,39 @@ models (LLMs).
 
 Memgraph has an [integration with
 LangChain](https://github.com/memgraph/langchain-memgraph), The integration
-supports **LangGraph toolkit** for building agentic application, **MemgraphQA chain**
-for querying via natural language and **Knowledge graph construction** from
-unstructured data.
+supports **LangGraph toolkit** for building agentic application, **MemgraphQA
+chain** for querying via natural language and **Knowledge graph construction**
+from unstructured data.
 
-{<h4 className="custom-header">LangGraph Toolkit</h4>}
+### LangGraph toolkit   
+
+The new LangGraph framework enables users to build agentic applications.
+Memgraph now offers a toolkit inside the LangGraph for building agents that can
+autonomously interact with the Memgraph database. 
+
+Currently, the Memgraph toolkit supports the following tools:
+- **QueryMemgraphTool**: Tool for executing Cypher queries on Memgraph.
+
+{<h4 className="custom-header">Installation</h4>}
+
+Before starting to write code, make sure you have installed the required
+packages in your environment:
+
+```shell
+pip install langchain langchain-openai langchain-memgraph langgraph
+```
+
+It is necessary to install `langgraph` as well since it is a dependency for using 
+the Memgraph toolkit.
+
+
+{<h4 className="custom-header">Enviroment setup: </h4>}
+
+Make sure you have [Memgraph](/getting-started) running
+in the background.
+
+After that, you can instantiate `Memgraph` in your Python code. This object holds the
+connection to the running Memgraph instance. 
 
 ```python
 import os
@@ -199,11 +227,36 @@ llm = init_chat_model("gpt-4o-mini", model_provider="openai")
 db = Memgraph(url=url, username=username, password=password)
 toolkit = MemgraphToolkit(db=db, llm=llm)
 
+```
+
+The `refresh_schema` is initially set to `False` because there is still no data
+in the database, and we want to avoid unnecessary database calls. The code above
+also initializes the LLM chat model from OpenAI and gets the toolkit for Memgraph.
+
+{<h4 className="custom-header">Agent setup: </h4>}
+
+After setting up Memgraph and the toolkit, you can create an agent that will use the toolkit to 
+solve particular problem:
+
+```python
 agent_executor = create_react_agent(
     llm,
     toolkit.get_tools(),
     prompt="You will get a cypher query, try to execute it on the Memgraph database.",
 )
+```
+
+This is a simple example of an agent executing a cyper query passed to the
+agent. If the toolkit had more tools, the agent could use them as well. Feel
+free to contribute tools to the
+[integration](https://github.com/memgraph/langchain-memgraph/blob/main/langchain_memgraph/tools.py)
+
+
+{<h4 className="custom-header"> Running agent </h4>}
+
+In the end, we are seeding the data in the database and running the agent:
+
+```python
 
 query = """
     CREATE (c:Character {name: 'Jon Snow', house: 'Stark', title: 'King in the North'})
@@ -211,16 +264,23 @@ query = """
 memgraph_connection.query(query)
 memgraph_connection.refresh_schema()
 
-# Verify nodes exist
-game_exists = memgraph_connection.query(
-    """MATCH (c:Character {name: 'Jon Snow'}) RETURN c"""
+example_query = "MATCH (n) WHERE n.name = 'Jon Snow' RETURN n"
+events = memgraph_agent.stream(
+    {"messages": [("user", example_query)]},
+    stream_mode="values",
 )
 
+last_event = None
+for event in events:
+    last_event = event
+    event["messages"][-1].pretty_print()
 
+print (last_event)
 
+```
+The agent will autonomously pick a tool and use the toolkit to solve the requested problem. 
 
-
-{<h4 className="custom-header">Knowledge graph construction</h4>}
+### Knowledge graph construction
 
 You can follow the example on [LangChain
 docs](https://python.langchain.com/docs/integrations/graphs/memgraph/) or go
