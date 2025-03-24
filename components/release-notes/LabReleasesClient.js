@@ -13,7 +13,8 @@ const sectionNameByType = {
     'fix': 'Bug fixes',
 }
 
-export default function LabReleasesClient() {
+// version should be a single string (e.g. '2.1.0', '3.1.2' etc.)
+export default function LabReleasesClient({ version }) {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -25,10 +26,8 @@ export default function LabReleasesClient() {
                 const json = await res.json();
                 setData(json.items || []); // Ensure data is always an array
             } catch (error) {
-                console.error("Error fetching release notes:", error);
                 setData([]);
                 setLoading(false);
-                return <></>;
             } finally {
                 setLoading(false);
             }
@@ -41,20 +40,20 @@ export default function LabReleasesClient() {
         return <p>Loading release notes...</p>;
     }
 
-    if (!Array.isArray(data)) {
-        console.error("🚨 Error: Expected data to be an array but got:", typeof data, data);
-        return <></>;
+    if (!Array.isArray(data) || data.length === 0) {
+        return <>Could not load release notes for version {version}.</>;
     }
 
-    const filteredData = data[0];
-    const releasedAt = new Date(filteredData.releasedAt);
+    const filteredDataArray = data.filter(item => item.version === filterValue);
 
-    console.log(filteredData)
+    if (filteredDataArray.length === 0) {
+        return <p>No release notes found for version {version}.</p>;
+    }
+
+    const filteredData = filteredDataArray[0];
 
     return (
         <div>
-            <h2>Lab v{filteredData.version} - {`${releasedAt.toLocaleString('default', { month: 'short' })} ${releasedAt.getDate()}, ${releasedAt.getFullYear()}`}</h2>
-
             {filteredData.sections.map((section, index) => (
                 <div key={index}>
                     <h4 className="custom-header">{sectionEmojiByType[section.type.toLowerCase()] || ''} {sectionNameByType[section.type.toLowerCase()] || ''}</h4>
