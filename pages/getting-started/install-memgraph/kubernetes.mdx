@@ -52,11 +52,30 @@ By default, the Helm chart will create a `PersistentVolumeClaim` (PVC) for
 storage and logs. If the storage class for PVC is not defined, PVC will use the
 default one available in the cluster. The storage class can be configured in the
 `values.yaml` file. To avoid losing your data, make sure you have `Retain`
-reclaim policy. If you delete `PersistentVolumeClaim` without having `Retain`
-reclaim policy, you will lose your data because `PersistentVolume` will be
-deleted.
+reclaim policy set on your storage class. If you delete `PersistentVolumeClaim`
+without having `Retain` reclaim policy, you will lose your data because
+`PersistentVolume` will get deleted too. The alternative to creating a new
+storage class is to patch your existing storage class by applying the `Retain`
+policy. This is necessary because the default Kubernetes policy is `Delete`. The
+patching can be done using the following bash script:
+
+```bash
+#!/bin/bash
+
+# Get all Persistent Volume names
+PVS=$(kubectl get pv --no-headers -o custom-columns=":metadata.name")
+
+# Loop through each PV and patch it
+for pv in $PVS; do
+  echo "Patching PV: $pv"
+  kubectl patch pv $pv -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+done
+
+echo
+
 
 An example of a storage class for AWS EBS volumes: 
+
 ```yaml
 storageClass:
   name: "gp2"
@@ -68,7 +87,8 @@ storageClass:
 ```
 
 Default template for a storage class is part of the Helm chart and can be found 
-in the repository. 
+in the repository. If you don't want to create a new storage class, set
+`storageClass.create` to `false`.
 
 More details on the configuration options can be found in the [configuration
 section](#configuration-options).
@@ -81,6 +101,19 @@ you can enable them in the `values.yaml` file.
 
 The secrets are prepared to work for environment variables `MEMGRAPH_USER` and `MEMGRAPH_PASSWORD`. 
 
+
+### Probes
+
+Memgraph standalone chart uses startup, readiness and liveness probes. The startup probe
+is used to determine when a container application has started. The liveness
+probe is used to determine when a container should be restarted. The readiness
+probe is used to determine when a container is ready to start accepting traffic.
+The startup probe will succeed only after the recovery of the Memgraph has
+finished. Liveness and readiness probes will start after the startup probe
+succeeds. By default, the startup probe has to succeed within 2 hours. If the
+recovery from backup takes longer than that, update the configuration to the
+value that is high enough. The liveness and readiness probe have to succeed at
+least once in 5 minutes for a pod to be considered ready.
 
 ### System configuration
 
@@ -152,13 +185,10 @@ their default values.
 | `service.type`                              | Kubernetes service type                                                                                                          | `ClusterIP`                            |
 | `service.enableBolt`                        | Enable Bolt protocol                                                                                                             | `true`                                 |
 | `service.boltPort`                          | Bolt protocol port                                                                                                               | `7687`                                 |
-| `service.boltProtocol`                      | Protocol used by Bolt                                                                                                            | `TCP`                                  |
 | `service.enableWebsocketMonitoring`         | Enable WebSocket monitoring                                                                                                      | `false`                                |
 | `service.websocketPortMonitoring`           | WebSocket monitoring port                                                                                                        | `7444`                                 |
-| `service.websocketPortMonitoringProtocol`   | Protocol used by WebSocket monitoring                                                                                            | `TCP`                                  |
 | `service.enableHttpMonitoring`              | Enable HTTP monitoring                                                                                                           | `false`                                |
 | `service.httpPortMonitoring`                | HTTP monitoring port                                                                                                             | `9091`                                 |
-| `service.httpPortMonitoringProtocol`        | Protocol used by HTTP monitoring                                                                                                 | `http`                                 |
 | `service.annotations`                       | Annotations to add to the service                                                                                                | `{}`                                   |
 | `persistentVolumeClaim.createStorageClaim`  | Enable creation of a Persistent Volume Claim for storage                                                                         | `true`                                 |
 | `persistentVolumeClaim.storageClassName`    | Storage class name for the persistent volume claim                                                                               | `""`                                   |
@@ -183,19 +213,22 @@ their default values.
 | `serviceAccount.annotations`                | Annotations to add to the service account                                                                                        | `{}`                                   |
 | `serviceAccount.name`                       | The name of the service account to use. If not set and create is true, a name is generated.                                      | `""`                                   |
 | `container.terminationGracePeriodSeconds`   | Grace period for pod termination                                                                                                 | `1800`                                 |
-| `probes.liveliness.initialDelaySeconds`     | Initial delay for liveliness probe                                                                                               | `10`                                   |
-| `probes.liveliness.periodSeconds`           | Period seconds for liveliness probe                                                                                              | `60`                                   |
-| `probes.liveliness.failureThreshold`        | Failure threshold for liveliness probe                                                                                           | `3`                                    |
-| `probes.readiness.initialDelaySeconds`      | Initial delay for readiness probe                                                                                                | `10`                                   |
-| `probes.readiness.periodSeconds`            | Period seconds for readiness probe                                                                                               | `30`                                   |
-| `probes.readiness.failureThreshold`         | Failure threshold for readiness probe                                                                                            | `3`                                    |
-| `probes.startup.initialDelaySeconds`        | Initial delay for startup probe                                                                                                  | `10`                                   |
-| `probes.startup.periodSeconds`              | Period seconds for startup probe                                                                                                 | `10`                                   |
-| `probes.startup.failureThreshold`           | Failure threshold for startup probe                                                                                              | `30`                                   |
+| `container.livenessProbe.tcpSocket.port`    | Port used for TCP connection. Should be the same as bolt port.                                                                   | `7687`                                 |
+| `container.livenessProbe.failureThreshold`  | Failure threshold for liveness probe                                                                                             | `20`                                   |
+| `container.livenessProbe.timeoutSeconds`    | Initial delay for readiness probe                                                                                                | `10`                                   |
+| `container.livenessProbe.periodSeconds`     | Period seconds for readiness probe                                                                                               | `5`                                    |
+| `container.readinessProbe.tcpSocket.port`   | Port used for TCP connection. Should be the same as bolt port.                                                                   | `7687`                                 |
+| `container.readinessProbe.failureThreshold` | Failure threshold for readiness probe                                                                                            | `20`                                   |
+| `container.readinessProbe.timeoutSeconds`   | Initial delay for readiness probe                                                                                                | `10`                                   |
+| `container.readinessProbe.periodSeconds`    | Period seconds for readiness probe                                                                                               | `5`                                    |
+| `container.startupProbe.tcpSocket.port`     | Port used for TCP connection. Should be the same as bolt port.                                                                   | `7687`                                 |
+| `container.startupProbe.failureThreshold`   | Failure threshold for startup probe                                                                                              | `1440`                                 |
+| `container.startupProbe.periodSeconds`      | Period seconds for startup probe                                                                                                 | `10`                                   |
 | `nodeSelectors`                             | Node selectors for pod. Left empty by default.                                                                                   | `{}`                                   |
 | `customQueryModules`                        | List of custom Query modules that should be mounted to Memgraph Pod                                                              | `[]`                                   |
 | `sysctlInitContainer.enabled`               | Enable the init container to set sysctl parameters                                                                               | `true`                                 |
 | `sysctlInitContainer.maxMapCount`           | Value for `vm.max_map_count` to be set by the init container                                                                     | `262144`                               |
+| `storageClass.create`                       | If set to true, new StorageClass will be created.                                                                                | `false`                                |
 | `storageClass.name`                         | Name of the StorageClass                                                                                                         | `"memgraph-generic-storage-class"`     |
 | `storageClass.provisioner`                  | Provisioner for the StorageClass                                                                                                 | `""`                                   |
 | `storageClass.storageType`                  | Type of storage for the StorageClass                                                                                             | `""`                                   |
@@ -412,8 +445,11 @@ You can use `sysctlInitContainer` configuration parameter to [increase the `vm_m
 ### Authentication
 
 By default, there is no user or password configured for Memgraph instances. You can use `secrets` configuration parameter 
-to create the user with the password.
+to create the user with the password. The secret can be created in the following way:
 
+```
+kubectl create secret generic memgraph-secrets --from-literal=USER=memgraph --from-literal=PASSWORD=memgraph
+```
 
 ### Setting up the cluster
 
@@ -450,7 +486,7 @@ the external network you are using for accessing instances from outside.
 
 The most cost-friendly way to manage a Memgraph HA cluster in K8s is using a `IngressNginx` contoller. This controller is capable of routing TCP messages on Bolt level protocol 
 to the K8s Memgraph services. To achieve this, it uses only a single `LoadBalancer` which means there is only a single external IP for connecting to the cluster. Users can connect 
-to any coordinator or data instance by distinguishing bolt ports. The only step required is to install Memgraph HA chart:
+to any coordinator or data instance by distinguishing Bolt ports. The only step required is to install Memgraph HA chart:
 
 ```
 helm install mem-ha-test ./charts/memgraph-high-availability --set \
@@ -461,44 +497,83 @@ externalAccessConfig.dataInstance.serviceType=IngressNginx,externalAccessConfig.
 
 The chart will also install `IngressNginx` automatically with all required configuration.
 
-#### Configuration options
+### Probes
+
+Memgraph HA chart uses startup, readiness and liveness probes. The startup probe
+is used to determine when a container application has started. The liveness
+probe is used to determine when a container should be restarted. The readiness
+probe is used to determine when a container is ready to start accepting traffic.
+The startup probe will succeed only after the recovery of the Memgraph has
+finished. Liveness and readiness probes will start after the startup probe
+succeeds. By default, the startup probe on data instances has to succeed within 2 hours. If the
+recovery from backup takes longer than that, update the configuration to the
+value that is high enough. The liveness and readiness probe have to succeed at
+least once in 5 minutes for a pod to be considered ready on data instances.
+Coordinators have their own probe configuration and receive pings on the NuRaft
+server, whereas data instances receive pings on the Bolt server.
+
+### Configuration options
 
 The following table lists the configurable parameters of the Memgraph HA chart and their default values.
 
 
-| Parameter                                          | Description                                                                                                                                                                                                                                                                                                                                                                                          | Default                    |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------- |
-| `image.repository`                        | Memgraph Docker image repository                                                                            | `memgraph/memgraph`        |
-| `image.tag`                               | Specific tag for the Memgraph Docker image. Overrides the image tag whose default is chart version.         | `2.22.0`                   |
-| `image.pullPolicy`                        | Image pull policy                                                                                           | `IfNotPresent`             |
-| `env.MEMGRAPH_ENTERPRISE_LICENSE`         | Memgraph enterprise license                                                                                 | `<your-license>`           |
-| `env.MEMGRAPH_ORGANIZATION_NAME`          | Organization name                                                                                           | `<your-organization-name>` |
-| `storage.libPVCSize`                      | Size of the storage PVC                                                                                     | `1Gi`                      |
-| `storage.libStorageClassName`             | The name of the storage class used for storing data.                                                        | `""`                        |
-| `storage.libStorageAccessMode`            | Access mode used for lib storage.                                                                           | `ReadWriteOnce`            |
-| `storage.logPVCSize`                      | Size of the log PVC                                                                                         | `1Gi`                      |
-| `storage.logStorageClassName`             | The name of the storage class used for storing logs.                                                        | `""`                         |
-| `storage.logStorageAccessMode`            | Access mode used for log storage.                                                                           | `ReadWriteOnce`            |
-| `externalAccess.coordinator.serviceType`  | IngressNginx, NodePort, CommonLoadBalancer or LoadBalancer.                                                 | `NodePort`                 |
-| `externalAccess.dataInstance.serviceType` | IngressNginx, NodePort or LoadBalancer.                                                                     | `NodePort`                 |
-| `ports.boltPort`                          | Bolt port used on coordinator and data instances.                                                           | `7687`                     |
-| `ports.managementPort`                    | Management port used on coordinator and data instances.                                                     | `10000`                    |
-| `ports.replicationPort`                   | Replication port used on data instances.                                                                    | `20000`                    |
-| `ports.coordinatorPort`                   | Coordinator port used on coordinators.                                                                      | `12000`                    |
-| `affinity.unique`                         | Schedule pods on different nodes in the cluster                                                             | `false`                    |
-| `affinity.parity`                         | Schedule pods on the same node with maximum one coordinator and one data node                               | `false`                    |
-| `affinity.nodeSelection`                  | Schedule pods on nodes with specific labels                                                                 | `false`                    |
-| `affinity.roleLabelKey`                   | Label key for node selection                                                                                | `role`                     |
-| `affinity.dataNodeLabelValue`             | Label value for data nodes                                                                                  | `data-node`                |
-| `affinity.coordinatorNodeLabelValue`      | Label value for coordinator nodes                                                                           | `coordinator-node`         |
-| `data`                                    | Configuration for data instances                                                                            | See `data` section         |
-| `coordinators`                            | Configuration for coordinator instances                                                                     | See `coordinators` section |
-| `sysctlInitContainer.enabled`             | Enable the init container to set sysctl parameters                                                          | `true`                     |
-| `sysctlInitContainer.maxMapCount`         | Value for `vm.max_map_count` to be set by the init container                                                | `262144`                   |
-| `secrets.enabled`                         | Enable the use of Kubernetes secrets for Memgraph credentials                                               | `false`                    |
-| `secrets.name`                            | The name of the Kubernetes secret containing Memgraph credentials                                           | `memgraph-secrets`         |
-| `secrets.userKey`                         | The key in the Kubernetes secret for the Memgraph user, the value is passed to the `MEMGRAPH_USER` env.     | `USER`                     |
-| `secrets.passwordKey`                     | The key in the Kubernetes secret for the Memgraph password, the value is passed to the `MEMGRAPH_PASSWORD`. | `PASSWORD`                 |
+| Parameter                                                | Description                                                                                                 | Default                    |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `image.repository`                                       | Memgraph Docker image repository                                                                            | `memgraph/memgraph`        |
+| `image.tag`                                              | Specific tag for the Memgraph Docker image. Overrides the image tag whose default is chart version.         | `3.1.0`                    |
+| `image.pullPolicy`                                       | Image pull policy                                                                                           | `IfNotPresent`             |
+| `env.MEMGRAPH_ENTERPRISE_LICENSE`                        | Memgraph enterprise license                                                                                 | `<your-license>`           |
+| `env.MEMGRAPH_ORGANIZATION_NAME`                         | Organization name                                                                                           | `<your-organization-name>` |
+| `storage.libPVCSize`                                     | Size of the storage PVC                                                                                     | `1Gi`                      |
+| `storage.libStorageClassName`                            | The name of the storage class used for storing data.                                                        | `""`                       |
+| `storage.libStorageAccessMode`                           | Access mode used for lib storage.                                                                           | `ReadWriteOnce`            |
+| `storage.logPVCSize`                                     | Size of the log PVC                                                                                         | `1Gi`                      |
+| `storage.logStorageClassName`                            | The name of the storage class used for storing logs.                                                        | `""`                       |
+| `storage.logStorageAccessMode`                           | Access mode used for log storage.                                                                           | `ReadWriteOnce`            |
+| `externalAccess.coordinator.serviceType`                 | IngressNginx, NodePort, CommonLoadBalancer or LoadBalancer.                                                 | `NodePort`                 |
+| `externalAccess.dataInstance.serviceType`                | IngressNginx, NodePort or LoadBalancer.                                                                     | `NodePort`                 |
+| `ports.boltPort`                                         | Bolt port used on coordinator and data instances.                                                           | `7687`                     |
+| `ports.managementPort`                                   | Management port used on coordinator and data instances.                                                     | `10000`                    |
+| `ports.replicationPort`                                  | Replication port used on data instances.                                                                    | `20000`                    |
+| `ports.coordinatorPort`                                  | Coordinator port used on coordinators.                                                                      | `12000`                    |
+| `affinity.unique`                                        | Schedule pods on different nodes in the cluster                                                             | `false`                    |
+| `affinity.parity`                                        | Schedule pods on the same node with maximum one coordinator and one data node                               | `false`                    |
+| `affinity.nodeSelection`                                 | Schedule pods on nodes with specific labels                                                                 | `false`                    |
+| `affinity.roleLabelKey`                                  | Label key for node selection                                                                                | `role`                     |
+| `affinity.dataNodeLabelValue`                            | Label value for data nodes                                                                                  | `data-node`                |
+| `affinity.coordinatorNodeLabelValue`                     | Label value for coordinator nodes                                                                           | `coordinator-node`         |
+| `container.data.livenessProbe.tcpSocket.port`            | Port used for TCP connection. Should be the same as bolt port.                                              | `7687`                     |
+| `container.data.livenessProbe.failureThreshold`          | Failure threshold for liveness probe                                                                        | `20`                       |
+| `container.data.livenessProbe.timeoutSeconds`            | Timeout for liveness probe                                                                                  | `10`                       |
+| `container.data.livenessProbe.periodSeconds`             | Period seconds for readiness probe                                                                          | `5`                        |
+| `container.data.readinessProbe.tcpSocket.port`           | Port used for TCP connection. Should be the same as bolt port.                                              | `7687`                     |
+| `container.data.readinessProbe.failureThreshold`         | Failure threshold for readiness probe                                                                       | `20`                       |
+| `container.data.readinessProbe.timeoutSeconds`           | Timeout for readiness probe                                                                                 | `10`                       |
+| `container.data.readinessProbe.periodSeconds`            | Period seconds for readiness probe                                                                          | `5`                        |
+| `container.data.startupProbe.tcpSocket.port`             | Port used for TCP connection. Should be the same as bolt port.                                              | `7687`                     |
+| `container.data.startupProbe.failureThreshold`           | Failure threshold for startup probe                                                                         | `1440`                     |
+| `container.data.startupProbe.timeoutSeconds`             | Timeout for probe                                                                                           | `10`                       |
+| `container.data.startupProbe.periodSeconds`              | Period seconds for startup probe                                                                            | `10`                       |
+| `container.coordinators.livenessProbe.tcpSocket.port`    | Port used for TCP connection. Should be the same as bolt port.                                              | `12000`                    |
+| `container.coordinators.livenessProbe.failureThreshold`  | Failure threshold for liveness probe                                                                        | `20`                       |
+| `container.coordinators.livenessProbe.timeoutSeconds`    | Timeout for liveness probe                                                                                  | `10`                       |
+| `container.coordinators.livenessProbe.periodSeconds`     | Period seconds for readiness probe                                                                          | `5`                        |
+| `container.coordinators.readinessProbe.tcpSocket.port`   | Port used for TCP connection. Should be the same as bolt port.                                              | `12000`                    |
+| `container.coordinators.readinessProbe.failureThreshold` | Failure threshold for readiness probe                                                                       | `20`                       |
+| `container.coordinators.readinessProbe.timeoutSeconds`   | Timeout for readiness probe                                                                                 | `10`                       |
+| `container.coordinators.readinessProbe.periodSeconds`    | Period seconds for readiness probe                                                                          | `5`                        |
+| `container.coordinators.startupProbe.tcpSocket.port`     | Port used for TCP connection. Should be the same as bolt port.                                              | `12000`                    |
+| `container.coordinators.startupProbe.failureThreshold`   | Failure threshold for startup probe                                                                         | `1440`                     |
+| `container.coordinators.startupProbe.timeoutSeconds`     | Timeout for probe                                                                                           | `10`                       |
+| `container.coordinators.startupProbe.periodSeconds`      | Period seconds for startup probe                                                                            | `10`                       |
+| `data`                                                   | Configuration for data instances                                                                            | See `data` section         |
+| `coordinators`                                           | Configuration for coordinator instances                                                                     | See `coordinators` section |
+| `sysctlInitContainer.enabled`                            | Enable the init container to set sysctl parameters                                                          | `true`                     |
+| `sysctlInitContainer.maxMapCount`                        | Value for `vm.max_map_count` to be set by the init container                                                | `262144`                   |
+| `secrets.enabled`                                        | Enable the use of Kubernetes secrets for Memgraph credentials                                               | `false`                    |
+| `secrets.name`                                           | The name of the Kubernetes secret containing Memgraph credentials                                           | `memgraph-secrets`         |
+| `secrets.userKey`                                        | The key in the Kubernetes secret for the Memgraph user, the value is passed to the `MEMGRAPH_USER` env.     | `USER`                     |
+| `secrets.passwordKey`                                    | The key in the Kubernetes secret for the Memgraph password, the value is passed to the `MEMGRAPH_PASSWORD`. | `PASSWORD`                 |
 
 
 For the `data` and `coordinators` sections, each item in the list has the following parameters:
