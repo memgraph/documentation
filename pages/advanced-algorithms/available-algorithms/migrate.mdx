@@ -98,6 +98,61 @@ CREATE (u1)-[:FRIENDS_WITH]->(u2);
 
 ---
 
+### `neo4j()`
+
+With the `migrate.neo4j()` procedure, you can access Neo4j and migrate your data to Memgraph.  
+The resulting nodes and edges are converted into a stream of rows which can include labels, properties, and primitives.
+**Streaming of raw node and relationship objects is not supported**, and users are advised to migrate all the necessary identifiers
+in order to recreate the same graph in Memgraph.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `label_or_rel_or_query: str` ➡ Label name (written in format `(:Label)`), relationship name (written in format `[:rel_type]`) or a plain cypher query. 
+- `config: mgp.Map` ➡ Connection parameters (as in `gqlalchemy.Neo4j`). Notable parameters are `host[String]` and `port[Integer]`.
+- `config_path` ➡ Path to a JSON file containing configuration parameters.  
+- `params: mgp.Nullable[mgp.Any] (default=None)` ➡ Query parameters (if applicable).  
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ The result table as a stream of rows.
+        - When retrieving nodes using the `(:Label)` syntax, row will have the following keys: `labels` and `properties`.
+        - When retrieving relationships using the `[:REL_TYPE]` syntax, row will have the following keys: `from_labels`, `to_labels`, `from_properties`, `to_properties` and `edge_properties`.
+        - When retrieving results using a plain Cypher query, row will have keys identical to the returned column names from the Cypher query.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+#### Retrieve nodes of certain label and create them in Memgraph
+```cypher
+CALL migrate.neo4j('(:Person)', {host: 'localhost', port: 7687})
+YIELD row
+WITH row.labels AS labels, row.properties as props
+CREATE (n:labels) SET n += row.props
+```
+
+#### Retrieve relationships of certain type and create them in Memgraph
+```cypher
+CALL migrate.neo4j('[:KNOWS]', {host: 'localhost', port: 7687})
+YIELD row
+WITH row.from_labels AS from_labels,
+        row.to_labels AS to_labels,
+        row.from_properties AS from_properties,
+        row.to_properties AS to_properties,
+        row.edge_properties AS edge_properties
+MATCH (p1:Person {id: row.from_properties.id})
+MATCH (p2:Person {id: row.to_properties.id})
+CREATE (p1)-[r:KNOWS]->(p2)
+SET r += edge_properties;
+```
+
+#### Retrieve information from Neo4j using an arbitrary Cypher query
+```cypher
+CALL migrate.neo4j('MATCH (n) RETURN count(n) as cnt', {host: 'localhost', port: 7687})
+YIELD row
+RETURN row.cnt as cnt;
+```
+
+---
+
 ### `oracle_db()`
 
 With the `migrate.oracle_db()` procedure, you can access Oracle DB and migrate your data to Memgraph.
