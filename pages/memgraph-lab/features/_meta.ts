@@ -1,4 +1,5 @@
 export default {
+    "collections": "Collections",
     "graphchat": "Graph Chat",
     "graph-style-script": "Graph Style Script (GSS)",
     "monitoring": "Monitoring",
