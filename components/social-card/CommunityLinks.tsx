@@ -14,18 +14,21 @@ export function CommunityLinks() {
         title="Discord"
         body="Join the community"
         href="https://discord.gg/memgraph"
+        is_external={true}
       />
       <SocialCard 
         icon={<GitHub />}
         title="GitHub"
         body="Ask a question"
         href="https://github.com/memgraph/memgraph/discussions"
+        is_external={true}
       />
       <SocialCard 
         icon={<Calendar />}
         title="Office hours"
         body="Talk with Memgraph engineers"
         href="https://memgraph.com/office-hours"
+        is_external={true}
       />
       </SocialCards>
       </div>
