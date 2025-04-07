@@ -131,7 +131,12 @@ export default withNextra({
       },
       {
         source: '/mage/query-modules/cpp/conditional-execution',
-        destination: '/advanced-algorithms/available-algorithms/conditional_execution',
+        destination: '/advanced-algorithms/available-algorithms/do',
+        permanent: true
+      },
+      {
+        source: '/advanced-algorithms/available-algorithms/conditional_execution',
+        destination: '/advanced-algorithms/available-algorithms/do',
         permanent: true
       },
       {
