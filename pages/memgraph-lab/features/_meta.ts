@@ -1,6 +1,6 @@
 export default {
     "collections": "Collections",
-    "csv-import-tool": "CSV import tool",
+    "csv-file-import": "CSV file import",
     "graphchat": "GraphChat",
     "graph-style-script": "Graph Style Script (GSS)",
     "layout": "Layout",
