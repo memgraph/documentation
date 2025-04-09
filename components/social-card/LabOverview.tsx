@@ -18,13 +18,13 @@ export function LabOverview() {
       />
       <SocialCard 
         title="Features →"
-        body="Explore tools such as GraphChat, monitoring, query sharing, data import/export, and more."
+        body="Explore features such as GraphChat, monitoring, sharing features, and more."
         href="/docs/memgraph-lab/features"
       />
       <SocialCard 
-        title="Fundamentals →"
-        body="Understand the core concepts of Memgraph Lab, including remote storage and configuration."
-        href="/docs/memgraph-lab/fundamentals"
+        title="Configuration →"
+        body="Learn how to configure Memgraph Lab in Docker environment using environment variables."
+        href="/docs/memgraph-lab/configuration"
       />
       </SocialCards>
       </div>
