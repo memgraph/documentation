@@ -806,12 +806,12 @@ export default withNextra({
       },
       {
         source: '/memgraph/how-to-guides/streams/manage-streams-lab',
-        destination: '/data-streams/manage-streams-lab',
+        destination: '/memgraph-lab/features/streams',
         permanent: true
       },
       {
         source: '/memgraph/import-data/data-streams/manage-streams-lab',
-        destination: '/data-streams/manage-streams-lab',
+        destination: '/memgraph-lab/features/streams',
         permanent: true
       },
       {
@@ -846,82 +846,82 @@ export default withNextra({
       },
       {
         source: '/memgraph-lab/graph-style-script-language',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/features/graph-style-script',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/reference-guide',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/features/graph-style-script',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-colors',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/features/graph-style-script/built-in-elements#colors',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-functions',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/features/graph-style-script/built-in-elements#functions',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-variables',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/features/graph-style-script/built-in-elements#variables',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-edgestyle-directive',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/features/graph-style-script/directive-properties#edgestyle-directive',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-nodestyle-directive',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/features/graph-style-script/directive-properties#nodestyle-directive',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-viewstyle-directive',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/features/graph-style-script/directive-properties#viewstyle-directive',
         permanent: true
       },
       {
         source: '/memgraph-lab/style-script/gss-viewstyle-map-directive',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/features/graph-style-script/directive-properties#viewstylemap-directive',
         permanent: true
       },
       {
         source: '/memgraph-lab/connect-to-memgraph',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/getting-started/connection-types',
         permanent: true
       },
       {
         source: '/memgraph-lab/installation',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/getting-started/installation-and-deployment',
         permanent: true
       },
       {
         source: '/memgraph-lab/installation/linux',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/getting-started/installation-and-deployment',
         permanent: true
       },
       {
         source: '/memgraph-lab/installation/macos',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/getting-started/installation-and-deployment',
         permanent: true
       },
       {
         source: '/memgraph-lab/installation/windows',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/getting-started/installation-and-deployment',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/font-awesome-for-node-images',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/features/graph-style-script/style-your-graphs-in-memgraph-lab#use-font-awesome-for-node-images',
         permanent: true
       },
       {
         source: '/memgraph/tutorials/style-your-graphs-in-memgraph-lab',
-        destination: '/memgraph-lab',
+        destination: '/memgraph-lab/features/graph-style-script/style-your-graphs-in-memgraph-lab',
         permanent: true
       },
       {
@@ -2029,7 +2029,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/how-to-guides/streams/kafka/connect-to-stream-from-lab',
-        destination: '/data-streams/manage-streams-lab',
+        destination: '/memgraph-lab/features/streams',
         permanent: true
       },
       {
@@ -3138,7 +3138,204 @@ export default withNextra({
         source: '/data-modeling/knowledge-graph',
         destination: '/data-modeling/modeling-guides/model-a-knowledge-graph',
         permanent: true
-      }
+      },
+      // START: NEW MEMGRAPH LAB REDIRECTS
+      {
+        source: '/data-streams/manage-streams-lab',
+        destination: '/memgraph-lab/features/streams',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/graph-style-script',
+        destination: '/memgraph-lab/features/graph-style-script',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual',
+        destination: '/memgraph-lab/features',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/connection-types',
+        destination: '/memgraph-lab/getting-started/connection-types',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/custom-base-path',
+        destination: '/memgraph-lab/getting-started/installation-and-deployment#custom-base-path',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/custom-ssl-certificates',
+        destination: '/memgraph-lab/getting-started/installation-and-deployment#custom-ssl-certificate',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/graph-style-script-sharing',
+        destination: '/memgraph-lab/features/sharing-features#graph-style-script-sharing',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/query-sharing',
+        destination: '/memgraph-lab/features/sharing-features#query-sharing',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/remote-storage',
+        destination: '/memgraph-lab/features/sharing-features#remote-storage-1',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/graphchat',
+        destination: '/memgraph-lab/features/graphchat',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/single-sign-on',
+        destination: '/memgraph-lab/features/single-sign-on',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/install-and-connect',
+        destination: '/memgraph-lab/getting-started',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/csv-file-import',
+        destination: '/memgraph-lab/features/csv-file-import',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/csv-file-import',
+        destination: '/memgraph-lab/features/csv-file-import',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/graph-style-script/built-in-elements',
+        destination: '/memgraph-lab/features/graph-style-script/built-in-elements',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/graph-style-script/directive-properties',
+        destination: '/memgraph-lab/features/graph-style-script/directive-properties',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/graph-style-script#main-building-blocks',
+        destination: '/memgraph-lab/features/graph-style-script/main-building-blocks',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/style-your-graphs-in-memgraph-lab',
+        destination: '/memgraph-lab/features/graph-style-script/style-your-graphs-in-memgraph-lab',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/query-execution',
+        destination: '/memgraph-lab/querying',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#run-history',
+        destination: '/memgraph-lab/features/run-history',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#collections',
+        destination: '/memgraph-lab/features/collections',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#query-modules',
+        destination: '/memgraph-lab/features/query-modules',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#streams',
+        destination: '/memgraph-lab/features/streams',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#graph-schema',
+        destination: '/memgraph-lab/features/graph-schema',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#datasets',
+        destination: '/memgraph-lab/getting-started/data-migration#datasets',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#import',
+        destination: '/memgraph-lab/getting-started/data-migration',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#export',
+        destination: '/memgraph-lab/getting-started/data-migration',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#logs',
+        destination: '/memgraph-lab/features/logs',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#layout',
+        destination: '/memgraph-lab/features/layout',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/graph-style-script#caching-results-for-faster-performance',
+        destination: '/memgraph-lab/features/graph-style-script#caching-results-for-faster-performance',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#import--export',
+        destination: '/memgraph-lab/getting-started/data-migration',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#cypher-editor',
+        destination: '/memgraph-lab/querying#cypher-editor',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#graph-style-editor',
+        destination: '/memgraph-lab/querying#graph-style-editor',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#parameters',
+        destination: '/memgraph-lab/querying#parameters',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#data-results',
+        destination: '/memgraph-lab/querying#query-results',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual#graph-results',
+        destination: '/memgraph-lab/querying#graph-results',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/single-sign-on#set-up-lab-integration',
+        destination: '/memgraph-lab/features/single-sign-on#set-up-lab-integration',
+        permanent: true
+      },
+      {
+        source: '/data-visualization/user-manual/single-sign-on#set-up-lab-integration-1',
+        destination: '/memgraph-lab/features/single-sign-on#set-up-lab-integration-1',
+        permanent: true
+      },
+      
+      
+      
+      
+
+      // END: NEW MEMGRAPH LAB REDIRECTS
     ];
   },
 });
