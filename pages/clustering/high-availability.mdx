@@ -267,6 +267,27 @@ If there is already a MAIN instance in the cluster, this query will fail.
 
 This operation will result in writing to the Raft log.
 
+### Demote instance
+
+Demote instance query can be used by an admin to demote the current main to replica. In this case, the leader coordinator won't perform a failover, but as a user, 
+you should choose promote one of the data instances to MAIN using the `SET INSTANCE `instance` TO MAIN` query.
+
+```plaintext
+DEMOTE INSTANCE instanceName;
+```
+
+This operation will result in writing to the Raft log.
+
+<Callout type="info">
+
+By combining the functionalities of queries `DEMOTE INSTANCE instanceName` and `SET INSTANCE instanceName TO MAIN` you get the manual failover capability. This can be useful
+e.g during a maintenance work on the instance where the current MAIN is deployed.
+
+</Callout>
+
+
+
+
 ### Unregister instance
 
 There are various reasons which could lead to the decision that an instance needs to be removed from the cluster. The hardware can be broken,
@@ -283,22 +304,6 @@ during the unregistration process. If no MAIN instance is available, the
 operation cannot be guaranteed to succeed.
 
 The instance requested to be unregistered will also be unregistered from the current MAIN's REPLICA set.
-
-### Demote instance
-
-Demoting instances should be done by a leader coordinator.
-
-Demote instance query will result in several actions:
-1. The coordinator instance will demote the instance to REPLICA.
-2. The coordinator instance will continue pinging the data instance every `--instance-health-check-frequency-sec` seconds to check its status.
-In this case, the leader coordinator won't choose a new MAIN, but as a user, you should choose one instance to promote it to MAIN using the `SET INSTANCE `instance` TO MAIN` query.
-
-```plaintext
-DEMOTE INSTANCE instanceName;
-```
-
-This operation will result in writing to the Raft log.
-
 
 ### Force reset cluster state
 
@@ -502,7 +507,7 @@ the cluster:
 Memgraph prioritizes availability over strict consistency (leaning towards AP in
 the CAP theorem). While it aims to maintain consistency as much as possible, the
 current failover logic can result in a non-zero Recovery Point Objective (RPO),
-that is, data loss, because:
+that is, the loss of committed data, because:
 - The promoted MAIN might not have received all commits from the previous MAIN
   before the failure.
 - This design ensures that the MAIN remains writable for the maximum possible
@@ -604,7 +609,7 @@ Failure of REPLICA data instance isn't very harmful since users can continue wri
 REPLICAs. The most important thing to analyze is what happens when MAIN gets down. In that case, the leader coordinator uses 
 user-controllable parameters related to the frequency of health checks from the leader to replication instances (`--instance-health-check-frequency-sec`) 
 and the time needed to realize the instance is down (`--instance-down-timeout-sec`). After collecting enough evidence, the leader concludes the MAIN is down and performs failover
-using just a handful of RPC messages (correct time depends on the distance between instances). It is important to mention that the whole failover is performed with a zero data-loss 
+using just a handful of RPC messages (correct time depends on the distance between instances). It is important to mention that the whole failover is performed without the loss of committed data
 if the newly chosen MAIN (previously REPLICA) had all up-to-date data.
 
 Current deployment assumes the existence of only one datacenter, which automatically means that Memgraph won't be available in the case the whole datacenter goes down. We are actively
