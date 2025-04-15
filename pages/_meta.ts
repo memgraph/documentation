@@ -15,5 +15,6 @@ export default {
   "clustering": "Clustering",
   "data-streams": "Data streams",
   "help-center": "Help center",
-  "release-notes": "Release notes"
+  "release-notes": "Release notes",
+  "memgraph-in-production": "Memgraph in production"
 }

@@ -1,0 +1,315 @@
+---
+title: Memgraph in GraphRAG
+description: Understand the constraints in Memgraph's operations. Our guide breaks it down, streamlining your approach to graph use cases.
+---
+
+import { Callout } from 'nextra/components'
+
+# Constraints
+
+In modern database systems, ensuring data integrity and reducing redundancy is
+paramount. Constraints play a pivotal role, ensuring that only valid data is
+entered into the database upon commit. The following chapters delve deep into two
+fundamental types of constraints, existence and uniqueness.
+
+The existence constraint ensures the presence of specific data within the
+database, while the uniqueness constraint ensures that specific label-property
+pairs remain unique across entries.
+
+## Existence constraint
+
+Existence constraint enforces that each node with a specific label must also
+have a certain property. Only one label and property can be supplied at a time.
+
+This constraint can be enforced using the following language construct:
+
+```cypher
+CREATE CONSTRAINT ON (n:label) ASSERT EXISTS (n.property);
+```
+
+To confirm that the constraint was successfully created use the following query:
+
+```cypher
+SHOW CONSTRAINT INFO;
+```
+
+Trying to modify the database in a way that violates the constraint will
+yield an error.
+
+Constraints are dropped using the `DROP` clause:
+
+```cypher
+DROP CONSTRAINT ON (n:label) ASSERT EXISTS (n.property);
+```
+
+### Example
+
+If the database is used to hold basic employee information, each
+employee should have a first name and a last name. You can enforce this by
+running the following queries:
+
+```cypher
+CREATE CONSTRAINT ON (n:Employee) ASSERT EXISTS (n.first_name);
+CREATE CONSTRAINT ON (n:Employee) ASSERT EXISTS (n.last_name);
+```
+
+The `SHOW CONSTRAINT INFO;` should return the following result:
+
+```
++-----------------+-----------------+-----------------+
+| constraint type | label           | properties      |
++-----------------+-----------------+-----------------+
+| exists          | Employee        | first_name      |
+| exists          | Employee        | last_name       |
++-----------------+-----------------+-----------------+
+```
+
+To drop the created constraints use the following queries:
+
+```cypher
+DROP CONSTRAINT ON (n:Employee) ASSERT EXISTS (n.first_name);
+DROP CONSTRAINT ON (n:Employee) ASSERT EXISTS (n.last_name);
+```
+
+Now, `SHOW CONSTRAINT INFO;` returns an empty set.
+
+## Uniqueness constraint
+
+The uniqueness constraint enforces that each label-property pair is unique. You can
+also, specify multiple properties when creating uniqueness constraints. 
+
+<Callout type="info">
+
+Adding a uniqueness constraint does not create a [label-property
+index](/fundamentals/indexes), it needs to be added manually. 
+
+</Callout>
+
+The uniqueness constraint can be enforced using the following language
+construct:
+
+```cypher
+CREATE CONSTRAINT ON (n:label) ASSERT n.property1, n.property2, ..., IS UNIQUE;
+```
+
+To confirm that the constraint was successfully created use the following query:
+
+```cypher
+SHOW CONSTRAINT INFO;
+```
+
+Trying to modify the database in a way that violates the constraint will yield
+an error `Unable to commit due to unique constraint violation on
+:Label(property)`.
+
+Constraints are dropped using the `DROP` clause:
+
+```cypher
+DROP CONSTRAINT ON (n:label) ASSERT n.property IS UNIQUE;
+```
+
+### Example
+
+If the database is used to hold basic employee information, each employee should
+have a unique id and email. You can enforce this by running the following query:
+
+```cypher
+CREATE CONSTRAINT ON (n:Employee) ASSERT n.id IS UNIQUE;
+CREATE CONSTRAINT ON (n:Employee) ASSERT n.email IS UNIQUE;
+```
+
+The `SHOW CONSTRAINT INFO;` should return the following result:
+
+```
++-----------------+-----------------+-----------------+
+| constraint type | label           | properties      |
++-----------------+-----------------+-----------------+
+| unique          | Employee        | id              |
+| unique          | Employee        | email           |
++-----------------+-----------------+-----------------+
+```
+
+To specify multiple properties when creating uniqueness
+constraints, list them one after the other:
+
+```cypher
+CREATE CONSTRAINT ON (n:Employee) ASSERT n.name, n.address IS UNIQUE;
+```
+
+At this point, `SHOW CONSTRAINT INFO;` yields the following result:
+
+```
++-----------------+-----------------+-----------------+
+| constraint type | label           | properties      |
++-----------------+-----------------+-----------------+
+| unique          | Employee        | id              |
+| unique          | Employee        | email           |
+| unique          | Employee        | name, address   |
++-----------------+-----------------+-----------------+
+```
+
+This means that two employees could have the same name **or** the same address,
+but they can not have the same name **and** the same address. 
+
+To drop the created constraints, use the following queries:
+
+```cypher
+DROP CONSTRAINT ON (n:Employee) ASSERT n.id IS UNIQUE;
+DROP CONSTRAINT ON (n:Employee) ASSERT n.email IS UNIQUE;
+DROP CONSTRAINT ON (n:Employee) ASSERT n.name, n.address IS UNIQUE;
+```
+
+Now, `SHOW CONSTRAINT INFO;` returns an empty set.
+
+## Data type constraint
+
+The data type constraint enforces that each label-property pair is of a certain data type.
+
+<Callout type="info">
+
+Adding a data type constraint does not create a [label-property
+index](/fundamentals/indexes), it needs to be added manually.
+
+</Callout>
+
+The data type constraint can be enforced using the following language
+construct:
+
+```cypher
+CREATE CONSTRAINT ON (n:label) ASSERT n.property IS TYPED DATA_TYPE;
+```
+
+The supported data types are:
+
+| Data type           |
+| ------------------- |
+| `NULL`              |
+| `STRING`            |
+| `BOOLEAN`           |
+| `INTEGER`           |
+| `FLOAT`             |
+| `LIST`              |
+| `MAP`               |
+| `DURATION`          |
+| `DATE`              |
+| `LOCALTIME`         |
+| `LOCALDATETIME`     |
+| `ZONEDDATETIME`     |
+| `ENUM`              |
+| `POINT`             |
+
+To confirm that the constraint was successfully created use the following query:
+
+```cypher
+SHOW CONSTRAINT INFO;
+```
+
+Trying to modify the database in a way that violates the constraint will yield
+an error `IS TYPED DATA_TYPE violation on Label(property)`.
+
+Constraints are dropped using the `DROP` clause:
+
+```cypher
+DROP CONSTRAINT ON (n:label) ASSERT n.property IS TYPED DATA_TYPE;
+```
+
+You can only have one data type constraint on a given label-property pair.
+Attempting to create a second data type constraint on a given label-property pair will yield an error
+`Constraint IS TYPED DATA_TYPE on :Label(property) already exists`.
+Attempting to drop a data type constraint which doesn't exist will yield an error
+`Constraint IS TYPED DATA_TYPE on :Node(prop) doesn't exist`.
+
+<Callout type="info">
+
+Data type constraints are not yet supported in the [`schema.assert()`](/querying/schema#assert) procedure.
+
+</Callout>
+
+
+### Example
+
+If the database is used to hold basic information about a person like their name and age
+you can enforce the name to be a string and the age to be an integer by running the following queries:
+
+```cypher
+CREATE CONSTRAINT ON (n:Person) ASSERT n.name IS TYPED STRING;
+CREATE CONSTRAINT ON (n:Person) ASSERT n.age IS TYPED INTEGER;
+```
+
+Then `SHOW CONSTRAINT INFO;` should return the following result:
+
+```
++-----------------+--------------+-----------------+-------------+
+| constraint type | label        | properties      |  data_type  |
++-----------------+--------------+-----------------+-------------|
+| data_type       | Person       | name            |   STRING    |
+| data_type       | Person       | age             |   INTEGER   |
++-----------------+--------------+-----------------+-------------|
+```
+
+Creating a person with
+```cypher
+CREATE (:Person {age:22});
+```
+and trying to violate the data type constraints by setting the age of a person to a string with:
+```cypher
+MATCH (n) SET n.age = 'age';
+```
+will yield the error `IS TYPED INTEGER violation on Person(age)`.
+
+To drop the created constraints, use the following queries:
+
+```cypher
+DROP CONSTRAINT ON (n:Person) ASSERT n.name IS TYPED STRING;
+DROP CONSTRAINT ON (n:Person) ASSERT n.age IS TYPED INTEGER;
+```
+
+Now, `SHOW CONSTRAINT INFO;` returns an empty set.
+
+
+## Schema-related procedures
+
+You can also modify the constraints using the [`schema.assert()` procedure](/querying/schema#assert).
+
+### Delete all constraints
+
+To delete all constraints, use the [`schema.assert()`](/querying/schema#assert) procedure with the following parameters:
+- `indices_map` = map of key-value pairs of all indexes in the database
+- `unique_constraints` = `{}`
+- `existence_constraints` = `{}`
+- `drop_existing` = `true`
+
+Here is an example of indexes and constraints set in the database:
+
+```cypher
+CREATE CONSTRAINT ON (n:Person) ASSERT EXISTS (n.name);
+CREATE CONSTRAINT ON (n:Employee) ASSERT n.id IS UNIQUE;
+CREATE CONSTRAINT ON (n:Employee) ASSERT n.email IS UNIQUE;
+CREATE CONSTRAINT ON (n:Employee) ASSERT n.name, n.surname IS UNIQUE;
+CREATE INDEX ON :Student(id);
+CREATE INDEX ON :Student;
+```
+
+There are three uniqueness and one existence constraint. Additionally, there are
+two indexes - one label and one label-property index. To delete all constraints, run:
+
+```cypher
+CALL schema.assert({Student: ["", "id"]}, {}, {}, true) 
+YIELD action, key, keys, label, unique
+RETURN action, key, keys, label, unique;
+```
+
+The above query removes all existing constraints because the empty
+`unique_constraints` and `existence_constraints` maps indicate that no
+constraints should be asserted as existing, while the `drop_existing` set to
+`true` specifies that all existing constraints should be dropped.
+
+Primarily, the [`assert()`](querying/schema#assert) procedure is used to define a schema, but it's also
+useful if you need to [delete all node indexes](/fundamentals/indexes#delete-all-node-indexes) or [delete all node indexes and constraints](/querying/schema#delete-all-indexes-and-constraints).
+
+## Recovery
+
+Existence and unique [constraints](/fundamentals/constraints), and indexes can be
+recovered in parallel. To enable this behavior, set the
+[`storage-parallel-schema-recovery`
+configuration](/configuration/configuration-settings#storage) flag to `true`. 
