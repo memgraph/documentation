@@ -441,7 +441,7 @@ Estimating Memgraph's storage memory usage is not entirely straightforward
 because it depends on a lot of variables, but it is possible to do so quite
 accurately.
 
-If you want to **estimate** memory usage in IN_MEMORY_TRANSACTIONAL storage mode, use the following formula:
+If you want to **estimate** memory usage in `IN_MEMORY_TRANSACTIONAL` storage mode, use the following formula:
 
 $\texttt{StorageRAMUsage} = \texttt{NumberOfVertices} \times 212\text{B} + \texttt{NumberOfEdges} \times 162\text{B}$
 
@@ -476,7 +476,7 @@ that the formula is correct.
 
 ### The calculation in detail
 
-Let's dive deeper into the IN_MEMORY_TRANSACTIONAL storage mode memory usage
+Let's dive deeper into the `IN_MEMORY_TRANSACTIONAL` storage mode memory usage
 values. Because Memgraph works on the x86 architecture, calculations are based
 on the x86 Linux memory usage.
 
@@ -558,19 +558,35 @@ value. So the layout of each property is:
 
 $\texttt{propertySize} = \texttt{basicMetadata} + \texttt{propertyID} + [\texttt{additionalMetadata}] + \texttt{value}.$
 
-| Value type                  | Size                           | Note
-|-----------------------------|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|`NULL`                       | 1B + 1B                        | The value is written in the first byte of the basic metadata.                                                                                                                                    |
-|`BOOL`                       | 1B + 1B                        | The value is written in the first byte of the basic metadata.                                                                                                                                    |
-|`INT`                        | 1B + 1B + 1B, 2B, 4B or 8B     | Basic metadata, property ID and the value depending on the size of the integer.                                                                                                                  |
-|`DOUBLE`                     | 1B + 1B + 8B                   | Basic metadata, property ID and the value                                                                                                                                                        |
-|`STRING`                     | 1B + 1B + 1B + min 1B          | Basic metadata, property ID, additional metadata and lastly the value depending on the size of the string, where 1 ASCII character in the string takes up 1B.                                    |
-|`LIST`                       | 1B + 1B + 1B + min 1B          | Basic metadata, property ID, additional metadata and the total size depends on the number and size of the values in the list.                                                                    |
-|`MAP`                        | 1B + 1B + 1B + min 1B          | Basic metadata, property ID, additional metadata and the total size depends on the number and size of the values in the map.                                                                     |
-|`TEMPORAL_DATA`              | 1B + 1B + 1B + min 1B + min 1B | Basic metadata, property ID, additional metadata, seconds, microseconds. Value of the seconds and microseconds is at least 1B, but probably 4B in most cases due to the large values they store. |
-|`ZONED_TEMPORAL_DATA`        | `TEMPORAL_DATA` + 1B + min 1B  | Like `TEMPORAL_DATA`, but followed by timezone name length (1 byte) and string (1 byte per character).                                                                                           |
-|`OFFSET_ZONED_TEMPORAL_DATA` | `TEMPORAL_DATA` + 2B           | Like `TEMPORAL_DATA`, but followed by the offset from UTC (in minutes; always 2 bytes).                                                                                                          |
-|`ENUM`                       | 1B + 1B + 2B, 4B, 8B or 16B    | Basic metadata, property ID and the value depending on required size representation required.                                                                                                    |
+| Value type                  | Sizing in detail               | Total estimated size | Note
+|-----------------------------|--------------------------------|----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|`NULL`                       | 0B                             | 0B                   | Memgraph treats null values same as if they're not present. Therefore, `NULL` values are not stored in the property store.                                                                       |
+|`BOOL`                       | 1B + 1B                        | 2B                   | The value is written in the first byte of the basic metadata.                                                                                                                                    |
+|`INT`                        | 1B + 1B + 1B, 2B, 4B or 8B     | 3B - 10B             | Basic metadata, property ID and the value depending on the size of the integer.                                                                                                                  |
+|`DOUBLE`                     | 1B + 1B + 8B                   | 10B                  | Basic metadata, property ID and the value                                                                                                                                                        |
+|`STRING`                     | 1B + 1B + 1B + min 1B          | at least 4B          | Basic metadata, property ID, additional metadata and lastly the value depending on the size of the string, where 1 ASCII character in the string takes up 1B.                                    |
+|`LIST`                       | 1B + 1B + 1B + min 1B          | at least 4B (empty)  | Basic metadata, property ID, additional metadata and the total size depends on the number and size of the values in the list.                                                                    |
+|`MAP`                        | 1B + 1B + 1B + min 1B          | at least 4B (empty)  | Basic metadata, property ID, additional metadata and the total size depends on the number and size of the values in the map.                                                                     |
+|`TEMPORAL_DATA`              | 1B + 1B + 1B + min 1B + min 1B | 12B                  | Basic metadata, property ID, additional metadata, seconds, microseconds. Value of the seconds and microseconds is at least 1B, but probably 4B in most cases due to the large values they store. |
+|`ZONED_TEMPORAL_DATA`        | `TEMPORAL_DATA` + 1B + min 1B  | at least 14B         | Like `TEMPORAL_DATA`, but followed by timezone name length (1 byte) and string (1 byte per character).                                                                                           |
+|`OFFSET_ZONED_TEMPORAL_DATA` | `TEMPORAL_DATA` + 2B           | at least 14B         | Like `TEMPORAL_DATA`, but followed by the offset from UTC (in minutes; always 2 bytes).                                                                                                          |
+|`ENUM`                       | 1B + 1B + 2B, 4B, 8B or 16B    | 4B - 18B             | Basic metadata, property ID and the value depending on required size representation required.                                                                                                    |
+
+Users can additionally inspect the exact size of a property in bytes using the [propertySize()](/querying/functions#scalar-functions) function.
+The query usage is the following:
+```cypher
+MATCH (n) 
+RETURN n.id AS id, propertySize(n, "id") AS prop_size_bytes;
+```
+
+Output:
+```output
++-----------+-----------------+
+| id        | prop_size_bytes |
++-----------+-----------------+
+| 1         | 3               |
++-----------+-----------------+
+```
 
 ### Marvel dataset use case
 
