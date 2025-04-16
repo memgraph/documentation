@@ -134,9 +134,90 @@ expression, the expression can be so complicated that the index doesn't get used
 If there is any suspicion that an index isn't used, we recommend writing
 labels and properties inside the `MATCH` pattern.
 
-### Label-properties (composite) index
+### Label-property composite index
 
-An index on a label and one or more properties is called a composite index. 
+An index on a label and two or more properties is called a composite index.
+Composite indices optimize queries where multiple properties are commonly used
+together in filtering clauses, or when uniqueness exists in a combination of
+node properties, rather than in the individual properties.
+
+To create a composite index on nodes labelled `:Person` and having properties
+`name` and `occupation`:
+```cypher
+CREATE INDEX ON :Person(name, occupation);
+```
+
+Such an index can be used to optimise queries which filter against the index's label
+and some or all of the index's properties:
+
+```cypher
+MATCH (p:Person) WHERE p.name = "Alice Smith" AND p.occupation = "DevOps Engineer" RETURN *;
+```
+
+Without a composite index, you would need to either index on `name` and filter
+on `occupation`, or index on `occupation` and filter on `name`. Having a
+composite index means queries such as these execute more efficiently, because no
+filtering is required after the index lookup.
+
+There are no restrictions on the number of properties on which a composite index
+can be created, but be aware that an index entry will be created for every node
+having *any* of these properties.
+
+In the following query, an index entry will be created for "OpenMind",
+despite it having only two of the properties of the composite index (`name` and
+`sector`).  It should be clear that composite indices are not efficient when
+they are created on sparsely populated properties.
+
+```cypher
+CREATE INDEX ON :Company(name, size, location, sector, founded, turnover);
+CREATE (:Company {name: 'OpenMind', sector: 'AI'});
+```
+
+The order of properties within the index matter. The two indices created below
+are distinct, despite them both being for the same label and properties:
+
+```cypher
+CREATE INDEX ON :Person(name, age, occupation);
+CREATE INDEX ON :Person(age, occupation, name);
+```
+
+This is important because composite indices can also be used on the *leftmost prefix*
+of the properties. For the first index, we can obviously match a node based on its
+`name`, `age`, and `occupation` properties:
+
+```cypher
+MATCH (p:Person)
+WHERE p.name = 'Alice Smith' AND p.age = 42 AND p.occupation = 'DevOps Engineer'
+RETURN *;
+```
+
+But we can also use the same index if we are filtering only against `name` and `age`, or even just `name`:
+
+``` cypher
+MATCH (p:Person) WHERE p.name = 'Alice' AND p.age = 42 RETURN *;
+MATCH (p:Person) WHERE p.name = 'Alice' RETURN *;
+```
+
+However, the index **cannot** be used if we are only filtering against `occupation` or `age`.
+
+Formally, for a composite index on `:L(p0, p1, p2, ...)` to be used, a query
+must match against `:L` and any of the leftmost prefix of properties (such
+as `p0`, or `p0, p1`, or `p0, p1, p2`). Contrawise, an index cannot be used
+in a query if it does not use a leftmost prefix.
+
+The following table summarises the cases where a composite index on properties `:L(p0, p1, p2)`
+can and can't be used, based on which properties the query matches against:
+
+| p0 | p1 | p2 | Example                                                  | Uses index | Needs filter |
+| -- | -- | -- | -------------------------------------------------------- | ---------- | ------------ |
+| ❌ | ❌ | ❌ | `MATCH (x:L)`                                            | ❌         | ✅           |
+| ❌ | ❌ | ✅ | `MATCH (x:L) WHERE x.p2 = 1`                             | ❌         | ✅           |
+| ❌ | ✅ | ❌ | `MATCH (x:L) WHERE x.p1 = 1`                             | ❌         | ✅           |
+| ❌ | ✅ | ✅ | `MATCH (x:L) WHERE x.p1 = 1 AND x.p2 = 1`                | ❌         | ✅           |
+| ✅ | ❌ | ❌ | `MATCH (x:L) WHERE x.p0 = 1`                             | ✅         | ❌           |
+| ✅ | ❌ | ✅ | `MATCH (x:L) WHERE x.p0 = 1 AND x.p2 = 1`                | ✅         | ✅           |
+| ✅ | ✅ | ❌ | `MATCH (x:L) WHERE x.p0 = 1 AND x.p1 = 1`                | ✅         | ❌           |
+| ✅ | ✅ | ✅ | `MATCH (x:L) WHERE x.p0 = 1 AND x.p1 = 1 AND x.p2 = 1`   | ✅         | ❌           |
 
 ### Edge-type index
 
@@ -321,6 +402,10 @@ DROP INDEX ON :Label(property);
 ```
 
 ```cypher
+DROP INDEX ON :Label(property1, property2);
+```
+
+```cypher
 DROP EDGE INDEX ON :EDGE_TYPE;
 ```
 
@@ -499,6 +584,10 @@ USING INDEX :Label, :Label2 ...;
 USING INDEX :Label(property) ...;
 ```
 
+```cypher
+USING INDEX :Label(property1, property2) ...;
+```
+
 It is also possible to specify multiple hints separated with comma. In that
 case, the planner will apply the first hint that is applicable for a given
 match.
@@ -541,4 +630,8 @@ in a skip list):
 When it comes to label-property indexes, Memgraph stores a list of specific
 properties that are used in label-property indexes. This list is ordered to make
 the search faster. All property types can be ordered. First, they are ordered
-based on the type and then within that type.
+based on the type, and secondly for values within that type. 
+
+In the case of composite indices, the list is lexicographically ordered, which
+means that the pair $(a_1, a_2)$ is ordered before $(b_1, b_2)$ if either $a_1 <
+b_1$, or $a_1 = b_1$ and $a_2 < b_2$.
