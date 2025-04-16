@@ -166,24 +166,33 @@ having *any* of these properties.
 In the following query, an index entry will be created for "OpenMind",
 despite it having only two of the properties of the composite index (`name` and
 `sector`).  It should be clear that composite indices are not efficient when
-they are created on sparsely populated properties.
+they are created on sparsely populated properties:
 
 ```cypher
 CREATE INDEX ON :Company(name, size, location, sector, founded, turnover);
 CREATE (:Company {name: 'OpenMind', sector: 'AI'});
 ```
 
-The order of properties within the index matter. The two indices created below
-are distinct, despite them both being for the same label and properties:
+The order of properties within the index matter. The two indices below are
+distinct, despite them both being for the same label and properties, and this
+distinction has important performance implications.
 
 ```cypher
 CREATE INDEX ON :Person(name, age, occupation);
 CREATE INDEX ON :Person(age, occupation, name);
 ```
 
-This is important because composite indices can also be used on the *leftmost prefix*
-of the properties. For the first index, we can obviously match a node based on its
-`name`, `age`, and `occupation` properties:
+This order follows the "leftmost prefix rule", where the leftmost prefix is the
+subset of index properties starting from the first property.
+
+A composite index on properties `(a, b)` can efficiently support queries on
+property `a`, or on properties `a` and `b` together.  However, it cannot
+efficiently support queries on property `b` alone. Similarly, an index on
+properties `(b, a)` would help with queries on `b`, or `b` and `a` together, but
+not on `a` alone.
+
+In the case of our index on `(name, age, occupation)`, we can use the index for
+queries matching all three properties.
 
 ```cypher
 MATCH (p:Person)
@@ -202,11 +211,17 @@ However, the index **cannot** be used if we are only filtering against `occupati
 
 Formally, for a composite index on `:L(p0, p1, p2, ...)` to be used, a query
 must match against `:L` and any of the leftmost prefix of properties (such
-as `p0`, or `p0, p1`, or `p0, p1, p2`). Contrawise, an index cannot be used
-in a query if it does not use a leftmost prefix.
+as `p0`, or `p0`, `p1`, or `p0`, `p1`, `p2`). Contrawise, an index cannot be used
+in a query if the query does not match a leftmost prefix of properties.
 
-The following table summarises the cases where a composite index on properties `:L(p0, p1, p2)`
-can and can't be used, based on which properties the query matches against:
+The most effective use of index is in a query which matches only properties from
+the leftmost prefix of the composite index, as this will need no further
+filtering. If the query matches a leftmost prefix as well as other non-contiguous
+properties, the index can be used, but additional filtering is needed.
+
+The following table summarises the cases where a composite index on properties
+`:L(p0, p1, p2)` will and won't be used, and whether additional filtering is
+required, based on which properties the query matches against:
 
 | p0 | p1 | p2 | Example                                                  | Uses index | Needs filter |
 | -- | -- | -- | -------------------------------------------------------- | ---------- | ------------ |
@@ -218,6 +233,21 @@ can and can't be used, based on which properties the query matches against:
 | ✅ | ❌ | ✅ | `MATCH (x:L) WHERE x.p0 = 1 AND x.p2 = 1`                | ✅         | ✅           |
 | ✅ | ✅ | ❌ | `MATCH (x:L) WHERE x.p0 = 1 AND x.p1 = 1`                | ✅         | ❌           |
 | ✅ | ✅ | ✅ | `MATCH (x:L) WHERE x.p0 = 1 AND x.p1 = 1 AND x.p2 = 1`   | ✅         | ❌           |
+
+The best uses here - those where the index can be used with no additional
+filtering - are those matching exaclty on one of the three leftmost prefixes
+`p0`; `p0` and `p1`; or `p0`, `p1,` and `p2`.
+
+Because of the leftmost prefix rule, a composite index can subsume a
+label+property index. You should be aware, however, that even though an index on
+`:L(a, b, c)` can replace an index on `:L(a)`, it may not perform as efficiently
+as the single property index. If queries frequently filter on `a` alone, it may
+be worth adding an additional :L(a)` index.
+
+When deciding the order of properties within a composite index, you should
+generally put the property with the highest cardinality (most unique values)
+first. Alternatively, if queries on property `a` alone are more common than
+those on `b` alone, prefer `(a, b)` over `(b, a)`.
 
 ### Edge-type index
 
