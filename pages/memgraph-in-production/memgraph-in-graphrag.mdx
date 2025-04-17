@@ -1,0 +1,152 @@
+---
+title: Memgraph in GraphRAG use cases
+description: Suggestions on how to bring your Memgraph to production in GraphRAG use cases. 
+---
+
+import { Callout } from 'nextra/components'
+import { CommunityLinks } from '/components/social-card/CommunityLinks'
+
+# Memgraph in GraphRAG use cases
+
+<Callout type="info">
+👉 **Start here first**  
+Before diving into this guide, we recommend starting with the [**General suggestions**](/memgraph-in-production/general-suggestions) 
+page. It provides **foundational, use-case-agnostic advice** for deploying Memgraph in production.
+
+This guide builds on that foundation, offering **additional recommendations tailored to specific workloads**. 
+In cases where guidance overlaps, the information in this chapter should be seen as **complementary or overriding**, depending 
+on the unique needs of your use case.
+</Callout>
+
+## When to use this guide
+
+This guide is for you if you're exploring or building **GraphRAG (Graph-Augmented Retrieval-Augmented Generation)** systems.
+Consider diving into this guide when:
+
+- 💬 You want to **query your graph using natural language** through a proxy **LLM** interface.  
+- 🔄 You need to **seamlessly extract knowledge graphs from multiple source systems**, especially when graph representation 
+  naturally suits the data structure.
+- 🏢 You're building a system where **business stakeholders need fast insights** without relying on engineers to expose data through APIs.  
+- 🌙 Your engineers are **deep in the trenches at midnight**, and you'd rather they write **simple questions** instead of Cypher queries.  
+- 🧠 You have **embeddings** and need to perform **vector search** across your graph, along with structured Cypher query language expressiveness.  
+
+If any of these resonate with your project, this guide will walk you through the best practices and configurations to bring 
+GraphRAG to life using Memgraph.
+
+## Why should you choose Memgraph for GraphRAG use cases
+
+Choosing Memgraph for your GraphRAG use case means prioritizing **performance**, **scalability**, and a **smooth end-user experience**.
+Memgraph is currently the **most performant and scalable graph database** on the market—your business stakeholders won’t be happy
+waiting unreasonable amounts of time for answers, and with Memgraph, they won’t have to. You can explore our performance results in
+the [**Benchgraph benchmarks**](https://memgraph.com/benchgraph).
+
+Thanks to its **in-memory architecture**, Memgraph delivers **predictable response times**, avoiding the inconsistency of LRU cache
+strategies that sometimes hit disk and degrade performance.
+
+With built-in **vector search powered by [usearch](https://github.com/unum-cloud/usearch)**, Memgraph supports **high-performance retrieval**
+across all your GraphRAG workloads. It also acts as a **unified analytical engine**, connecting to **legacy systems** and supporting a wide range
+of **data ingestion sources** to populate your knowledge graph with ease.
+
+Memgraph makes **schema metadata accessible in constant time**, allowing your LLM to construct Cypher queries **efficiently and without overhead**.
+To ensure a secure environment, Memgraph also provides **role-based and fine-grained access controls**, including **read-only access**, so your
+GraphRAG queries never risk modifying your data.
+
+## What is covered?
+
+The suggestions for GraphRAG use cases **complement** several key sections in the 
+[**general suggestions guide**](/memgraph-in-production/general-suggestions). These sections offer important context and
+additional best practices tailored for performance, stability, and scalability in GraphRAG systems:
+
+- **[Hardware sizing](#hardware-sizing)**  
+  If you're using embeddings for vector search, be aware that they can significantly impact **memory consumption**.
+
+- **[Choosing the right Memgraph flag set](#choosing-the-right-memgraph-flag-set)**  
+  Configure runtime flags to enable **constant-time schema retrieval** for the LLM. This reduces overhead during `text2Cypher` construction.
+
+- **[Choosing the right Memgraph storage mode](#choosing-the-right-memgraph-storage-mode)**  
+  Guidance on selecting the optimal **storage mode** for GraphRAG use cases, depending on whether your focus is analytical speed or transactional safety.
+
+- **[Enterprise features you might require](#enterprise-features-you-might-require)**  
+  Understand which **enterprise features** — such as security, access controls, and dynamic graph algorithms are 
+  essential for production-ready GraphRAG deployments.
+
+- **[Queries that best suit your workload](#queries-that-best-suit-your-workload)**  
+  Learn how to use **deep path traversals**, **vector search**, and **dynamic MAGE algorithms** to efficiently retrieve contextual data and 
+  handle **high-velocity graphs**.
+
+- **[Memgraph ecosystem](#memgraph-ecosystem)**  
+  Explore the tools and integrations within the **Memgraph ecosystem** that can accelerate the development and operation of your GraphRAG pipeline.
+
+## Hardware sizing
+
+If your GraphRAG use case involves **vector embeddings**, it’s important to account for their **impact on memory usage**. Currently, 
+Memgraph stores embeddings in two places:
+
+1. In its **proprietary in-memory property storage** using 8 bytes per float.
+2. In the **vector index (usearch)** using 4 bytes per float (float32).
+
+This results in a total **12-byte overhead per float value** when storing embeddings.
+
+To estimate the additional memory required for embeddings, use the following formula:
+
+```
+number of nodes with embeddings × embedding dimension × 12B
+```
+
+This will give you a more accurate view of your memory needs when planning hardware resources.
+
+### Upcoming optimizations
+
+Memgraph is actively working on two short-term optimizations to reduce this memory overhead:
+
+- 🧭 **Reference-based indexing**: Embeddings will be stored only in the vector index, with the property storage holding just a reference. 
+  Since embeddings are used exclusively for vector search, this eliminates duplication.
+  
+- ⚙️ **Support for float16 in usearch**: Users will be able to store embeddings as 2-byte floats (float16), commonly used in neural networks. 
+  This reduces memory usage significantly while maintaining accuracy within a **\<1% margin**, making it a strong tradeoff for most applications.
+
+### Best practices
+
+- Consider the **appropriate embedding dimension** for your use case. While models like OpenAI use 1536 or 3072 dimensions, **lower-dimensional vectors
+  (e.g., 512 or 768)** often result in only a **5–6% drop in accuracy** and drastically reduce memory consumption.
+
+- If in-memory embedding storage is too demanding, you can **offload embeddings to a third-party vector database** and still integrate it 
+  into your GraphRAG pipeline alongside Memgraph.
+
+- If you're also storing **document context** in Memgraph, keep in mind that these long strings are currently stored in memory as well. A short-term
+  roadmap item will enable **offloading static text content to disk**, since these strings rarely change. This will further 
+  **increase your memory efficiency and scalability**.
+
+## Choosing the right Memgraph flag set
+
+For GraphRAG use cases, it's essential to run Memgraph with the following additional flag:
+
+```bash
+--schema-info-enabled=true
+```
+
+This enables **constant-time schema retrieval**, which drastically reduces the time needed to supply the **LLM with schema information**
+required for generating Cypher queries. Without this flag, schema discovery can introduce unnecessary latency, negatively affecting query
+responsiveness and the overall user experience.
+
+## Choosing the right Memgraph storage mode
+
+Schema retrieval is fully supported in both `IN_MEMORY_TRANSACTIONAL` and `IN_MEMORY_ANALYTICAL` storage modes. This means you can choose the
+mode that best fits your workload without compromising the ability to serve schema metadata to the LLM.
+
+- Use `IN_MEMORY_TRANSACTIONAL` if your use case requires **ACID guarantees**, **replication**, or **high availability**.
+- Use `IN_MEMORY_ANALYTICAL` if you're focused on **read-only**, **high-ingestion**, or **analytics-heavy** workloads where
+  **maximum write throughput** is a priority.
+
+Both modes are compatible with GraphRAG workflows — choose based on your performance and reliability needs.
+
+## Enterprise features you might require
+blahblah
+
+## Queries that best suit your workload
+blahblah
+
+## Memgraph ecosystem
+blahblah
+
+<CommunityLinks/>
