@@ -4,7 +4,7 @@ interface SocialCardProps {
   icon?: ReactNode;
   title: string;
   href: string;
-  body: string;
+  body?: string;
   is_external?: boolean;
 }
 
@@ -21,7 +21,11 @@ export function SocialCard({ icon, title, href, body, is_external }: SocialCardP
           {icon}
           <span>{title}</span>
         </div>
-        <p className="mt-2 text-sm font-medium text-gray-600 dark:text-gray-300">{body}</p>
+        {body && (
+          <p className="mt-2 text-sm font-medium text-gray-600 dark:text-gray-300">
+            {body}
+          </p>
+        )}
       </div>
     </a>
   );
