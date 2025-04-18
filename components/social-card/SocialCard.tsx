@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 
 interface SocialCardProps {
-  icon: ReactNode;
+  icon?: ReactNode;
   title: string;
   href: string;
-  body: string;
+  body?: string;
 }
 
 export function SocialCard({ icon, title, href, body }: SocialCardProps) {
