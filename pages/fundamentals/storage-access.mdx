@@ -1,0 +1,59 @@
+---
+title: Storage access
+description: Understand how Memgraph access the storage layer. A detailed resource to optimize multi-client throughput.
+---
+
+import { Callout } from 'nextra/components'
+
+# Storage access
+
+The storage (or storage layer) refers to all data associated with the graph itself.
+This means vertices, edges, their properties, label and other data.
+
+Queries that are reading or writing to the graph are said to be accessing the storage.
+These accesses are mediated through the `storage accessors`.
+The accessors guarantee a transactional view and concurrency safety.
+
+## Storage accessors
+
+There are 3 types of accessors:
+- **Shared access**: Allows multiple queries to run in parallel, marked as either read or write.
+- **Read-only access**: Permits multiple read queries to run in parallel but forbids any write operations or queries requiring unique access.
+- **Unique access**: Grants exclusive access to a single query, preventing any other type of access during its execution.
+
+**Shared access** is the most common access granted. Any data oriented Cypher query will use it.
+
+**Read-only access** is currently used only by `CREATE SNAPSHOT` when in ANALYTICAL mode. Using the read-only access guarantees that the snapshot is consistent, while also allowing for other (shared access) read queries to run in parallel.
+
+**Unique access** queries is used by queries that require full control over the storage layer. These are:
+- Index queries
+- Constraint queries
+- TTL setup queries
+- Enum setup queries
+- `DROP GRAPH` query
+- `RECOVER SNAPSHOT` query
+
+### Deducing the accessor type needed
+
+The type is deduced at parsing time automatically.
+Read-only and unique accesses are given based on the query type (as described in the previous section).
+The shared access needs to additionally mark a query as read or write. This is also done automatically at parse-time.
+
+The only instance where the user needs to explicitly specify the desired shared access type is when creating a managed (explicit) transactions.
+These transactions acquire and hold the storage accessor at the start of their execution.
+By default a write shared access is taken, but this can limit which queries can run in parallel. For the best performance, it is recommended to mark transactions with the desired access type.
+For more details, refer to [Transactions](/fundamentals/transactions).
+
+## Queries that do not require storage access
+
+Queries that do not read or modify any graph data do not need storage access.
+These queries are:
+- Auth queries
+- Multi-tenant queries
+- Replication queries
+- Show config queries
+- Setting queries
+- Version queries
+- Transaction queue queries
+
+Please note that even if these queries do not access the storage, they still might be accessing a shared resource and could block or throw if called in parallel.
