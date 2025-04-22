@@ -1,5 +1,6 @@
 export default {
     "collections": "Collections",
+    "custom-configuration": "Custom configuration",
     "csv-file-import": "CSV file import",
     "graphchat": "GraphChat",
     "graph-schema": "Graph schema",
