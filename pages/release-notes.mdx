@@ -62,7 +62,184 @@ updated.
 
 ### Memgraph v3.2.0 - Apr 23rd, 2025
 
+{<h4 className="custom-header">⚠️ Breaking changes</h4>}
+
+- Procedure results are now populated with null values by default. Procedures
+  no longer throw if all result fields don't get inserted; instead, they return
+  null in those fields. [#2790](https://github.com/memgraph/memgraph/pull/2790)
+
+{<h4 className="custom-header">✨ New features</h4>}
+
+- Added support for composite indices. Composite indices are indices on labels
+  and two or more properties. Composite indices significantly improve database
+  performance on queries that filter against multiple properties. To take
+  advantage of this improvement, users should create composite indices for
+  frequently queried combinations of properties.
+  [#2760](https://github.com/memgraph/memgraph/pull/2760),
+  [#2887](https://github.com/memgraph/memgraph/pull/2887)
+- Added metrics tracking related to replication and high availability. This
+  includes metrics like the number of RPC messages sent, the duration of the
+  recovery etc. Users can use our
+  [prometheus-exporter](https://github.com/memgraph/prometheus-exporter) to get
+  immediately cluster info status.
+  [#2772](https://github.com/memgraph/memgraph/pull/2772)
+- Added `mgp_result_reserve` function to the C-api for reserving memory for
+  procedure results. [#2790](https://github.com/memgraph/memgraph/pull/2790)
+- Added edge TTL. The system can now automatically delete stale edges using the
+  specified property `ttl` inside the edges.
+  [#2730](https://github.com/memgraph/memgraph/pull/2730)
+- Added global index on edge properties. Since edges have only one relationship
+  type, the global property index will have a data structure that is tracked
+  over properties with the syntax `CREATE GLOBAL EDGE INDEX ON :(prop)`.
+  [#2730](https://github.com/memgraph/memgraph/pull/2730)
+- Expanded storage access types to UNIQUE, READ, WRITE and READ_ONLY. A better
+  differentiation of query types allows more queries to run in parallel. Users
+  can now run read queries while creating snapshots, even in ANALYTICAL mode.
+  [2798](https://github.com/memgraph/memgraph/pull/2798)
+- Added support for OR label expressions, enabling queries like `MATCH
+  (n:Label1|Label2)` to retrieve nodes with any of the specified labels. If
+  indexes exist on the labels, the planner rewrites the query as a UNION of
+  index scans for efficient execution. Additionally, simple WHERE clauses with
+  OR label checks are optimized similarly, reducing reliance on full scans.
+  [#2783](https://github.com/memgraph/memgraph/pull/2783)
+
+{<h4 className="custom-header">🛠️ Improvements</h4>}
+
+- There is now an improved logic for selecting the new MAIN instance during the
+  failover in the MT environment. An instance that has the newest databases is
+  considered the newest. Users will now have a smaller chance of experiencing
+  the loss of committed data.
+  [#2812](https://github.com/memgraph/memgraph/pull/2812)
+- Metrics related to HA coordinators are now immediately reset after the client
+  pulls them. Users can now see the aggregated value from all coordinators when
+  using [Memgraph's Prometheus
+  exporter](https://github.com/memgraph/prometheus-exporter/pull/19). Also, the
+  data won't be lost after the coordinator's restart.
+  [#2802](https://github.com/memgraph/memgraph/pull/2802)
+- The memory footprint of TypedValue (internal data structure used mostly
+  during query execution) got smaller. The optimization results in lower memory
+  usage in query modules that return many results (e.g., modules that return
+  the whole graph, like PageRank) by a few percent.
+  [#2806](https://github.com/memgraph/memgraph/pull/2806)
+- Reduced memory footprint of `mgp_result_record` used for returning results in
+  all procedures APIs. The optimization reduces memory usage by up to 50% in
+  query modules, which return many results, such as the whole graph (e.g.,
+  PageRank). [#2790](https://github.com/memgraph/memgraph/pull/2790)
+- `utils::Scheduler` now skips backed-up tasks. Background tasks that took
+  longer than the period will not be called multiple times after the execution.
+  It lowers the overall workload and frees up resources.
+  [2853](https://github.com/memgraph/memgraph/pull/2853)
+- Schema info edge updates made faster. Previously, edge deletions would cause
+  a slow commit. Users can now use the run-time schema info more freely without
+  impacting the performance.
+  [2844](https://github.com/memgraph/memgraph/pull/2844)
+- Snapshot creation has been parallelized. Edges and vertices are batched (as
+  defined via flag). These batches are processed in parallel on a number of
+  threads. Users can now create snapshots in less time, freeing up resources
+  for other tasks. [2818](https://github.com/memgraph/memgraph/pull/2818)
+
+{<h4 className="custom-header">🐞 Bug fixes</h4>}
+
+- Parsing a query in which a pattern comprehension is nested (such as `RETURN
+  [[(x)-->(y) | x]];`) no longer causes a crash.
+  [#2716](https://github.com/memgraph/memgraph/pull/2716)
+- Replica won't crash anymore when performing recovery and when disk access to
+  the durability folder fails. Instead, it will return an empty response,
+  signaling the main that the recovery isn't completed. Users should expect the
+  same behavior as before.
+  [#2780](https://github.com/memgraph/memgraph/pull/2780)
+- The scheduler (utility module) will release its lock before starting to
+  execute its function. This will enable deadlock-free concurrent execution
+  between the periodic snapshot thread and the thread that performs demotion
+  under replication. [#2882](https://github.com/memgraph/memgraph/pull/2882)
+- During the promotion of the MAIN instance, the promotion will be aborted if
+  registering one of the replicas fails. In that case, the coordinator will
+  retry the promotion after a few seconds. There is now a smaller chance of
+  users experiencing failed failover. Previously, the RPC communication would
+  fail, and MAIN would partially register some of the replicas.
+  [#2869](https://github.com/memgraph/memgraph/pull/2869)
+- The newly elected coordinator leader will perform a failover correctly when
+  the leader inherits the cluster state without the main instance.
+  [#2857](https://github.com/memgraph/memgraph/pull/2857)
+- When manually promoting an instance, it is now unnecessary that all replicas
+  are alive. Users can now use the `SET INSTANCE instance TO MAIN` query in
+  more situations. [#2857](https://github.com/memgraph/memgraph/pull/2857)
+- If a snapshot gets created while MAIN receives a request to demote itself to
+  REPLICA, the snapshot creation will get aborted. Additionally, the thread
+  creating snapshots will be paused on demotion. Similarly, when the REPLICA is
+  promoted to the main, the snapshot thread will be resumed.
+  [#2846](https://github.com/memgraph/memgraph/pull/2846)
+- The `DUMP DATABASE` query generated the wrong query for ANY triggers. Dumping
+  the database now generates the correct trigger query.
+  [2855](https://github.com/memgraph/memgraph/pull/2855)
+- Fixed missing edge property index and unique constraint garbage collection.
+  No slow memory creep up while using constraints or edge index.
+  [2850](https://github.com/memgraph/memgraph/pull/2850)
+- Metadata from WAL files was unnecessarily used during recovery, even for old
+  WAL files which shouldn't have been used. This could've caused a possible
+  data loss because newer WAL files wouldn't be used in some situations while
+  recovering. [#2892](https://github.com/memgraph/memgraph/pull/2892)
+- `DUMP DATABASE` has more stability guarantees. The output order has changed
+  for better memory usage and performance, and a sort is applied to the type
+  constraints. The durability write bug in v2.19.0, v2.20.0, v2.20.1 for the
+  3D Cartesian data type was fixed in v2.21.0, but in a way that reading
+  durability from those versions would no longer be possible if a "corrupt"
+  3D Cartesian was written into those durability files. Those durability
+  files can now be read, and the engine handles the "corrupt" values.
+  [#2888](https://github.com/memgraph/memgraph/pull/2888)
+- Fixed unreliable authentication deserialization. Users can now reliably
+  upgrade auth data between different versions, as well as between the
+  community and enterprise.
+  [2915](https://github.com/memgraph/memgraph/pull/2915)
+
 ### MAGE v3.2.0 - Apr 23rd, 2025
+
+{<h4 className="custom-header">⚠️ Breaking changes</h4>}
+
+- Significantly improved image build time and size -> there is only "with-ML"
+  image now -> please use that one instead of previous no-ML images.
+  [#590](https://github.com/memgraph/mage/pull/590)
+- Shorten Docker image tags e.g. from `3.2-memgraph-3.2` -> `3.2` or
+  `3.2-memgraph-3.2-relwithdebinfo` -> `3.2-relwithdebinfo` for all future
+  releases. Users updating to images for Memgraph/MAGE >= 3.2 should use the
+  shorter tag format. [#600](https://github.com/memgraph/mage/pull/600)
+
+{<h4 className="custom-header">✨ New features</h4>}
+
+- Added migration module via the Arrow Flight RPC protocol. Users can now
+  stream data into Memgraph using a single Cypher query by executing the `CALL
+  migrate.arrow_flight()` procedure.
+  [#558](https://github.com/memgraph/mage/pull/558)
+- Added migration module using `DuckDB`. Users can now connect to their data
+  sources with DuckDB using a single Cypher query by executing the `CALL
+  migrate.duckdb()` procedure.
+  [#560](https://github.com/memgraph/mage/pull/560)
+- Added the migration module from another Memgraph instance. Users can now
+  seamlessly transfer data from one Memgraph instance to another using a single
+  Cypher query by executing the `CALL migrate.memgraph()` procedure.
+  [#561](https://github.com/memgraph/mage/pull/561)
+- Added migration module to migrate from `ServiceNow` data source. Users can
+  now migrate their data using ServiceNow REST API by executing a single Cypher
+  query with `CALL migrate.servicenow()` procedure
+  [#572](https://github.com/memgraph/mage/pull/572)
+
+{<h4 className="custom-header">🛠️ Improvements</h4>}
+
+- The performance of the betweenness centrality and online betweenness
+  centrality algorithms has been improved, with speedups exceeding 100% in some
+  cases. By default, the algorithm now uses half of the available hardware
+  threads for parallelization.
+  [#588](https://github.com/memgraph/mage/pull/588)
+- Updated torch versions to 2.4.0 to fix
+  [CVE-2024-7804](https://github.com/advisories/GHSA-4vmg-rw8f-92f9); use
+  cached Python packages for faster CI builds.
+  [#587](https://github.com/memgraph/mage/pull/587)
+
+{<h4 className="custom-header">🐞 Bug fixes</h4>}
+
+- Moved `$HOME` for `memgraph` user to fix missing Python modules when users
+  mount `/var/lib/memgraph` as an external volume.
+  [#594](https://github.com/memgraph/mage/pull/594)
 
 ### Lab v3.2.0 - Apr 23rd, 2025
 

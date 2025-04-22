@@ -6,6 +6,7 @@ description: Discover the migration capabilities of Memgraph for efficient trans
 import { Cards } from 'nextra/components'
 import GitHub from '/components/icons/GitHub'
 import { Steps } from 'nextra/components'
+import { Callout } from 'nextra/components';
 
 # migrate
 
@@ -34,6 +35,181 @@ filter, and convert relational data into a graph format.
 ---
 
 ## Procedures
+
+### `arrow_flight()`
+
+With the `arrow_flight()` procedure, users can access data sources which support the [Arrow Flight RPC protocol](https://arrow.apache.org/docs/format/Flight.html) for transfer
+of large data records to achieve high performance. Underlying implementation is using the `pyarrow` Python library to stream rows to
+Memgraph. [Dremio](https://www.dremio.com/) is a confirmed data source that works with the `arrow_flight()` procedure. Other sources may also be compatible, but Dremio is based on previous experience.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `query: str` ➡ Query used to query the data source.  
+- `config: mgp.Map` ➡ Connection parameters (as in `pyarrow.flight.connect`). Useful parameters for connecting are `host`, `port`, `username` and `password`.
+- `config_path` ➡ Path to a JSON file containing configuration parameters.  
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ The result table as a stream of rows.
+
+#### Retrieve and inspect data
+```cypher
+CALL migrate.arrow_flight('SELECT * FROM users', {username: 'memgraph',
+        password: 'password',
+        host: 'localhost',
+        port: '12345'} )
+YIELD row
+RETURN row
+LIMIT 5000;
+```
+
+#### Filter specific data
+```cypher
+CALL migrate.arrow_flight('SELECT * FROM users', {username: 'memgraph',
+        password: 'password',
+        host: 'localhost',
+        port: '12345'} )
+YIELD row
+WHERE row.age >= 30
+RETURN row;
+```
+
+#### Create nodes from migrated data
+```cypher
+CALL migrate.arrow_flight('SELECT id, name, age FROM users', {username: 'memgraph',
+        password: 'password',
+        host: 'localhost',
+        port: '12345'} )
+YIELD row
+CREATE (u:User {id: row.id, name: row.name, age: row.age});
+```
+
+#### Create relationships between users
+```cypher
+CALL migrate.arrow_flight('SELECT user1_id, user2_id FROM friendships', {username: 'memgraph',
+        password: 'password',
+        host: 'localhost',
+        port: '12345'} )
+YIELD row
+MATCH (u1:User {id: row.user1_id}), (u2:User {id: row.user2_id})
+CREATE (u1)-[:FRIENDS_WITH]->(u2);
+```
+
+### `duckdb()`
+With the `migrate.duckdb()` procedure, users can connect to the ** DuckDB** database and query various data sources.
+List of data sources that are supported by DuckDB can be found on their [official documentation page](https://duckdb.org/docs/stable/data/data_sources.html).
+The underlying implementation streams results from DuckDB to Memgraph using the `duckdb` Python Library. DuckDB is started with the in-memory mode, without any
+persistence and is used just to proxy to the underlying data sources.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `query: str` ➡ Table name or an SQL query.  
+- `setup_queries: mgp.Nullable[List[str]]` ➡ List of queries that will be executed prior to the query provided as the initial argument. 
+Used for setting up the connection to additional data sources.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ The result table as a stream of rows.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+#### Retrieve and inspect data
+```cypher
+CALL migrate.duckdb("SELECT * FROM 'test.parquet';")
+YIELD row
+RETURN row
+LIMIT 5000;
+```
+
+#### Filter specific data
+```cypher
+CALL migrate.duckdb("SELECT * FROM 'test.parquet';")
+YIELD row
+WHERE row.age >= 30
+RETURN row;
+```
+
+#### Create nodes from migrated data
+```cypher
+CALL migrate.duckdb("SELECT * FROM 'test.parquet';")
+YIELD row
+CREATE (u:User {id: row.id, name: row.name, age: row.age});
+```
+
+#### Create relationships between users
+```cypher
+CALL migrate.duckdb("SELECT * FROM 'test.parquet';")
+YIELD row
+MATCH (u1:User {id: row.user1_id}), (u2:User {id: row.user2_id})
+CREATE (u1)-[:FRIENDS_WITH]->(u2);
+```
+
+#### Setup connection to query additional data sources
+```cypher
+CALL migrate.duckdb("SELECT * FROM 's3://your_bucket/your_file.parquet';", ["CREATE SECRET secret1 (TYPE s3, KEY_ID 'key', SECRET 'secret', REGION 'region');"])
+YIELD row
+MATCH (u1:User {id: row.user1_id}), (u2:User {id: row.user2_id})
+CREATE (u1)-[:FRIENDS_WITH]->(u2);
+```
+
+---
+
+### `memgraph()`
+
+With the `migrate.memgraph()` procedure, you can access another Memgraph instance and migrate your data to a new Memgraph instance.  
+The resulting nodes and edges are converted into a stream of rows which can include labels, properties, and primitives.
+
+<Callout type="info">
+Streaming of raw node and relationship objects is not supported and users are advised to migrate all the necessary identifiers in order to recreate the same graph in Memgraph.
+</Callout>
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `label_or_rel_or_query: str` ➡ Label name (written in format `(:Label)`), relationship name (written in format `[:rel_type]`) or a plain cypher query. 
+- `config: mgp.Map` ➡ Connection parameters (as in `gqlalchemy.Memgraph`). Notable parameters are `host[String]`, and `port[Integer]` 
+- `config_path` ➡ Path to a JSON file containing configuration parameters.  
+- `params: mgp.Nullable[mgp.Any] (default=None)` ➡ Query parameters (if applicable).  
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ The result table as a stream of rows.
+        - when retrieving nodes using the `(:Label)` syntax, row will have the following keys: `labels`, and `properties`
+        - when retrieving relationships using the `[:REL_TYPE]` syntax, row will have the following keys: `from_labels`, `to_labels`, `from_properties`, `to_properties`, and `edge_properties`
+        - when retrieving results using a plain Cypher query, row will have keys identical to the returned column names from the Cypher query
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+#### Retrieve nodes of certain label and create them in a new Memgraph instance
+```cypher
+CALL migrate.memgraph('(:Person)', {host: 'localhost', port: 7687})
+YIELD row
+WITH row.labels AS labels, row.properties as props
+CREATE (n:labels) SET n += row.props
+```
+
+#### Retrieve relationships of certain type and create them in a new Memgraph instance
+```cypher
+CALL migrate.memgraph('[:KNOWS]', {host: 'localhost', port: 7687})
+YIELD row
+WITH row.from_labels AS from_labels,
+        row.to_labels AS to_labels,
+        row.from_properties AS from_properties,
+        row.to_properties AS to_properties,
+        row.edge_properties AS edge_properties
+MATCH (p1:Person {id: row.from_properties.id})
+MATCH (p2:Person {id: row.to_properties.id})
+CREATE (p1)-[r:KNOWS]->(p2)
+SET r += edge_properties;
+```
+
+#### Retrieve information from Memgraph using an arbitrary Cypher query
+```cypher
+CALL migrate.memgraph('MATCH (n) RETURN count(n) as cnt', {host: 'localhost', port: 7687})
+YIELD row
+RETURN row.cnt as cnt;
+```
+
+---
 
 ### `mysql()`
 
@@ -331,6 +507,49 @@ RETURN row;
 CALL migrate.s3('s3://my-bucket/employees.csv', {aws_access_key_id: 'your-key',
         aws_secret_access_key: 'your-secret',
         region_name: 'eu-central-1'} )
+YIELD row
+CREATE (e:Employee {id: row.id, name: row.name, position: row.position});
+```
+
+---
+
+### `servicenow()`
+
+With the `migrate.servicenow()` procedure, you can access [ServiceNow REST API](https://developer.servicenow.com/dev.do#!/reference/api/xanadu/rest/) and transfer your data to Memgraph.
+The underlying implementation is using the [`requests` Python library] to migrate results to Memgraph. The REST API from 
+ServiceNow must provide results in the format `{results: []}` in order for Memgraph to stream it into result rows.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `endpoint: str` ➡ ServiceNow endpoint. Users can optionally include their own query parameters to filter results.  
+- `config: mgp.Map` ➡ Connection parameters. Notable connection parameters are `username` and `password`, per `requests.get()` method.
+- `config_path: str` ➡ Path to a JSON file containing configuration parameters.  
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ Each row from the CSV file as a structured dictionary.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+#### Retrieve and inspect CSV data from ServiceNow
+```cypher
+CALL migrate.servicenow('http://my_endpoint/api/data', {})
+YIELD row
+RETURN row
+LIMIT 100;
+```
+
+#### Filter specific rows from the CSV
+```cypher
+CALL migrate.servicenow('http://my_endpoint/api/data', {})
+YIELD row
+WHERE row.age >= 30
+RETURN row;
+```
+
+#### Create nodes dynamically from CSV data
+```cypher
+CALL migrate.servicenow('http://my_endpoint/api/data', {})
 YIELD row
 CREATE (e:Employee {id: row.id, name: row.name, position: row.position});
 ```
