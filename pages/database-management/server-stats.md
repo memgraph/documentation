@@ -123,9 +123,7 @@ SHOW METRICS INFO;
 | "ScanAllByEdgeTypeOperator"           | "Operator"    | "Counter"   | 0        |
 | "ScanAllByIdOperator"                 | "Operator"    | "Counter"   | 0        |
 | "ScanAllByLabelOperator"              | "Operator"    | "Counter"   | 0        |
-| "ScanAllByLabelPropertyOperator"      | "Operator"    | "Counter"   | 0        |
-| "ScanAllByLabelPropertyRangeOperator" | "Operator"    | "Counter"   | 0        |
-| "ScanAllByLabelPropertyValueOperator" | "Operator"    | "Counter"   | 0        |
+| "ScanAllByLabelPropertiesOperator"    | "Operator"    | "Counter"   | 0        |
 | "ScanAllOperator"                     | "Operator"    | "Counter"   | 0        |
 | "SetLabelsOperator"                   | "Operator"    | "Counter"   | 0        |
 | "SetPropertiesOperator"               | "Operator"    | "Counter"   | 0        |

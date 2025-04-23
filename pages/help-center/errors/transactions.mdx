@@ -99,6 +99,28 @@ While some client drivers may handle serialization errors by retrying transactio
 developers should not rely solely on this mechanism. Always include comprehensive error handling 
 in your application to address cases where the error persists beyond the retry logic. 
 
+## Transaction accessor misalignment
+
+### Error message
+
+1. **Accessor type `{}` and query type `{}` are misaligned!**
+
+### Handling transaction timeout
+
+Transactions in Memgraph must acquire the appropriate type of storage access at the start of their execution.
+
+This access can be one of the following types:
+- **Shared access**: Allows multiple queries to run in parallel, marked as either read or write.
+- **Read-only access**: Permits multiple read queries to run in parallel but forbids any write operations or queries requiring unique access.
+- **Unique access**: Grants exclusive access to a single query, preventing any other type of access during its execution.
+
+For more information regarding storage access, please refer to [Storage access](/fundamentals/storage-access).
+
+While single queries can be parsed and the correct type of storage access can be determined automatically by Memgraph, this is not the case for explicit (managed) transactions.
+In managed transactions, the database cannot infer the required access type in advance because the transaction's operations are not know at the beginning.
+This can lead to storage access misalignment if the requested access type does not match the operations being performed.
+
+See appropriate driver's documentation for more information on how to define transaction's type.
 
 ## Transaction timeout
 
@@ -119,15 +141,17 @@ Here are the [instructions](/configuration/configuration-settings#using-flags-an
 
 Here are the storage access error messages you might encounter:
 
-1. **Cannot access storage, unique access query is running. Try again later.**
+1. **Cannot get shared access storage. Try stopping other queries that are running in parallel.**
 2. **Cannot get unique access to the storage. Try stopping other queries that are running in parallel.**
+3. **Cannot get read only access to the storage. Try stopping other queries that are running in parallel.**
 
 ### Understanding storage access timeout
 
-Storage access timeouts occur during query preparation when the query execution engine cannot get the required type of access to the storage. There are two types of storage access:
+Storage access timeouts occur during query preparation when the query execution engine cannot get the required type of access to the storage. There are three types of storage access:
 
-- **Shared access**: Multiple queries can have shared access at the same time, but shared access cannot be granted while a query with unique access is running.
-- **Unique access**: Only one query can have unique access at a time, and no other query can have any type of access during that period.
+- **Shared access**: Multiple queries can have shared access at the same time. These queries are marked with a read or write type, allowing Memgraph to efficiently execute multiple operations in parallel without conflicts.
+- **Unique access**: Only one query can have unique access at a time, and no other access type can be granted during that period.
+- **Read-only access**: Queries with read-only access allow other read queries to run in parallel but forbid any write operations or unique access queries.
 
 These timeouts prevent worker starvation and database blocking that could occur if queries were to wait indefinitely for storage access.
 
