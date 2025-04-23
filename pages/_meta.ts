@@ -9,7 +9,7 @@ export default {
   "querying": "Querying",
   "advanced-algorithms": "Advanced algorithms",
   "custom-query-modules": "Custom query modules",
-  "data-visualization": "Data visualization",
+  "memgraph-lab": "Memgraph Lab",
   "database-management": "Database management",
   "deployment": "Deployment",
   "clustering": "Clustering",
