@@ -1,5 +1,5 @@
 export default {
-  "supported-sources": "Supported sources",
+  "supported-data-sources": "Supported data sources",
   "best-practices": "Best practices",
   "csv": "CSV",
   "json": "JSON",
