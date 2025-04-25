@@ -1,0 +1,169 @@
+---
+title: do
+description: Optimize your graph computing workflow with Memgraph's conditional execution capabilities. Explore tutorials and comprehensive documentation to learn how to execute specific operations based on conditions within your graphs.
+---
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+import { Cards } from 'nextra/components'
+import GitHub from '/components/icons/GitHub'
+
+# do
+
+Queries might require conditional execution logic that can’t be adequately
+expressed in Cypher. The `do` module makes it possible to define complex logic
+that will control query execution.
+
+<Cards>
+  <Cards.Card
+    icon={<GitHub />}
+    title="Source code"
+    href="https://github.com/memgraph/mage/blob/main/cpp/do_module/do_module.cpp"
+  />
+</Cards>
+
+| Trait              | Value      |
+| ------------------ | ---------- |
+| **Module type**    | module     |
+| **Implementation** | C++        |
+| **Parallelism**    | sequential |
+
+## Procedures
+
+<Callout type="info">
+You can execute this algorithm on [graph projections, subgraphs or portions of the graph](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph).
+</Callout>
+
+The following procedures can't be used to run queries that execute global operations:
+
+* creating and deleting indexes 
+* creating and deleting constraints
+* changing the global isolation level
+* setting the storage mode
+
+### `case()`
+
+When given a list of condition-query pairs, `do.case` executes the query associated
+with the first condition evaluating to `true` (or the `else query` if none are
+`true`) with the given parameters.
+
+Parameters are prefixed with `$` like `$param_name`. Check the documentation on
+querying for [examples](/querying/expressions#parameters).
+
+{<h4 className="custom-header"> Input: </h4>}
+* `subgraph: Graph` (**OPTIONAL**) ➡ A specific subgraph, which is an [object of type Graph](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph) returned by the `project()` function, on which the algorithm is run.
+  If subgraph is not specified, the algorithm is computed on the entire graph by default.
+* `conditionals: List[Any]` ➡ Variable-length list of condition-query pairs
+  structured as `[condition, query, condition, query, …​]`. Conditions are
+  `boolean` and queries are `string`.
+* `else_query: string (default = "")` ➡ The query to be executed if no
+  condition evaluates to `true`.
+* `params: Map (default = NULL)` ➡ If any of the given queries is parameterized,
+  provide a `{param_name: param_value}` map to be applied to them.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+* `value: Map` ➡ Contains the result record of the executed query. Each `value` corresponds to one result record.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+The following example checks how many nodes there are in the database, and
+returns `empty` if there are `0` nodes, `one node` if there is `1` node, or
+`multiple nodes` if any other result is produced by the `size(collect(n))`
+functions:
+
+```cypher
+MATCH (n)
+WITH size(collect(n)) as n_nodes
+CALL do.case([n_nodes = 0,
+              "RETURN 'empty' AS graph_status;",
+              n_nodes = 1,
+              "RETURN 'one node' AS graph_status;"],
+              "RETURN 'multiple nodes' AS graph_status;")
+YIELD value
+RETURN value.graph_status AS graph_status;
+```
+
+### `when()`
+
+`do.when` evaluates the given condition and executes the `if query` or the
+`else query` depending on whether the condition is satisfied.
+
+[Parameters](/querying/expressions#parameters) are prefixed with `$` like
+`$param_name`.
+
+{<h4 className="custom-header"> Input: </h4>}
+* `subgraph: Graph` (**OPTIONAL**) ➡ A specific subgraph, which is an [object of type Graph](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph) returned by the `project()` function, on which the algorithm is run.
+  If subgraph is not specified, the algorithm is computed on the entire graph by default.
+* `condition: boolean` ➡ Determines what query to execute.
+* `if_query: string` ➡ The query to be executed if the condition is satisfied.
+* `else_query: string (default = "")` ➡ The query to be executed if the
+  condition isn’t satisfied.
+* `params: Map (default = NULL)` ➡ If `if_query` or `else_query` are parameterized,
+   provide a `{param_name: param_value}` map to be applied.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+* `value: Map` ➡ Contains the result record of the executed query. Each `value` corresponds to one result record.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+The following example checks how many nodes there are in the database, checks if
+the result is 0, and returns `empty` if is, and `not empty` if it isn't:
+
+```cypher
+MATCH (n)
+WITH size(collect(n)) as n_nodes
+CALL do.when(n_nodes = 0,
+             "RETURN 'empty' AS graph_status;",
+             "RETURN 'not empty' as graph_status;")
+YIELD value
+RETURN value.graph_status AS graph_status;
+```
+
+## Example
+
+<Steps>
+
+{<h3 className="custom-header"> Database state </h3>} 
+
+The database contains the following data: 
+
+![](/pages/advanced-algorithms/available-algorithms/do/do-1.png)
+
+Created with the following Cypher queries:
+
+```cypher
+MERGE (a:Node {id: 0}) MERGE (b:Node {id: 1}) CREATE (a)-[:RELATION]->(b);
+MERGE (a:Node {id: 1}) MERGE (b:Node {id: 2}) CREATE (a)-[:RELATION]->(b);
+MERGE (a:Node {id: 0}) MERGE (b:Node {id: 2}) CREATE (a)-[:RELATION]->(b);
+MERGE (a:Node {id: 3}) MERGE (b:Node {id: 4}) CREATE (a)-[:RELATION]->(b);
+MERGE (a:Node {id: 3}) MERGE (b:Node {id: 5}) CREATE (a)-[:RELATION]->(b);
+MERGE (a:Node {id: 4}) MERGE (b:Node {id: 5}) CREATE (a)-[:RELATION]->(b);
+```
+
+{<h3 className="custom-header"> Check a condition </h3>} 
+
+Check if the number of nodes is equal to `0`, and return appropriate message:
+
+```cypher
+MATCH (n:Node)
+WITH size(collect(n)) as n_nodes
+CALL do.when(n_nodes = 0,
+             "RETURN 'empty' AS graph_status;",
+             "RETURN 'not empty' as graph_status;")
+YIELD value
+RETURN value.graph_status AS graph_status;
+```
+
+Result:
+
+```plaintext
+┌──────────────┐
+│ graph_status │
+├──────────────┤
+│ not empty    │ 
+└──────────────┘
+```
+
+</Steps>

@@ -11,8 +11,8 @@ import CodeSnippet from '/components/code-snippet/CodeSnippet'
 
 Learn how to create a Python application that connects to the Memgraph database and executes simple queries.
 
-Both [Neo4j Python client](https://neo4j.com/docs/python-manual/current/) and [GQLAlchemy](https://github.com/memgraph/gqlalchemy) can be used to connect to Memgraph with Python. 
-This guide will show how to use Neo4j Python client and for more information on GQLAlchemy, check out its [documentation](https://memgraph.github.io/gqlalchemy/). 
+Both [Neo4j Python client](https://neo4j.com/docs/python-manual/current/) and [GQLAlchemy](https://github.com/memgraph/gqlalchemy) can be used to connect to Memgraph with Python.
+This guide will show how to use Neo4j Python client and for more information on GQLAlchemy, check out its [documentation](https://memgraph.github.io/gqlalchemy/).
 
 Memgraph and Neo4j both support Bolt protocol and Cypher queries, which means that same client can be used to connect to both databases.
 This is very convenient if switching between the two databases is needed. This guide is based on the client version v5 and above. Some examples may
@@ -29,7 +29,7 @@ Necessary prerequisites that should be installed in your local environment are:
 
 <Steps>
 
-### Run Memgraph 
+### Run Memgraph
 
 If you're new to Memgraph or you're in a developing stage, we
 recommend using the Memgraph Platform. Besides the database, it also
@@ -60,7 +60,7 @@ communicate with the client using the exposed 7687 port. Memgraph Lab is a web
 application you can use to visualize the data. It's accessible at
 [http://localhost:3000](http://localhost:3000) if Memgraph Platform is running
 correctly. The 7444 port enables Memgraph Lab to access and preview the logs,
-which is why both of these ports need to be exposed. 
+which is why both of these ports need to be exposed.
 
 For more information visit the getting started guide on [how to run Memgraph
 with Docker](/getting-started/install-memgraph/docker).
@@ -177,6 +177,8 @@ Once the database is running and the client is installed or available in Python,
 - [Connect without authentication (default)](#connect-without-authentication-default)
 - [Connect with authentication](#connect-with-authentication)
 - [Connect with self-signed certificate](#encrypted-database-connection-with-self-signed-certificate)
+- [Connect with Single sign-on (SSO)](#connect-with-single-sign-on-sso)
+- [Impersonate a user](#impersonate-a-user)
 
 #### Connect without authentication (default)
 
@@ -267,6 +269,47 @@ with GraphDatabase.driver(URI, auth=AUTH) as client:
     # Get the result
     for record in records:
         print(record["name"])
+```
+
+#### Connect with Single sign-on (SSO)
+
+<Callout type="warning">
+This is currently only supported for OIDC SSO.
+</Callout>
+
+To use SSO with the Python driver you need to get the access and id tokens yourself.
+One simple way to do it is to use the authlib library and follow the official [tutorial](https://docs.authlib.org/en/latest/client/oauth2.html).
+
+To connect to the Memgraph database you have to use the `custom_auth` class with the `scheme` parameter set as `oidc-entra-id`, `oidc-okta` or `oidc-custom` depending on which scheme you are using,
+`credentials` parameter set to contain both access and id tokens in the format shown in the example below. Finally set `principal` and `realm` parameters to `None`.
+
+Below is an example of connecting to the Memgraph database using OIDC SSO with custom auth scheme.
+```python
+with neo4j.GraphDatabase.driver(
+    "bolt://localhost:7687",
+    auth=neo4j.custom_auth(
+        scheme="oidc-custom",
+        credentials=f"access_token={token['access_token']};id_token={token['id_token']}",
+        principal=None,
+        realm=None,
+    )
+) as driver:
+```
+
+#### Impersonate a user
+
+<Callout type="info">
+[User impersonation](/database-management/authentication-and-authorization/impersonate-user) is an Enterprise feature.
+</Callout>
+
+Once logged in, a user with the correct permissions can impersonate a different
+users during a session. This means that any query executing during that session
+will be executed as if the impersonated user executed it. The target user can be
+defined during session creation as in the following snippet:
+
+```python
+with driver.session(impersonated_user="user1") as session:
+    # queries here will be executed as if user1 executed them
 ```
 
 ### Query the database
@@ -392,14 +435,14 @@ for record in records:
     print(path.end_node)
 ```
 
-Path will contain [Nodes](#process-the-node-result) and [Relationships[#process-the-relationship-result], that can be accessed in the same way as in the previous examples.
+Path will contain [Nodes](#process-the-node-result) and [Relationships](#process-the-relationship-result), that can be accessed in the same way as in the previous examples.
 
 ### Transaction management
 
 Transaction is a unit of work that is executed on the database, it could be some basic read, write or complex set of steps in form of series of queries. There can be multiple ways to mange transaction, but usually, they are managed automatically by the client or manually by the explicit code steps. Transaction management defines how to handle the transaction, when to commit, rollback, or terminate it.
 
-On the driver side, if a transaction fails because of a transient error, the transaction is retried automatically. 
-The transient error will occur during write conflicts or network failures. The driver will retry the transaction function with an exponentially increasing delay. 
+On the driver side, if a transaction fails because of a transient error, the transaction is retried automatically.
+The transient error will occur during write conflicts or network failures. The driver will retry the transaction function with an exponentially increasing delay.
 
 #### Automatic transaction management
 
@@ -503,6 +546,11 @@ With sessions, you can run:
 
 To create a managed transaction, use `Session.execute_read()` procedure for read queries and `Session.execute_write()` procedure for write queries.
 
+<Callout type="info">
+As of Memgraph version 3.2, queries are categorized as **read** or **write** and the corresponding storage access is taken. This allows for better query parallelization and higher throughput.
+An exception will be thrown if the user tries to execute a write query inside a read transaction. For more details, see [transaction accessor misalignment](/fundamentals/transactions#transaction-accessor-misalignment).
+</Callout>
+
 ```python
 def match_user(tx, name):
     result = tx.run(
@@ -538,6 +586,12 @@ To maintain multiple concurrent transactions, use [multiple concurrent sessions]
 With explicit transactions, you can get **complete control over transactions**. To begin a transaction, run `Session.begin_transaction()` procedure and to run a transaction, use `Transaction.run()` procedure.
 Explicit transactions offer the possibility of explicitly controlling the end of a transaction with `Transaction.commit()`, `Transaction.rollback()` or `Transaction.close()` methods.
 
+<Callout type="info">
+As of Memgraph version 3.2, queries are categorized as **read** or **write** and the corresponding storage access is taken. This allows for better query parallelization and higher throughput.
+Explicit transactions can cover a number of individual queries, but storage access is given at the start. For best performance, the user needs to declare whether the transaction should use read or write access.
+This can be done by setting the session's `default_access_mode` to `"r"` or `"w"`. This will, in turn, set the access mode of a transaction created via the `begin_transaction` function. Note that `execute_read` and `execute_write` will override the session's default access.
+</Callout>
+
 Use explicit transaction if you need to **distribute Cypher execution across multiple functions for the same transaction** or if you need to **run multiple queries within a single transactions without automatic retries**.
 
 The following example shows how to explicitly control the transaction of changing account balances based on a token transfer:
@@ -567,7 +621,7 @@ def create_users(client, sender, receiver):
 
 
 def transfer_tokens(client, sender_id, receiver_id, num_of_tokens):
-    with client.session(database="memgraph") as session:
+    with client.session(database="memgraph", default_access_mode="w") as session:
         tx = session.begin_transaction()
 
         try:
@@ -633,6 +687,11 @@ In the above example, if John's account balance is changed to a number less than
 Implicit or auto-commit transactions are the simplest way to run a Cypher query since they won't be automatically retried as with `execute_query()` procedure or managed transactions.
 With implicit transactions, you don't have the same control of transaction as with explicit transactions, so they are mostly used for quick prototyping.
 
+<Callout type="info">
+As of Memgraph version 3.2, queries are categorized as **read** or **write** and the corresponding storage access is taken. This allows for better query parallelization and higher throughput.
+Access mode is automatically determined when executing single queries through implicit transactions.
+</Callout>
+
 To run an implicit transaction, use the `Session.run()` method:
 
 ```python
@@ -645,9 +704,9 @@ The `Session.run()` method is most commonly used for `LOAD CSV` clause to preven
 
 #### Concurrent transactions
 
-It is possible to run concurrent transactions with Python's client by leveraging threads or processes. 
-Using threads could cause your code to be partially locked because of [Global interpreter lock (GIL)](https://wiki.python.org/moin/GlobalInterpreterLock), 
-resulting in slow execution. Hence, it is always better to run your workloads in separate processes, 
+It is possible to run concurrent transactions with Python's client by leveraging threads or processes.
+Using threads could cause your code to be partially locked because of [Global interpreter lock (GIL)](https://wiki.python.org/moin/GlobalInterpreterLock),
+resulting in slow execution. Hence, it is always better to run your workloads in separate processes,
 where each process will have its own interpreter and memory space, avoiding GIL issues. To leverage multiple concurrent processes, you can use Python's `multiprocessing` module.
 
 Here is an example of how to run concurrent transactions with `multiprocessing` module:
@@ -659,7 +718,7 @@ from neo4j import GraphDatabase
 HOST_PORT = "bolt://localhost:7687"
 
 def process_chunk(query, create_list):
-    try: 
+    try:
         driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
         with driver.session() as session:
             session.run(query, {"batch": create_list})
@@ -680,7 +739,7 @@ with multiprocessing.Pool(10) as pool:
     pool.starmap(process_chunk, [(query, chunk) for chunk in chunks])
 ```
 
-Each process will execute a query that contains a chunk of nodes.  
+Each process will execute a query that contains a chunk of nodes.
 You can control the number of concurrent transactions and processes by
 specifying the number of processes in the `multiprocessing.Pool` constructor.
 Each transaction will be a separate connection to the database and will be
@@ -693,7 +752,7 @@ conflicting transactions. The typical scenario is when two transactions try to
 update the same node simultaneously, or add a relationship to the same node. It
 is a write-write conflict between transactions. In this case, the first
 transaction will pass, and one of the transactions will fail, and you will need
-to handle the error and retry the transaction. 
+to handle the error and retry the transaction.
 
 If you are running transactions in parallel, you should avoid [implicit
 transactions](#implicit-transactions) because you can't control the execution
@@ -702,7 +761,7 @@ process, and there are no retries.
 You can use the [managed transactions](#managed-transactions) or [explicit
 transactions](#explicit-transactions) to handle the conflicting transactions.
 Explicit API provides full control of the process, and it is recommended for
-production use and handling conflicts. 
+production use and handling conflicts.
 
 Here is an example of how to handle conflicting transactions in explicit API:
 
@@ -716,7 +775,7 @@ def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, 
                 tx.commit()
                 break
         except TransientError as te:
-            jitter = random.uniform(0, jitter) * initial_wait_time 
+            jitter = random.uniform(0, jitter) * initial_wait_time
             wait_time = initial_wait_time * (backoff_factor ** attempt) + jitter
             print(f"Commit failed on attempt {attempt+1}. Retrying in {wait_time} seconds...")
             time.sleep(wait_time)
@@ -730,9 +789,9 @@ In the example above, we are using the `begin_transaction()` method to start a
 transaction, and then we are running the query inside the transaction. If the
 transaction fails with a `TransientError,` the transaction will be retried using
 the retry strategy. Otherwise, another error occurred, and the transaction
-should be aborted. 
+should be aborted.
 
-The essential aspects of the retry strategy are the following arguments: 
+The essential aspects of the retry strategy are the following arguments:
 
 - `max_retries` - the maximum number of retries before the transaction will be
 aborted with a timeout error. This number should be set based on the expected
@@ -750,7 +809,7 @@ for 2 minutes + waiting time.
   retry. If there are a lot of transactions running in parallel, it is
   recommended to use `jitter` to avoid the thundering herd problem.
 
-If you use managed transactions, you can configure the retry scenario to use the `session` configuration. Here is an example: 
+If you use managed transactions, you can configure the retry scenario to use the `session` configuration. Here is an example:
 
 ```python
 import multiprocessing
@@ -781,18 +840,18 @@ In this case, the `TransientError` will be retried using the retry strategy that
 The essential configuration arguments are the following:
 
 - `max_transaction_retry_time` - the maximum time the transaction will be
-  retried; after that, it will be aborted with a timeout error. 
+  retried; after that, it will be aborted with a timeout error.
 - `initial_retry_delay` - the time that the transaction will wait before the
-  first retry. 
+  first retry.
 - `retry_delay_multiplier` - the factor by which the retry delay will be
   multiplied after each retry.
 - `retry_delay_jitter_factor` - the factor by which the retry delay will be
-  randomized after each retry. 
+  randomized after each retry.
 
 <Callout type="info">
 
 If you are still struggling with conflicts and serialization errors while using a Python client, we recommend
 referring to our [Serialization errors](/help-center/errors/serialization) page
-for detailed guidance on troubleshooting and best practices. 
+for detailed guidance on troubleshooting and best practices.
 
 </Callout>
