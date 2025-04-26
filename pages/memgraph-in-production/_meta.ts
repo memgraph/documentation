@@ -3,4 +3,5 @@ export default {
   "memgraph-in-graphrag": "Memgraph in GraphRAG use cases",
   "benchmarking-memgraph": "Benchmarking Memgraph",
   "memgraph-in-high-throughput-workloads": "Memgraph in high-throughput workloads",
+  "memgraph-in-mission-critical-workloads": "Memgraph in mission critical workloads"
 }
