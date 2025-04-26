@@ -95,29 +95,145 @@ additional best practices tailored for performance, stability, and scalability i
 - [Queries that best suit your workload](#queries-that-best-suit-your-workload)
   Learn how to optimize update queries coming at the database.
 
-- [Memgraph ecosystem](#memgraph-ecosystem)
-  Memgraph offers native streaming support for Apache Kafka and Apache Pulsar.
-
 ## Choosing the right Memgraph flag set
+
+When streaming data from systems like Kafka, the incoming payload is often **standardized**, 
+meaning that even when a node or relationship is updated, **some property values might remain unchanged**.
+
+By default, Memgraph sets the flag `--storage-delta-on-identical-property-update=true`, which **updates all properties**
+of a node or relationship during an update, even if the new value is identical to the existing one.
+This can introduce unnecessary write overhead.
+
+To optimize for **higher throughput** in scenarios where most incoming updates do not change all property values,
+it’s recommended to set:
+
+```bash
 --storage-delta-on-identical-property-update=false
+```
+
+With this setting, Memgraph will **only create delta records for properties that have actually changed**,
+reducing internal write operations and improving overall system throughput—especially important in high-velocity
+streaming use cases.
 
 ## Choosing the right Memgraph storage mode
-analytical if they just do updates and appends
+
+High-throughput scenarios in Memgraph can run effectively on both `IN_MEMORY_TRANSACTIONAL` and `IN_MEMORY_ANALYTICAL`
+storage modes, depending on your specific workload requirements.
+
+If your workload meets the following conditions:
+
+- You are **updating properties** on existing nodes and relationships,  
+- You are **appending** new nodes and relationships to the graph,  
+- You are **not performing deletes**,
+
+then it may be worth considering switching to `IN_MEMORY_ANALYTICAL` mode.  
+This mode allows **writes to be multithreaded**, unlocking **near limitless write speeds** by parallelizing ingestion
+across CPU cores.
+
+However, keep in mind:
+
+- If you require **replication**, **high availability**, or **ACID guarantees**, you must use `IN_MEMORY_TRANSACTIONAL` mode.  
+- `IN_MEMORY_ANALYTICAL` is optimized for **bulk ingestion** and **read-only analytics**, but it 
+  **does not support transactional rollback**, as it doesn’t create delta objects during writes.  
+  Additionally, **WALs (write-ahead logs) are not generated** in this mode, meaning recovery relies solely on **snapshot creation**.
 
 ## Importing mechanisms
-kafka native, kafka manual, write-write conflict resolution with retries
-idempotent concept
+
+Memgraph natively supports **Apache Kafka** and **Apache Pulsar** consumers to directly ingest data streams
+([learn more here](/data-streams#create-a-stream)). However, depending on the system architecture and flexibility
+requirements, some users prefer building **custom Kafka consumers** that programmatically push data into Memgraph.
+
+### Handling write-write conflicts
+If you are ingesting data from **multiple topics** or multiple producers, it's important to 
+**handle potential write-write conflicts**—especially when running in `IN_MEMORY_TRANSACTIONAL` mode.  
+You can learn more about these scenarios in our
+[conflicting transactions documentation](/help-center/errors/transactions#conflicting-transactions).
+
+To safely manage these conflicts:
+
+- Use a driver that supports **managed transactions** with automatic retries. For example, **Neo4j drivers**
+  offer an `execute_write()` method that **automatically retries transient errors** (errors that can be safely retried without client-side intervention).
+- Wrap your **write operations inside retryable transactions** if there are **multiple concurrent writers**.
+- If you **only have a single writer**, you generally don’t need to worry about transient errors or retries.
+
+### Idempotency concept
+In addition, when working with streams, **unexpected errors may require replaying the stream**.
+To ensure **data consistency even after multiple replays**, it's crucial to make your ingestion logic **idempotent**.  
+We strongly recommend using **`MERGE` clauses** instead of `CREATE` when inserting data into Memgraph.
+`MERGE` ensures that nodes and relationships are **created only if they don't already exist**, preventing
+duplicates and keeping your graph clean no matter how many times the same event is replayed.
 
 ## Enterprise features you might require
-high-availability
-node and edge ttl
-multitenancy
+
+For production-grade high-throughput deployments, you may need advanced capabilities to ensure
+**availability**, **data management**, and **tenant isolation**. Memgraph offers several enterprise features
+designed to support these needs:
+
+- **Replication, high availability, and automatic failover**  
+  If you require your system to be **available at all times**, Memgraph supports
+  [clustering and high availability](/clustering/high-availability), allowing you to minimize downtime and recover
+  automatically from failures.
+
+- **Node and relationship TTL (time-to-live)**  
+  In high-ingestion environments, you may need to automatically **clean up stale data** after a certain retention period.
+  Memgraph supports [time-to-live (TTL)](/querying/time-to-live) mechanisms for both **nodes** and **relationships**,
+  ensuring your graph remains manageable and efficient over time.
+
+- **Multi-tenancy**  
+  Some workloads require a **separate graph database per customer** to ensure strict data isolation and security.
+  Memgraph supports [multi-tenancy](/database-management/multi-tenancy), enabling you to manage multiple independent
+  graphs within a single Memgraph instance.
 
 ## Queries that best suit your workload
-easy updates
 
+When ingesting data from streams, it's best to keep your Cypher queries **simple, idempotent, and efficient**. A typical ingestion query should look like:
 
-## Memgraph ecosystem
-native kafka consumers
+```cypher
+MERGE (n:Label) SET n += $row;
+```
+
+This approach ensures **idempotency** (safe reprocessing of the same events) and **minimizes query execution time** by keeping the transaction lightweight.  
+Keep in mind that adding **complex business logic** or **customization** to the ingestion queries will **increase query latency**, so it's always a good practice to **profile your queries** using Memgraph’s [`PROFILE` tool](/querying/clauses/profile) to understand and optimize performance.
+
+---
+
+### Dynamic labels and edge types
+
+Memgraph also supports:
+
+- [**Dynamic node label creation**](/querying/clauses/create#14-creating-node-labels-dynamically)  
+- [**Dynamic relationship type creation**](/querying/clauses/create#23-creating-relationship-types-dynamically)
+
+However, **dynamic creation is only supported with `CREATE` operations**, and **matching or merging dynamically created
+labels and types is not supported**.
+
+If your payload contains **dynamic labels or edge types** and you still need **idempotency**, you have two options:
+
+- **Programmatically construct your Cypher query strings** based on the payload to ensure correct label/type usage before sending the query to Memgraph.
+- **Optionally use the `merge` procedure from MAGE** ([MAGE Merge documentation](/advanced-algorithms/available-algorithms/merge))
+  if you want a built-in helper.  
+
+<Callout type="warning">
+Note: While MAGE procedures are **written in C++ and highly optimized**, they still introduce **slightly more overhead**
+compared to **pure Cypher**, as they are executed as external modules. We recommend favoring pure Cypher when
+possible for the **highest performance**.
+</Callout>
+
+### Using `convert.str2object` for parsing nested properties
+
+When working with streamed data, sometimes your incoming payload contains **serialized JSON strings** that need to be
+transformed into property maps inside your graph.
+Memgraph provides the [`convert.str2object` function](/querying/functions#conversion-functions) to easily handle this scenario.
+
+Example usage:
+
+```cypher
+WITH convert.str2object('{"name":"Alice", "age":30}') AS props
+MERGE (n:Person)
+SET n += props;
+```
+
+This function **parses a JSON-formatted string into a Cypher map**, making it very useful for flexible ingestion pipelines
+where the payload structure might vary slightly or be semi-structured.
 
 <CommunityLinks/>
