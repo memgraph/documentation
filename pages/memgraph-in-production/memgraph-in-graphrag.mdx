@@ -1,0 +1,192 @@
+---
+title: Memgraph in GraphRAG use cases
+description: Suggestions on how to bring your Memgraph to production in GraphRAG use cases. 
+---
+
+import { Callout } from 'nextra/components'
+import { CommunityLinks } from '/components/social-card/CommunityLinks'
+
+# Memgraph in GraphRAG use cases
+
+<Callout type="info">
+👉 **Start here first**  
+Before diving into this guide, we recommend starting with the [**General suggestions**](/memgraph-in-production/general-suggestions) 
+page. It provides **foundational, use-case-agnostic advice** for deploying Memgraph in production.
+
+This guide builds on that foundation, offering **additional recommendations tailored to specific workloads**. 
+In cases where guidance overlaps, consider the information here as **complementary or overriding**, depending 
+on the unique needs of your use case.
+</Callout>
+
+## Is this guide for you?
+
+This guide is for you if you're exploring or building **GraphRAG (Graph-Augmented Retrieval-Augmented Generation)** systems.
+You'll benefit from this content if:
+
+- 💬 You want to **query your graph using natural language** through a proxy **LLM** interface.  
+- 🔄 You need to **seamlessly extract knowledge graphs from multiple source systems**, especially when a graph structure naturally fits the data.
+- 🏢 You're building a system where **business stakeholders need fast insights** without relying on engineers to expose data through APIs.  
+- 🌙 Your engineers are **deep in the trenches at midnight**, and you'd rather they write **simple questions** instead of Cypher queries.  
+- 🧠 You have **embeddings** and need to perform **vector search** across your graph, along with structured Cypher query language expressiveness.  
+
+If any of these resonate with your project, this guide will walk you through the best practices and configurations to bring 
+GraphRAG to life using Memgraph.
+
+## Why choose Memgraph for GraphRAG use cases?
+
+Here's what makes Memgraph a perfect fit for GraphRAG:
+- **In-memory architecture**: Delivers consistent, **predictable response times**, avoiding the inconsistency of disk-based caching strategies like LRU.
+- **Built-in Vector search (powered by [usearch](https://github.com/unum-cloud/usearch))**: Supports **high-performance retrieval** across all your GraphRAG workloads.
+- **Unified analytical engine**: Seamlessly integrates with **legacy systems** and supports a wide range of **data ingestion sources** to populate your knowledge graph with ease.
+- **Instant schema metadata access**: Makes **schema metadata accessible in constant time**, allowing your LLM to construct Cypher queries **efficiently and without overhead**.
+- **Enterprise-grade access control**:  Secure your data with **role-based permissions**, including **read-only access**, so your GraphRAG queries never risk modifying your data.
+
+## What is covered?
+
+The suggestions for GraphRAG use cases **complement** several key sections in the 
+[general suggestions guide](/memgraph-in-production/general-suggestions). These sections offer important context and
+additional best practices tailored for performance, stability, and scalability in GraphRAG systems:
+
+- [Hardware sizing](#hardware-sizing)
+  If you're using embeddings for vector search, be aware that they can significantly impact **memory consumption**.
+
+- [Choosing the right Memgraph flag set](#choosing-the-right-memgraph-flag-set)
+  Configure runtime flags to enable **constant-time schema retrieval** for the LLM. This reduces overhead during `text2Cypher` construction.
+
+- [Choosing the right Memgraph storage mode](#choosing-the-right-memgraph-storage-mode)
+  Guidance on selecting the optimal **storage mode** for GraphRAG use cases, depending on whether your focus is analytical speed or transactional safety.
+
+- [Enterprise features you might require](#enterprise-features-you-might-require)
+  Understand which **enterprise features** — such as security, access controls, and dynamic graph algorithms are 
+  essential for production-ready GraphRAG deployments.
+
+- [Queries that best suit your workload](#queries-that-best-suit-your-workload)
+  Learn how to use **deep path traversals**, **vector search**, and **dynamic MAGE algorithms** to efficiently retrieve contextual data and 
+  handle **high-velocity graphs**.
+
+- [Memgraph ecosystem](#memgraph-ecosystem)
+  Explore the tools and integrations within the **Memgraph ecosystem** that can accelerate the development and operation of your GraphRAG pipeline.
+
+## Hardware sizing
+
+If your GraphRAG use case involves **vector embeddings**, it’s important to account for their **impact on memory usage**. Currently, 
+Memgraph stores embeddings in two places:
+
+1. In its **proprietary in-memory property storage** using 8 bytes per float.
+2. In the **vector index (usearch)** using 4 bytes per float (float32).
+
+This results in a total **12-byte overhead per float value** when storing embeddings.
+
+To estimate the additional memory required for embeddings, use the following formula:
+
+```
+number of nodes with embeddings × embedding dimension × 12B
+```
+
+This will give you a more accurate view of your memory needs when planning hardware resources.
+
+### Upcoming optimizations
+
+Memgraph is actively working on two short-term optimizations to reduce this memory overhead:
+
+- 🧭 **Reference-based indexing**: Embeddings will be stored only in the vector index, with the property storage holding just a reference. 
+  Since embeddings are used exclusively for vector search, this eliminates duplication.
+  
+- ⚙️ **Support for float16 in usearch**: Users will be able to store embeddings as 2-byte floats (`float16`), commonly used in neural networks. 
+  This reduces memory usage significantly while maintaining accuracy within a **\<1% margin**, making it a strong tradeoff for most applications.
+
+### Best practices
+
+- **Choose the right embedding dimension**:
+  While models like OpenAI use 1536 or 3072 dimensions, **lower-dimensional vectors like 512 or 768** often result in only a 
+  **5–6% drop in accuracy** and drastically reduce memory consumption.
+- **Offload if needed**: If in-memory embedding storage is too demanding, you can **offload embeddings to a third-party vector database** and still integrate it 
+  into your GraphRAG pipeline alongside Memgraph.
+- **Watch for string context size**: If you're also storing **document context** in Memgraph, keep in mind that these long strings are 
+  currently stored in memory as well. A short-term roadmap item will enable **offloading static text content to disk**, since these strings
+  rarely change. This will further **increase your memory efficiency and scalability**.
+
+## Choosing the right Memgraph flag set
+
+For GraphRAG use cases, it's essential to run Memgraph with the following additional flag:
+
+```bash
+--schema-info-enabled=true
+```
+
+This enables **constant-time schema retrieval**, which drastically reduces the time needed to supply the **LLM with schema information**
+required for generating Cypher queries. Without this flag, schema discovery can introduce unnecessary latency, negatively affecting query
+responsiveness and the overall user experience.
+
+## Choosing the right Memgraph storage mode
+
+Schema retrieval is fully supported in both `IN_MEMORY_TRANSACTIONAL` and `IN_MEMORY_ANALYTICAL` storage modes. This means you can choose the
+mode that best fits your workload without compromising the ability to serve schema metadata to the LLM.
+
+- Use `IN_MEMORY_TRANSACTIONAL` if your use case requires **ACID guarantees**, **replication**, or **high availability**.
+- Use `IN_MEMORY_ANALYTICAL` if you're focused on **read-only**, **high-ingestion**, or **analytics-heavy** workloads where
+  **maximum write throughput** is a priority.
+
+Both modes are compatible with GraphRAG workflows — choose based on your performance and reliability needs.
+
+## Enterprise features you might require
+
+To ensure your GraphRAG setup is secure, scalable, and suitable for multi-user environments, Memgraph offers several 
+enterprise features that are especially relevant:
+
+- 🔐 **Role-based access control**  
+  GraphRAG systems often generate queries automatically via LLMs, so it’s critical to enforce strict **read-only permissions** 
+  to prevent accidental data modification. Memgraph supports 
+  [role-based access control](/database-management/authentication-and-authorization/role-based-access-control), 
+  allowing you to limit access to **read-only roles** for GraphRAG users and services.
+
+- 🏷️ **Label-based access control**  
+  For more granular permissions, Memgraph supports 
+  [label-based access control](/database-management/authentication-and-authorization/role-based-access-control#label-based-access-control).
+  This enables defining access rules at the **label and edge type level**, so users can only view and query the parts of the 
+  graph that are relevant to them—ensuring **data isolation and privacy** across teams or tenants.
+
+- 🔐 **SSO support for GraphChat**  
+  If you're using **GraphChat** inside **Memgraph Lab** to power LLM-based querying, 
+  [single sign-on (SSO)](/database-management/authentication-and-authorization/auth-system-integrations#single-sign-on) makes it easy 
+  to integrate with your existing identity provider and streamline user access across your organization.
+
+- 🔄 **Dynamic graph algorithms**  
+  In scenarios where the graph is **changing in real-time** and you need **continuous summarization or insights**, Memgraph 
+  provides enterprise-only [dynamic graph algorithms](/advanced-algorithms/available-algorithms#dynamic-graph-algorithms-enterprise), 
+  such as **online community detection**. These allow your GraphRAG pipeline to stay up-to-date with evolving data without expensive 
+  full re-computation.
+
+
+## Queries that best suit your workload
+When integrating Memgraph into open-source GraphRAG frameworks like
+[LlamaIndex](/ai-ecosystem/integrations#llamaindex),
+[LangGraph](/ai-ecosystem/integrations#langchain) or
+[MCP](/ai-ecosystem/integrations#model-context-protocol-mcp),
+it’s essential to incorporate this query in your retrieval pipeline:
+
+```cypher
+SHOW SCHEMA INFO;
+```
+
+This command retrieves the graph schema in **constant time**, enabling the LLM to construct valid Cypher queries with 
+minimal overhead. It’s a key part of the retrieval pipeline that helps bridge natural language questions and 
+structured graph queries.
+
+While there's no single query pattern that fits all GraphRAG use cases. Since LLMs generate a wide variety of
+questions, **multi-hop queries** (i.e., traversals across multiple relationships) stand to benefit significantly from
+Memgraph’s **in-memory architecture**, offering fast and consistent response times even under complex traversal logic.
+
+## Memgraph ecosystem
+
+To accelerate your GraphRAG journey, we recommend exploring the [**AI ecosystem**](/ai-ecosystem) page. There,
+you’ll find detailed information about:
+
+- **GraphChat**, Memgraph’s natural language interface powered by LLMs  
+- **Open-source GraphRAG integrations** with frameworks like LlamaIndex and LangGraph  
+- **Practical examples** and usage patterns to help you get started quickly
+
+Whether you're building a custom retrieval pipeline or experimenting with LLM-driven interfaces, this ecosystem
+is designed to give you a head start and reduce development time.
+
+<CommunityLinks/>
