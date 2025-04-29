@@ -13,7 +13,8 @@ export default {
   "database-management": "Database management",
   "deployment": "Deployment",
   "clustering": "Clustering",
+  "memgraph-in-production": "Memgraph in production",
   "data-streams": "Data streams",
   "help-center": "Help center",
-  "release-notes": "Release notes"
+  "release-notes": "Release notes",
 }
