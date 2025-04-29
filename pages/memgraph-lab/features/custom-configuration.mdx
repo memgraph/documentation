@@ -1,0 +1,872 @@
+---
+title: Custom configuration
+description: Customize Lab’s behavior and interface using a configuration file when running Lab in a Docker container.
+---
+
+import { Callout } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# Custom configuration
+
+Lab offers a way to customize certain behaviors of the application through a
+**configuration file**. 
+<Callout type="info">
+This functionality is only available when Lab is running
+inside a Docker container with the environment variable `CONFIG_URI` set.
+</Callout>
+
+Providing a configuration file is optional - if omitted, Lab will operate
+with its default settings.
+
+You can currently configure the following segments:
+
+1. [Settings parameters](#settings):
+  - Modify default values, such as **Theme**, **Run history** record count,
+    **Logs** record count, etc.
+  - Lock specific values to prevent users from changing them across all sessions
+    of the Lab instance.
+2. [Sidebar navigation](#sidebar):
+  - Hide specific tabs in the sidebar, such as **Streams**, **Datasets**,
+    **Import**, **Export**, etc.
+3. [Predefined datasets](#predefined-datasets): 
+  - Hide selected predefined datasets from the **Datasets** section.
+  - Mark a predefined dataset as **Featured**, which makes it more prominent in
+    the UI.
+4. [Graph node actions](#graph-node-actions):
+  - Hide default node actions: **Expand**, **Collapse**, **Hide**.
+  - Add new custom graph node actions by defining a CYPHER query (**Enterprise
+    feature**).
+5. [GSS Overrides](#system-default-gss-enterprise) (**Enterprise feature**)
+  - Override system default **GSS styles** and customize per theme if needed.
+
+
+## Configuration format
+
+The configuration file must be written in YAML format. There are two
+supported methods for supplying the file to Lab:
+
+{<h3 className="custom-header">File protocol</h3>} 
+
+You can mount a configuration file inside the Lab Docker container
+and reference it using the environment variable `CONFIG_URI`. Example:
+
+```
+CONFIG_URI=file:///app/config.yaml`
+```
+
+* The URI must begin with the `file://` prefix.
+* The referenced file must exist within the Lab container’s file system
+  for the configuration to be applied successfully.
+
+<Callout type="info">
+With Docker, you can mount the configuration file and reference it
+using an environment variable:
+
+```
+docker run \
+  -e CONFIG_URI=file:///home/lab/config.yaml \
+  -v $(pwd)/config.yaml:/home/lab/config.yaml \
+  -p 3000:3000 \
+     memgraph/lab
+```
+</Callout>
+
+{<h3 className="custom-header">HTTP(S) protocol</h3>} 
+
+If the configuration file is hosted externally and the Lab container can
+access it via HTTP or HTTPS, you can provide the URI like so:
+
+```
+CONFIG_URI=http://my.local.service/lab/configuration.yaml
+```
+
+* Ensure that the file is publicly accessible or that the container has
+  the necessary permissions to fetch it.
+* Both `http://` and `https://` protocols are supported.
+
+## Configuration workflow
+
+The configuration process begins with the `CONFIG_URI` environment
+variable. Before starting the Lab server, Lab will fetch the configuration
+from the defined URI and run a validation process.
+
+### Validation
+
+If the configuration file is invalid, the process will exit with a list
+of validation issues. For example:
+
+```
+ERROR: Configuration failed: Config: Invalid configuration file: 2 issue(s)
+  - Path: settings.application.theme.isLocked: Error: Expected boolean, received string, Expected: boolean, Received: string;
+  - Path: features.0.name: Error: Invalid discriminator value. Expected 'tabs.system.configure' | 'datasets.system.configure' | 'graph.nodes.system.configure' | 'graph.nodes.user.configure' | 'gss.system.configure'
+```
+
+This ensures that any configuration errors are caught before Lab is fully
+initialized.
+
+### Enterprise features
+
+Certain configuration options, such as custom graph node actions and
+overriding the system's default GSS, require an Enterprise license.
+
+To specify the Enterprise license, use the following environment variables:
+* `ENTERPRISE_LICENSE_ORG_NAME`
+* `ENTERPRISE_LICENSE_KEY`
+
+If either the license is missing or invalid, any Enterprise-specific features
+in the configuration will be ignored, and the following message will appear
+in the logs:
+
+```
+WARN: Config: Feature "graph.nodes.user.configure" ignored due to an invalid enterprise license.
+WARN: Config: Feature "graph.nodes.user.configure" ignored due to an invalid enterprise license.
+WARN: Config: Feature "gss.system.configure" ignored due to an invalid enterprise license.
+```
+
+### Finalizing the workflow
+
+Once the configuration file has been validated and successfully loaded, the
+Lab server will boot up with the applied configuration.
+
+## Features
+
+In this section, you'll find detailed information about each feature available
+through the configuration file, including the format and instructions on how
+to use them.
+
+Below is an example of a configuration file that demonstrates two features
+along with some changes to the settings:
+
+```yaml
+version: 1
+settings:
+  application:
+    theme:
+      value: dark
+      isLocked: true
+  runHistory:
+    maxRecordCount:
+      value: 100
+      isLocked: false
+  monitoring:
+    pollingIntervalSec:
+      value: 20
+
+features:
+- name: tabs.system.configure
+  items:
+  - id: datasets
+    isHidden: true
+  - id: streams
+    isHidden: true
+
+- name: graph.nodes.system.configure
+  items:
+  - id: collapse
+    isHidden: true
+  - id: hide
+    isHidden: true
+```
+
+### Settings
+
+For settings parameters, you can define initial values for various settings.
+These values will serve as the starting point, but users can still modify
+them within their individual browser sessions.
+
+However, you can lock specific settings to prevent users from changing them.
+To lock a setting, simply add `isLocked: true` to the relevant parameter.
+By default, all settings are unlocked.
+
+{<h4 className="custom-header">Complete settings configuration example</h4>} 
+
+Here is a complete example of the settings configuration:
+
+```yaml
+settings:
+  application:
+    theme:
+      value: dark
+      isLocked: true
+  codeCompletion:
+    maxNodeCount:
+      value: 250000
+    maxEdgeCount:
+      value: 500000
+  graphRendering:
+    maxNodeCount:
+      value: 3500
+    maxEdgeCount:
+      value: 8500
+  runHistory:
+    maxRecordCount:
+      value: 1000
+      isLocked: false
+  logs:
+    maxRecordCount:
+      value: 500
+  monitoring:
+    pollingIntervalSec:
+      value: 5
+  telemetry:
+    isDefaultTrackingEnabled:
+      value: true
+    isErrorTrackingEnabled:
+      value: true
+```
+
+{<h4 className="custom-header">Partial settings configuration example</h4>} 
+
+You don’t need to define every parameter—only specify the ones you wish
+to change or override. For example:
+
+```yaml
+settings:
+  application:
+    theme:
+      value: dark
+      isLocked: true
+  logs:
+    maxRecordCount:
+      value: 100
+```
+
+### Sidebar
+
+Using the configuration file, you can hide specific features from the sidebar in
+Lab. Note that **Query execution** and **Run history** cannot be hidden, all
+other features are customizable.
+
+Each feature has a unique id that you can reference in the configuration
+file. For example, if you wish to hide `Streams` and `Datasets` from the
+sidebar, you can do so as follows:
+
+```yaml
+features:
+- name: tabs.system.configure
+  items:
+  - id: datasets
+    isHidden: true
+  - id: streams
+    isHidden: true
+```
+
+{<h4 className="custom-header">Complete list of features you can hide</h4>} 
+
+Below is a complete list of features that you can hide from the sidebar:
+
+```yaml
+features:
+- name: tabs.system.configure
+  items:
+  - id: graphchat
+    isHidden: true
+  - id: share history
+    isHidden: true
+  - id: collections
+    isHidden: true
+  - id: query modules
+    isHidden: true
+  - id: streams
+    isHidden: true
+  - id: graph schema
+    isHidden: true
+  - id: datasets
+    isHidden: true
+  - id: import
+    isHidden: true
+  - id: export
+    isHidden: true
+  - id: monitoring
+    isHidden: true
+  - id: logs
+    isHidden: true
+  - id: settings
+    isHidden: true
+```
+
+### Predefined datasets
+
+Lab includes 36 predefined datasets by default. Using the configuration file,
+you can customize how these datasets appear in the UI:
+
+{<h4 className="custom-header">Hiding datasets</h4>} 
+
+You can hide any predefined dataset by referencing its unique ID in the
+configuration file.
+For example, to hide "F1 Races" and "Europe Backpacking", use the following
+configuration:
+
+```yaml
+features:
+- name: datasets.system.configure
+  items:
+  - id: europe-backpacking
+    isHidden: true
+  - id: f1-races
+    isHidden: true
+```
+
+Here is a full list of dataset IDs that you can manage:
+
+```yaml
+features:
+- name: datasets.system.configure
+  items:
+  - id: air-traffic
+    isHidden: true
+  - id: base-station-network-of-zagreb
+    isHidden: true
+  - id: cora-scientific-publications
+    isHidden: true
+  - id: country-capitals
+    isHidden: true
+  - id: country-trade-imports-exports
+    isHidden: false
+  - id: dependencies-knowledge-graph
+    isHidden: true
+  - id: drug-combinations
+    isHidden: true
+  - id: energy-management-system
+    isHidden: true
+  - id: europe-backpacking
+    isHidden: true
+  - id: europe-gas-pipelines-scigrid
+    isHidden: true
+  - id: europe-road-network
+    isHidden: true
+  - id: eurovision-voting-results
+    isHidden: true
+  - id: f1-races
+    isHidden: true
+  - id: football-player-transfers
+    isHidden: true
+  - id: football-premier-league-games
+    isHidden: true
+  - id: game-of-thrones-deaths
+    isHidden: true
+  - id: graph-technology-landscape
+    isHidden: true
+  - id: hetionet
+    isHidden: true
+  - id: iam-memgraph
+    isHidden: true
+  - id: icij-pandora-papers
+    isHidden: true
+  - id: karate-club-friendship-network
+    isHidden: true
+  - id: marvel-cinematic-universe
+    isHidden: true
+  - id: movielens
+    isHidden: true
+  - id: music-genres-social-network
+    isHidden: true
+  - id: national-parks
+    isHidden: true
+  - id: physics-citation-network
+    isHidden: true
+  - id: protein-interactions
+    isHidden: true
+  - id: python-dependency-vulnerabilities
+    isHidden: true
+  - id: sp-500-stock-prices
+    isHidden: true
+  - id: subreddit-network-explorer
+    isHidden: true
+  - id: supply-chain-analysis
+    isHidden: true
+  - id: ted-talks
+    isHidden: true
+  - id: twitter-christmas-retweets
+    isHidden: true
+  - id: vehicle-insurance
+    isHidden: true
+  - id: video-game-sales
+    isHidden: true
+  - id: wiki-articles
+    isHidden: true
+```
+
+{<h4 className="custom-header">Featuring datasets</h4>} 
+
+You can also change whether a predefined dataset is featured on the datasets
+page. Featured datasets are given more visibility and space in the UI.
+
+To mark a dataset as featured (or not), use the `isFeatured` field.
+
+By default, only the following datasets are featured:
+* Pandora Papers (ID: `icij-pandora-papers`)
+* Game of Thrones Deaths (ID: `game-of-thrones-deaths`)
+
+Here’s how to feature a dataset in your config:
+
+```yaml
+features:
+- name: datasets.system.configure
+  items:
+  # Hide the GOT datasets
+  - id: game-of-thrones-deaths
+    isHidden: true
+  # Keep the Pandora Papers dataset, but remove the "featured" tag
+  - id: icij-pandora-papers
+    isHidden: false
+    isFeatured: false
+  # Set the Wiki articles to be "featured"
+  - id: wiki-articles
+    isHidden: false
+    isFeatued: true
+```
+
+### Graph node actions
+
+In Lab's graph view, when you click on a node, a sidebar appears with available
+node actions. By default, the following actions are provided:
+- **Expand**: Fetches relationships and neighboring nodes from the selected node
+  and adds them to the graph view.
+- **Collapse**: Hides relationships and nodes that are only connected to the
+  selected node.
+- **Hide**: Hides the selected node from the graph view.
+
+{<h4 className="custom-header">Hiding default actions</h4>} 
+
+You can hide any of these default actions using the configuration file. Each
+action is referenced by its ID. For example, to hide all three default actions:
+
+```yaml
+- name: graph.nodes.system.configure
+  items:
+  - id: expand
+    isHidden: true
+  - id: collapse
+    isHidden: true
+  - id: hide
+    isHidden: true
+```
+
+To hide only the "Hide" action:
+
+```yaml
+- name: graph.nodes.system.configure
+  items:
+  - id: hide
+    isHidden: true
+```
+
+{<h4 className="custom-header">Adding custom node actions (Enterprise)</h4>} 
+
+You can also define custom node actions that appear in the sidebar when a node
+is selected in the graph view. This feature requires an Enterprise license.
+
+Each custom action executes a Cypher query and should return nodes,
+relationships, and/or paths - only these types of objects can be added to the
+graph view.
+
+Here’s an example of two custom actions:
+- `Expand local` - Fetches relationships that connect the selected node with any
+  nodes already present in the graph view.
+- `Expand with 2-hops` - Performs a two-hop traversal and returns all matching
+  nodes and relationships.
+
+```yaml
+- name: graph.nodes.user.configure
+  items:
+  - label: Expand local
+    query:
+      code:
+        value: |
+          MATCH (n)-[e]-(m)
+          WHERE id(n) = $selectedNodeId AND id(m) IN $nodeIds
+          RETURN n, e, m;
+  - label: Expand with 2-hops
+    query:
+      code:
+        value: |
+          MATCH p=(n)-[*..2]-()
+          WHERE id(n) = $selectedNodeId
+          RETURN p;
+```
+
+You can use the following parameters in your Cypher queries:
+- `$selectedNodeId` — The ID of the node that was clicked.
+- `$nodeIds` — A list of IDs of all nodes currently in the graph
+  view (including hidden ones).
+
+Each action must have a `label` field, which will be displayed
+on the UI button.
+
+<Callout type="info">
+**Important**: Lab does not validate Cypher queries during configuration
+loading. Ensure your query is valid and returns the correct data structures
+(nodes, relationships, and/or paths).
+</Callout>
+
+<Callout type="info">
+This feature requires an Enterprise license.
+</Callout>
+
+### System default GSS <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+In Lab, you can define your own [Graph Style Scripts (GSS)](/memgraph-lab/features/graph-style-script) to control the visual
+styling of your graphs. Each Lab instance comes with a system default GSS, which
+is applied unless otherwise specified. The Query Execution interface also
+includes a shortcut action to quickly apply the current default GSS.
+
+Using the configuration file, you can override the system default GSS
+with your own custom style. You also have the option to set different
+default GSS values per theme - light and/or dark.
+
+<Callout type="info">
+**Important**: Lab does not validate GSS code during configuration loading.
+Ensure your GSS is valid and compatible with your graph data and use
+case.
+</Callout>
+
+<Callout type="info">
+This feature requires an Enterprise license.
+</Callout>
+
+{<h4 className="custom-header">General override example</h4>} 
+
+To override the system default GSS for all themes:
+
+```yaml
+features:
+- name: gss.system.configure
+  items:
+  - style:
+      code:
+        value: |
+          @NodeStyle {
+            size: 3
+            color: red
+            border-width: 0.1
+            border-color: white
+            font-size: 3
+          }
+          @EdgeStyle {
+            color: gray
+            width: 0.2
+            font-size: 3
+          }
+
+```
+
+{<h4 className="custom-header">Theme-specific GSS override</h4>} 
+
+To apply different GSS for light and dark themes, use the `theme` field
+with values `light` or `dark`:
+
+```yaml
+features:
+- name: gss.system.configure
+  items:
+  - theme: light
+    style:
+      code:
+        value: |
+          @NodeStyle {
+            size: 3
+            color: red
+            border-width: 0.1
+            border-color: black
+            font-size: 3
+          }
+          @EdgeStyle {
+            color: gray
+            width: 0.2
+            font-size: 3
+          }
+  - theme: dark
+    style:
+      code:
+        value: |
+          @NodeStyle {
+            size: 3
+            color: blue
+            border-width: 0.1
+            border-color: white
+            font-size: 3
+          }
+          @EdgeStyle {
+            color: white
+            width: 0.2
+            font-size: 3
+          }
+```
+
+## Complete configuration example
+
+Below is a full example of a configuration file that includes a variety of
+customization options, including features available only with an
+Enterprise license.
+
+```yaml
+version: 1
+settings:
+  application:
+    theme:
+      value: dark
+      isLocked: false
+  codeCompletion:
+    maxNodeCount:
+      value: 250000
+      isLocked: false
+    maxEdgeCount:
+      value: 500000
+      isLocked: false
+  graphRendering:
+    maxNodeCount:
+      value: 3500
+      isLocked: false
+    maxEdgeCount:
+      value: 8500
+      isLocked: false
+  runHistory:
+    maxRecordCount:
+      value: 1000
+      isLocked: false
+  logs:
+    maxRecordCount:
+      value: 500
+      isLocked: false
+  monitoring:
+    pollingIntervalSec:
+      value: 5
+      isLocked: false
+  telemetry:
+    isDefaultTrackingEnabled:
+      value: true
+      isLocked: false
+    isErrorTrackingEnabled:
+      value: true
+      isLocked: false
+
+features:
+- name: tabs.system.configure
+  items:
+  - id: graphchat
+    isHidden: false
+  - id: share history
+    isHidden: false
+  - id: collections
+    isHidden: false
+  - id: query modules
+    isHidden: false
+  - id: streams
+    isHidden: false
+  - id: graph schema
+    isHidden: false
+  - id: datasets
+    isHidden: false
+  - id: import
+    isHidden: false
+  - id: export
+    isHidden: false
+  - id: monitoring
+    isHidden: false
+  - id: logs
+    isHidden: false
+  - id: settings
+    isHidden: false
+
+- name: datasets.system.configure
+  items:
+  - id: air-traffic
+    isHidden: false
+    isFeatured: false
+  - id: base-station-network-of-zagreb
+    isHidden: false
+    isFeatured: false
+  - id: cora-scientific-publications
+    isHidden: false
+    isFeatured: false
+  - id: country-capitals
+    isHidden: false
+    isFeatured: false
+  - id: country-trade-imports-exports
+    isHidden: false
+    isFeatured: false
+  - id: dependencies-knowledge-graph
+    isHidden: false
+    isFeatured: false
+  - id: drug-combinations
+    isHidden: false
+    isFeatured: false
+  - id: energy-management-system
+    isHidden: false
+    isFeatured: false
+  - id: europe-backpacking
+    isHidden: false
+    isFeatured: false
+  - id: europe-gas-pipelines-scigrid
+    isHidden: false
+    isFeatured: false
+  - id: europe-road-network
+    isHidden: false
+    isFeatured: false
+  - id: eurovision-voting-results
+    isHidden: false
+    isFeatured: false
+  - id: f1-races
+    isHidden: false
+    isFeatured: false
+  - id: football-player-transfers
+    isHidden: false
+    isFeatured: false
+  - id: football-premier-league-games
+    isHidden: false
+    isFeatured: false
+  - id: game-of-thrones-deaths
+    isHidden: false
+    isFeatured: true
+  - id: graph-technology-landscape
+    isHidden: false
+    isFeatured: false
+  - id: hetionet
+    isHidden: false
+    isFeatured: false
+  - id: iam-memgraph
+    isHidden: false
+    isFeatured: false
+  - id: icij-pandora-papers
+    isHidden: false
+    isFeatured: true
+  - id: karate-club-friendship-network
+    isHidden: false
+    isFeatured: false
+  - id: marvel-cinematic-universe
+    isHidden: false
+    isFeatured: false
+  - id: movielens
+    isHidden: false
+    isFeatured: false
+  - id: music-genres-social-network
+    isHidden: false
+    isFeatured: false
+  - id: national-parks
+    isHidden: false
+    isFeatured: false
+  - id: physics-citation-network
+    isHidden: false
+    isFeatured: false
+  - id: protein-interactions
+    isHidden: false
+    isFeatured: false
+  - id: python-dependency-vulnerabilities
+    isHidden: false
+    isFeatured: false
+  - id: sp-500-stock-prices
+    isHidden: false
+    isFeatured: false
+  - id: subreddit-network-explorer
+    isHidden: false
+    isFeatured: false
+  - id: supply-chain-analysis
+    isHidden: false
+    isFeatured: false
+  - id: ted-talks
+    isHidden: false
+    isFeatured: false
+  - id: twitter-christmas-retweets
+    isHidden: false
+    isFeatured: false
+  - id: vehicle-insurance
+    isHidden: false
+    isFeatured: false
+  - id: video-game-sales
+    isHidden: false
+    isFeatured: false
+  - id: wiki-articles
+    isHidden: false
+    isFeatured: false
+
+- name: graph.nodes.system.configure
+  items:
+  - id: expand
+    isHidden: false
+  - id: collapse
+    isHidden: false
+  - id: hide
+    isHidden: false
+
+# Enterprise feature
+- name: graph.nodes.user.configure
+  items:
+  - label: Expand local
+    query:
+      code:
+        value: |
+          MATCH (n)-[e]-(m)
+          WHERE id(n) = $selectedNodeId AND id(m) IN $nodeIds
+          RETURN n, e, m;
+  - label: Expand with 2-hops
+    query:
+      code:
+        value: |
+          MATCH p=(n)-[*..2]-()
+          WHERE id(n) = $selectedNodeId
+          RETURN p;
+
+# Enterprise feature
+- name: gss.system.configure
+  items:
+  - style:
+      code:
+        value: |
+          // A palette of colors used to color distinct node labels
+          Define(COLOR_PALETTE, AsArray(
+            #FFD700, #FF8C00, #ADFF2F, #00CED1,
+            #7FFFD4, #40E0D0, #87CEFA, #9370DB,
+            #FF69B4, #FFB6C1, #FAFAD2, #E0FFFF
+          ))
+          Define(COLOR_PALETTE_ITER, AsIterator(COLOR_PALETTE))
+
+          // If there are no palette colors to use, use random colors instead
+          Define(RandomColor, Function(RGB(RandomInt(255), RandomInt(255), RandomInt(255))))
+          Define(GetNextColor, Function(
+            Coalesce(Next(COLOR_PALETTE_ITER), RandomColor())
+          ))
+
+          // Cache map to keep a selected color for each node label
+          Define(ColorByLabel, AsMap())
+          Define(GetColorByLabel, Function(labels, Coalesce(
+            Get(ColorByLabel, labels), Set(ColorByLabel, labels, GetNextColor())
+          )))
+          Define(JoinLabels, Function(labels, Join(Sort(labels), ":")))
+
+          // Baseline node style that will be applied to every single node
+          @NodeStyle {
+            Define(COLOR, GetColorByLabel(JoinLabels(Labels(node))))
+            size: 3
+            color: COLOR
+            color-hover: Lighter(COLOR)
+            color-selected: Darker(COLOR)
+            border-width: 0.6
+            border-color: #EEEEEE
+            font-size: 3
+            label: Format(":{}", Join(Labels(node), " :"))
+          }
+
+          // Overwrite node text with the property "name" if defined
+          @NodeStyle HasProperty(node, "name") {
+            label: AsText(Property(node, "name"))
+          }
+
+          // Baseline edge style that will be applied to every single edge
+          @EdgeStyle {
+            color: #BBBBBB
+            color-hover: #FFFFFF
+            color-selected: #FFFFFF
+            width: 0.2
+            width-hover: 0.4
+            width-selected: 0.4
+            font-size: 3
+          }
+
+          // Show edge text only if there is a small number of edges in the view
+          @EdgeStyle Less(EdgeCount(graph), 30) {
+            label: Type(edge)
+          }
+```
+
+<CommunityLinks/>

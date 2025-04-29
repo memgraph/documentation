@@ -9,11 +9,12 @@ export default {
   "querying": "Querying",
   "advanced-algorithms": "Advanced algorithms",
   "custom-query-modules": "Custom query modules",
-  "data-visualization": "Data visualization",
+  "memgraph-lab": "Memgraph Lab",
   "database-management": "Database management",
   "deployment": "Deployment",
   "clustering": "Clustering",
+  "memgraph-in-production": "Memgraph in production",
   "data-streams": "Data streams",
   "help-center": "Help center",
-  "release-notes": "Release notes"
+  "release-notes": "Release notes",
 }
