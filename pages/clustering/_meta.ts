@@ -1,5 +1,6 @@
 export default {
     "high-availability": "High availability",
-    "replication": "Replication"
+    "replication": "Replication",
+    "faq": "FAQ"
 }
   
