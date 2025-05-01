@@ -280,42 +280,90 @@ kubectl get events --namespace <namespace-name>
 
 ### Debugging Running Pods
 
-k8s official documentation on how to [debug running
-pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/)
-is quite detailed.
-
-### Creating a Debugging Memgraph Pod
+### Creating the Debugging Memgraph Pod
 
 The main issue with debugging under k8s (running gdb) is that the container
 needs to be in the privileged mode. To run any given container in the
 privileged mode, the k8s cluster itself needs to have an appropriate
 configuration.
 
+Below is an example on how to start the privileged `kind` cluster. First create
+a new config `debug-cluster.yaml` file:
 ```
-TODO(gitbuda): Explain how to do so with, e.g. kind or for real (https://chatgpt.com/share/6812882c-f450-800a-b13c-04eefccc0880).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.31.0
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+    kubeadmConfigPatches:
+      - |
+        kind: ClusterConfiguration
+        kubeletConfiguration:
+          extraArgs:
+            allow-privileged: "true"
+# To inspect the cluster run `kubectl get pods -n kube-system`.
+# If some of the pods is in the CrashLoopBackOff status, try runnig `kubectl
+# logs <pod-name> -n kube-system` to get the error message.
+```
+To start the cluster, you have to execute:
+```
+kind create cluster --name <cluster-name> --config debug-cluster.yaml
 ```
 
-Create a new `pod.yaml` file with the following content:
+Once cluster is up and running, create a new `debug-pod.yaml` file with the
+following content:
 ```
-# TODO(gitbuda): Copy the file once it's working under kind (https://chatgpt.com/share/6812842d-c698-800a-b352-32e35a67b693).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-pod
+spec:
+  containers:
+  - name: my-container
+    image: memgraph/memgraph:3.2.0-relwithdebinfo
+    securityContext:
+      runAsUser: 0  # Runs the container as root
+      privileged: true
+      capabilities:
+        add: ["SYS_PTRACE"]
+      allowPrivilegeEscalation: true
+    command: ["sleep"]
+    args: ["infinity"]
+    stdin: true
+    tty: true
 ```
 
 To get the pod up and running and open a shell inside it run:
 ```
-kubectl apply -f pod.yaml
+kubectl apply -f debug-pod.yaml
 kubectl exec -it debug-pod -- bash
 ```
 
 Once you are in the pod execute:
 ```
 apt-get update && apt-get install -y gdb
+su memgraph
 gdb --args ./memgraph <memgraph-flags>
 run
 ```
 
+Once you have memgraph up and running under `gdb`, run your workload (insert
+data, write or queries…). When you manage to recreate the issue, use the [gdb
+commands](/database-management/debugging#list-of-useful-commands-when-in-gdb)
+to pin point the exact issue.
+
+To delete the debug pod run:
 ```
 kubectl delete pod debug-pod
 ```
+
+k8s official documentation on how to [debug running
+pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/)
+is quite detailed.
 
 ### Specific Cloud Provider Instructions
 
@@ -325,4 +373,3 @@ kubectl delete pod debug-pod
 The [k8s quick
 reference](https://kubernetes.io/docs/reference/kubectl/quick-reference/) is an
 amazing set of commands!
-
