@@ -1,7 +1,6 @@
 export default {
-    "docker": "Docker",
-    "linux": "Linux",
-    "aws": "AWS",
-    "gcp": "GCP",
-    "azure": "Azure"
+    "best-practices": "Best practices",
+    "workloads": "Workloads",
+    "environments": "Environments",
+    "benchmarking-memgraph": "Benchmarking",
 }
