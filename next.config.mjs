@@ -3336,7 +3336,7 @@ export default withNextra({
         permanent: true
       },
       {
-        source: '/docs/getting-started/install-memgraph/docker#run-memgraph-mage-docker-image',
+        source: '/getting-started/install-memgraph/docker#run-memgraph-mage-docker-image',
         destination: '/getting-started/install-memgraph/docker#run-memgraph-mage',
         permanent: true
       },
