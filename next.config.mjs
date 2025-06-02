@@ -3330,6 +3330,71 @@ export default withNextra({
         destination: '/memgraph-lab/features/single-sign-on#set-up-lab-integration-1',
         permanent: true
       },
+      {
+        source: '/getting-started/install-memgraph/docker#available-docker-images',
+        destination: '/getting-started/install-memgraph/docker#quickstart',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/docker#run-memgraph-mage-docker-image',
+        destination: '/getting-started/install-memgraph/docker#run-memgraph-mage',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/docker#run-memgraph-mage-docker-image--cugraph',
+        destination: '/getting-started/install-memgraph/docker#advanced-cugraph-support-legacy',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/docker#run-memgraph-docker-image',
+        destination: '/getting-started/install-memgraph/docker#run-memgraph-mage',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/docker#load-and-run-memgraph-docker-image-from-memgraph-download-hub',
+        destination: '/getting-started/install-memgraph/docker#install-from-a-downloaded-targz',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/docker#run-memgraph-lab-image',
+        destination: '/getting-started/install-memgraph/docker#connect-via-memgraph-lab',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/docker#issues-when-connecting-to-memgraph-lab-to-memgraph',
+        destination: '/getting-started/install-memgraph/docker#memgraph-lab-cant-connect',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/docker#issues-when-connecting-to-memgraph-lab-to-memgraph',
+        destination: '/getting-started/install-memgraph/docker#quickstart',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/docker#running-individual-tools-from-memgraph-platform-image',
+        destination: '/getting-started/install-memgraph/docker#quickstart',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/docker#stop-and-start-the-instance',
+        destination: '/getting-started/first-steps-with-docker#managing-docker-service-on-windows-using-powershell',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/docker#issues-with-loading-memgraph',
+        destination: '/getting-started/install-memgraph/docker#troubleshooting',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/docker#issues-when-connecting-to-memgraph-platform-up-to-version-214',
+        destination: '/getting-started/install-memgraph/docker#troubleshooting',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/docker#issues-with-connecting-mgconsole-to-the-database',
+        destination: '/getting-started/install-memgraph/docker#troubleshooting',
+        permanent: true
+      },
       
       
       

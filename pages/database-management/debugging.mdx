@@ -2,6 +2,8 @@
 title: Debugging Memgraph by yourself
 description: Utilize tools provided to you in the container to inspect what's happening in your Memgraph instance. Send us diagnostics, so we're able to identify issues quicker and make the product more stable. 
 ---
+import { Steps } from 'nextra/components'
+import { Callout } from 'nextra/components' 
 
 # Debugging Memgraph by yourself
 
@@ -250,3 +252,200 @@ hotspot perf.data
 you should be able to see a similar flamegraph like in the picture below.
 
 ![](/pages/database-management/debugging/perf.png)
+
+## Debugging Memgraph under Kubernetes (k8s)
+
+### General commands
+
+To being with, the master of all kubectl commands is:
+```
+kubectl get all
+```
+
+Managing [nodes](https://kubernetes.io/docs/concepts/architecture/nodes/):
+```
+kubectl get nodes --show-labels # Show all nodes and their labels.
+kubectl get nodes -o wide       # Show additional information about the nodes.
+kubectl top nodes               # Get the current memory usage.
+```
+
+Managing [pods](https://kubernetes.io/docs/concepts/workloads/pods/):
+```
+kubectl get pods --show-labels               # Show all pods and their labels.
+kubectl get pods -o wide                     # Inspect how pods get scheduled.
+kubectl describe pod <pod-name>              # Inspect pod config (args, envs, ...).
+kubectl get pod <pod-name> -o yaml           # Get pod yaml config.
+kubectl exec -it <pod-name> -- /bin/bash     # Login to a runnning pod.
+kubectl logs <pod-name>                      # Get logs for a running pod.
+kubectl logs memgraph-data-0-0 | tail -n 100 # Filter last logs from a running pod.
+kubectl logs --previous <pod-name>           # Get logs from a crashed pod.
+kubectl logs <pod-name> -c <container-name>  # Get logs from a specific pod, e.g., debugging init containers.
+kubectl cp <pod-name>:<pod-path> .           # Copy logs from a running pod.
+```
+
+[Events](https://kubernetes.io/docs/reference/kubernetes-api/cluster-resources/event-v1/):
+```
+kubectl get events --all-namespaces  --sort-by='.metadata.creationTimestamp' # List all events by creation time.
+kubectl get events --namespace <namespace-name>                              # List all events in the given namespace.
+```
+
+[Cluster](https://kubernetes.io/docs/concepts/architecture/):
+```
+kubectl port-forward <pod-name> <host-port>:<pod-port> # Forward/connect port on host to the pod port.
+kubectl cluster-info dump                              # Dump current cluster state to stdout.
+```
+
+[StatefulSets](https://kubernetes.io/docs/tutorials/stateful-application/basic-stateful-set/):
+```
+kubectl get statefulsets                  # Show all StatefulSets.
+kubectl get pvc                           # Get all PersistentVolumeClaims.
+kubectl get pvc -l app=<statefulset-name> # Get the PersistentVolumeClaims for the StatefulSet.
+```
+
+### Debugging Memgraph pods
+
+To use `gdb` inside a Kubernetes pod, the container must run in **privileged
+mode**. To run any given container in the privileged mode, the k8s cluster
+itself needs to have an appropriate configuration.
+
+Below is an example on how to start the privileged `kind` cluster. 
+
+<Steps>
+{<h4 className="custom-header">Create a privileged kind cluster</h4>}
+
+First, create new config `debug-cluster.yaml` file with allow-privileged
+enabled.
+
+```yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.31.0
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+    kubeadmConfigPatches:
+      - |
+        kind: ClusterConfiguration
+        kubeletConfiguration:
+          extraArgs:
+            allow-privileged: "true"
+# To inspect the cluster run `kubectl get pods -n kube-system`.
+# If some of the pods is in the CrashLoopBackOff status, try runnig `kubectl
+# logs <pod-name> -n kube-system` to get the error message.
+```
+
+To start the cluster, execute the following command:
+```
+kind create cluster --name <cluster-name> --config debug-cluster.yaml
+```
+
+{<h4 className="custom-header">Deploy a debug pod</h4>}
+
+Once cluster is up and running, create a new `debug-pod.yaml` file with the
+following content:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-pod
+spec:
+  containers:
+  - name: my-container
+    image: memgraph/memgraph:3.2.0-relwithdebinfo # Use the latest, but make sure it's the relwithdebinfo one!
+    securityContext:
+      runAsUser: 0  # Runs the container as root.
+      privileged: true
+      capabilities:
+        add: ["SYS_PTRACE"]
+      allowPrivilegeEscalation: true
+    command: ["sleep"]
+    args: ["infinity"]
+    stdin: true
+    tty: true
+```
+
+To get the pod up and running and open a shell inside it run:
+```
+kubectl apply -f debug-pod.yaml
+kubectl exec -it debug-pod -- bash
+```
+
+Once you are in the pod execute:
+```
+apt-get update && apt-get install -y gdb
+su memgraph
+gdb --args ./memgraph <memgraph-flags>
+run
+```
+
+Once you have memgraph up and running under `gdb`, run your workload (insert
+data, write or queries…). When you manage to recreate the issue, use the [gdb
+commands](/database-management/debugging#list-of-useful-commands-when-in-gdb)
+to pin point the exact issue.
+
+{<h4 className="custom-header">Delete the debug pod</h4>}
+
+To delete the debug pod run:
+```
+kubectl delete pod debug-pod
+```
+</Steps>
+
+k8s official documentation on how to [debug running
+pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/)
+is quite detailed.
+
+### Handling core dumps
+
+When Memgraph crashes, for example, due to segmentation faults (`SIGSEGV`),
+**core dumps** can provide invaluable insight for debugging. The Memgraph Helm
+charts provide an easy way to enable persistent core dump storage using the
+`createCoreDumpsClaim` option.
+
+To enable core dumps, create a `values.yaml` file with at least the following setting: 
+
+```
+createCoreDumpsClaim: true
+```
+
+<Callout type="info">
+Feel free to copy values file from the [helm-charts repository](https://github.com/memgraph/helm-charts) as a base, since additional required fields may be missing from a minimal config.
+</Callout>
+
+This instructs the Helm chart to create a `PersistentVolumeClaim` (PVC) to
+store core dumps generated by the Memgraph process. 
+
+{<h4 className="custom-header">Important configuration notes</h4>}
+
+**By default the storage size is 10GiB**. Core dumps can be as large as your node's total RAM, so it's recommended to set this explicitly and make sure to adjust the `coreDumpsStorageSize` under
+`values.yaml` file. 
+
+**Make sure to use the `relwithdebinfo` image** of Memgraph by setting the `image.tag` also under `values.yaml` file.
+
+Run the following command to install Memgraph with the debugging configuration:
+```
+helm install my-release memgraph/memgraph -f values.yaml
+```
+
+The core dumps are written to a mounted volume inside the container (the
+default is `/var/core/memgraph`, it's possible to tweak that by changing the
+`coreDumpsMountPath` under `values.yaml`). You can use `kubectl exec` or
+`kubectl cp` to access the files for post-mortem analysis.
+
+If you have k8s cluster under any major cloud provider + you want to store the
+dumps under S3, probably the best repo to check out is the
+[core-dump-handler](https://github.com/IBM/core-dump-handler).
+
+### Specific cloud provider instructions
+
+* [AWS](https://github.com/memgraph/helm-charts/tree/main/charts/memgraph-high-availability/aws)
+* [Azure](https://github.com/memgraph/helm-charts/blob/main/charts/memgraph-high-availability/aks)
+* [GCP](https://github.com/memgraph/helm-charts/tree/main/tutorials/gcp)
+
+The [k8s quick
+reference](https://kubernetes.io/docs/reference/kubectl/quick-reference/) is an
+amazing set of commands!
