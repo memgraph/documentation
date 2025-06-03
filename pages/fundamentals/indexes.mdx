@@ -134,6 +134,65 @@ expression, the expression can be so complicated that the index doesn't get used
 If there is any suspicion that an index isn't used, we recommend writing
 labels and properties inside the `MATCH` pattern.
 
+Label-property indices can also be created directly on properties that are
+nested within [map properties](/fundamentals/data-types#maps). If your schema is
+already structured using nested JSON-like documents, you can get optimal query
+index performance without needing to flatten your data using the `.` notation:
+
+```cypher
+CREATE INDEX ON :Project(delivery.status.due_date)
+```
+
+<Callout type="warning">
+
+This will create an index only on `delivery.status.due_date`. It does not
+create an index on `delivery`, nor on `delivery.status`.
+
+</Callout>
+
+When querying against nested properties, you **must** use a `WHERE` clause. If
+you use inline property matching, you will be comparing against the entire map
+structure, not just the specified property. The following query returns an empty
+result set because the inline property does not contain the `milestone`.
+
+```cypher
+CREATE INDEX ON :Project(delivery.status.due_date);
+CREATE (:Project {delivery: {status: {due_date: date('2025-06-04'), milestone: 'v3.14'}}});
+
+MATCH (proj:Project {delivery: {status: {due_date: date('2025-06-04')}}}) RETURN *;
+```
+
+Adding the `milestone` property returns the correct result, but as the `delivery`
+property is not directly indexed - only the child `due_date` is - the index will
+still not be used.
+
+```cypher
+MATCH (proj:Project {delivery: {milestone: 'v3.14', status: {due_date: date('2025-06-04')}}}) RETURN *;
+```
+
+```
++-----------------------------------------------------------------------------+
+| proj                                                                        |
++-----------------------------------------------------------------------------+
+| (:Project {delivery: {milestone: "v3.14", status: {due_date: 2025-06-04}}}) |
++-----------------------------------------------------------------------------+
+```
+
+Instead, you should use a `WHERE` clause to specify just the indexed property,
+which is the only scenario in which a nested index can be used:
+
+```cypher
+MATCH (proj:Project) WHERE x.delivery.status.due_date = date('2025-06-04') RETURN *;
+```
+
+```
++-----------------------------------------------------------------------------+
+| proj                                                                        |
++-----------------------------------------------------------------------------+
+| (:Project {delivery: {milestone: "v3.14", status: {due_date: 2025-06-04}}}) |
++-----------------------------------------------------------------------------+
+```
+
 ### Label-property composite index
 
 An index on a label and two or more properties is called a **composite index**.
@@ -256,6 +315,22 @@ When deciding the order of properties within a composite index, you should
 generally put the property with the highest cardinality (most unique values)
 first. Alternatively, if queries on property `a` alone are more common than
 those on `b` alone, prefer `(a, b)` over `(b, a)`.
+
+Composite indices may also be created using nested properties. You cannot create
+a nested composite index for both a property and its parent within the same index.
+The following is invalid because it contains both `name` and `name.surname`:
+
+```cypher
+CREATE INDEX ON :Person(name, name.surname) // INVALID
+```
+
+However, it is perfectly valid to create nested composite indices on multiple
+properties underneath the same parent property, provided the parent isn't also
+specified alone:
+
+```cypher
+CREATE INDEX ON :Person(name.firstname, name.surname)`
+```
 
 ### Edge-type index
 
