@@ -114,6 +114,10 @@ Alternatively, you can make one directly by running the following query:
 CREATE SNAPSHOT;
 ```
 
+<Callout type="info">
+If another snapshot is already being created or no committed writes to the database have been made since the last snapshot, this query will fail with an error.
+</Callout>
+
 By default, snapshot files are saved inside the `var/lib/memgraph/snapshots` directory.
 
 To query which snapshots currently exist in the data directory, execute:
@@ -153,6 +157,11 @@ background thread will pause and no snapshots will be created as long as that
 mode is active. The job will continue with the last defined interval when the
 storage mode is changed to `IN_MEMORY_TRANSACTIONAL` storage mode.
 
+<Callout type="info">
+The periodic snapshot will be skipped if another snapshot is in progress or no new writes have been committed since the last snapshot.
+If the periodic snapshot is skipped it will be logged on INFO level.
+</Callout>
+
 <Callout type="warning">
 Snapshots and WAL files are presently not compatible between Memgraph versions.
 </Callout>
@@ -166,6 +175,26 @@ This behavior can be controlled using the following flags:
 - `--storage-snapshot-thread-count`: This flag specifies the number of threads to be used for snapshot creation. By default, Memgraph uses the system's maximum thread count. You can override this value to fine-tune performance based on your system's resources.
 
 When parallelized execution is enabled, Memgraph divides the data into batches, where the batch size is defined via `--storage-items-per-batch`. The optimal batch size and thread count may vary depending on the dataset size and system configuration.
+
+#### When Parallelization Helps
+
+Parallel execution is especially beneficial when CPU-bound operations dominate the snapshot creation process, such as serialization or compression of in-memory structures.
+As a general guideline, parallel snapshot creation provides the most significant performance improvement when disk I/O constitutes 25% or less of the total snapshot creation time.
+
+To take full advantage of parallelization, it’s also important to set the `--storage-items-per-batch` flag appropriately. This value determines how the dataset is split into work units for threads.
+A good rule of thumb is: Total number of items (vertices + edges) ≈ 4 × number of threads × --storage-items-per-batch
+This ensures that each thread has enough batches to work on without idling, helping maximize CPU utilization during snapshot creation.
+
+When using multi-threaded snapshot creation with the correct batch size, the disk will once again become the bottleneck. At that point, more threads will not necessarily yield better performance.
+
+##### Measuring Disk Write Speed on Linux
+To determine how fast your disk can handle writes (which influences the I/O bottleneck), you can use the dd command:
+```bash
+dd if=/dev/zero of=testfile bs=1G count=1 oflag=direct
+```
+This writes a 1 GB file directly to disk and reports the write speed. After the test, remove the file.
+
+You can also monitor real-time disk utilization during snapshot creation using tools like `iostat`, `iotop`, or `dstat`.
 
 ## Storage modes
 
