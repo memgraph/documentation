@@ -75,10 +75,11 @@ can use bolt+routing so that write queries can always be sent to the correct dat
 won't be routed to the old main but rather to the new main instance on which failover got performed.
 This protocol works in a way that the client
 first sends a ROUTE bolt message to any coordinator instance. The coordinator replies to the message by returning the routing table with three entries specifying
-from which instance can be data read, to which instance data can be written and which instances can behave as routers. In the Memgraph HA cluster, the MAIN
-data instance is the only writeable instance, REPLICAs are readable instances, and COORDINATORs behave as routers. Bolt+routing is the client-side routing protocol
-which means that the resolution of network endpoints happens inside drivers.
-For more details check [Request message ROUTE](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route) documentation.
+from which instance can the data be read, to which instance data can be written to and which instances behave as routers. In the Memgraph HA cluster, the MAIN
+data instance is the only writeable instance, REPLICAs are readable instances, and COORDINATORs behave as routers. However, the cluster can be configured in such a way 
+that MAIN can also be used for reading. Check this [paragraph](#setting-config-for-highly-available-cluster) for more info. 
+Bolt+routing is the client-side routing protocol, meaning network endpoint resolution happens inside drivers. 
+For more details about the Bolt messages involved in the communication, check [the following link](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route).
 
 Users only need to change the scheme they use for connecting to coordinators. This means instead of using `bolt://<main_ip_address>,` you should
 use `neo4j://<coordinator_ip_adresss>` to get an active connection to the current MAIN instance in the cluster. You can find examples of how to 
@@ -220,12 +221,13 @@ Register instance query will result in several actions:
 4. Data instance will start the replication server on `replication_server`.
 
 ```plaintext
-REGISTER INSTANCE instanceName WITH CONFIG {"bolt_server": boltServer, "management_server": managementServer, "replication_server": replicationServer};
+REGISTER INSTANCE instanceName ( AS ASYNC ) WITH CONFIG {"bolt_server": boltServer, "management_server": managementServer, "replication_server": replicationServer};
 ```
 
 This operation will result in writing to the Raft log.
 
-In case the MAIN instance already exists in the cluster, a replica instance will also be registered on MAIN.
+In case the MAIN instance already exists in the cluster, a replica instance will be automatically connected to the MAIN. You can specify whether the replica should behave
+synchronously or asynchronously by using `AS ASYNC` construct after `instanceName`.
 
 
 ### Add coordinator instance
@@ -383,6 +385,32 @@ Flags `--coordinator-id`, `--coordinator-port` and `--management-port` need to b
 server that coordinator instances use for communication. Flag `--instance-health-check-frequency-sec` specifies how often should leader coordinator
 check the status of the replication instance to update its status. Flag `--instance-down-timeout-sec` gives the user the ability to control how much time should
 pass before the coordinator starts considering the instance to be down. 
+
+There is also a configuration option for specifying whether reads from the main are enabled. The configuration value is by default false but can be changed in run-time 
+using the following query:
+
+```
+SET COORDINATOR SETTING 'enabled_reads_on_main' TO 'true'/'false' ;
+```
+
+Users can also choose whether failover to the async replica is allowed by using the following query:
+
+```
+SET COORDINATOR SETTING 'sync_failover_only' TO 'true'/'false' ;
+```
+
+
+By default, the value is `true`, which means that only sync replicas are candidates in the election. When the value is set to `false`, the async replica is also considered, but
+there is an additional risk of experiencing data loss. However, failover to an async replica may be necessary when other sync replicas are down and you want to
+manually perform a failover.
+
+
+All run-time configuration options can be retrieved using:
+
+```
+SHOW COORDINATOR SETTINGS ;
+```
+
 
 <Callout type="info">
 
