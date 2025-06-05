@@ -3395,8 +3395,11 @@ export default withNextra({
         destination: '/getting-started/install-memgraph/docker#troubleshooting',
         permanent: true
       },
-      
-      
+      {
+        source: '/ai-ecosystem/graphchat',
+        destination: '/ai-ecosystem#graphchat',
+        permanent: true
+      },
       
       
 
