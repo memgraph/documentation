@@ -5,6 +5,14 @@ description: Leverage Kafka for efficient graph stream processing in Memgraph's 
 
 # Graph stream processing with Kafka and Memgraph
 
+<Callout type="info">
+
+This page is currently being refactored as part of the [Awesome Data streams deprecation and streaming examples migration](https://github.com/memgraph/documentation/issues/1315).
+
+The content here may be outdated or under active revision. Please check back soon or follow the GitHub issue for updates.
+
+</Callout>
+
 In this tutorial, you will learn how to connect Memgraph to an existing Kafka
 stream using Memgraph Lab, and transform data into graph database objects to
 analyze it in real-time.
