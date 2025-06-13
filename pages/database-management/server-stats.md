@@ -152,7 +152,7 @@ SHOW METRICS INFO;
 | "MessagesConsumed"                    | "Stream"      | "Counter"   | 0        |
 | "StreamsCreated"                      | "Stream"      | "Counter"   | 0        |
 | "ActiveTransactions"                  | "Transaction" | "Counter"   | 1        |
-| "CommitedTransactions"                | "Transaction" | "Counter"   | 0        |
+| "CommittedTransactions"               | "Transaction" | "Counter"   | 0        |
 | "FailedPrepare"                       | "Transaction" | "Counter"   | 1        |
 | "FailedPull"                          | "Transaction" | "Counter"   | 0        |
 | "FailedQuery"                         | "Transaction" | "Counter"   | 1        |
