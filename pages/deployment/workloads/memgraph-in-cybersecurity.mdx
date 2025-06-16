@@ -1,0 +1,257 @@
+---
+title: Memgraph in cybersecurity
+description: Suggestions on how to bring your Memgraph to production when running cybersecurity use cases. 
+---
+
+import { Callout } from 'nextra/components'
+import { CommunityLinks } from '/components/social-card/CommunityLinks'
+
+# Memgraph in cybersecurity
+
+<Callout type="info">
+Before diving into this guide, we recommend starting with the [Deployment best practices](/deployment/best-practices) 
+page. It provides **foundational, use-case-agnostic advice** for deploying Memgraph in production.
+
+This guide builds on that foundation, offering **additional recommendations tailored to cybersecurity workloads**. 
+In cases where guidance overlaps, consider the information here as **complementary or overriding**, depending 
+on the unique needs of your use case.
+</Callout>
+
+## Is this guide for you?
+
+This guide is for you if you're working with **cybersecurity and threat detection** where real-time analysis, 
+data correlation, and threat intelligence are critical. You'll benefit from this content if:
+
+- You're building a **Security Information and Event Management (SIEM)** system that needs to correlate events across multiple sources.  
+- You're implementing **threat detection** that requires real-time analysis of network traffic, logs, and security events.  
+- You need to **track and analyze attack patterns** across your infrastructure, identifying potential security breaches.  
+- You're working with **threat intelligence** data that needs to be correlated with your internal security events.  
+- You require **real-time alerting** based on complex security patterns and relationships.
+- You're working with cloud security use cases, leveraging **complex configuration objects** across your network topology
+
+If this sounds like your use case, this guide will walk you through how to configure and scale Memgraph for 
+**reliable, real-time security analysis** in production.
+
+## Why choose Memgraph for cybersecurity use cases?
+
+When your workload involves analyzing security events, correlating threats, and detecting patterns in real-time, 
+Memgraph provides the performance and architecture needed to keep your systems secure—without compromise. 
+
+Here's why Memgraph is a great fit for cybersecurity use cases:
+
+- **In-memory storage engine**: Memgraph operates entirely in-memory, enabling **real-time threat detection** and analysis.
+  This allows it to **process security events as they occur**, rather than waiting for disk I/O. Unlike systems that rely on LRU
+  or OS-level caching, where **cache invalidation can delay threat detection**, Memgraph offers
+  **predictable analysis latency** even under constant security event ingestion.  
+  
+  While many graph databases **max out around 1,000 events per second**, Memgraph can handle **up to 50x more** 
+  (see image below), making it ideal for **high-velocity security event processing**.
+
+  ![](/pages/memgraph-in-production/benchmarking-memgraph/realistic-workload.png)
+
+- **Non-blocking reads and writes with MVCC**: Built on multi-version concurrency control (MVCC), 
+  Memgraph ensures that **security event ingestion doesn't block threat analysis** and **analysis doesn't block ingestion**,
+  allowing both to scale independently.
+
+- **Fine-grained locking**: Locking happens at the node and relationship level, enabling **highly concurrent security event processing** 
+  and minimizing contention across threads.
+
+- **Lock-free skiplist storage**: Memgraph uses **lock-free, concurrent skip list structures** for storing security events,
+  relationships, and indices, leading to faster threat pattern matching and minimal coordination overhead between threads.
+
+- **Snapshot isolation by default**: Unlike many databases that rely on **read-committed** isolation 
+  (which could miss critical security events), Memgraph provides **snapshot isolation**, ensuring data accuracy and 
+  consistency in security analysis.
+
+- **Inter-query parallelization**: Each security analysis query is handled on its own CPU core, meaning Memgraph can 
+  **scale horizontally on a single machine** based on your hardware.
+
+- **Horizontal read scaling with high availability**: Memgraph supports [replication](/clustering/replication) and
+  [high availability](/clustering/high-availability), allowing you to distribute **security analysis across multiple replicas**.
+  These replicas can also power **secondary workloads** like threat intelligence correlation or historical analysis, 
+  **without affecting the performance of the main security event processing instance**.
+
+## What is covered?
+
+The suggestions for cybersecurity workloads **complement** several key sections in the 
+[general suggestions guide](/memgraph-in-production/general-suggestions). These sections offer important context and
+additional best practices tailored for security analysis, threat detection, and event correlation:
+
+- [Choosing the right Memgraph flag set](#choosing-the-right-memgraph-flag-set) <br />
+  Memgraph offers specific flags to optimize security event processing and threat detection.
+
+- [Choosing the right Memgraph storage mode](#choosing-the-right-memgraph-storage-mode) <br />
+  Guidance on selecting the optimal **storage mode** for cybersecurity use cases, depending on whether your focus is
+  real-time analysis or historical security data retention.
+
+- [Importing mechanisms](#importing-mechanisms) <br />
+  Suggestions on how importing strategies work with Memgraph in cybersecurity for high-throughput and analytical use cases.
+
+- [Optimizing security event processing](#optimizing-security-event-processing) <br />
+  Learn how to use nested properties and nested indices to reduce TCO and improve performance of your security use case.
+
+- [Enterprise features you might require](#enterprise-features-you-might-require)  <br />
+  Understand which **enterprise features** — such as high availability, audit logging, and advanced security controls
+  are essential for production-grade security deployments.
+
+- [Queries that best suit your workload](#queries-that-best-suit-your-workload)
+  Learn how to optimize security analysis queries and threat detection patterns.
+
+## Choosing the right Memgraph flag set
+
+When processing security events from systems like SIEMs or log collectors, the incoming payload is often **standardized**, 
+meaning that even when a security event is updated, **some property values might remain unchanged**.
+
+By default, Memgraph sets the flag `--storage-delta-on-identical-property-update=true`, which **updates all properties**
+of a node or relationship during an update, even if the new value is identical to the existing one.
+This can introduce unnecessary write overhead.
+
+To optimize for **higher throughput** in scenarios where most incoming security events do not change all property values,
+it's recommended to set:
+
+```bash
+--storage-delta-on-identical-property-update=false
+```
+
+With this setting, Memgraph will **only create delta records for properties that have actually changed**,
+reducing internal write operations and improving overall system throughput—especially important in high-velocity
+security event processing.
+
+## Choosing the right Memgraph storage mode
+
+Cybersecurity scenarios in Memgraph can run effectively on both `IN_MEMORY_TRANSACTIONAL` and `IN_MEMORY_ANALYTICAL`
+storage modes, depending on your specific security requirements.
+
+If your security workload meets the following conditions:
+
+- You are **updating security event properties** on existing nodes and relationships,  
+- You are **appending** new security events and relationships to the graph,  
+- You are **not performing deletes** of security events (for compliance reasons),
+- You are leveraging **on-demand analysis** of the graph with read-only queries
+
+then it may be worth considering switching to `IN_MEMORY_ANALYTICAL` mode.  
+This mode allows **security event processing to be multithreaded**, unlocking **near limitless ingestion speeds** by parallelizing
+event processing across CPU cores.
+
+However, keep in mind:
+
+- If you require **replication**, **high availability**, or **ACID guarantees** for your security data, you must use `IN_MEMORY_TRANSACTIONAL` mode.  
+- `IN_MEMORY_ANALYTICAL` is optimized for **bulk security event ingestion** and **real-time analysis**, but it 
+  **does not support transactional rollback**, as it doesn't create delta objects during writes.  
+  Additionally, **WALs (write-ahead logs) are not generated** in this mode, meaning recovery relies solely on **snapshot creation**.
+
+Learn more about [storage modes](/fundamentals/storage-memory-usage#storage-modes) in our documentation.
+
+## Importing mechanisms
+
+If you're dealing with **high-volume security event processing** (e.g., analyzing every network request, processing millions of security events per second), 
+we recommend checking out the [importing mechanisms section](/deployment/workloads/memgraph-in-high-throughput-workloads#importing-mechanisms) 
+in our high-throughput workloads guide for detailed guidance on handling high-volume data ingestion.
+
+## Optimizing security event processing
+
+### Map properties
+Memgraph allows you to store complex JSON objects as map properties within nodes. This is particularly beneficial for security use cases because:
+
+- **Localized configuration data**: Keep all related security event properties and configurations within a single node
+- **Reduced lookup time**: Access nested properties directly without traversing to other nodes
+- **Lower TCO**: Map properties are more memory-efficient than creating separate nodes and relationships
+- **Simplified data model**: Maintain complex hierarchical security data without creating additional graph structure
+
+### Nested indices
+For efficient security event processing and threat detection, Memgraph supports nested indices that allow you to create indices on map properties of nodes and relationships. This is particularly useful for security use cases where you need to:
+
+- **Index nested security event data** (e.g., `event.details.severity`, `event.source.ip_address`)
+- **Optimize queries on complex JSON payloads** from security tools and SIEMs
+- **Improve performance when filtering** on deeply nested properties in security event maps
+- **Speed up lookups** on structured security data that follows a hierarchical format
+
+Example of creating a nested index for security events:
+```cypher
+CREATE INDEX ON :SecurityEvent(event.details.severity);
+```
+
+This creates a nested index that can significantly improve the performance of queries that filter security events based on nested properties within the event map.
+
+Learn more about [nested indices](/fundamentals/indexes#label-property-index) in our documentation.
+
+## Enterprise features you might require
+
+For production-grade cybersecurity deployments, you may need advanced capabilities to ensure
+**availability**, **data retention**, and **security compliance**. Memgraph offers several enterprise features
+designed to support these needs:
+
+- **Replication, high availability, and automatic failover**  
+  If you require your security system to be **available at all times**, Memgraph supports
+  [clustering and high availability](/clustering/high-availability), allowing you to minimize downtime and recover
+  automatically from failures.
+
+- **Node and relationship TTL (time-to-live)**  
+  In security environments, you may need to automatically **archive or remove old security events** after a certain retention period
+  to comply with data retention policies.
+  Memgraph supports [time-to-live (TTL)](/querying/time-to-live) mechanisms for both **nodes** and **relationships**,
+  ensuring your security graph remains manageable and compliant over time.
+
+- **Multi-tenancy**  
+  Some security deployments require **separate security graphs per department or customer** to ensure strict data isolation and compliance.
+  Memgraph supports [multi-tenancy](/database-management/multi-tenancy), enabling you to manage multiple independent
+  security graphs within a single Memgraph instance.
+
+- **Role-based access control**  
+  For security-sensitive deployments, Memgraph provides [role-based access control](/database-management/authentication-and-authorization/role-based-access-control)
+  to ensure that only authorized personnel can access and modify security data.
+
+## Queries that best suit your workload
+
+### Idempotency concept
+
+When processing security events, it's best to keep your Cypher queries **simple, idempotent, and efficient**. A typical security event ingestion query should look like:
+
+```cypher
+MERGE (n:SecurityEvent) SET n += $row;
+```
+
+This approach ensures **idempotency** (safe reprocessing of the same security events) and **minimizes query execution time** by keeping the transaction lightweight.  
+Keep in mind that adding **complex security logic** or **customization** to the ingestion queries will **increase query latency**, so it's always a good practice to **profile your queries** using Memgraph's [`PROFILE` tool](/querying/clauses/profile) to understand and optimize performance.
+
+### Dynamic labels and edge types
+
+Memgraph also supports:
+
+- [Dynamic node label creation](/querying/clauses/create#14-creating-node-labels-dynamically)  
+- [Dynamic relationship type creation](/querying/clauses/create#23-creating-relationship-types-dynamically)
+
+This is particularly useful for security events where the event type might be dynamic based on the source or severity.
+
+However, **dynamic creation is only supported with `CREATE` operations**, and **matching or merging dynamically created
+labels and types is not supported**.
+
+If your security event payload contains **dynamic labels or edge types** and you still need **idempotency**, you have two options:
+
+- **Programmatically construct your Cypher query strings** based on the security event payload to ensure correct label/type usage before sending the query to Memgraph.
+- **Optionally use the [`merge`](/advanced-algorithms/available-algorithms/merge) procedure from MAGE**
+
+<Callout type="warning">
+While MAGE procedures are **written in C++ and highly optimized**, they still introduce **slightly more overhead**
+compared to **pure Cypher**, as they are executed as external modules. We recommend favoring pure Cypher when
+possible for the **highest performance** in security event processing.
+</Callout>
+
+### Using `convert.str2object` for parsing nested properties
+
+When working with security event streams, sometimes your incoming payload contains **serialized JSON strings** that need to be
+transformed into property maps inside your graph.
+Memgraph provides the [`convert.str2object` function](/querying/functions#conversion-functions) to easily handle this scenario.
+
+Example usage:
+
+```cypher
+WITH convert.str2object('{"event_type":"login_attempt", "severity":"high", "source_ip":"192.168.1.1"}') AS props
+MERGE (n:SecurityEvent)
+SET n += props;
+```
+
+This function **parses a JSON-formatted string into a Cypher map**, making it very useful for flexible security event ingestion pipelines
+where the event structure might vary slightly or be semi-structured.
+
+<CommunityLinks/>
