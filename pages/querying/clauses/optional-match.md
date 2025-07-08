@@ -61,7 +61,7 @@ Output:
 +----------------+----------------+
 ```
 
-Because there are no outgoing relationships of type `LIVES_IN` for the node, the value of r is `null` while the value of `contry.name` is `'United Kingdom'`.
+Because there are no outgoing relationships of type `LIVES_IN` for the node, the value of r is `null` while the value of `country.name` is `'United Kingdom'`.
 
 ## Dataset queries
 
