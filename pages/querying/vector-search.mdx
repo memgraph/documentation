@@ -19,6 +19,7 @@ specifically operates at `READ_UNCOMMITTED`. This design maintains all
 transactional guarantees at the database level. Only the vector index
 operations use this relaxed isolation level, ensuring the database's ACID
 properties remain intact for all other operations.
+Memgraph supports both vector index on nodes and on edges.
 
 <Callout type="warning">
 To configure vector search as described in the example, please use the latest Memgraph version.
@@ -46,6 +47,11 @@ CREATE VECTOR INDEX vector_index_name ON :Label(embedding) WITH CONFIG {"dimensi
 ```
 
 Note that `dimension` and `capacity` are mandatory configuration required to create a vector index.
+
+To create vector index on edges, next syntax should be used:
+```shell
+CREATE VECTOR EDGE INDEX vector_index_name ON :EDGE_TYPE(embedding) WITH CONFIG {"dimension": 256, "capacity": 1000};
+```
 
 ### Configuration parameters
 
@@ -83,6 +89,8 @@ Additionally, the same information can be retrieved with the `SHOW VECTOR INDEX 
 - `metric: string` ➡ Metric used for vector search similarity.
 - `size: int` ➡ The number of entries in the vector index.
 - `scalar_kind: string` ➡ The scalar type used for each vector element.
+- `index_type: string` ➡ The type of the index. If the vector index is created on nodes, the output will be `label+property_vector`; 
+if created on edges, it will be `edge-type+property_vector`.
 
 {<h3 className="custom-header"> Usage: </h3>}
 
@@ -98,8 +106,8 @@ SHOW VECTOR INDEX INFO;
 
 ### Query vector index
 
-Use the `vector_search.search()` procedure to search for similar vectors within
-a vector index. This procedure allows you to find the closest vectors to a query
+Use the `vector_search.search()` and `vector_search.search_edges()` procedures to search for similar vectors within
+a vector index. This procedures allows you to find the closest vectors to a query
 vector based on the selected similarity metric.
 
 {<h3 className="custom-header"> Input: </h3>}
@@ -110,14 +118,27 @@ vector based on the selected similarity metric.
 
 {<h3 className="custom-header"> Output: </h3>}
 
+When the index is defined on nodes:
+
 - `distance: double` ➡ The distance from the node to the query.
 - `node: Vertex` ➡ A node in the vector index matching the given query.
+- `similarity: double` ➡ The similarity of the node and the query.
+
+When the index is defined on edges:
+
+- `distance: double` ➡ The distance from the node to the query.
+- `edges: Relationship` ➡ A node in the vector index matching the given query.
 - `similarity: double` ➡ The similarity of the node and the query.
 
 {<h3 className="custom-header"> Usage: </h3>}
 
 ```shell
 CALL vector_search.search("index_name", 1, [2.0, 2.0]) YIELD * RETURN *;
+```
+
+To query an index on edges, use:
+```shell
+CALL vector_search.search_edges("index_name", 1, [2.0, 2.0]) YIELD * RETURN *;
 ```
 
 ### Similarity metrics
@@ -217,11 +238,11 @@ SHOW VECTOR INDEX INFO;
 The above query will result with:
 
 ```
-+--------------+--------------+--------------+--------------+--------------+--------+--------------+
-| capacity     | dimension    | index_name   | label        | property     | size   | scalar_kind  |
-+--------------+--------------+--------------+--------------+--------------+--------+--------------+
-| 2048         | 2            | "index_name" | "Node"       | "vector"     | 0      | "f16"        |
-+--------------+--------------+--------------+--------------+--------------+--------+--------------+
++----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
+| capacity | dimension | index_name  | label  | property | size | scalar_kind | index_type              |
++----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
+| 2048     | 2         | "index_name"| "Node" | "vector" | 0    | "f16"       | "label+property_vector" |
++----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
 ```
 
 {<h3 className="custom-header"> Create a node </h3>}
@@ -242,11 +263,11 @@ CALL vector_search.show_index_info() YIELD * RETURN *;
 The above query results in:
 
 ```
-+--------------+--------------+--------------+--------------+--------------+--------+--------------+
-| capacity     | dimension    | index_name   | label        | property     | size   | scalar_kind  |
-+--------------+--------------+--------------+--------------+--------------+--------+--------------+
-| 2048         | 2            | "index_name" | "Node"       | "vector"     | 1      | "f16"        |
-+--------------+--------------+--------------+--------------+--------------+--------+--------------+
++----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
+| capacity | dimension | index_name  | label  | property | size | scalar_kind | index_type              |
++----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
+| 2048     | 2         | "index_name"| "Node" | "vector" | 1    | "f16"       | "label+property_vector" |
++----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
 ```
 
 We can see the size of the index changed, due to one new node.
@@ -290,11 +311,11 @@ CALL vector_search.show_index_info() YIELD * RETURN *;
 
 The size is now 5, due to 4 additional nodes:
 ```
-+--------------+--------------+--------------+--------------+--------------+--------+--------------+
-| capacity     | dimension    | index_name   | label        | property     | size   | scalar_kind  |
-+--------------+--------------+--------------+--------------+--------------+--------+--------------+
-| 2048         | 2            | "index_name" | "Node"       | "vector"     | 5      | "f16"        |
-+--------------+--------------+--------------+--------------+--------------+--------+--------------+
++----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
+| capacity | dimension | index_name  | label  | property | size | scalar_kind | index_type              |
++----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
+| 2048     | 2         | "index_name"| "Node" | "vector" | 5    | "f16"       | "label+property_vector" |
++----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
 ```
 
 Let's again search for the top five similar nodes to the vector [2.0, 2.0] (to compare it to all nodes we have):
