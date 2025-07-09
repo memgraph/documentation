@@ -300,6 +300,11 @@ export default withNextra({
         permanent: true
       },
       {
+        source: '/memgraph/query-modules/mgps.py',
+        destination: '/advanced-algorithms/available-algorithms/mgps',
+        permanent: true
+      },
+      {
         source: '/mage/algorithms/traditional-graph-analytics/node-similarity-algorithm',
         destination: '/advanced-algorithms/available-algorithms/node_similarity',
         permanent: true

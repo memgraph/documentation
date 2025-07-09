@@ -38,6 +38,7 @@ export default {
   "meta_util": "meta_util",
   "meta": "meta",
   "migrate": "migrate",
+  "mgps": "mgps",
   "neighbors": "neighbors",
   "node_similarity": "node_similarity",
   "node": "node",
