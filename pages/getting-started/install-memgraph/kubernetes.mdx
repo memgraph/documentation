@@ -39,7 +39,7 @@ configured to deploy Memgraph as a Kubernetes `StatefulSet` workload.
 It will deploy a single Memgraph instance in a single pod.
 
 Typically, when deploying a stateful application like Memgraph, a `StatefulSet`
-workload is used to ensure that each pod has a unique identity and stable
+workload is used to ensure that each pod has a uoc adm policy add-scc-to-user memgraph-scc -z memgraph -n memgraphoc adm policy add-scc-to-user memgraph-scc -z memgraph -n memgraphnique identity and stable
 network identity. When deploying Memgraph,  it is also necessary to define a
 `PersistentVolumeClaims` to store [the data
 directory](/configuration/data-durability-and-backup) (`/var/lib/memgraph`).
@@ -714,6 +714,62 @@ The `args` section contains a list of arguments for the instance.
 For all available database settings, refer to the [configuration settings
 docs](/database-management/configuration).
 
+## Root access
+
+Both standalone and HA charts currently require root access for init containers in order to change ownership of the directories which Memgraph will use for the durability. One possible approach for solving it for users which have
+strict security policies is to create a custom `SecurityContextConstraint`. An example we used for deploying Memgraph HA chart to the RedHat:
+
+```
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: memgraph
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: true
+allowPrivilegedContainer: true
+allowedCapabilities:
+  - CHOWN
+defaultAddCapabilities: null
+fsGroup:
+  type: RunAsAny
+groups: []
+priority: null
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+  - MKNOD
+runAsUser:
+  type: RunAsAny
+seLinuxContext:
+  type: RunAsAny
+supplementalGroups:
+  type: RunAsAny
+users:
+  - system:serviceaccount:*:memgraph
+volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+```
+
+Additionally, `values.yaml` file needed to be changed in the following way:
+```
+memgraphUserGroupId: "$(id -u memgraph):$(id -g memgraph)"
+```
+
+If you create your service account before the security context constraint, you will have to bind them manually:
+
+```
+oc adm policy add-scc-to-user memgraph-scc -z memgraph -n memgraph
+```
+
+
 ## Memgraph Lab Helm chart 
 
 A Helm chart for deploying Memgraph Lab on Kubernetes.
@@ -786,7 +842,6 @@ variable to a higher value to ensure that Memgraph Lab stays connected to Memgra
 when running queries over 65 seconds.
 
 Refer to the [Memgraph Lab documentation](/memgraph-lab/configuration) for details on how to configure Memgraph Lab.
-
 
 
 
