@@ -1,32 +1,153 @@
 ---
-title: Multiple roles per user
-description: Learn how to assign multiple roles to users and understand how permissions are combined in multi-tenant environments.
+title: Multiple roles per user and multi-tenant roles
+description: Learn how to assign database-specific roles to users in multi-tenant environments with special permission filtering logic.
 ---
 
 import { Callout } from 'nextra/components'
 
-# Multiple roles per user (Enterprise)
+# Multi-tenant roles (Enterprise)
 
-Memgraph Enterprise now supports assigning multiple roles to users simultaneously, with enhanced support for multi-tenant environments. This feature enables flexible permission management across different databases and better integration with external identity providers that return multiple roles.
+Memgraph Enterprise supports multi-tenant roles, which allow users to have different roles assigned to them for specific databases. This feature enables proper tenant isolation and fine-grained access control in multi-tenant environments.
 
 ## Overview
 
-With multiple roles support, users can have different roles assigned to them, and their permissions are combined from all roles. This is particularly powerful in multi-tenant environments where users may need different permissions for different databases.
+Multi-tenant roles are a specialized form of multiple roles that include special logic for database-specific permission filtering. When a user has multi-tenant roles, their permissions are dynamically filtered based on which database they're accessing, ensuring proper tenant isolation.
 
 Key benefits:
-- **Multi-tenant RBAC**: Users can have different roles for different databases
-- **SSO Integration**: External identity providers (OIDC, SAML) often return arrays of roles
-- **Flexible Permissions**: Combining permissions from multiple specialized roles
-- **Database-specific Access**: Fine-grained control over which databases users can access
+- **Tenant Isolation**: Users can have different permissions for different databases
+- **SSO Integration**: Support for external identity providers that return multiple roles
 
-## Multi-tenant role management
+## Database access with users and roles
 
-### Database-specific role assignments
+### Basic database access
 
-In multi-tenant environments, you can assign roles to users for specific databases:
+In Memgraph Enterprise, both users and roles can have database access permissions:
 
 ```cypher
--- Create roles with database-specific access
+-- Grant database access to a role
+GRANT DATABASE db_name TO user_or_role;
+
+-- Deny database access
+DENY DATABASE db_name TO user_or_role;
+
+-- Revoke database access
+REVOKE DATABASE db_name TO user_or_role;
+```
+
+### How database access works
+
+Database access follows these rules:
+- **Grants**: If any role or user grants access to a database, database is granted
+- **Denies**: If any role or user denies access to a database, database is denied
+- **Access**: User or role has database access if it is granted and not denied
+
+## Database access with multiple roles
+
+### Combining database access
+
+When a user has multiple roles, their database access is combined from all roles:
+
+```cypher
+-- Create roles with different database access
+CREATE ROLE role1;
+CREATE ROLE role2;
+
+-- Grant different database access to each role
+GRANT DATABASE db1 TO role1;
+GRANT DATABASE db2 TO role2;
+
+-- Create user and assign both roles
+CREATE USER alice IDENTIFIED BY 'password';
+SET ROLE FOR alice TO role1, role2;
+
+-- Result: Alice has access to both db1 and db2
+```
+
+### Database access conflicts
+
+When roles have conflicting database access, deny takes precedence:
+
+```cypher
+-- Role1 grants access to db1
+GRANT DATABASE db1 TO role1;
+
+-- Role2 denies access to db1
+DENY DATABASE db1 TO role2;
+
+-- User with both roles
+SET ROLE FOR user TO role1, role2;
+
+-- Result: User is denied access to db1 (deny takes precedence)
+```
+
+## Privileges with multiple roles
+
+When a user has multiple roles, their privileges are combined according to the following rules:
+
+- **Grant**: If any assigned role with access to the database grants a privilege, the user is granted that privilege.
+- **Deny**: If any assigned role with access to the database denies a privilege, the user is denied that privilege—even if another role grants it.
+- **Effective privilege**: The user's effective privileges are the union of all granted privileges, minus any that are denied by any role.
+
+This means that **deny always takes precedence over grant** when there is a conflict.
+**Note:** The resulting user privileges contain user's privileges only if the user also has access to the database.
+
+## Creating database-specific roles
+
+### Using database access for tenant isolation
+
+You can create roles that are specific to certain databases by controlling their database access:
+
+```cypher
+-- Create tenant-specific roles
+CREATE ROLE tenant1_admin;
+CREATE ROLE tenant2_user;
+
+-- Grant database access to specific tenants
+GRANT DATABASE tenant1_db TO tenant1_admin;
+GRANT DATABASE tenant2_db TO tenant2_user;
+
+-- Grant appropriate permissions
+GRANT ALL PRIVILEGES TO tenant1_admin;
+GRANT MATCH, CREATE, MERGE, SET TO tenant2_user;
+
+-- Create user with both roles
+CREATE USER bob IDENTIFIED BY 'password';
+SET ROLE FOR bob TO tenant1_admin, tenant2_user;
+```
+
+### Limitations of this approach
+
+While this approach works, it has some limitations:
+- Users get access to all databases their roles have access to
+- No fine-grained control over which role applies to which database
+- Permission filtering is based on database access, not role assignment
+- Admin needs to create a set of role for each database
+
+## Better API: Database-specific role assignment
+
+### Setting roles ON a database
+
+Memgraph Enterprise provides a better API for database-specific role assignment using the `ON database` clause:
+
+```cypher
+-- Assign role to specific database
+SET ROLE FOR user_name TO role_name ON database_name;
+
+-- Remove role from specific database
+CLEAR ROLE FOR user_name ON database_name;
+
+-- Remove all roles
+CLEAR ROLES;
+```
+
+**Note:** Multiple roles can be specified on a database. However, the list of roles needs to be exhaustive.
+
+### How it works
+
+This API provides true database-specific role assignment:
+
+```cypher
+-- Create roles with database access
 CREATE ROLE tenant1_admin;
 CREATE ROLE tenant2_user;
 
@@ -34,156 +155,67 @@ CREATE ROLE tenant2_user;
 GRANT DATABASE tenant1_db TO tenant1_admin;
 GRANT DATABASE tenant2_db TO tenant2_user;
 
--- Create user
-CREATE USER bob IDENTIFIED BY 'password';
+-- Grant permissions
+GRANT ALL PRIVILEGES TO tenant1_admin;
+GRANT MATCH, CREATE, MERGE, SET TO tenant2_user;
 
--- Assign database-specific roles
-ADD ROLE tenant1_admin TO bob;
-ADD ROLE tenant2_user TO bob;
+-- Create user with database-specific roles
+CREATE USER alice IDENTIFIED BY 'password';
+SET ROLE FOR alice TO tenant1_admin ON tenant1_db;
+SET ROLE FOR alice TO tenant2_user ON tenant2_db;
 ```
 
-### Global vs database-specific roles
+**Note:** The list of roles defined in the SET ROLE query is an exhaustive list.
 
-Roles can be assigned globally (accessible across all databases) or specifically for certain databases:
+### Special logic for database filtering
 
-```cypher
--- Global role (accessible across all databases)
-CREATE ROLE global_analyst;
-GRANT MATCH, STATS TO global_analyst;
-ADD ROLE global_analyst TO alice;
+When using `SET ROLE ... ON database`, the system applies special logic:
 
--- Database-specific role (only accessible in specific database)
-CREATE ROLE tenant_admin;
-GRANT DATABASE tenant_db TO tenant_admin;
-GRANT ALL PRIVILEGES TO tenant_admin;
-ADD ROLE tenant_admin TO alice;
-```
+1. **Database Access Check**: Only roles with access to the specified database can be assigned
+2. **Permission Filtering**: When accessing a database, only roles assigned to that database are considered
+3. **Isolation**: Users cannot access permissions from roles assigned to other databases
+4. **Automatic Filtering**: The system automatically filters permissions based on the current database context
 
-## Permission combination rules
-
-When a user has multiple roles, their permissions are combined using the following rules:
-
-- **Grants**: If any role grants a permission, the user has that permission
-- **Denies**: If any role denies a permission, the user is denied that permission (deny takes precedence)
-- **Database Access**: If any role grants access to a database, the user has access
-- **Fine-grained Permissions**: Combined using the same grant/deny logic
-- **Database Filtering**: When accessing a specific database, only roles with access to that database are considered
-
-## Managing multiple roles
-
-### Adding roles to users
-
-To add a role to a user (keeping any existing roles), use:
-
-```cypher
-ADD ROLE role_name TO user_name;
-```
+## Multi-tenant role management
 
 ### Adding database-specific roles
 
-To add a role that's specific to a database:
+To assign a role to a user for a specific database:
 
 ```cypher
 -- The role must have access to the database
 GRANT DATABASE database_name TO role_name;
-ADD ROLE role_name TO user_name;
+SET ROLE FOR user_name TO role_name ON database_name;
 ```
 
-### Removing specific roles
+### Clearing database-specific roles
 
-To remove a specific role from a user, use:
+To remove a role from a specific database:
 
 ```cypher
-REMOVE ROLE role_name FROM user_name;
+CLEAR ROLE FOR user_name ON database_name;
 ```
 
-### Viewing user roles
-
-To see all roles assigned to a user:
-
-```cypher
-SHOW ROLES FOR user_name;
-```
-
-### Viewing roles for a specific database
+### Viewing multi-tenant roles
 
 To see which roles a user has for a specific database:
+
+```cypher
+SHOW ROLES FOR user_name ON database_name;
+```
+
+### Viewing permissions for a specific database
+
+To see what permissions a user has in a specific database:
 
 ```cypher
 SHOW PRIVILEGES FOR user_name ON database_name;
 ```
 
-### Legacy single role commands
-
-For backward compatibility, the following commands still work:
-
-```cypher
--- Set a single role (replaces all existing roles)
-SET ROLE FOR user_name TO role_name;
-
--- Clear all roles
-CLEAR ROLE FOR user_name;
-```
-
-<Callout type="warning">
-The `SET ROLE` command is maintained for backward compatibility but is deprecated. Use `ADD ROLE` and `REMOVE ROLE` for better control over multiple roles.
-</Callout>
-
-## Multi-tenant examples
-
-### Basic multi-tenant setup
-
-```cypher
--- Create databases
-CREATE DATABASE tenant1_db;
-CREATE DATABASE tenant2_db;
-
--- Create roles for each tenant
-CREATE ROLE tenant1_admin;
-CREATE ROLE tenant1_user;
-CREATE ROLE tenant2_admin;
-CREATE ROLE tenant2_user;
-
--- Grant database access
-GRANT DATABASE tenant1_db TO tenant1_admin;
-GRANT DATABASE tenant1_db TO tenant1_user;
-GRANT DATABASE tenant2_db TO tenant2_admin;
-GRANT DATABASE tenant2_db TO tenant2_user;
-
--- Grant permissions
-GRANT ALL PRIVILEGES TO tenant1_admin;
-GRANT MATCH, CREATE, MERGE, SET TO tenant1_user;
-GRANT ALL PRIVILEGES TO tenant2_admin;
-GRANT MATCH, CREATE, MERGE, SET TO tenant2_user;
-
--- Create users with multi-tenant roles
-CREATE USER alice IDENTIFIED BY 'password';
-ADD ROLE tenant1_admin TO alice;
-ADD ROLE tenant2_user TO alice;
-
-CREATE USER bob IDENTIFIED BY 'password';
-ADD ROLE tenant1_user TO bob;
-ADD ROLE tenant2_admin TO bob;
-```
-
-### Cross-tenant user with different permissions
-
-```cypher
--- User with different roles across tenants
-CREATE USER manager IDENTIFIED BY 'password';
-
--- Admin in tenant1, regular user in tenant2
-ADD ROLE tenant1_admin TO manager;
-ADD ROLE tenant2_user TO manager;
-
--- Check permissions in each database
-SHOW PRIVILEGES FOR manager ON tenant1_db;  -- Full admin privileges
-SHOW PRIVILEGES FOR manager ON tenant2_db;  -- Limited user privileges
-```
 
 ### SSO integration with multi-tenant roles
 
-When using external auth modules, users can be assigned multiple roles based on their identity provider roles:
+When using external auth modules, users can be assigned multi-tenant roles based on their identity provider roles:
 
 ```python
 def authenticate(username, password):
@@ -191,7 +223,8 @@ def authenticate(username, password):
     if username == "cross_tenant_manager" and password == "password":
         return {
             "authenticated": True,
-            "roles": ["tenant1_admin", "tenant2_user", "global_analyst"],
+            "roles": ["tenant1_admin", "tenant2_user"],
+            "role_databases": ["tenant1_db", "tenant2_db"],
             "username": "cross_tenant_manager"
         }
     
@@ -202,7 +235,7 @@ def authenticate(username, password):
 
 ### Main database selection
 
-When a user has multiple roles with access to different databases, the system determines the main database:
+When a user has multi-tenant roles with access to different databases, the system determines the main database:
 
 ```cypher
 -- Create roles with different main databases
@@ -215,16 +248,19 @@ SET MAIN DATABASE db2 FOR role2;
 
 -- User with both roles
 CREATE USER user1 IDENTIFIED BY 'password';
-ADD ROLE role1 TO user1;
-ADD ROLE role2 TO user1;
+SET ROLE role1 FOR user1 ON db1;
+SET ROLE role2 FOR user1 ON db2;
 
--- The first role's main database becomes the user's main database
-SHOW PRIVILEGES FOR user1;  -- Shows db1 as main database
 ```
+
+<Callout type="info">
+In case of an SSO connection, no user information is stored in Memgraph; instead the auth module returns roles associated with the connection. 
+In this case, there are no guarantees which role's main database will be selected. Use "database" in the session arguments to define the target database.
+</Callout>
 
 ### Database-specific permission filtering
 
-When accessing a specific database, only roles with access to that database are considered:
+The special logic ensures that when accessing a specific database, only roles assigned to that database are considered:
 
 ```cypher
 -- Role with access to multiple databases
@@ -236,7 +272,8 @@ GRANT MATCH ON db2 TO multi_db_role;
 
 -- User with this role
 CREATE USER user1 IDENTIFIED BY 'password';
-ADD ROLE multi_db_role TO user1;
+SET ROLE multi_db_role FOR user1 ON db1;
+SET ROLE multi_db_role FOR user1 ON db2;
 
 -- When accessing db1: has MATCH, CREATE
 -- When accessing db2: has only MATCH
@@ -246,45 +283,7 @@ ADD ROLE multi_db_role TO user1;
 
 1. **Use descriptive role names**: Include tenant information in role names (e.g., `tenant1_admin`, `tenant2_user`)
 2. **Follow principle of least privilege**: Grant only necessary permissions to each role
-3. **Separate global and tenant-specific roles**: Use global roles for cross-tenant access, tenant-specific roles for isolation
-4. **Test permission combinations**: Verify that combined permissions work as expected in each database
+3. **Separate tenant-specific roles**: Create distinct roles for each tenant to ensure proper isolation
+4. **Test permission combinations**: Verify that multi-tenant permissions work correctly in each database
 5. **Document role assignments**: Keep track of which users have which roles for which databases
 6. **Use deny sparingly**: Remember that deny takes precedence over grant across all databases
-
-## Migration from single roles
-
-Existing users with single roles will continue to work without changes. To migrate to multiple roles in a multi-tenant environment:
-
-1. **Audit current roles**: Review existing role assignments and database access
-2. **Plan multi-tenant structure**: Design how to split roles across databases
-3. **Create database-specific roles**: Define roles for each tenant/database
-4. **Test in development**: Verify permission combinations work correctly in each database
-5. **Migrate gradually**: Use `ADD ROLE` to add new roles before removing old ones
-
-## Troubleshooting
-
-### Permission conflicts across databases
-
-If a user has conflicting permissions across roles in different databases:
-
-```cypher
--- Role A grants CREATE on db1
-GRANT CREATE ON db1 TO role_a;
-
--- Role B denies CREATE on db2
-DENY CREATE ON db2 TO role_b;
-
--- User with both roles
-ADD ROLE role_a TO user;
-ADD ROLE role_b TO user;
-
--- Result: User can CREATE on db1, cannot CREATE on db2
-```
-
-### Database access conflicts
-
-Similar rules apply to database access - if any role denies access to a database, the user will be denied access to that database, even if other roles grant access.
-
-### Performance considerations
-
-Multiple roles with database filtering may slightly impact permission checking performance, but this is typically negligible in most deployments. The database filtering ensures that only relevant roles are considered for each database access. 
