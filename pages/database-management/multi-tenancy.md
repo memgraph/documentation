@@ -142,13 +142,55 @@ Access to all databases can be granted or revoked using wildcards:
 
 ### Multi-database queries and the memgraph database
 
-Recent changes to Memgraph have modified how multi-database queries are executed. Multi-database queries (such as `SHOW DATABASES`, `CREATE DATABASE`, `DROP DATABASE`, etc.) now target the default "memgraph" database and require access to it.
+Recent changes to Memgraph have modified how multi-database queries are executed. Multi-database queries (such as `SHOW DATABASES`, `CREATE DATABASE`, `DROP DATABASE`, etc.) now target the "memgraph" database and require access to it.
 
-#### Requirements for multi-database queries
+To execute these queries, users must have:
+- The appropriate privileges (`MULTI_DATABASE_USE`, `MULTI_DATABASE_EDIT`)
+- Access to the default "memgraph" database
 
-To execute multi-database queries, users must have:
-1. The appropriate multi-database privileges (`MULTI_DATABASE_USE`, `MULTI_DATABASE_EDIT`)
-2. Access to the default "memgraph" database
+### Multi-tenant query syntax changes
+
+Recent changes to Memgraph have also modified the syntax for certain queries in multi-tenant environments. The `SHOW ROLE` and `SHOW PRIVILEGES` commands now require specifying the database context.
+
+#### SHOW ROLE syntax in multi-tenant environments
+
+In multi-tenant environments, you must specify which database context to use when showing roles:
+
+1. **Show roles for the user's main database:**
+```cypher
+SHOW ROLE FOR user_name ON MAIN;
+```
+
+2. **Show roles for the current database:**
+```cypher
+SHOW ROLE FOR user_name ON CURRENT;
+```
+
+3. **Show roles for a specific database:**
+```cypher
+SHOW ROLE FOR user_name ON DATABASE database_name;
+```
+
+#### SHOW PRIVILEGES syntax in multi-tenant environments
+
+Similarly, the `SHOW PRIVILEGES` command requires database context specification:
+
+1. **Show privileges for the user's main database:**
+```cypher
+SHOW PRIVILEGES FOR user_or_role ON MAIN;
+```
+
+2. **Show privileges for the current database:**
+```cypher
+SHOW PRIVILEGES FOR user_or_role ON CURRENT;
+```
+
+3. **Show privileges for a specific database:**
+```cypher
+SHOW PRIVILEGES FOR user_or_role ON DATABASE database_name;
+```
+
+These commands return the aggregated roles and privileges for the user in the specified database context. The `ON MAIN` option shows information for the user's main database, `ON CURRENT` shows information for whatever database is currently active, and `ON DATABASE` shows information for the explicitly specified database.
 
 #### Impact on multi-tenant environments
 
