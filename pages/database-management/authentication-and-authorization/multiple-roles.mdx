@@ -17,6 +17,59 @@ Key benefits:
 - **Tenant Isolation**: Users can have different permissions for different databases
 - **SSO Integration**: Support for external identity providers that return multiple roles
 
+## Authentication and authorization requirements
+
+Recent changes to Memgraph have introduced new requirements for authentication and authorization operations in multi-tenant environments. These changes affect how users can perform user and role management operations.
+
+### AUTH privilege requirement
+
+Authentication and authorization queries (such as `CREATE USER`, `CREATE ROLE`, `GRANT`, `DENY`, `REVOKE`, etc.) now require the `AUTH` privilege. Users must be explicitly granted this privilege to perform user and role management operations.
+
+### Default database access requirement
+
+In addition to the `AUTH` privilege, users must also have access to the default "memgraph" database to execute authentication and authorization queries. This requirement applies even when the user is working in other databases within a multi-tenant environment.
+
+<Callout type="warning">
+**Multi-tenant environments**: This requirement is only a concern in multi-tenant environments where users have access to databases other than the default "memgraph" database. In single-database deployments, this requirement is automatically satisfied.
+</Callout>
+
+### Impact on multi-tenant role management
+
+When using multi-tenant roles, ensure that users who need to perform authentication and authorization operations have:
+1. The `AUTH` privilege granted to their roles
+2. Access to the default "memgraph" database
+3. Appropriate role assignments for the "memgraph" database
+
+#### Example: Admin user with multi-tenant roles
+
+```cypher
+-- Create admin role with full privileges
+CREATE ROLE system_admin;
+GRANT ALL PRIVILEGES TO system_admin;
+GRANT DATABASE memgraph TO system_admin;
+
+-- Create tenant-specific admin roles
+CREATE ROLE tenant1_admin;
+CREATE ROLE tenant2_admin;
+GRANT MATCH, CREATE, MERGE, SET, DELETE, INDEX TO tenant1_admin;
+GRANT MATCH, CREATE, MERGE, SET, DELETE, INDEX TO tenant2_admin;
+GRANT DATABASE tenant1_db TO tenant1_admin;
+GRANT DATABASE tenant2_db TO tenant2_admin;
+
+-- Create admin user
+CREATE USER admin_user IDENTIFIED BY 'admin_password';
+
+-- Assign roles with database-specific assignments
+SET ROLE FOR admin_user TO system_admin ON memgraph;
+SET ROLE FOR admin_user TO tenant1_admin ON tenant1_db;
+SET ROLE FOR admin_user TO tenant2_admin ON tenant2_db;
+```
+
+In this setup, `admin_user` can:
+- Perform authentication/authorization operations when connected to the "memgraph" database
+- Manage tenant1_db data when connected to tenant1_db
+- Manage tenant2_db data when connected to tenant2_db
+
 ## Database access with users and roles
 
 ### Basic database access
@@ -287,3 +340,7 @@ SET ROLE multi_db_role FOR user1 ON db2;
 4. **Test permission combinations**: Verify that multi-tenant permissions work correctly in each database
 5. **Document role assignments**: Keep track of which users have which roles for which databases
 6. **Use deny sparingly**: Remember that deny takes precedence over grant across all databases
+7. **Treat memgraph database as admin database**: In multi-tenant environments, restrict access to the default "memgraph" database to privileged users only
+8. **Ensure AUTH privilege access**: Users who need to perform authentication/authorization operations must have both the `AUTH` privilege and access to the "memgraph" database
+9. **Separate application data**: Store all application data in tenant-specific databases, not in the default "memgraph" database
+10. **Plan for authentication operations**: Design your role structure to ensure that users who need to manage users and roles have appropriate access to the "memgraph" database

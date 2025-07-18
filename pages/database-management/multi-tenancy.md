@@ -20,6 +20,65 @@ A default database named 'memgraph' is automatically created during startup. New
 users are granted access only to this default database. The default
 database name cannot be altered.
 
+### Default database best practices
+
+In multi-tenant environments, we recommend treating the default "memgraph" database as an administrative/system database rather than storing application data in it. This approach provides better security and isolation, especially given recent changes to authentication and authorization requirements.
+
+#### Why treat memgraph as an admin database?
+
+Recent changes to Memgraph require that users have both the `AUTH` privilege and access to the default "memgraph" database to execute authentication and authorization queries. This requirement affects multi-tenant environments where users might have access to other databases but not the default one.
+
+#### Recommended setup
+
+1. **Restrict memgraph database access**: Only grant access to the "memgraph" database to privileged users who need to perform system administration tasks
+2. **Use tenant-specific databases**: Store all application data in dedicated tenant databases
+3. **Separate concerns**: Keep user management, role management, and system administration separate from application data
+
+#### Example configuration
+
+```cypher
+-- Create admin role with full system privileges
+CREATE ROLE system_admin;
+GRANT ALL PRIVILEGES TO system_admin;
+GRANT DATABASE memgraph TO system_admin;
+
+-- Create tenant-specific roles (no access to memgraph database)
+CREATE ROLE tenant1_admin;
+CREATE ROLE tenant1_user;
+CREATE ROLE tenant2_admin;
+CREATE ROLE tenant2_user;
+
+-- Grant appropriate permissions to tenant roles
+GRANT MATCH, CREATE, MERGE, SET, DELETE, INDEX TO tenant1_admin;
+GRANT MATCH, CREATE, MERGE, SET, DELETE TO tenant1_user;
+GRANT MATCH, CREATE, MERGE, SET, DELETE, INDEX TO tenant2_admin;
+GRANT MATCH, CREATE, MERGE, SET, DELETE TO tenant2_user;
+
+-- Grant access only to tenant databases
+GRANT DATABASE tenant1_db TO tenant1_admin, tenant1_user;
+GRANT DATABASE tenant2_db TO tenant2_admin, tenant2_user;
+
+-- Create users
+CREATE USER system_admin_user IDENTIFIED BY 'admin_password';
+CREATE USER tenant1_admin_user IDENTIFIED BY 't1_admin_pass';
+CREATE USER tenant1_regular_user IDENTIFIED BY 't1_user_pass';
+CREATE USER tenant2_admin_user IDENTIFIED BY 't2_admin_pass';
+CREATE USER tenant2_regular_user IDENTIFIED BY 't2_user_pass';
+
+-- Assign roles
+SET ROLE FOR system_admin_user TO system_admin;
+SET ROLE FOR tenant1_admin_user TO tenant1_admin;
+SET ROLE FOR tenant1_regular_user TO tenant1_user;
+SET ROLE FOR tenant2_admin_user TO tenant2_admin;
+SET ROLE FOR tenant2_regular_user TO tenant2_user;
+```
+
+In this configuration:
+- `system_admin_user` can perform all authentication/authorization operations and has access to the "memgraph" database
+- Tenant users can only access their respective tenant databases
+- Application data is completely isolated in tenant-specific databases
+- The "memgraph" database serves purely as an administrative database
+
 ## Isolated databases
 
 Isolated databases within Memgraph function as distinct single-database Memgraph
