@@ -121,6 +121,66 @@ of the following commands:
 | Privileges to specific labels. | `ALL LABELS` |
 | Privileges to specific relationships types. | `ALL EDGE TYPES` |
 
+## Authentication and authorization requirements
+
+Recent changes to Memgraph have modified how user privileges are generated for authentication and authorization operations. These changes affect multi-tenant environments where users have access to databases other than the default "memgraph" database.
+
+### AUTH privilege requirement
+
+Authentication and authorization queries (such as `CREATE USER`, `CREATE ROLE`, `GRANT`, `DENY`, `REVOKE`, etc.) now require the `AUTH` privilege. Users must be explicitly granted this privilege to perform user and role management operations.
+
+### Default database access requirement
+
+In addition to the `AUTH` privilege, users must also have access to the default "memgraph" database to execute authentication and authorization queries. This requirement applies even when the user is working in other databases within a multi-tenant environment.
+
+<Callout type="warning">
+**Multi-tenant environments**: This requirement is only a concern in multi-tenant environments where users have access to databases other than the default "memgraph" database. In single-database deployments, this requirement is automatically satisfied.
+</Callout>
+
+### Recommended approach for multi-tenant environments
+
+In multi-tenant environments, we recommend treating the default "memgraph" database as an administrative/system database rather than storing application data in it. This approach provides better security and isolation:
+
+1. **Restrict access to the memgraph database**: Only grant access to privileged users who need to perform authentication and authorization operations
+2. **Use tenant-specific databases**: Store application data in dedicated tenant databases rather than the default database
+3. **Separate administrative functions**: Keep user management and system administration separate from application data
+
+#### Example setup for multi-tenant environments
+
+```cypher
+-- Create admin role with full privileges
+CREATE ROLE admin;
+GRANT ALL PRIVILEGES TO admin;
+GRANT DATABASE memgraph TO admin;
+
+-- Create tenant-specific roles
+CREATE ROLE tenant1_user;
+CREATE ROLE tenant2_user;
+
+-- Grant appropriate permissions to tenant roles
+GRANT MATCH, CREATE, MERGE, SET, DELETE TO tenant1_user;
+GRANT MATCH, CREATE, MERGE, SET, DELETE TO tenant2_user;
+
+-- Grant access to tenant databases only
+GRANT DATABASE tenant1_db TO tenant1_user;
+GRANT DATABASE tenant2_db TO tenant2_user;
+
+-- Create users
+CREATE USER admin_user IDENTIFIED BY 'admin_password';
+CREATE USER tenant1_user_account IDENTIFIED BY 'password1';
+CREATE USER tenant2_user_account IDENTIFIED BY 'password2';
+
+-- Assign roles
+SET ROLE FOR admin_user TO admin;
+SET ROLE FOR tenant1_user_account TO tenant1_user;
+SET ROLE FOR tenant2_user_account TO tenant2_user;
+```
+
+In this setup:
+- `admin_user` has access to the "memgraph" database and can perform all authentication/authorization operations
+- `tenant1_user_account` and `tenant2_user_account` can only access their respective tenant databases
+- Application data is stored in tenant-specific databases, not in the default "memgraph" database
+
 After the first user is created, Memgraph will execute a query if and only if
 either a user or its role is granted that privilege and neither the user nor its
 role are denied that privilege. Otherwise, Memgraph will not execute that
