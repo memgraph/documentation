@@ -74,20 +74,35 @@ before being written to the DB, and in the end the log file contains all steps
 needed to reconstruct the DB’s most recent state.
 
 Memgraph has WAL enabled by default. To switch it on and off, use the boolean
-`--storage-wal-enabled` flag. For other WAL-related flags check the [configuration
-reference guide](/database-management/configuration#storage).
+`--storage-wal-enabled` flag. For other WAL-related flags check the
+[configuration reference guide](/database-management/configuration#storage).
 
 By default, WAL files are located at `/var/lib/memgraph/wal`.
 
+<h4 className="custom-header">WAL file lifecycle</h4>
+
+**Older WAL files are deleted automatically after a snapshot is created** since
+the snapshot contains the full database state up to that point. Only WAL files
+containing changes after the latest snapshot are retained.
+
+To control WAL file cleanup indirectly, you can limit the number of snapshots
+via `--storage-snapshot-retention-count`.
+
+**It is not possible to use WAL files exclusively** without snapshots. Memgraph
+enforces periodic snapshots when WAL is enabled and will fail to start if WAL is
+enabled with snapshot interval set to zero.
+
 ### Snapshots
+
 Snapshots provide a faster way to restore the states of your database. Snapshots
 are created periodically based on the value defined with the
-`--storage-snapshot-interval` configuration flags, as well as upon exit based
-on the value of the `--storage-snapshot-on-exit` configuration flag.  When a
+`--storage-snapshot-interval` configuration flags, as well as upon exit based on
+the value of the `--storage-snapshot-on-exit` configuration flag.  When a
 snapshot creation is triggered, the entire data storage is written to the drive.
 Nodes and relationships are divided into groups called batches.
 
-Snapshot creation can be made faster by using **multiple threads**. See [Parallelized execution](#parallelized-execution) for more information.
+Snapshot creation can be made faster by using **multiple threads**. See
+[Parallelized execution](#parallelized-execution) for more information.
 
 On startup, the database state is recovered from the most recent snapshot file.
 Memgraph can read the data and build the indexes on multiple threads, using
@@ -99,31 +114,50 @@ smaller dataset might require a smaller batch size to utilize a multi-threaded
 processor, while bigger datasets might use bigger batches to minimize the
 synchronization between the worker threads. Therefore, the size of batches and
 the number of used threads [are
-configurable](/database-management/configuration#storage) similarly to
-other durability-related settings.
+configurable](/database-management/configuration#storage) similarly to other
+durability-related settings.
 
 The timestamp of the snapshot is compared with the latest update recorded in the
 WAL file and, if the snapshot is less recent, the state of the DB will be
 recovered using the WAL file.
 
 Memgraph has snapshot creation enabled by default. You can configure the exact
-snapshot creation behavior by [defining the relevant flags](/database-management/configuration#storage).
-Alternatively, you can make one directly by running the following query:
+snapshot creation behavior by [defining the relevant
+flags](/database-management/configuration#storage). Alternatively, you can make
+one directly by running the following query:
 
 ```opencypher
 CREATE SNAPSHOT;
 ```
 
 <Callout type="info">
-If another snapshot is already being created or no committed writes to the database have been made since the last snapshot, this query will fail with an error.
+If another snapshot is already being created or no committed writes to the
+database have been made since the last snapshot, this query will fail with an
+error.
 </Callout>
 
-By default, snapshot files are saved inside the `var/lib/memgraph/snapshots` directory.
+By default, snapshot files are saved inside the `var/lib/memgraph/snapshots`
+directory.
 
 To query which snapshots currently exist in the data directory, execute:
-```opencypher
+
+```cypher
 SHOW SNAPSHOTS;
 ```
+
+<h4 className="custom-header">Snapshot and WAL recovery logic</h4>
+
+During recovery, Memgraph always attempts to use the fastest and most efficient
+method to restore the database state:
+- If the snapshot has a **more recent** timeline than the WAL, the database is
+fully recovered from the latest snapshot.
+- If the snapshot has a **less recent** timeline than the WAL, Memgraph first
+recovers from the snapshot, and then replays WAL files containing changes made
+after the snapshot was taken. This ensures recovery to the most recent state.
+- Snapshot recovery is **typically faster** than recovery from WAL because
+snapshots store the complete state of the database in a single file, while WAL
+files store incremental changes and need to be replayed sequentially.
+
 
 ### Periodic snapshots
 
@@ -158,8 +192,9 @@ mode is active. The job will continue with the last defined interval when the
 storage mode is changed to `IN_MEMORY_TRANSACTIONAL` storage mode.
 
 <Callout type="info">
-The periodic snapshot will be skipped if another snapshot is in progress or no new writes have been committed since the last snapshot.
-If the periodic snapshot is skipped it will be logged on INFO level.
+The periodic snapshot will be skipped if another snapshot is in progress or no
+new writes have been committed since the last snapshot. If the periodic snapshot
+is skipped it will be logged on INFO level.
 </Callout>
 
 <Callout type="warning">
@@ -168,33 +203,56 @@ Snapshots and WAL files are presently not compatible between Memgraph versions.
 
 ### Parallelized execution
 
-Snapshot creation in Memgraph can be optimized using multiple threads, which significantly reduces the time required to create snapshots for large datasets. 
+Snapshot creation in Memgraph can be optimized using multiple threads, which
+significantly reduces the time required to create snapshots for large datasets. 
 
 This behavior can be controlled using the following flags:
-- `--storage-parallel-snapshot-creation`: This flag determines whether snapshot creation is performed in a multi-threaded fashion. By default, it is set to `false`. To enable parallelized execution, set this flag to `true`.
-- `--storage-snapshot-thread-count`: This flag specifies the number of threads to be used for snapshot creation. By default, Memgraph uses the system's maximum thread count. You can override this value to fine-tune performance based on your system's resources.
+- `--storage-parallel-snapshot-creation`: This flag determines whether snapshot
+  creation is performed in a multi-threaded fashion. By default, it is set to
+  `false`. To enable parallelized execution, set this flag to `true`.
+- `--storage-snapshot-thread-count`: This flag specifies the number of threads
+  to be used for snapshot creation. By default, Memgraph uses the system's
+  maximum thread count. You can override this value to fine-tune performance
+  based on your system's resources.
 
-When parallelized execution is enabled, Memgraph divides the data into batches, where the batch size is defined via `--storage-items-per-batch`. The optimal batch size and thread count may vary depending on the dataset size and system configuration.
+When parallelized execution is enabled, Memgraph divides the data into batches,
+where the batch size is defined via `--storage-items-per-batch`. The optimal
+batch size and thread count may vary depending on the dataset size and system
+configuration.
 
-#### When Parallelization Helps
+<h4 className="custom-header">When parallelization helps</h4>
 
-Parallel execution is especially beneficial when CPU-bound operations dominate the snapshot creation process, such as serialization or compression of in-memory structures.
-As a general guideline, parallel snapshot creation provides the most significant performance improvement when disk I/O constitutes 25% or less of the total snapshot creation time.
+Parallel execution is especially beneficial when CPU-bound operations dominate
+the snapshot creation process, such as serialization or compression of in-memory
+structures. As a general guideline, parallel snapshot creation provides the most
+significant performance improvement when disk I/O constitutes 25% or less of the
+total snapshot creation time.
 
-To take full advantage of parallelization, it’s also important to set the `--storage-items-per-batch` flag appropriately. This value determines how the dataset is split into work units for threads.
-A good rule of thumb is: Total number of items (vertices + edges) ≈ 4 × number of threads × --storage-items-per-batch
-This ensures that each thread has enough batches to work on without idling, helping maximize CPU utilization during snapshot creation.
+To take full advantage of parallelization, it’s also important to set the
+`--storage-items-per-batch` flag appropriately. This value determines how the
+dataset is split into work units for threads. A good rule of thumb is: Total
+number of items (vertices + edges) ≈ 4 × number of threads ×
+--storage-items-per-batch This ensures that each thread has enough batches to
+work on without idling, helping maximize CPU utilization during snapshot
+creation.
 
-When using multi-threaded snapshot creation with the correct batch size, the disk will once again become the bottleneck. At that point, more threads will not necessarily yield better performance.
+When using multi-threaded snapshot creation with the correct batch size, the
+disk will once again become the bottleneck. At that point, more threads will not
+necessarily yield better performance.
 
-##### Measuring Disk Write Speed on Linux
-To determine how fast your disk can handle writes (which influences the I/O bottleneck), you can use the dd command:
+
+<h4 className="custom-header">Measuring disk write speed on Linux</h4>
+
+To determine how fast your disk can handle writes (which influences the I/O
+bottleneck), you can use the dd command:
 ```bash
 dd if=/dev/zero of=testfile bs=1G count=1 oflag=direct
 ```
-This writes a 1 GB file directly to disk and reports the write speed. After the test, remove the file.
+This writes a 1 GB file directly to disk and reports the write speed. After the
+test, remove the file.
 
-You can also monitor real-time disk utilization during snapshot creation using tools like `iostat`, `iotop`, or `dstat`.
+You can also monitor real-time disk utilization during snapshot creation using
+tools like `iostat`, `iotop`, or `dstat`.
 
 ## Storage modes
 
