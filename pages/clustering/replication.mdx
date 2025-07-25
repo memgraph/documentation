@@ -71,20 +71,29 @@ cluster.
 
 Once demoted to REPLICA instances, they will no longer accept write queries. In
 order to start the replication, each REPLICA instance needs to be registered
-from the MAIN instance by setting a replication mode (SYNC or ASYNC) and
+from the MAIN instance by setting a replication mode (SYNC, ASYNC or STRICT_SYNC) and
 specifying the REPLICA instance's socket address.
 
 The replication mode defines the terms by which the MAIN instance can commit the
 changes to the database, thus modifying the system to prioritize either
 consistency or availability:
 
-- **SYNC** - After committing a transaction, the MAIN instance will communicate
-the changes to all REPLICA instances running in SYNC mode and wait until it
-receives a response or information that a timeout is reached. SYNC mode ensures
+
+- **STRICT_SYNC** - After committing a transaction, the MAIN instance will communicate
+the changes to all REPLICA instances and wait until it
+receives a response or information that a timeout is reached. The STRICT_SYNC mode ensures
 consistency and partition tolerance (CP), but not availability for writes. If
 the primary database has multiple replicas, the system is highly available for
 reads. But, when a replica fails, the MAIN instance can't process the write due
-to the nature of synchronous replication.
+to the nature of synchronous replication. It is implemented as two-phase commit protocol.
+
+
+- **SYNC** - After committing a transaction, the MAIN instance will communicate
+the changes to all REPLICA instances and wait until it
+receives a response or information that a timeout is reached. It is different from
+**STRICT_SYNC** mode because it the MAIN can continue committing even in situations
+when **SYNC** replica is down.
+
 
 - **ASYNC** - The MAIN instance will commit a transaction without receiving
   confirmation from REPLICA instances that they have received the same
@@ -234,6 +243,14 @@ the following query:
 REGISTER REPLICA name ASYNC TO <socket_address>;
 ```
 
+
+If you want to register a REPLICA instance with an STRICT_SYNC replication mode, run
+the following query:
+
+```plaintext
+REGISTER REPLICA name STRICT_SYNC TO <socket_address>;
+```
+
 The socket address must be a string value as follows:
 
 ```plaintext
@@ -282,8 +299,7 @@ If you set REPLICA roles using port `10000`, you can define the socket address s
 
 When a REPLICA instance is registered, it will start replication in ASYNC mode
 until it synchronizes to the current state of the database. Upon
-synchronization, REPLICA instances will either continue working in the ASYNC
-mode or reset to SYNC mode.
+synchronization, REPLICA instances will either continue working in the ASYNC, STRICT_SYNC or SYNC mode.
 
 ### Listing all registered REPLICA instances
 
@@ -493,10 +509,12 @@ accepts read and write queries to the database and REPLICA instances accept only
 read queries.
 
 The changes or state of the MAIN instance are replicated to the REPLICA
-instances in a SYNC or ASYNC mode. The SYNC mode ensures consistency and
+instances in a SYNC, STRICT_SYNC or ASYNC mode. The STRICT_SYNC mode ensures consistency and
 partition tolerance (CP), but not availability for writes. The ASYNC mode
 ensures system availability and partition tolerance (AP), while data can only be
-eventually consistent.
+eventually consistent. The SYNC mode is something in between because it waits
+for writes to be accepted on replicas but MAIN can still commit even in situations
+when one of REPLICAs is down.
 
 By using the timestamp, the MAIN instance knows the current state of the
 REPLICA. If the REPLICA is not synchronized with the MAIN instance, the MAIN
@@ -552,6 +570,17 @@ SYNC REPLICA doesn't answer within the expected timeout.
 
 ![](/pages/clustering/replication/workflow_diagram_data_manipulation.drawio.png)
 
+
+#### STRICT_SYNC replication mode
+
+The STRICT_SYNC replication mode behaves very similarly to a
+SYNC mode except that MAIN won't commit a transaction locally in a situation in
+which one of STRICT_SYNC replicas is down. To achieve that, all instances run
+together a two-commit protocol which allows you such a synchronization. This 
+reduces the throughout but such a mode is super useful in a high-availability
+scenario in which a failover is the most operation to support. Such a mode then
+allows you a failover without the fear of experiencing a data loss.
+
 #### ASYN replication mode
 
 In the ASYNC replication mode, the MAIN instance will commit a transaction
@@ -570,6 +599,7 @@ instance.
 ![](/pages/clustering/replication/memgraph-replication-async.png)
 
 ASYNC mode ensures system availability and partition tolerance.
+
 
 ### Synchronizing instances
 
