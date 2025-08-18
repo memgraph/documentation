@@ -308,6 +308,12 @@ Running this query will provide information about currently logged-in Memgraph u
 SHOW ACTIVE USERS INFO;
 ```
 
+Identical information can be obtained by executing the following command:
+
+```cypher
+SHOW ACTIVE USERS;
+```
+
 ```copy=false
 | username | session uuid                           | login timestamp       |
 |----------|----------------------------------------|-----------------------|
