@@ -966,3 +966,92 @@ CALL refactor.rename_type_property("distance_in_km","distance",[r]) YIELD relati
 | 1                                     |
 +---------------------------------------+
 ```
+
+### `mergeNodes()`
+
+Merges the properties, labels and relationships for the source nodes to the target node.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `subgraph: Graph` (**OPTIONAL**) ➡ A specific subgraph, which is an [object of type Graph](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph) returned by the `project()` function, on which the algorithm is run. 
+If subgraph is not specified, the algorithm is computed on the entire graph by default.
+
+- `nodes: List[Node]` ➡  List of nodes that will be merged into the first node of the list. Exception is thrown if the node list is empty.
+- `config: Map` ➡ Configuration parameters:
+  - `properties: string` ➡ values: `combine`, `override/overwrite`, `discard`:
+    - `combine` ➡ if there are multiple values of the properties, they will be merged into a list of values. if there is only one property, then it will be the same value
+    - `override` ➡ last property in the list wins
+    - `overwrite` ➡ same as `override`
+    - `discard` ➡ discard the properties of the nodes - value will be null
+  - `.*: string` ➡ equivalent to properties
+  - `mergeRels: boolean` ➡ specify whether the relationships will be merged into the target node or discarded.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `node: Node` ➡ Merged node with updated properties, labels and relationships.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+Create a graph using the queries below:
+
+```cypher
+CREATE (n1:Person {name: 'Alice', age: 30, city: 'New York'})
+CREATE (n2:Person {name: 'Bob', age: 25, country: 'USA'}); 
+```
+
+Use the procedure to merge the nodes:
+
+```cypher
+MATCH (n1:Person {name: 'Alice'}), (n2:Person {name: 'Bob'})
+CALL refactor.merge_nodes([n1, n2], {properties: 'combine'}) YIELD node
+RETURN node.name as name, node.age as age, node.city as city, node.country as country;
+```
+
+or
+
+```cypher
+MATCH (n1:Person {name: 'Alice'}), (n2:Person {name: 'Bob'})
+CALL refactor.merge_nodes([n1, n2], {`.*`: 'combine'}) YIELD node
+RETURN node.name as name, node.age as age, node.city as city, node.country as country;
+```
+
+The procedure returns the merged node properties:
+
+```plaintext
++-----------------------------------------------------+
+| name             | age      | city       | country  |
++-----------------------------------------------------+
+| ["Alice", "Bob"] | [30, 25] | "New York" | "USA"    |
++-----------------------------------------------------+
+```
+
+The following scenario will also merge the relationships:
+
+Create a graph using the queries below:
+
+```cypher
+CREATE (n1:Person {name: 'Alice', age: 30, city: 'New York'})
+CREATE (n2:Person {name: 'Bob', age: 25, country: 'USA'})
+CREATE (n3:Person {name: 'Charlie', age: 35, city: 'London'})
+CREATE (n1)-[:KNOWS {since: 2020}]->(n2)
+CREATE (n2)-[:WORKS_WITH {project: 'Project X'}]->(n3)
+CREATE (n3)-[:FRIENDS_WITH {since: 2019}]->(n1); 
+```
+
+Use the procedure to merge the nodes and relationships:
+
+```cypher
+  MATCH (n1:Person {name: 'Alice'}), (n2:Person {name: 'Bob'}), (n3:Person {name: 'Charlie'})
+  CALL refactor.merge_nodes([n1, n2, n3], {properties: 'combine', mergeRels: true}) YIELD node
+  RETURN node.name as name, outDegree(node) as out_degree, inDegree(node) as in_degree;
+```
+
+The procedure returns the merged node properties:
+
+```plaintext
++----------------------------------------------------+
+| name                        | inDegree | outDegree |
++----------------------------------------------------+
+| ["Alice", "Bob", "Charlie"] | 3        | 3         |
++----------------------------------------------------+
+```
