@@ -355,10 +355,22 @@ EXISTS subqueries do not require a `RETURN` clause. If one is present, it does n
 ```cypher
 MATCH (person:Person)
 WHERE EXISTS {
-    MATCH (person)-[:HAS_DOG]->(:Dog)
-    RETURN person.name
+    MATCH (person)-[:LIVING_IN]->(country:Country)
+    RETURN country.name
 }
 RETURN person.name AS name
+```
+
+Output:
+
+```nocopy
++---------+
+| name    |
++---------+
+| Anna    |
+| Harry   |
+| John    |
++---------+
 ```
 
 ### 4.5. EXISTS with UNION
@@ -367,29 +379,49 @@ EXISTS can be used with a `UNION` clause, and the `RETURN` clauses are not requi
 
 ```cypher
 MATCH (person:Person)
-RETURN
-    person.name AS name,
-    EXISTS {
-        MATCH (person)-[:HAS_DOG]->(:Dog)
+WHERE EXISTS {
+        MATCH (person)-[:LIVING_IN]->(:Country {name: 'Germany'})
         UNION
-        MATCH (person)-[:HAS_CAT]->(:Cat)
-    } AS hasPet
+        MATCH (person)-[:WORKING_IN]->(:Country {name: 'United Kingdom'})
+    }
+RETURN person.name AS name
+```
+
+Output:
+
+```nocopy
++---------+
+| name    |
++---------+
+| Anna    |
+| Harry   |
++---------+
 ```
 
 ### 4.6. Outer scope variables and WITH
 
-Variables from the outside scope are visible for the entire subquery, even when using a `WITH` clause. Shadowing these variables is not allowed. An outside scope variable is shadowed when a newly introduced variable within the inner scope is defined with the same name. The example below shadows the outer variable `name` and will therefore throw an error.
+Variables from the outside scope are visible for the entire subquery, even when using a `WITH` clause. Shadowing these variables is not allowed. An outside scope variable is shadowed when a newly introduced variable within the inner scope is defined with the same name. The example below shadows the outer variable `countryName` and will therefore throw an error.
 
 ```cypher
-WITH 'Peter' as name
-MATCH (person:Person {name: name})
+WITH 'United Kingdom' as countryName
+MATCH (person:Person)-[:LIVING_IN]->(c:Country {name: countryName})
 WHERE EXISTS {
-    WITH "Ozzy" AS name
-    MATCH (person)-[:HAS_DOG]->(d:Dog)
-    WHERE d.name = name
+    WITH "Germany" AS countryName
+    MATCH (person)-[:LIVING_IN]->(d:Country)
+    WHERE d.name = countryName
 }
 RETURN person.name AS name
 ```
+
+```nocopy
++---------+
+| name    |
++---------+
+| Anna    |
+| John    |
++---------+
+```
+
 
 ## Dataset queries
 
