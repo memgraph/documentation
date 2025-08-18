@@ -1,6 +1,6 @@
 ---
 title: WHERE clause
-description: In Memgraph, easily transform lists into individual rows with the UNWIND operator. Get started with our extensive documentation and other resources available.
+description: In Memgraph, easily rows with the WHERE 
 ---
 
 # WHERE clause
@@ -25,6 +25,13 @@ order to avoid problems with performance or results.
    1.7. [Filter with pattern expressions](#17-filter-with-pattern-expressions)<br />
 2. [String matching](#2-string-matching)<br />
 3. [Regular Expressions](#3-regular-expressions)
+4. [Existential subqueries](#4-existential-subqueries)<br />
+   4.1. [Basic EXISTS in WHERE](#41-basic-exists-in-where)<br />
+   4.2. [Negation with NOT EXISTS](#42-negation-with-not-exists)<br />
+   4.3. [When to use EXISTS instead of pattern expressions](#43-when-to-use-exists-instead-of-pattern-expressions)<br />
+   4.4. [RETURN in EXISTS subqueries](#44-return-in-exists-subqueries)<br />
+   4.5. [EXISTS with UNION](#45-exists-with-union)<br />
+   4.6. [Outer scope variables and WITH](#46-outer-scope-variables-and-with)
 
 ## Dataset
 
@@ -237,6 +244,152 @@ expression grammar. The ECMAScript grammar can be found
 [here](http://ecma-international.org/ecma-262/5.1/#sec-15.10), while the
 modifications are described in [this
 document](https://en.cppreference.com/w/cpp/regex/ecmascript).
+
+## 4. Existential subqueries
+
+Existential subqueries allow you to use `EXISTS { ... }` within `WHERE` (or as a standalone expression) to test whether a subquery returns at least one row. The subquery can reference variables from the outer scope (correlated subquery), while variables created inside the subquery are not visible outside of it.
+
+### 4.1. Basic EXISTS in WHERE
+
+Return people who live in Germany:
+
+```cypher
+MATCH (p:Person)
+WHERE EXISTS {
+  MATCH (p)-[:LIVING_IN]->(:Country {name: 'Germany'})
+}
+RETURN p.name
+ORDER BY p.name;
+```
+
+Output:
+
+```nocopy
++---------+
+| p.name  |
++---------+
+| Anna    |
+| John    |
++---------+
+```
+
+### 4.2. Negation with NOT EXISTS
+
+Return people who do not live in the United Kingdom:
+
+```cypher
+MATCH (p:Person)
+WHERE NOT EXISTS {
+  MATCH (p)-[:LIVING_IN]->(:Country {name: 'United Kingdom'})
+}
+RETURN p.name
+ORDER BY p.name;
+```
+
+Output:
+
+```nocopy
++---------+
+| p.name  |
++---------+
+| John    |
++---------+
+```
+
+### 4.3. When to use EXISTS instead of pattern expressions
+
+Pattern expressions like `exists( (p)-[:FRIENDS_WITH]-() )` are convenient for simple existence checks, but they cannot contain additional clauses such as `WHERE`, `WITH`/aggregation, or multiple pattern parts. `EXISTS { ... }` supports this additional logic.
+
+For example, return people who have at least two friendships (uses aggregation inside the subquery):
+
+```cypher
+MATCH (p:Person)
+WHERE EXISTS {
+  MATCH (p)-[:FRIENDS_WITH]-(:Person)
+  WITH count(*) AS friendsCount
+  WHERE friendsCount >= 2
+}
+RETURN p.name
+ORDER BY p.name;
+```
+
+Output:
+
+```nocopy
++---------+
+| p.name  |
++---------+
+| Anna    |
+| Harry   |
+| John    |
++---------+
+```
+
+You can also include property predicates on relationships inside the subquery. For example, people connected by a friendship that started before 2012:
+
+```cypher
+MATCH (p:Person)
+WHERE EXISTS {
+  MATCH (p)-[r:FRIENDS_WITH]-(:Person)
+  WHERE r.date_of_start < 2012
+}
+RETURN p.name
+ORDER BY p.name;
+```
+
+Output:
+
+```nocopy
++---------+
+| p.name  |
++---------+
+| Harry   |
+| John    |
++---------+
+```
+
+### 4.4. RETURN in EXISTS subqueries
+
+EXISTS subqueries do not require a `RETURN` clause. If one is present, it does not need to be aliased (unlike `CALL` subqueries), and any variables returned within the `EXISTS` subquery are not available after the subquery finishes.
+
+```cypher
+MATCH (person:Person)
+WHERE EXISTS {
+    MATCH (person)-[:HAS_DOG]->(:Dog)
+    RETURN person.name
+}
+RETURN person.name AS name
+```
+
+### 4.5. EXISTS with UNION
+
+EXISTS can be used with a `UNION` clause, and the `RETURN` clauses are not required. If one branch has a `RETURN` clause, then all branches require one. If any `UNION` branch returns at least one row, the entire `EXISTS` expression evaluates to `true`.
+
+```cypher
+MATCH (person:Person)
+RETURN
+    person.name AS name,
+    EXISTS {
+        MATCH (person)-[:HAS_DOG]->(:Dog)
+        UNION
+        MATCH (person)-[:HAS_CAT]->(:Cat)
+    } AS hasPet
+```
+
+### 4.6. Outer scope variables and WITH
+
+Variables from the outside scope are visible for the entire subquery, even when using a `WITH` clause. Shadowing these variables is not allowed. An outside scope variable is shadowed when a newly introduced variable within the inner scope is defined with the same name. The example below shadows the outer variable `name` and will therefore throw an error.
+
+```cypher
+WITH 'Peter' as name
+MATCH (person:Person {name: name})
+WHERE EXISTS {
+    WITH "Ozzy" AS name
+    MATCH (person)-[:HAS_DOG]->(d:Dog)
+    WHERE d.name = name
+}
+RETURN person.name AS name
+```
 
 ## Dataset queries
 
