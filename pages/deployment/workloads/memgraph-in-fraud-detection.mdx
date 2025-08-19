@@ -22,7 +22,7 @@ unique needs of your use case.
 This guide is for you if you're building real-time **fraud detection**, **anti-money laundering (AML)**, or **account abuse** systems.
 You'll benefit from this content if:
 
-- You need to **detect anomalies in near real time** across transactions, devices, identities, and merchants.
+- You need to **detect anomalies in real time** across transactions, devices, identities, and merchants.
 - You want to uncover **multi-hop fraud rings** (e.g., money mules, collusion networks, synthetic identities) and **account takeover cascades**.
 - You plan to run **what‑if tests** to evaluate new rules, thresholds, and investigation workflows before rollout.
 - You ingest high-velocity events from **payments/auth logs/identity services** and require consistent read performance while updates stream in.
@@ -31,11 +31,10 @@ You'll benefit from this content if:
 ## Why choose Memgraph for fraud detection?
 
 - **In-memory architecture**: Consistent, predictable response times for scoring, alerting, and investigator tooling.
-- **Path traversals with advanced filtering**: Deep path traversal supports expressive, constraint-based pathfinding with hop limits, time windows, and custom costs—perfect for modeling
-  complex fraud patterns (velocity checks, device/geo constraints, merchant categories). Learn more in
-  [Deep path traversal algorithms](/advanced-algorithms/deep-path-traversal).
-- **Non-blocking reads and writes (MVCC)**: Keep scoring and investigation UIs responsive while events are continuously ingested.
-- **Snapshot isolation by default**: Provide investigators with consistent, reproducible graph views.
+- **Graph algorithms (MAGE)**: Use community detection, node similarity, centralities, and more to **infer hidden structure and risk signals** (e.g., collusion clusters, mule networks, synthetic identities). Explore the [available algorithms](/advanced-algorithms/available-algorithms).
+- **Streaming/dynamic algorithms**: Keep results fresh on **high‑velocity data** with online/dynamic algorithms that update incrementally (e.g., online centralities). See [dynamic graph algorithms](/advanced-algorithms/available-algorithms#dynamic-graph-algorithms-enterprise).
+- **GNNs and ML on graph topology**: Leverage graph-native topology for **GNNs** (e.g., node classification, link prediction) and combine **embeddings** with graph algorithms to improve fraud detection accuracy over tabular‑only baselines.
+
 
 ## What is covered?
 
@@ -44,13 +43,10 @@ The suggestions for fraud detection workloads complement several key sections in
 additional best practices tailored for performance, stability, and scalability in production:
 
 - [Choosing the right Memgraph flag set](/deployment/best-practices#choosing-the-right-memgraph-flag-set)  
-  Configure flags for streaming updates, long-running analytics, and schema access.
+  Configure flags for schema access.
 
 - [Choosing the right Memgraph storage mode](/deployment/best-practices#choosing-the-right-memgraph-storage-mode)  
   Select between transactional durability and multithreaded ingestion for your workload.
-
-- [Importing mechanisms](#importing-mechanisms)  
-  Plan ingestion from streams and batch sources safely and idempotently.
 
 - [Optimizing fraud detection](#optimizing-fraud-detection)  
   Use deep path traversals, map properties, and nested indices.
@@ -59,16 +55,6 @@ additional best practices tailored for performance, stability, and scalability i
   Secure multi-user environments and ensure governance.
 
 ## Choosing the right Memgraph flag set
-
-Fraud events often arrive as standardized messages where not every property changes.
-To reduce write overhead during high-throughput ingestion, consider:
-
-```bash
---storage-delta-on-identical-property-update=false
-```
-
-With this setting, Memgraph creates delta records only for properties that actually changed, improving throughput when many updates repeat existing values.
-All available flags are listed in the [Configuration](/database-management/configuration) section.
 
 If you plan to power natural-language interfaces for investigators (see GraphRAG below), enable constant-time schema retrieval:
 
@@ -80,54 +66,13 @@ This drastically reduces time to provide schema to an LLM, improving responsiven
 
 ## Choosing the right Memgraph storage mode
 
-Use the mode that best aligns with your requirements:
+Most finance and fraud workloads are inherently **transactional** (safety-critical decisions, auditability, recoverability). As a default,
+we recommend running in `IN_MEMORY_TRANSACTIONAL` mode to ensure **ACID guarantees**, support for **replication/HA**, and **WAL/snapshot** durability.
 
-- Use `IN_MEMORY_TRANSACTIONAL` if you require **ACID guarantees**, **replication**, or **high availability** for safety-critical decisions.
-- Use `IN_MEMORY_ANALYTICAL` if you prioritize **multithreaded ingestion** and **read-only analytics/simulations** where you don’t need transactional rollback.
+Consider `IN_MEMORY_ANALYTICAL` only for specialized pipelines focused on **bulk/multithreaded ingestion** and **read-only analytics/simulations** where transactional rollback isn’t required.
+Another suitable flow for using analytical is during import, after which the user will switch to `IN_MEMORY_TRANASCTIONAL` mode for ensuring data consistency during the batch update process day-to-day.
 
 Learn more about storage modes in the [Storage memory usage](/fundamentals/storage-memory-usage#storage-modes) documentation.
-
-## Importing mechanisms
-
-Memgraph natively integrates with **data streams** (e.g., Kafka) and supports **batch imports**. For multi-source fraud data:
-
-- Use drivers or native stream integrations for near-real-time updates.
-- If you have multiple concurrent writers, use drivers with **retryable (managed) transactions** to handle transient conflicts during bursts.
-- Keep ingestion **idempotent** to allow safe replays.
-
-See [Data streams](/data-streams) and guidance on
-[conflicting transactions](/help-center/errors/transactions#conflicting-transactions).
-
-## Optimizing fraud detection
-
-### Deep path traversals for rings and routing of funds
-Use deep path traversals to identify suspicious multi-hop structures and flows:
-
-```cypher
-// Example: amount-weighted path from a source to a sink account under custom cost
-MATCH path=(s:Account {id: $sourceId})-[:SENT_TO|TRANSFERRED_TO*WSHORTEST (r, n | coalesce(r.amount, 1)) total_amount]->(t:Account {id: $targetId})
-RETURN path, total_amount;
-```
-
-Filter expansions by properties (e.g., time windows, MCC codes, device fingerprints), set hop limits,
-or use composite weights and predicates. See
-[Deep path traversal algorithms](/advanced-algorithms/deep-path-traversal).
-
-### Map properties and nested indices
-Fraud pipelines often carry semi-structured payloads (auth metadata, device, geo, channel). Store JSON-like maps and index nested fields:
-
-```cypher
-CREATE INDEX ON :Event(details.device.fingerprint);
-```
-
-Nested indices speed up filters like `WHERE e.details.device.fingerprint = $fp` without over-normalizing your model.
-Learn more in [Indexes](/fundamentals/indexes#label-property-index).
-
-### Time windows and TTL
-Use time predicates to bound traversals to recent activity, and consider **TTL** to control graph size:
-
-- Time filters: `WHERE r.ts >= $from AND r.ts < $to`
-- TTL policies: see [Time to live](/querying/time-to-live)
 
 ## Enterprise features you might require
 
@@ -140,7 +85,54 @@ Use time predicates to bound traversals to recent activity, and consider **TTL**
   [High availability](/clustering/high-availability) and [Replication](/clustering/replication).
 
 - **Multi-tenancy**  
-  Isolate per product, region, or customer program. See [Multi-tenancy](/database-management/multi-tenancy).
+  Isolate per product, region, or use case. See [Multi-tenancy](/database-management/multi-tenancy).
+
+- **Single sign-on (SSO) for Memgraph Lab**  
+  Streamline secure access for your fraud investigators and stakeholders. See [Single sign-on](/memgraph-lab/features/single-sign-on).
+
+- **Audit logs**  
+  Track access and changes for compliance and investigations. See [Audit log](/database-management/enabling-memgraph-enterprise#audit-log).
+
+- **Query sharing for collaboration**  
+  Enable investigators to share queries and findings seamlessly. See [Sharing features](/database-management/enabling-memgraph-enterprise#sharing-features).
+
+## Working with fraud detection
+
+There are three complementary ways to build fraud detection on Memgraph:
+
+### 1) Basic pattern matching in Cypher
+Use Cypher to encode rules and patterns directly over the graph:
+- Variable‑length paths for multi‑hop patterns (e.g., mule chains, shared devices)
+- Property/time filters for velocity and windowing
+- Negative patterns (absence of expected relationships)
+
+```cypher
+// Example: shared device across multiple accounts in a short window
+MATCH (d:Device)<-[:USED_DEVICE]-(a:Account)-[:PERFORMED]->(tx:Txn)
+WHERE tx.ts >= $from AND tx.ts < $to
+WITH d, collect(DISTINCT a) AS accounts
+WHERE size(accounts) >= $minAccounts
+RETURN d, accounts;
+```
+
+### 2) Graph algorithms (MAGE)
+Compute risk signals by scoring topology. Commonly useful algorithms include:
+- [Katz centrality](/advanced-algorithms/available-algorithms/katz_centrality)
+- [Degree centrality](/advanced-algorithms/available-algorithms/degree_centrality)
+- [Community detection](/advanced-algorithms/available-algorithms/community_detection)
+- [PageRank](/advanced-algorithms/available-algorithms/pagerank)
+- [Betweenness centrality](/advanced-algorithms/available-algorithms/betweenness_centrality)
+- [Node similarity](/advanced-algorithms/available-algorithms/node_similarity)
+
+Browse more in [Available algorithms](/advanced-algorithms/available-algorithms). Many also have online/dynamic variants (e.g., [pagerank_online](/advanced-algorithms/available-algorithms/pagerank_online), [katz_centrality_online](/advanced-algorithms/available-algorithms/katz_centrality_online)) for high‑velocity data.
+
+### 3) Machine learning on graphs
+Leverage graph structure and embeddings to train models:
+- Supervised GNNs: [GNN node classification](/advanced-algorithms/available-algorithms/gnn_node_classification), [GNN link prediction](/advanced-algorithms/available-algorithms/gnn_link_prediction)
+- Unsupervised embeddings: [node2vec](/advanced-algorithms/available-algorithms/node2vec), [node2vec_online](/advanced-algorithms/available-algorithms/node2vec_online)
+
+Combine ML features (embeddings, graph algorithm scores, rule outputs) into your fraud scoring pipeline to maximize precision/recall.
+
 
 ## Interact with your fraud graph using GraphRAG
 
