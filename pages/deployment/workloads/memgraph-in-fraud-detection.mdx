@@ -1,0 +1,157 @@
+---
+title: Memgraph in fraud detection
+description: Suggestions on how to bring your Memgraph to production in fraud detection and anti-abuse use cases.
+---
+
+import { Callout } from 'nextra/components'
+import { CommunityLinks } from '/components/social-card/CommunityLinks'
+
+# Memgraph in fraud detection
+
+<Callout type="info">
+Before diving into this guide, we recommend starting with the [Deployment best practices](/deployment/best-practices)
+page. It provides foundational, use-case-agnostic advice for deploying Memgraph in production.
+
+This guide builds on that foundation, offering additional recommendations tailored to fraud detection and anti-abuse workloads.
+In cases where guidance overlaps, consider the information here as complementary or overriding, depending on the
+unique needs of your use case.
+</Callout>
+
+## Is this guide for you?
+
+This guide is for you if you're building real-time **fraud detection**, **anti-money laundering (AML)**, or **account abuse** systems.
+You'll benefit from this content if:
+
+- You need to **detect anomalies in near real time** across transactions, devices, identities, and merchants.
+- You want to uncover **multi-hop fraud rings** (e.g., money mules, collusion networks, synthetic identities) and **account takeover cascades**.
+- You plan to run **what‑if tests** to evaluate new rules, thresholds, and investigation workflows before rollout.
+- You ingest high-velocity events from **payments/auth logs/identity services** and require consistent read performance while updates stream in.
+- You need to correlate evidence across systems for **investigation and case management**.
+
+## Why choose Memgraph for fraud detection?
+
+- **In-memory architecture**: Consistent, predictable response times for scoring, alerting, and investigator tooling.
+- **Path traversals with advanced filtering**: Deep path traversal supports expressive, constraint-based pathfinding with hop limits, time windows, and custom costs—perfect for modeling
+  complex fraud patterns (velocity checks, device/geo constraints, merchant categories). Learn more in
+  [Deep path traversal algorithms](/advanced-algorithms/deep-path-traversal).
+- **Non-blocking reads and writes (MVCC)**: Keep scoring and investigation UIs responsive while events are continuously ingested.
+- **Snapshot isolation by default**: Provide investigators with consistent, reproducible graph views.
+
+## What is covered?
+
+The suggestions for fraud detection workloads complement several key sections in the
+[general suggestions guide](/deployment/best-practices). These sections offer important context and
+additional best practices tailored for performance, stability, and scalability in production:
+
+- [Choosing the right Memgraph flag set](/deployment/best-practices#choosing-the-right-memgraph-flag-set)  
+  Configure flags for streaming updates, long-running analytics, and schema access.
+
+- [Choosing the right Memgraph storage mode](/deployment/best-practices#choosing-the-right-memgraph-storage-mode)  
+  Select between transactional durability and multithreaded ingestion for your workload.
+
+- [Importing mechanisms](#importing-mechanisms)  
+  Plan ingestion from streams and batch sources safely and idempotently.
+
+- [Optimizing fraud detection](#optimizing-fraud-detection)  
+  Use deep path traversals, map properties, and nested indices.
+
+- [Enterprise features you might require](#enterprise-features-you-might-require)  
+  Secure multi-user environments and ensure governance.
+
+## Choosing the right Memgraph flag set
+
+Fraud events often arrive as standardized messages where not every property changes.
+To reduce write overhead during high-throughput ingestion, consider:
+
+```bash
+--storage-delta-on-identical-property-update=false
+```
+
+With this setting, Memgraph creates delta records only for properties that actually changed, improving throughput when many updates repeat existing values.
+All available flags are listed in the [Configuration](/database-management/configuration) section.
+
+If you plan to power natural-language interfaces for investigators (see GraphRAG below), enable constant-time schema retrieval:
+
+```bash
+--schema-info-enabled=true
+```
+
+This drastically reduces time to provide schema to an LLM, improving responsiveness.
+
+## Choosing the right Memgraph storage mode
+
+Use the mode that best aligns with your requirements:
+
+- Use `IN_MEMORY_TRANSACTIONAL` if you require **ACID guarantees**, **replication**, or **high availability** for safety-critical decisions.
+- Use `IN_MEMORY_ANALYTICAL` if you prioritize **multithreaded ingestion** and **read-only analytics/simulations** where you don’t need transactional rollback.
+
+Learn more about storage modes in the [Storage memory usage](/fundamentals/storage-memory-usage#storage-modes) documentation.
+
+## Importing mechanisms
+
+Memgraph natively integrates with **data streams** (e.g., Kafka) and supports **batch imports**. For multi-source fraud data:
+
+- Use drivers or native stream integrations for near-real-time updates.
+- If you have multiple concurrent writers, use drivers with **retryable (managed) transactions** to handle transient conflicts during bursts.
+- Keep ingestion **idempotent** to allow safe replays.
+
+See [Data streams](/data-streams) and guidance on
+[conflicting transactions](/help-center/errors/transactions#conflicting-transactions).
+
+## Optimizing fraud detection
+
+### Deep path traversals for rings and routing of funds
+Use deep path traversals to identify suspicious multi-hop structures and flows:
+
+```cypher
+// Example: amount-weighted path from a source to a sink account under custom cost
+MATCH path=(s:Account {id: $sourceId})-[:SENT_TO|TRANSFERRED_TO*WSHORTEST (r, n | coalesce(r.amount, 1)) total_amount]->(t:Account {id: $targetId})
+RETURN path, total_amount;
+```
+
+Filter expansions by properties (e.g., time windows, MCC codes, device fingerprints), set hop limits,
+or use composite weights and predicates. See
+[Deep path traversal algorithms](/advanced-algorithms/deep-path-traversal).
+
+### Map properties and nested indices
+Fraud pipelines often carry semi-structured payloads (auth metadata, device, geo, channel). Store JSON-like maps and index nested fields:
+
+```cypher
+CREATE INDEX ON :Event(details.device.fingerprint);
+```
+
+Nested indices speed up filters like `WHERE e.details.device.fingerprint = $fp` without over-normalizing your model.
+Learn more in [Indexes](/fundamentals/indexes#label-property-index).
+
+### Time windows and TTL
+Use time predicates to bound traversals to recent activity, and consider **TTL** to control graph size:
+
+- Time filters: `WHERE r.ts >= $from AND r.ts < $to`
+- TTL policies: see [Time to live](/querying/time-to-live)
+
+## Enterprise features you might require
+
+- **Role-based and label-based access control (RBAC/LBAC)**  
+  Ensure least-privilege access across analysts, SOC teams, and external partners. See
+  [Role-based access control](/database-management/authentication-and-authorization/role-based-access-control).
+
+- **Replication and high availability**  
+  Keep scoring and investigations online with leader–replica setups and automatic failover. See
+  [High availability](/clustering/high-availability) and [Replication](/clustering/replication).
+
+- **Multi-tenancy**  
+  Isolate per product, region, or customer program. See [Multi-tenancy](/database-management/multi-tenancy).
+
+## Interact with your fraud graph using GraphRAG
+
+Enable natural-language interaction for triage and investigations with GraphRAG and GraphChat in Memgraph Lab.
+This helps non-technical stakeholders quickly ask: “Is user X linked to known fraud rings?” or “Show connections between these accounts in the last 30 days.”
+
+- See: [Memgraph in GraphRAG use cases](/deployment/workloads/memgraph-in-graphrag)
+- Include constant-time schema retrieval in your pipeline:
+
+```cypher
+SHOW SCHEMA INFO;
+```
+
+<CommunityLinks/> 
