@@ -1,105 +1,34 @@
 ---
-title: Multiple roles per user and multi-tenant roles
-description: Learn how to assign database-specific roles to users in multi-tenant environments with special permission filtering logic.
+title: Multi-role users and multi-tenant roles
+description: Learn how users can have multiple roles and how to assign database-specific roles in multi-tenant environments with special permission filtering logic.
 ---
 
 import { Callout } from 'nextra/components'
 
-# Multi-tenant roles (Enterprise)
+# Multi-role users and multi-tenant roles (Enterprise)
 
+As of v3.5 Memgraph allows users to have multiple roles assigned to them 
+simultaneously.
 Memgraph Enterprise supports multi-tenant roles, which allow users to have
 different roles assigned to them for specific databases. This feature enables
 proper tenant isolation and fine-grained access control in multi-tenant
 environments.
 
-## Overview
+## Privileges with multiple roles
 
-Multi-tenant roles are a specialized form of multiple roles that include special
-logic for database-specific permission filtering. When a user has multi-tenant
-roles, their permissions are dynamically filtered based on which database
-they're accessing, ensuring proper tenant isolation.
+When a user has multiple roles, their privileges are combined according to the
+following rules:
 
-Key benefits:
-- **Tenant Isolation**: Users can have different permissions for different
-  databases
-- **SSO Integration**: Support for external identity providers that return
-  multiple roles
+- **Grant**: If any assigned role with access to the database grants a
+  privilege, the user is granted that privilege.
+- **Deny**: If any assigned role with access to the database denies a privilege,
+  the user is denied that privilege—even if another role grants it.
+- **Effective privilege**: The user's effective privileges are the union of all
+  granted privileges, minus any that are denied by any role.
 
-
-## Authentication and authorization requirements
-
-Recent changes to Memgraph have introduced new requirements for authentication
-and authorization operations in multi-tenant environments. These changes affect
-how users can perform user and role management operations.
-
-
-### AUTH privilege requirement
-
-Authentication and authorization queries (such as `CREATE USER`, `CREATE ROLE`,
-`GRANT`, `DENY`, `REVOKE`, etc.) now require the `AUTH` privilege. Users must be
-explicitly granted this privilege to perform user and role management
-operations.
-
-### Default database access requirement
-
-In addition to the `AUTH` privilege, users must also have access to the default
-"memgraph" database to execute authentication and authorization queries. This
-requirement applies even when the user is working in other databases within a
-multi-tenant environment.
-
-### Replication and multi-database queries
-
-Replication queries (such as `REGISTER REPLICA`, `SHOW REPLICAS`, `DROP
-REPLICA`, etc.) and multi-database queries (such as `SHOW DATABASES`, `CREATE
-DATABASE`, `DROP DATABASE`, etc.) also now target the "memgraph" database and
-require access to it.
-
-<Callout type="warning"> **Multi-tenant environments**: These requirements are
-only a concern in multi-tenant environments where users have access to databases
-other than the default "memgraph" database. In single-database deployments,
-these requirements are automatically satisfied. </Callout>
-
-### Impact on multi-tenant role management
-
-When using multi-tenant roles, ensure that users who need to perform
-authentication, authorization, replication, or multi-database operations have:
-1. The appropriate privileges (`AUTH`, `REPLICATION`, `MULTI_DATABASE_USE`,
-   `MULTI_DATABASE_EDIT`)
-2. Access to the default "memgraph" database
-3. Appropriate role assignments for the "memgraph" database
-
-{<h4 className="custom-header">Example: Admin user with multi-tenant roles</h4>}
-
-```cypher
-    -- Create admin role with full privileges
-    CREATE ROLE system_admin;
-    GRANT ALL PRIVILEGES TO system_admin;
-    GRANT DATABASE memgraph TO system_admin;
-
-    -- Create tenant-specific admin roles
-    CREATE ROLE tenant1_admin;
-    CREATE ROLE tenant2_admin;
-    GRANT MATCH, CREATE, MERGE, SET, DELETE, INDEX TO tenant1_admin;
-    GRANT MATCH, CREATE, MERGE, SET, DELETE, INDEX TO tenant2_admin;
-    GRANT DATABASE tenant1_db TO tenant1_admin;
-    GRANT DATABASE tenant2_db TO tenant2_admin;
-
-    -- Create admin user
-    CREATE USER admin_user IDENTIFIED BY 'admin_password';
-
-    -- Assign roles with database-specific assignments
-    SET ROLE FOR admin_user TO system_admin ON memgraph;
-    SET ROLE FOR admin_user TO tenant1_admin ON tenant1_db;
-    SET ROLE FOR admin_user TO tenant2_admin ON tenant2_db;
-```
-
-In this setup, `admin_user` can:
-- Perform authentication/authorization operations when connected to the
-  "memgraph" database
-- Execute replication and multi-database queries when connected to the
-  "memgraph" database
-- Manage tenant1_db data when connected to tenant1_db
-- Manage tenant2_db data when connected to tenant2_db
+This means that **deny always takes precedence over grant** when there is a
+conflict. **Note:** The resulting user privileges contain user's privileges only
+if the user also has access to the database.
 
 ## Database access with users and roles
 
@@ -128,7 +57,6 @@ Database access follows these rules:
   denied
 - **Access**: User or role has database access if it is granted and not denied
 
-## Database access with multiple roles
 
 ### Combining database access
 
@@ -167,22 +95,6 @@ SET ROLE FOR user TO role1, role2;
 
 -- Result: User is denied access to db1 (deny takes precedence)
 ```
-
-## Privileges with multiple roles
-
-When a user has multiple roles, their privileges are combined according to the
-following rules:
-
-- **Grant**: If any assigned role with access to the database grants a
-  privilege, the user is granted that privilege.
-- **Deny**: If any assigned role with access to the database denies a privilege,
-  the user is denied that privilege—even if another role grants it.
-- **Effective privilege**: The user's effective privileges are the union of all
-  granted privileges, minus any that are denied by any role.
-
-This means that **deny always takes precedence over grant** when there is a
-conflict. **Note:** The resulting user privileges contain user's privileges only
-if the user also has access to the database.
 
 ## Creating database-specific roles
 
@@ -465,11 +377,8 @@ SET ROLE multi_db_role FOR user1 ON db2;
 12. **Plan for administrative operations**: Design your role structure to ensure
     that users who need to manage users, roles, replication, or multi-database
     operations have appropriate access to the "memgraph" database
-13. **Use explicit database context**: Always specify the database context when
-    using `SHOW ROLE` and `SHOW PRIVILEGES` commands in multi-tenant
-    environments
-14. **Choose appropriate context**: Use `ON MAIN` for the user's main database,
+13. **Use explicit database context**: Use `ON MAIN` for the user's main database,
     `ON CURRENT` for the currently active database, or `ON DATABASE` for a
     specific database
-15. **Verify permissions in context**: Always check roles and privileges in the
+14. **Verify permissions in context**: Always check roles and privileges in the
     specific database context where they will be used
