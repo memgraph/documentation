@@ -26,7 +26,7 @@ In multi-tenant environments, we recommend treating the default "memgraph" datab
 
 #### Why treat memgraph as an admin database?
 
-Recent changes to Memgraph require that users have both the `AUTH` privilege and access to the default "memgraph" database to execute authentication and authorization queries. Additionally, replication queries (such as `REGISTER REPLICA`, `SHOW REPLICAS`, etc.) and multi-database queries (such as `SHOW DATABASES`, `CREATE DATABASE`, etc.) also now target the "memgraph" database and require access to it. This requirement affects multi-tenant environments where users might have access to other databases but not the default one.
+As of Memgraph v3.5, users have to have both the `AUTH` privilege and access to the default "memgraph" database to execute authentication and authorization queries. Additionally, replication queries (such as `REGISTER REPLICA`, `SHOW REPLICAS`, etc.) and multi-database queries (such as `SHOW DATABASES`, `CREATE DATABASE`, etc.) also now target the "memgraph" database and require access to it. This requirement affects multi-tenant environments where users might have access to other databases but not the default one.
 
 #### Recommended setup
 
@@ -143,15 +143,15 @@ Access to all databases can be granted or revoked using wildcards:
 
 ### Multi-database queries and the memgraph database
 
-Recent changes to Memgraph have modified how multi-database queries are executed. Multi-database queries (such as `SHOW DATABASES`, `CREATE DATABASE`, `DROP DATABASE`, etc.) now target the "memgraph" database and require access to it.
+As of Memgraph v3.5 multi-database queries (such as `SHOW DATABASES`, `CREATE DATABASE`, `DROP DATABASE`, etc.) target the "memgraph" database and require access to it.
 
 To execute these queries, users must have:
 - The appropriate privileges (`MULTI_DATABASE_USE`, `MULTI_DATABASE_EDIT`)
-- Access to the default "memgraph" database
+- **AND** access to the default "memgraph" database
 
 ### Multi-tenant query syntax changes
 
-Recent changes to Memgraph have also modified the syntax for certain queries in multi-tenant environments. The `SHOW ROLE` and `SHOW PRIVILEGES` commands now require specifying the database context in some cases.
+As of Memgraph v3.5 the syntax for certain queries in multi-tenant environments have changed. The `SHOW ROLE` and `SHOW PRIVILEGES` commands now require specifying the database context in some cases.
 
 **SHOW ROLE FOR USER**: This command does not require database specification and will show all roles assigned to the user across all databases.
 
