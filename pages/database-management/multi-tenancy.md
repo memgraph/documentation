@@ -110,7 +110,8 @@ Users interact with multi-tenant features through specialized Cypher queries:
 1. `CREATE DATABASE name`: Creates a new database.
 2. `DROP DATABASE name`: Deletes a specified database.
 3. `SHOW DATABASE`: Shows the current used database. It will return `NULL` if
-   there is not one.
+   no database is currently in use. You can also use `SHOW CURRENT DATABASE` for the same functionality. This command does not require any special privileges.
+
 4. `SHOW DATABASES`: Shows only the existing set of multitenant databases.
 5. `USE DATABASE name`: Switches focus to a specific database (disabled during
    transactions).
@@ -150,11 +151,15 @@ To execute these queries, users must have:
 
 ### Multi-tenant query syntax changes
 
-Recent changes to Memgraph have also modified the syntax for certain queries in multi-tenant environments. The `SHOW ROLE` and `SHOW PRIVILEGES` commands now require specifying the database context.
+Recent changes to Memgraph have also modified the syntax for certain queries in multi-tenant environments. The `SHOW ROLE` and `SHOW PRIVILEGES` commands now require specifying the database context in some cases.
 
-#### SHOW ROLE syntax in multi-tenant environments
+**SHOW ROLE FOR USER**: This command does not require database specification and will show all roles assigned to the user across all databases.
 
-In multi-tenant environments, you must specify which database context to use when showing roles:
+**SHOW PRIVILEGES FOR USER**: This command requires database specification in multi-tenant environments.
+
+**SHOW PRIVILEGES FOR ROLE**: This command does not require database specification and will show all privileges for the role.
+
+In multi-tenant environments, you must specify which database context to use when showing privileges for users:
 
 1. **Show roles for the user's main database:**
 ```cypher
