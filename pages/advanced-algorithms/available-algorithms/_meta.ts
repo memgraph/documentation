@@ -33,6 +33,7 @@ export default {
   "leiden_community_detection": "leiden_community_detection",
   "llm_util": "llm_util",
   "map": "map",
+  "math": "math",
   "max_flow": "max_flow",
   "merge": "merge",
   "meta_util": "meta_util",
