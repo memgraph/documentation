@@ -331,6 +331,10 @@ Inserts a value of given type under field `field_name`.
 ```
 
 ```cpp
+  void Insert(const char *field_name, const ZonedDateTime value)
+```
+
+```cpp
   void Insert(const char *field_name, const Duration value)
 ```
 
@@ -417,6 +421,10 @@ Sets a return value of given type.
 
 ```cpp
   void SetValue(const LocalDateTime &value)
+```
+
+```cpp
+  void SetValue(const ZonedDateTime &value)
 ```
 
 ```cpp
@@ -1533,6 +1541,179 @@ Object is hashable using
 std::hash<mgp::LocalDateTime>
 ```
 
+### ZonedDateTime
+Temporal type representing a date-time with timezone information.
+#### Constructors
+Creates a ZonedDateTime object from the copy of the given `mgp_zoned_date_time`.
+```cpp
+explicit ZonedDateTime(mgp_zoned_date_time *ptr)
+explicit ZonedDateTime(const mgp_zoned_date_time *const_ptr)
+```
+Creates a ZonedDateTime object from the given string representing a date in the ISO 8601 format
+(`YYYY-MM-DDThh:mm:ss`, `YYYY-MM-DDThh:mm`, `YYYYMMDDThhmmss`, `YYYYMMDDThhmm`, or `YYYYMMDDThh`).
+The string can also include timezone information as a numeric offset (`+HH:MM` or `-HH:MM`) or
+a named timezone identifier (`[America/New_York]`).
+```cpp
+explicit ZonedDateTime(std::string_view string)
+```
+Creates a ZonedDateTime object with the given `year`, `month`, `day`, `hour`, `minute`, `second`,
+`millisecond`, `microsecond`, and `offset_in_minutes` properties.
+```cpp
+ZonedDateTime(int year, int month, int day, int hour, int minute, int second, int millisecond, int microsecond,
+              int offset_in_minutes)
+```
+Creates a ZonedDateTime object with the given `year`, `month`, `day`, `hour`, `minute`, `second`,
+`millisecond`, `microsecond`, and `timezone_name` properties.
+```cpp
+ZonedDateTime(int year, int month, int day, int hour, int minute, int second, int millisecond, int microsecond,
+              std::string_view timezone_name)
+```
+```cpp
+ZonedDateTime(const ZonedDateTime &other)
+ZonedDateTime(ZonedDateTime &&other) noexcept
+```
+#### Member functions
+
+| Name                     | Description                                                       |
+| ------------------------ | ----------------------------------------------------------------- |
+| `Now`                    | Returns the current `ZonedDateTime`.                              |
+| `Year`                   | Returns the object's `year` property.                             |
+| `Month`                  | Returns the object's `month` property.                            |
+| `Day`                    | Returns the object's `day` property.                              |
+| `Hour`                   | Returns the object's `hour` property.                             |
+| `Minute`                 | Returns the object's `minute` property.                           |
+| `Second`                 | Returns the object's `second` property.                           |
+| `Millisecond`            | Returns the object's `millisecond` property.                      |
+| `Microsecond`            | Returns the object's `microsecond` property.                      |
+| `Offset`                 | Returns the object's timezone offset in minutes.                  |
+| `Timezone`               | Returns the object's timezone name.                               |
+| `Timestamp`              | Returns the object's timestamp (microseconds since Unix epoch).   |
+| `ToString`               | Returns the object's string representation.                       |
+
+##### Now
+
+Returns the current `ZonedDateTime`.
+
+```cpp
+static ZonedDateTime Now()
+```
+
+##### Year
+
+Returns the object's `year` property.
+
+```cpp
+int Year() const
+```
+
+##### Month
+
+Returns the object's `month` property.
+
+```cpp
+int Month() const
+```
+
+##### Day
+
+Returns the object's `day` property.
+
+```cpp
+int Day() const
+```
+
+##### Hour
+
+Returns the object's `hour` property.
+
+```cpp
+int Hour() const
+```
+##### Minute
+
+Returns the object's `minute` property.
+
+```cpp
+int Minute() const
+```
+
+##### Second
+
+Returns the object's `second` property.
+
+```cpp
+int Second() const
+```
+
+##### Millisecond
+
+Returns the object's `millisecond` property.
+
+```cpp
+int Millisecond() const
+```
+
+##### Microsecond
+
+Returns the object's `microsecond` property.
+
+```cpp
+int Microsecond() const
+```
+##### Timezone
+
+Returns the object's `timezone` string property.
+
+```cpp
+char const *Timezone() const
+```
+
+##### Offset
+
+Returns the object's `offset` property.
+
+```cpp
+int Offset() const
+```
+
+##### Timestamp
+
+Returns the object's timestamp (microseconds from Unix epoch).
+
+```cpp
+int64_t Timestamp() const
+```
+
+##### ToString
+
+Returns the object's string representation.
+
+```cpp
+std::string ToString() const
+```
+
+#### Operators
+
+| Name                         | Description          |
+| ---------------------------- | -------------------- |
+| `operator+`<br/>`operator-`  | arithmetic operators |
+| `operator==`<br/>`operator<` | comparison operators |
+
+##### operator-
+
+```cpp
+ZonedDateTime operator-(const Duration &dur) const
+```
+
+```cpp
+Duration operator-(const ZonedDateTime &other) const
+```
+Object is hashable using
+
+```cpp
+std::hash<mgp::ZonedDateTime>
+```
+
 ### Duration
 
 Represents a period of time in Memgraph.
@@ -2125,6 +2306,8 @@ explicit Value(const LocalTime &value)
 explicit Value(LocalTime &&value)
 explicit Value(const LocalDateTime &value)
 explicit Value(LocalDateTime &&value)
+explicit Value(const ZonedDateTime &value)
+explicit Value(ZonedDateTime &&value)
 explicit Value(const Duration &value)
 explicit Value(Duration &&value)
 ```
@@ -2235,6 +2418,11 @@ LocalDateTime ValueLocalDateTime()
 ```
 
 ```cpp
+ZonedDateTime ValueZonedDateTime() const
+ZonedDateTime ValueZonedDateTime()
+```
+
+```cpp
 Duration ValueDuration() const
 Duration ValueDuration()
 ```
@@ -2300,6 +2488,10 @@ bool IsLocalDateTime() const
 ```
 
 ```cpp
+bool IsZonedDateTime() const
+```
+
+```cpp
 bool IsDuration() const
 ```
 
@@ -2321,6 +2513,7 @@ Returns the value's string representation. It does this by finding the type of t
 | `Date`          | Returns `Date.ToString()`.                                           |
 | `LocalTime`     | Returns `LocalTime.ToString()`.                                      |
 | `LocalDateTime` | Returns `LocalDateTime.ToString()`.                                  |
+| `ZonedDateTime` | Returns `ZonedDateTime.ToString()`.                                  |
 | `Duration`      | Returns `Duration.ToString()`.                                       |
 
 ```cpp
@@ -2372,6 +2565,7 @@ The types are listed and described [in the reference guide](/fundamentals/data-t
 - `Type::Date`
 - `Type::LocalTime`
 - `Type::LocalDateTime`
+- `Type::ZonedDateTime`
 - `Type::Duration`
 
 Additionally, operator<< is overloaded for Type enum, and usage of this operator will print the type represented by mgp::Type enum.
