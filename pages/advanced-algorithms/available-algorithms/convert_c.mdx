@@ -1,0 +1,168 @@
+---
+title: convert_c
+description: Harness Memgraph's convert_c module to transform data structures into tree representations efficiently. Visualize the potential with detailed documentation and tutorials.
+---
+
+# convert_c
+
+import { Callout } from 'nextra/components'
+import { Cards } from 'nextra/components'
+import GitHub from '/components/icons/GitHub'
+
+The convert_c module is a data transformation module that offers functions
+to convert various data structures into different formats, allowing operations
+like tree conversion, data type transformation, and structural modifications
+for efficient data handling.
+
+Functions in the collection are called inline, while the procedure is called
+using the `CALL` subclause. 
+
+
+<Cards>
+  <Cards.Card
+    icon={<GitHub />}
+    title="Source code"
+    href="https://github.com/memgraph/mage/blob/main/cpp/convert_module/convert.c"
+  />
+</Cards>
+
+| Trait               | Value                                                 |
+| ------------------- | ---------- |
+| **Module type**     | util       |
+| **Implementation**  | C          |
+| **Graph direction** | directed   |
+| **Edge weights**    | unweighted |
+| **Parallelism**     | sequential |
+
+## Procedures
+
+### `to_tree()`
+
+Converts the provided value into a tree structure based on the specified configuration.
+This procedure is useful for transforming hierarchical data, nested objects, or
+graph structures into a standardized tree format.
+
+<Callout type="info">
+This procedure is equivalent to **apoc.convert.toTree**.
+</Callout>
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `paths: Any` ➡ The input value that needs to be converted to a tree structure. This can be a single path, a list of paths, or null.
+- `lowerCaseRels: Boolean (default = true)` (**OPTIONAL**) ➡ If true, relationship types will be converted to lowercase in the output tree structure.
+- `config: Map({})` (**OPTIONAL**) ➡ Configuration options for filtering node and relationship properties. The config can contain:
+  - `nodes`: Map of node labels to property filter lists
+  - `rels`: Map of relationship types to property filter lists
+  
+  Property filters can be:
+- `["*"]` - Include all properties (wildcard)
+- `["prop1", "prop2"]` - Include only specified properties
+- `["-prop1", "-prop2"]` - Exclude specified properties
+
+**Example filter configuration:**
+```cypher
+{
+  nodes: {
+    Person: ["name", "age", "email"],
+    Company: ["*"],
+    Address: ["-internal_id", "-created_at"]
+  },
+  rels: {
+    WORKS_FOR: ["since", "position"],
+    LIVES_AT: ["*"],
+    KNOWS: ["-confidence_score"]
+  }
+}
+```
+
+This configuration:
+- **Person nodes**: Include only `name`, `age`, and `email` properties
+- **Company nodes**: Include all properties (wildcard)
+- **Address nodes**: Include all properties except `internal_id` and `created_at`
+- **WORKS_FOR relationships**: Include only `since` and `position` properties
+- **LIVES_AT relationships**: Include all properties (wildcard)
+- **KNOWS relationships**: Include all properties except `confidence_score`
+
+<Callout type="warning">
+**Limitations due to C implementation:**
+- **Maximum 16 root nodes**: If processing multiple paths with different root nodes, the procedure can handle at most 16 unique root nodes
+- **Maximum 16 properties per filter**: Each property filter list can contain at most 16 property names
+- **Maximum 16 node labels**: The config can specify filters for at most 16 different node labels
+- **Maximum 16 relationship types**: The config can specify filters for at most 16 different relationship types
+- **String truncation**: Property names, node labels, and relationship types longer than 256 characters will be truncated
+</Callout>
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `value: Any` ➡ The resulting tree structure.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+Use the following query to convert graph paths to a tree structure:
+
+**Basic usage:**
+```cypher
+CREATE (a:Student {name: 'Ana'});
+CREATE (b:Student {name: 'Bob'});
+CREATE (c:Student {name: 'Carol'});
+CREATE (d:Student {name: 'Dave'});
+CREATE (e:Student {name: 'Eve'});
+MATCH (a:Student {name: 'Ana'}), (b:Student {name: 'Bob'}) CREATE (a)-[:FRIEND]->(b);
+MATCH (a:Student {name: 'Ana'}), (c:Student {name: 'Carol'}) CREATE (a)-[:FRIEND]->(c);
+MATCH (b:Student {name: 'Bob'}), (d:Student {name: 'Dave'}) CREATE (b)-[:COLLEAGUE]->(d);
+MATCH (c:Student {name: 'Carol'}), (e:Student {name: 'Eve'}) CREATE (c)-[:FRIEND]->(e);
+MATCH (d:Student {name: 'Dave'}), (e:Student {name: 'Eve'}) CREATE (d)-[:FRIEND]->(e);
+
+MATCH p = (a:Student {name: 'Ana'})-[*]->(e:Student {name: 'Eve'})
+WITH collect(p) AS paths
+CALL convert_c.to_tree(paths) YIELD value
+RETURN value;
+```
+
+The output shows the nested tree structure with relationships and their properties:
+
+```json
+{
+   "_id": 0,
+   "_type": "Student",
+   "friend": [
+      {
+         "_id": 1,
+         "_type": "Student",
+         "colleague": [
+            {
+               "_id": 3,
+               "_type": "Student",
+               "colleague._id": 2,
+               "friend": [
+                  {
+                     "_id": 4,
+                     "_type": "Student",
+                     "friend._id": 4,
+                     "name": "Eve"
+                  }
+               ],
+               "name": "Dave"
+            }
+         ],
+         "friend._id": 0,
+         "name": "Bob"
+      },
+      {
+         "_id": 2,
+         "_type": "Student",
+         "friend": [
+            {
+               "_id": 4,
+               "_type": "Student",
+               "friend._id": 3,
+               "name": "Eve"
+            }
+         ],
+         "friend._id": 1,
+         "name": "Carol"
+      }
+   ],
+   "name": "Ana"
+}
+```
