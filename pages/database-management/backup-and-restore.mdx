@@ -267,3 +267,50 @@ keeps its own
 [WAL](https://github.com/facebook/rocksdb/wiki/Write-Ahead-Log-%28WAL%29) files.
 Memgraph persists the metadata used in the implementation of the on-disk
 storage. 
+
+## Backup in multi-tenancy <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+When running Memgraph with multi-tenancy, every database other than the default database
+(named `memgraph`) will have its own associated database UUID. Database UUID can be inspected
+by running the `SHOW STORAGE INFO` command and reading the value under the `database_uuid` key.
+The default data directory location for a specific database is `/var/lib/memgraph/<database_uuid>/`. 
+The default database `memgraph` does not follow this directory structure and the data files are directly located under `/var/lib/memgraph`.
+
+Manual snapshot backup flow should look like this:
+
+<Steps>
+
+{<h3 className="custom-header">Create snapshots inside Memgraph</h3>}
+
+Create snapshot for every database (or let it create automatically with periodic snapshot execution inside Memgraph)
+
+{<h3 className="custom-header">Perform backup</h3>}
+
+Backup the snapshot for every database into a 3rd party location. Currently, you're encouraged to perform the backup mechanisms by 
+yourself with tools such as [rclone](https://rclone.org/).
+
+{<h3 className="custom-header">When performing recovery, copy the snapshot to Memgraph</h3>}
+
+When recovering a specific database, copy the snapshot to any data location
+  - if the data directory the snapshot is being copied to is a location that's outside the database directory, ensure the snapshot
+    has the permissions to be copied to the database data directory
+  - if the data directory the snapshot is being copied to is a location that's inside the database directory, there should be no issues
+    with permissions as there is no copying being performed from source to target directory location
+
+{<h3 className="custom-header">Position to specific database</h3>}
+
+Position the database driver interacting with Memgraph into the database using `USE DATABASE <database_name>` 
+
+{<h3 className="custom-header">Recover the snapshot</h3>}
+
+Execute `RECOVER SNAPSHOT <path_to_snapshot> FORCE`
+
+</Steps>
+
+
+## Best practices
+
+Memgraph can optimize restoring of snapshots in a multi-threaded manner. To enable multi-threaded restoration of a snapshot, you need to ensure
+the following flags are present:
+- `--storage-parallel-schema-recovery=true`
+- `--storage-recovery-thread-count=<number_of_cores>` where `number_of_cores` is the amount of CPU cores to parallelize the restoration process

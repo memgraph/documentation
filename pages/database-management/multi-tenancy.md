@@ -16,7 +16,7 @@ Instead, global limitations are imposed on Memgraph as a whole.
 
 ## Default database
 
-A default database named 'memgraph' is automatically created during startup. New
+A default database named `memgraph` is automatically created during startup. New
 users are granted access only to this default database. The default
 database name cannot be altered.
 
@@ -85,6 +85,9 @@ Isolated databases within Memgraph function as distinct single-database Memgraph
 instances. Queries executed on a specific database should operate as if it were
 the sole database in the system, preventing cross-database contamination. Users
 interact with individual databases, and cross-database queries are prohibited.
+
+Every database has its own database UUID, which can be read by running the `SHOW STORAGE INFO`
+query on a particular database.
 
 ## Database configuration and data directory
 
