@@ -1,6 +1,6 @@
 ---
 title: WHERE clause
-description: In Memgraph, easily rows with the WHERE 
+description: In Memgraph, filter query results with precision using the WHERE operator. Explore our detailed documentation and resources to learn more.
 ---
 
 # WHERE clause
