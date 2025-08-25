@@ -30,6 +30,7 @@ The result will contain the following fields:
 | Field                        | Description                                                                                                                                                                                   |
 |------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | name                         | Name of the current database.                    |
+| database_uuid                | Unique UUID of the database.                     |
 | vertex_count                 | The number of stored nodes (vertices).                                                                                                                                                        |
 | edge_count                   | The number of stored relationships (edges).                                                                                                                                                   |
 | average_degree               | The average number of relationships of a single node.                                                                                                                                         |
