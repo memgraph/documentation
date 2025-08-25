@@ -27,7 +27,7 @@ privileges will still apply but you won't be able to manage them.
 ### Roles
 
 User roles must be defined in Memgraph before using auth modules because these
-modules return the role associated with the user.
+modules return the role(s) associated with the user. As of v3.5 Memgraph supports multiple roles per user, allowing auth modules to return either a single role or multiple roles.
 
 ### Flags
 
@@ -85,8 +85,9 @@ The protocol used between Memgraph and the module is as follows:
  - Auth responses must be objects that contain the following fields:
     - `authenticated` - a `bool` indicating whether the user is allowed to log
      in to the database
-    - `role` - a `string` indicating which role the user should have (must be
-     supplied)
+    - `role` - a `string` indicating which role the user should have (backward compatible)
+    - `roles` - an array of strings indicating which roles the user should have (new format)
+    - `username` - the user's username (optional)
     - `errors` (optional) - if `authenticated` is false, Memgraph will put up a
      warning with the error message returned by the module
 
@@ -94,6 +95,59 @@ If the external auth module crashes during the processing of an auth request,
 Memgraph won't allow the user to log in to the database and will automatically
 restart the auth module for the next auth request. All crash logs will be seen
 in Memgraph's output (typically in `systemd` logs using `journalctl`).
+
+### Multiple roles support
+
+**As of v3.5** Memgraph supports multiple roles per user in auth module
+responses. Auth modules can return either a single role (backward compatible) or
+multiple roles (new format).
+
+#### Single role response (backward compatible)
+
+```python
+def authenticate(username, password):
+    return {
+        "authenticated": True,
+        "role": "moderator"  # Single role as string
+    }
+```
+
+#### Multiple roles response (new format)
+
+```python
+def authenticate(username, password):
+    return {
+        "authenticated": True,
+        "roles": ["admin", "user"]  # Multiple roles as array
+    }
+```
+
+#### Single role in array format
+
+```python
+def authenticate(username, password):
+    return {
+        "authenticated": True,
+        "roles": ["admin"]  # Single role in array
+    }
+```
+
+The system will:
+1. First check for a `roles` field in the response
+2. If `roles` is an array, use all roles in the array
+3. If `roles` is a string, use it as a single role
+4. If no `roles` field is found, fall back to the `role` field for backward
+   compatibility
+5. If no valid roles are found, authentication fails
+
+When a user has multiple roles, their permissions are combined using the
+following rules:
+- **Grants**: If any role grants a permission, the user has that permission
+- **Denies**: If any role denies a permission, the user is denied that
+  permission
+- **Database Access**: If any role grants and no role denies access to a
+  database, the user has access
+- **Fine-grained Permissions**: Combined using the same grant/deny logic
 
 ### Module example
 
@@ -107,7 +161,15 @@ import io
 
 
 def authenticate(username, password):
-    return {"authenticated": True, "role": "moderator"}
+    # Example with multiple roles
+    if username == "admin_user" and password == "password":
+        return {"authenticated": True, "roles": ["admin", "user"]}
+    
+    # Example with single role (backward compatible)
+    if username == "moderator_user" and password == "password":
+        return {"authenticated": True, "role": "moderator"}
+    
+    return {"authenticated": False, "errors": "Invalid credentials"}
 
 
 if __name__ == "__main__":
@@ -132,8 +194,8 @@ files. For example:
 #!/usr/bin/python3
 import module
 
-assert module.authenticate("sponge", "bob") == {"authenticated": True, "role": "analyst"}
-assert module.authenticate("CHUCK", "NORRIS") == {"authenticated": True, "role": "admin"}
+assert module.authenticate("admin_user", "password") == {"authenticated": True, "roles": ["admin", "user"]}
+assert module.authenticate("moderator_user", "password") == {"authenticated": True, "role": "moderator"}
 ```
 
 ## Single sign-on
@@ -150,17 +212,30 @@ identity service roles correspond to Memgraph’s.
 
 The role mapping is defined as a string where individual mappings are separated
 by a semicolon `;`. Each mapping is structured as follows:
-`{identity service role}:{Memgraph role}`.
+`{identity service role}:{Memgraph role}, {another Memgraph role}, ...`.
+
+One identity service role can be mapped to one or more Memgraph roles. 
+When a user logs in and is assigned an identity service role that is mapped to an array of Memgraph roles, the user is assigned all of the mapped Memgraph roles. 
+For more information regarding how multi-role users are handled by Memgraph, please visit [Multi-role users and multi-tenant roles](/database-management/authentication-and-authorization/multiple-roles).
 
 For example, the `entra.admin:memadmin; entra.user:memuser` mapping defines
 that the identity service roles `entra.admin` and `entra.user` respectively map
 to Memgraph’s `memadmin` and `memuser` roles.
+
+`entra.admin:memadmin; entra.user:memuser, memdev` maps `entra.user` to `memuser` and `memdev`.
+
+Different services use different parameters for defining roles. 
+Use `MEMGRAPH_SSO_{provider}_{protocol}_ROLE_FILED` to specify the token parameter that specifies the assigned roles.
 
 <Callout type="info">
 
 For correct operation, the Memgraph roles defined in the mapping need to be
 created in the Memgraph DB beforehand. Additionally, you have to grant [label-based permissions](/database-management/authentication-and-authorization/role-based-access-control#label-based-access-control) to the roles used in SSO.
 
+</Callout>
+
+<Callout type="info">
+SSO identity providers often return multiple roles for users. Memgraph now supports this natively - if your identity provider returns multiple roles, they will all be mapped to Memgraph roles and the user will have permissions from all assigned roles combined.
 </Callout>
 
 ### SAML

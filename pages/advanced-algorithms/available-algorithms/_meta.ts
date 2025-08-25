@@ -9,6 +9,8 @@ export default {
   "csv_utils": "csv_utils",
   "community_detection_online": "community_detection_online",
   "community_detection": "community_detection",
+  "convert": "convert",
+  "convert_c": "convert_c",
   "do": "do",
   "create": "create",
   "cugraph": "cugraph",
