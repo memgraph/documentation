@@ -78,93 +78,215 @@ please see the [information about monitoring via HTTP server](/database-manageme
 SHOW METRICS INFO;
 ```
 
-```copy=false
-+---------------------------------------+---------------+-------------+----------+
-| name                                  | type          | metric type | value    |
-+---------------------------------------+---------------+-------------+----------+
-| "AverageDegree"                       | "General"     | "Gauge"     | 0        |
-| "EdgeCount"                           | "General"     | "Gauge"     | 0        |
-| "VertexCount"                         | "General"     | "Gauge"     | 0        |
-| "ActiveLabelIndices"                  | "Index"       | "Counter"   | 0        |
-| "ActiveLabelPropertyIndices"          | "Index"       | "Counter"   | 0        |
-| "ActiveTextIndices"                   | "Index"       | "Counter"   | 0        |
-| "UnreleasedDeltaObjects"              | "Memory"      | "Counter"   | 0        |
-| "DiskUsage"                           | "Memory"      | "Gauge"     | 231838   |
-| "MemoryRes"                           | "Memory"      | "Gauge"     | 45805568 |
-| "PeakMemoryRes"                       | "Memory"      | "Gauge"     | 45805568 |
-| "AccumulateOperator"                  | "Operator"    | "Counter"   | 0        |
-| "AggregateOperator"                   | "Operator"    | "Counter"   | 0        |
-| "ApplyOperator"                       | "Operator"    | "Counter"   | 0        |
-| "CallProcedureOperator"               | "Operator"    | "Counter"   | 0        |
-| "CartesianOperator"                   | "Operator"    | "Counter"   | 0        |
-| "ConstructNamedPathOperator"          | "Operator"    | "Counter"   | 0        |
-| "CreateExpandOperator"                | "Operator"    | "Counter"   | 0        |
-| "CreateNodeOperator"                  | "Operator"    | "Counter"   | 0        |
-| "DeleteOperator"                      | "Operator"    | "Counter"   | 0        |
-| "DistinctOperator"                    | "Operator"    | "Counter"   | 0        |
-| "EdgeUniquenessFilterOperator"        | "Operator"    | "Counter"   | 0        |
-| "EmptyResultOperator"                 | "Operator"    | "Counter"   | 0        |
-| "EvaluatePatternFilterOperator"       | "Operator"    | "Counter"   | 0        |
-| "ExpandOperator"                      | "Operator"    | "Counter"   | 0        |
-| "ExpandVariableOperator"              | "Operator"    | "Counter"   | 0        |
-| "FilterOperator"                      | "Operator"    | "Counter"   | 0        |
-| "ForeachOperator"                     | "Operator"    | "Counter"   | 0        |
-| "HashJoinOperator"                    | "Operator"    | "Counter"   | 0        |
-| "IndexedJoinOperator"                 | "Operator"    | "Counter"   | 0        |
-| "LimitOperator"                       | "Operator"    | "Counter"   | 0        |
-| "MergeOperator"                       | "Operator"    | "Counter"   | 0        |
-| "OnceOperator"                        | "Operator"    | "Counter"   | 0        |
-| "OptionalOperator"                    | "Operator"    | "Counter"   | 0        |
-| "OrderByOperator"                     | "Operator"    | "Counter"   | 0        |
-| "ProduceOperator"                     | "Operator"    | "Counter"   | 0        |
-| "RemoveLabelsOperator"                | "Operator"    | "Counter"   | 0        |
-| "RemovePropertyOperator"              | "Operator"    | "Counter"   | 0        |
-| "RollUpApplyOperator"                 | "Operator"    | "Counter"   | 0        |
-| "ScanAllByEdgeIdOperator"             | "Operator"    | "Counter"   | 0        |
-| "ScanAllByEdgeTypeOperator"           | "Operator"    | "Counter"   | 0        |
-| "ScanAllByIdOperator"                 | "Operator"    | "Counter"   | 0        |
-| "ScanAllByLabelOperator"              | "Operator"    | "Counter"   | 0        |
-| "ScanAllByLabelPropertiesOperator"    | "Operator"    | "Counter"   | 0        |
-| "ScanAllOperator"                     | "Operator"    | "Counter"   | 0        |
-| "SetLabelsOperator"                   | "Operator"    | "Counter"   | 0        |
-| "SetPropertiesOperator"               | "Operator"    | "Counter"   | 0        |
-| "SetPropertyOperator"                 | "Operator"    | "Counter"   | 0        |
-| "SkipOperator"                        | "Operator"    | "Counter"   | 0        |
-| "UnionOperator"                       | "Operator"    | "Counter"   | 0        |
-| "UnwindOperator"                      | "Operator"    | "Counter"   | 0        |
-| "QueryExecutionLatency_us_50p"        | "Query"       | "Histogram" | 0        |
-| "QueryExecutionLatency_us_90p"        | "Query"       | "Histogram" | 0        |
-| "QueryExecutionLatency_us_99p"        | "Query"       | "Histogram" | 0        |
-| "ReadQuery"                           | "QueryType"   | "Counter"   | 0        |
-| "ReadWriteQuery"                      | "QueryType"   | "Counter"   | 0        |
-| "WriteQuery"                          | "QueryType"   | "Counter"   | 0        |
-| "ActiveBoltSessions"                  | "Session"     | "Counter"   | 1        |
-| "ActiveSSLSessions"                   | "Session"     | "Counter"   | 0        |
-| "ActiveSessions"                      | "Session"     | "Counter"   | 1        |
-| "ActiveTCPSessions"                   | "Session"     | "Counter"   | 1        |
-| "ActiveWebSocketSessions"             | "Session"     | "Counter"   | 0        |
-| "BoltMessages"                        | "Session"     | "Counter"   | 3        |
-| "SnapshotCreationLatency_us_50p"      | "Snapshot"    | "Histogram" | 0        |
-| "SnapshotCreationLatency_us_90p"      | "Snapshot"    | "Histogram" | 0        |
-| "SnapshotCreationLatency_us_99p"      | "Snapshot"    | "Histogram" | 0        |
-| "SnapshotRecoveryLatency_us_50p"      | "Snapshot"    | "Histogram" | 0        |
-| "SnapshotRecoveryLatency_us_90p"      | "Snapshot"    | "Histogram" | 0        |
-| "SnapshotRecoveryLatency_us_99p"      | "Snapshot"    | "Histogram" | 0        |
-| "MessagesConsumed"                    | "Stream"      | "Counter"   | 0        |
-| "StreamsCreated"                      | "Stream"      | "Counter"   | 0        |
-| "ActiveTransactions"                  | "Transaction" | "Counter"   | 1        |
-| "CommittedTransactions"               | "Transaction" | "Counter"   | 0        |
-| "FailedPrepare"                       | "Transaction" | "Counter"   | 1        |
-| "FailedPull"                          | "Transaction" | "Counter"   | 0        |
-| "FailedQuery"                         | "Transaction" | "Counter"   | 1        |
-| "RollbackedTransactions"              | "Transaction" | "Counter"   | 0        |
-| "SuccessfulQuery"                     | "Transaction" | "Counter"   | 0        |
-| "TriggersCreated"                     | "Trigger"     | "Counter"   | 0        |
-| "TriggersExecuted"                    | "Trigger"     | "Counter"   | 0        |
-+---------------------------------------+---------------+-------------+----------+
+users can also use the following query to get the same information:
+
+```cypher
+SHOW METRICS;
 ```
 
-
+```copy=false
++------------------------------------------+---------------------+-------------+------------+
+| name                                     | type                | metric type | value      |
++------------------------------------------+---------------------+-------------+------------+
+| "AverageDegree"                          | "General"           | "Gauge"     | 41.2732    |
+| "EdgeCount"                              | "General"           | "Gauge"     | 871978     |
+| "VertexCount"                            | "General"           | "Gauge"     | 42254      |
+| "SocketConnect_us_50p"                   | "General"           | "Histogram" | 0          |
+| "SocketConnect_us_90p"                   | "General"           | "Histogram" | 0          |
+| "SocketConnect_us_99p"                   | "General"           | "Histogram" | 0          |
+| "BecomeLeaderSuccess"                    | "HighAvailability"  | "Counter"   | 0          |
+| "DemoteInstance"                         | "HighAvailability"  | "Counter"   | 0          |
+| "DemoteMainToReplicaRpcFail"             | "HighAvailability"  | "Counter"   | 0          |
+| "DemoteMainToReplicaRpcSuccess"          | "HighAvailability"  | "Counter"   | 0          |
+| "EnableWritingOnMainRpcFail"             | "HighAvailability"  | "Counter"   | 0          |
+| "EnableWritingOnMainRpcSuccess"          | "HighAvailability"  | "Counter"   | 0          |
+| "FailedToBecomeLeader"                   | "HighAvailability"  | "Counter"   | 0          |
+| "GetDatabaseHistoriesRpcFail"            | "HighAvailability"  | "Counter"   | 0          |
+| "GetDatabaseHistoriesRpcSuccess"         | "HighAvailability"  | "Counter"   | 0          |
+| "NoAliveInstanceFailedFailovers"         | "HighAvailability"  | "Counter"   | 0          |
+| "PromoteToMainRpcFail"                   | "HighAvailability"  | "Counter"   | 0          |
+| "PromoteToMainRpcSuccess"                | "HighAvailability"  | "Counter"   | 0          |
+| "RaftFailedFailovers"                    | "HighAvailability"  | "Counter"   | 0          |
+| "RegisterReplicaOnMainRpcFail"           | "HighAvailability"  | "Counter"   | 0          |
+| "RegisterReplicaOnMainRpcSuccess"        | "HighAvailability"  | "Counter"   | 0          |
+| "RemoveCoordInstance"                    | "HighAvailability"  | "Counter"   | 0          |
+| "ReplicaRecoveryFail"                    | "HighAvailability"  | "Counter"   | 0          |
+| "ReplicaRecoverySkip"                    | "HighAvailability"  | "Counter"   | 0          |
+| "ReplicaRecoverySuccess"                 | "HighAvailability"  | "Counter"   | 0          |
+| "ShowInstance"                           | "HighAvailability"  | "Counter"   | 0          |
+| "ShowInstances"                          | "HighAvailability"  | "Counter"   | 0          |
+| "StateCheckRpcFail"                      | "HighAvailability"  | "Counter"   | 0          |
+| "StateCheckRpcSuccess"                   | "HighAvailability"  | "Counter"   | 0          |
+| "SuccessfulFailovers"                    | "HighAvailability"  | "Counter"   | 0          |
+| "SwapMainUUIDRpcFail"                    | "HighAvailability"  | "Counter"   | 0          |
+| "SwapMainUUIDRpcSuccess"                 | "HighAvailability"  | "Counter"   | 0          |
+| "UnregisterReplInstance"                 | "HighAvailability"  | "Counter"   | 0          |
+| "UnregisterReplicaRpcFail"               | "HighAvailability"  | "Counter"   | 0          |
+| "UnregisterReplicaRpcSuccess"            | "HighAvailability"  | "Counter"   | 0          |
+| "ChooseMostUpToDateInstance_us_50p"      | "HighAvailability"  | "Histogram" | 0          |
+| "ChooseMostUpToDateInstance_us_90p"      | "HighAvailability"  | "Histogram" | 0          |
+| "ChooseMostUpToDateInstance_us_99p"      | "HighAvailability"  | "Histogram" | 0          |
+| "CurrentWalRpc_us_50p"                   | "HighAvailability"  | "Histogram" | 0          |
+| "CurrentWalRpc_us_90p"                   | "HighAvailability"  | "Histogram" | 0          |
+| "CurrentWalRpc_us_99p"                   | "HighAvailability"  | "Histogram" | 0          |
+| "DataFailover_us_50p"                    | "HighAvailability"  | "Histogram" | 0          |
+| "DataFailover_us_90p"                    | "HighAvailability"  | "Histogram" | 0          |
+| "DataFailover_us_99p"                    | "HighAvailability"  | "Histogram" | 0          |
+| "DemoteMainToReplicaRpc_us_50p"          | "HighAvailability"  | "Histogram" | 0          |
+| "DemoteMainToReplicaRpc_us_90p"          | "HighAvailability"  | "Histogram" | 0          |
+| "DemoteMainToReplicaRpc_us_99p"          | "HighAvailability"  | "Histogram" | 0          |
+| "EnableWritingOnMainRpc_us_50p"          | "HighAvailability"  | "Histogram" | 0          |
+| "EnableWritingOnMainRpc_us_90p"          | "HighAvailability"  | "Histogram" | 0          |
+| "EnableWritingOnMainRpc_us_99p"          | "HighAvailability"  | "Histogram" | 0          |
+| "FinalizeTxnReplication_us_50p"          | "HighAvailability"  | "Histogram" | 0          |
+| "FinalizeTxnReplication_us_90p"          | "HighAvailability"  | "Histogram" | 0          |
+| "FinalizeTxnReplication_us_99p"          | "HighAvailability"  | "Histogram" | 0          |
+| "FrequentHeartbeatRpc_us_50p"            | "HighAvailability"  | "Histogram" | 0          |
+| "FrequentHeartbeatRpc_us_90p"            | "HighAvailability"  | "Histogram" | 0          |
+| "FrequentHeartbeatRpc_us_99p"            | "HighAvailability"  | "Histogram" | 0          |
+| "GetDatabaseHistoriesRpc_us_50p"         | "HighAvailability"  | "Histogram" | 0          |
+| "GetDatabaseHistoriesRpc_us_90p"         | "HighAvailability"  | "Histogram" | 0          |
+| "GetDatabaseHistoriesRpc_us_99p"         | "HighAvailability"  | "Histogram" | 0          |
+| "GetHistories_us_50p"                    | "HighAvailability"  | "Histogram" | 0          |
+| "GetHistories_us_90p"                    | "HighAvailability"  | "Histogram" | 0          |
+| "GetHistories_us_99p"                    | "HighAvailability"  | "Histogram" | 0          |
+| "HeartbeatRpc_us_50p"                    | "HighAvailability"  | "Histogram" | 0          |
+| "HeartbeatRpc_us_90p"                    | "HighAvailability"  | "Histogram" | 0          |
+| "HeartbeatRpc_us_99p"                    | "HighAvailability"  | "Histogram" | 0          |
+| "InstanceFailCallback_us_50p"            | "HighAvailability"  | "Histogram" | 0          |
+| "InstanceFailCallback_us_90p"            | "HighAvailability"  | "Histogram" | 0          |
+| "InstanceFailCallback_us_99p"            | "HighAvailability"  | "Histogram" | 0          |
+| "InstanceSuccCallback_us_50p"            | "HighAvailability"  | "Histogram" | 0          |
+| "InstanceSuccCallback_us_90p"            | "HighAvailability"  | "Histogram" | 0          |
+| "InstanceSuccCallback_us_99p"            | "HighAvailability"  | "Histogram" | 0          |
+| "PrepareCommitRpc_us_50p"                | "HighAvailability"  | "Histogram" | 0          |
+| "PrepareCommitRpc_us_90p"                | "HighAvailability"  | "Histogram" | 0          |
+| "PrepareCommitRpc_us_99p"                | "HighAvailability"  | "Histogram" | 0          |
+| "PromoteToMainRpc_us_50p"                | "HighAvailability"  | "Histogram" | 0          |
+| "PromoteToMainRpc_us_90p"                | "HighAvailability"  | "Histogram" | 0          |
+| "PromoteToMainRpc_us_99p"                | "HighAvailability"  | "Histogram" | 0          |
+| "RegisterReplicaOnMainRpc_us_50p"        | "HighAvailability"  | "Histogram" | 0          |
+| "RegisterReplicaOnMainRpc_us_90p"        | "HighAvailability"  | "Histogram" | 0          |
+| "RegisterReplicaOnMainRpc_us_99p"        | "HighAvailability"  | "Histogram" | 0          |
+| "ReplicaStream_us_50p"                   | "HighAvailability"  | "Histogram" | 0          |
+| "ReplicaStream_us_90p"                   | "HighAvailability"  | "Histogram" | 0          |
+| "ReplicaStream_us_99p"                   | "HighAvailability"  | "Histogram" | 0          |
+| "SnapshotRpc_us_50p"                     | "HighAvailability"  | "Histogram" | 0          |
+| "SnapshotRpc_us_90p"                     | "HighAvailability"  | "Histogram" | 0          |
+| "SnapshotRpc_us_99p"                     | "HighAvailability"  | "Histogram" | 0          |
+| "StartTxnReplication_us_50p"             | "HighAvailability"  | "Histogram" | 0          |
+| "StartTxnReplication_us_90p"             | "HighAvailability"  | "Histogram" | 0          |
+| "StartTxnReplication_us_99p"             | "HighAvailability"  | "Histogram" | 0          |
+| "StateCheckRpc_us_50p"                   | "HighAvailability"  | "Histogram" | 0          |
+| "StateCheckRpc_us_90p"                   | "HighAvailability"  | "Histogram" | 0          |
+| "StateCheckRpc_us_99p"                   | "HighAvailability"  | "Histogram" | 0          |
+| "SystemRecoveryRpc_us_50p"               | "HighAvailability"  | "Histogram" | 0          |
+| "SystemRecoveryRpc_us_90p"               | "HighAvailability"  | "Histogram" | 0          |
+| "SystemRecoveryRpc_us_99p"               | "HighAvailability"  | "Histogram" | 0          |
+| "UnregisterReplicaRpc_us_50p"            | "HighAvailability"  | "Histogram" | 0          |
+| "UnregisterReplicaRpc_us_90p"            | "HighAvailability"  | "Histogram" | 0          |
+| "UnregisterReplicaRpc_us_99p"            | "HighAvailability"  | "Histogram" | 0          |
+| "WalFilesRpc_us_50p"                     | "HighAvailability"  | "Histogram" | 0          |
+| "WalFilesRpc_us_90p"                     | "HighAvailability"  | "Histogram" | 0          |
+| "WalFilesRpc_us_99p"                     | "HighAvailability"  | "Histogram" | 0          |
+| "ActiveEdgePropertyIndices"              | "Index"             | "Counter"   | 0          |
+| "ActiveEdgeTypeIndices"                  | "Index"             | "Counter"   | 0          |
+| "ActiveEdgeTypePropertyIndices"          | "Index"             | "Counter"   | 0          |
+| "ActiveLabelIndices"                     | "Index"             | "Counter"   | 6          |
+| "ActiveLabelPropertyIndices"             | "Index"             | "Counter"   | 18         |
+| "ActivePointIndices"                     | "Index"             | "Counter"   | 0          |
+| "ActiveTextIndices"                      | "Index"             | "Counter"   | 0          |
+| "ActiveVectorEdgeIndices"                | "Index"             | "Counter"   | 0          |
+| "ActiveVectorIndices"                    | "Index"             | "Counter"   | 0          |
+| "UnreleasedDeltaObjects"                 | "Memory"            | "Counter"   | 0          |
+| "DiskUsage"                              | "Memory"            | "Gauge"     | 81508835   |
+| "MemoryRes"                              | "Memory"            | "Gauge"     | 339640320  |
+| "PeakMemoryRes"                          | "Memory"            | "Gauge"     | 339775488  |
+| "AccumulateOperator"                     | "Operator"          | "Counter"   | 0          |
+| "AggregateOperator"                      | "Operator"          | "Counter"   | 0          |
+| "ApplyOperator"                          | "Operator"          | "Counter"   | 0          |
+| "CallProcedureOperator"                  | "Operator"          | "Counter"   | 0          |
+| "CartesianOperator"                      | "Operator"          | "Counter"   | 0          |
+| "ConstructNamedPathOperator"             | "Operator"          | "Counter"   | 0          |
+| "CreateExpandOperator"                   | "Operator"          | "Counter"   | 0          |
+| "CreateNodeOperator"                     | "Operator"          | "Counter"   | 0          |
+| "DeleteOperator"                         | "Operator"          | "Counter"   | 0          |
+| "DistinctOperator"                       | "Operator"          | "Counter"   | 0          |
+| "EdgeUniquenessFilterOperator"           | "Operator"          | "Counter"   | 0          |
+| "EmptyResultOperator"                    | "Operator"          | "Counter"   | 0          |
+| "EvaluatePatternFilterOperator"          | "Operator"          | "Counter"   | 0          |
+| "ExpandOperator"                         | "Operator"          | "Counter"   | 0          |
+| "ExpandVariableOperator"                 | "Operator"          | "Counter"   | 0          |
+| "FilterOperator"                         | "Operator"          | "Counter"   | 0          |
+| "ForeachOperator"                        | "Operator"          | "Counter"   | 0          |
+| "HashJoinOperator"                       | "Operator"          | "Counter"   | 0          |
+| "IndexedJoinOperator"                    | "Operator"          | "Counter"   | 0          |
+| "LimitOperator"                          | "Operator"          | "Counter"   | 0          |
+| "MergeOperator"                          | "Operator"          | "Counter"   | 0          |
+| "OnceOperator"                           | "Operator"          | "Counter"   | 0          |
+| "OptionalOperator"                       | "Operator"          | "Counter"   | 0          |
+| "OrderByOperator"                        | "Operator"          | "Counter"   | 0          |
+| "PeriodicCommitOperator"                 | "Operator"          | "Counter"   | 0          |
+| "PeriodicSubqueryOperator"               | "Operator"          | "Counter"   | 0          |
+| "ProduceOperator"                        | "Operator"          | "Counter"   | 0          |
+| "RemoveLabelsOperator"                   | "Operator"          | "Counter"   | 0          |
+| "RemovePropertyOperator"                 | "Operator"          | "Counter"   | 0          |
+| "RollUpApplyOperator"                    | "Operator"          | "Counter"   | 0          |
+| "ScanAllByEdgeIdOperator"                | "Operator"          | "Counter"   | 0          |
+| "ScanAllByEdgeOperator"                  | "Operator"          | "Counter"   | 0          |
+| "ScanAllByEdgePropertyOperator"          | "Operator"          | "Counter"   | 0          |
+| "ScanAllByEdgePropertyRangeOperator"     | "Operator"          | "Counter"   | 0          |
+| "ScanAllByEdgePropertyValueOperator"     | "Operator"          | "Counter"   | 0          |
+| "ScanAllByEdgeTypeOperator"              | "Operator"          | "Counter"   | 0          |
+| "ScanAllByEdgeTypePropertyOperator"      | "Operator"          | "Counter"   | 0          |
+| "ScanAllByEdgeTypePropertyRangeOperator" | "Operator"          | "Counter"   | 0          |
+| "ScanAllByEdgeTypePropertyValueOperator" | "Operator"          | "Counter"   | 0          |
+| "ScanAllByIdOperator"                    | "Operator"          | "Counter"   | 0          |
+| "ScanAllByLabelOperator"                 | "Operator"          | "Counter"   | 0          |
+| "ScanAllByLabelPropertiesOperator"       | "Operator"          | "Counter"   | 0          |
+| "ScanAllByPointDistanceOperator"         | "Operator"          | "Counter"   | 0          |
+| "ScanAllByPointWithinbboxOperator"       | "Operator"          | "Counter"   | 0          |
+| "ScanAllOperator"                        | "Operator"          | "Counter"   | 0          |
+| "SetLabelsOperator"                      | "Operator"          | "Counter"   | 0          |
+| "SetPropertiesOperator"                  | "Operator"          | "Counter"   | 0          |
+| "SetPropertyOperator"                    | "Operator"          | "Counter"   | 0          |
+| "SkipOperator"                           | "Operator"          | "Counter"   | 0          |
+| "UnionOperator"                          | "Operator"          | "Counter"   | 0          |
+| "UnwindOperator"                         | "Operator"          | "Counter"   | 0          |
+| "QueryExecutionLatency_us_50p"           | "Query"             | "Histogram" | 0          |
+| "QueryExecutionLatency_us_90p"           | "Query"             | "Histogram" | 0          |
+| "QueryExecutionLatency_us_99p"           | "Query"             | "Histogram" | 0          |
+| "ReadQuery"                              | "QueryType"         | "Counter"   | 0          |
+| "ReadWriteQuery"                         | "QueryType"         | "Counter"   | 0          |
+| "WriteQuery"                             | "QueryType"         | "Counter"   | 0          |
+| "ShowSchema"                             | "SchemaInfo"        | "Counter"   | 0          |
+| "ActiveBoltSessions"                     | "Session"           | "Counter"   | 1          |
+| "ActiveSSLSessions"                      | "Session"           | "Counter"   | 0          |
+| "ActiveSessions"                         | "Session"           | "Counter"   | 1          |
+| "ActiveTCPSessions"                      | "Session"           | "Counter"   | 1          |
+| "ActiveWebSocketSessions"                | "Session"           | "Counter"   | 0          |
+| "BoltMessages"                           | "Session"           | "Counter"   | 4          |
+| "SnapshotCreationLatency_us_50p"         | "Snapshot"          | "Histogram" | 0          |
+| "SnapshotCreationLatency_us_90p"         | "Snapshot"          | "Histogram" | 0          |
+| "SnapshotCreationLatency_us_99p"         | "Snapshot"          | "Histogram" | 0          |
+| "SnapshotRecoveryLatency_us_50p"         | "Snapshot"          | "Histogram" | 10924534   |
+| "SnapshotRecoveryLatency_us_90p"         | "Snapshot"          | "Histogram" | 10924534   |
+| "SnapshotRecoveryLatency_us_99p"         | "Snapshot"          | "Histogram" | 10924534   |
+| "MessagesConsumed"                       | "Stream"            | "Counter"   | 0          |
+| "StreamsCreated"                         | "Stream"            | "Counter"   | 0          |
+| "DeletedEdges"                           | "TTL"               | "Counter"   | 0          |
+| "DeletedNodes"                           | "TTL"               | "Counter"   | 0          |
+| "ActiveTransactions"                     | "Transaction"       | "Counter"   | 1          |
+| "CommitedTransactions"                   | "Transaction"       | "Counter"   | 0          |
+| "FailedPrepare"                          | "Transaction"       | "Counter"   | 0          |
+| "FailedPull"                             | "Transaction"       | "Counter"   | 0          |
+| "FailedQuery"                            | "Transaction"       | "Counter"   | 0          |
+| "RollbackedTransactions"                 | "Transaction"       | "Counter"   | 0          |
+| "SuccessfulQuery"                        | "Transaction"       | "Counter"   | 1          |
+| "TriggersCreated"                        | "Trigger"           | "Counter"   | 0          |
+| "TriggersExecuted"                       | "Trigger"           | "Counter"   | 0          |
++------------------------------------------+---------------------+-------------+------------+
+```
 
 ## Build information
 
@@ -185,6 +307,12 @@ Running this query will provide information about currently logged-in Memgraph u
 
 ```cypher
 SHOW ACTIVE USERS INFO;
+```
+
+Identical information can be obtained by executing the following command:
+
+```cypher
+SHOW ACTIVE USERS;
 ```
 
 ```copy=false
