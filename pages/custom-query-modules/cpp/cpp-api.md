@@ -1543,26 +1543,27 @@ std::hash<mgp::LocalDateTime>
 
 ### ZonedDateTime
 Temporal type representing a date-time with timezone information.
+
 #### Constructors
-Creates a ZonedDateTime object from the copy of the given `mgp_zoned_date_time`.
+Creates a `ZonedDateTime` object from the copy of the given `mgp_zoned_date_time`.
 ```cpp
 explicit ZonedDateTime(mgp_zoned_date_time *ptr)
 explicit ZonedDateTime(const mgp_zoned_date_time *const_ptr)
 ```
-Creates a ZonedDateTime object from the given string representing a date in the ISO 8601 format
+Creates a `ZonedDateTime` object from the given string representing a date in the ISO 8601 format
 (`YYYY-MM-DDThh:mm:ss`, `YYYY-MM-DDThh:mm`, `YYYYMMDDThhmmss`, `YYYYMMDDThhmm`, or `YYYYMMDDThh`).
 The string can also include timezone information as a numeric offset (`+HH:MM` or `-HH:MM`) or
 a named timezone identifier (`[America/New_York]`).
 ```cpp
 explicit ZonedDateTime(std::string_view string)
 ```
-Creates a ZonedDateTime object with the given `year`, `month`, `day`, `hour`, `minute`, `second`,
+Creates a `ZonedDateTime` object with the given `year`, `month`, `day`, `hour`, `minute`, `second`,
 `millisecond`, `microsecond`, and `offset_in_minutes` properties.
 ```cpp
 ZonedDateTime(int year, int month, int day, int hour, int minute, int second, int millisecond, int microsecond,
               int offset_in_minutes)
 ```
-Creates a ZonedDateTime object with the given `year`, `month`, `day`, `hour`, `minute`, `second`,
+Creates a `ZonedDateTime` object with the given `year`, `month`, `day`, `hour`, `minute`, `second`,
 `millisecond`, `microsecond`, and `timezone_name` properties.
 ```cpp
 ZonedDateTime(int year, int month, int day, int hour, int minute, int second, int millisecond, int microsecond,
