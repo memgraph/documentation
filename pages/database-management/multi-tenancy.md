@@ -16,9 +16,68 @@ Instead, global limitations are imposed on Memgraph as a whole.
 
 ## Default database
 
-A default database named 'memgraph' is automatically created during startup. New
+A default database named `memgraph` is automatically created during startup. New
 users are granted access only to this default database. The default
 database name cannot be altered.
+
+### Default database best practices
+
+In multi-tenant environments, we recommend treating the default "memgraph" database as an administrative/system database rather than storing application data in it. This approach provides better security and isolation, especially given recent changes to authentication and authorization requirements.
+
+#### Why treat memgraph as an admin database?
+
+As of Memgraph v3.5, users have to have both the `AUTH` privilege and access to the default "memgraph" database to execute authentication and authorization queries. Additionally, replication queries (such as `REGISTER REPLICA`, `SHOW REPLICAS`, etc.) and multi-database queries (such as `SHOW DATABASES`, `CREATE DATABASE`, etc.) also now target the "memgraph" database and require access to it. This requirement affects multi-tenant environments where users might have access to other databases but not the default one.
+
+#### Recommended setup
+
+1. **Restrict memgraph database access**: Only grant access to the "memgraph" database to privileged users who need to perform system administration tasks
+2. **Use tenant-specific databases**: Store all application data in dedicated tenant databases
+3. **Separate concerns**: Keep user management, role management, system administration, replication management, and multi-database management separate from application data
+
+#### Example configuration
+
+```cypher
+-- Create admin role with full system privileges
+CREATE ROLE system_admin;
+GRANT ALL PRIVILEGES TO system_admin;
+GRANT DATABASE memgraph TO system_admin;
+
+-- Create tenant-specific roles (no access to memgraph database)
+CREATE ROLE tenant1_admin;
+CREATE ROLE tenant1_user;
+CREATE ROLE tenant2_admin;
+CREATE ROLE tenant2_user;
+
+-- Grant appropriate permissions to tenant roles
+GRANT MATCH, CREATE, MERGE, SET, DELETE, INDEX TO tenant1_admin;
+GRANT MATCH, CREATE, MERGE, SET, DELETE TO tenant1_user;
+GRANT MATCH, CREATE, MERGE, SET, DELETE, INDEX TO tenant2_admin;
+GRANT MATCH, CREATE, MERGE, SET, DELETE TO tenant2_user;
+
+-- Grant access only to tenant databases
+GRANT DATABASE tenant1_db TO tenant1_admin, tenant1_user;
+GRANT DATABASE tenant2_db TO tenant2_admin, tenant2_user;
+
+-- Create users
+CREATE USER system_admin_user IDENTIFIED BY 'admin_password';
+CREATE USER tenant1_admin_user IDENTIFIED BY 't1_admin_pass';
+CREATE USER tenant1_regular_user IDENTIFIED BY 't1_user_pass';
+CREATE USER tenant2_admin_user IDENTIFIED BY 't2_admin_pass';
+CREATE USER tenant2_regular_user IDENTIFIED BY 't2_user_pass';
+
+-- Assign roles
+SET ROLE FOR system_admin_user TO system_admin;
+SET ROLE FOR tenant1_admin_user TO tenant1_admin;
+SET ROLE FOR tenant1_regular_user TO tenant1_user;
+SET ROLE FOR tenant2_admin_user TO tenant2_admin;
+SET ROLE FOR tenant2_regular_user TO tenant2_user;
+```
+
+In this configuration:
+- `system_admin_user` can perform all authentication/authorization, replication, and multi-database operations and has access to the "memgraph" database
+- Tenant users can only access their respective tenant databases
+- Application data is completely isolated in tenant-specific databases
+- The "memgraph" database serves purely as an administrative database
 
 ## Isolated databases
 
@@ -26,6 +85,9 @@ Isolated databases within Memgraph function as distinct single-database Memgraph
 instances. Queries executed on a specific database should operate as if it were
 the sole database in the system, preventing cross-database contamination. Users
 interact with individual databases, and cross-database queries are prohibited.
+
+Every database has its own database UUID, which can be read by running the `SHOW STORAGE INFO`
+query on a particular database.
 
 ## Database configuration and data directory
 
@@ -51,7 +113,8 @@ Users interact with multi-tenant features through specialized Cypher queries:
 1. `CREATE DATABASE name`: Creates a new database.
 2. `DROP DATABASE name`: Deletes a specified database.
 3. `SHOW DATABASE`: Shows the current used database. It will return `NULL` if
-   there is not one.
+   no database is currently in use. You can also use `SHOW CURRENT DATABASE` for the same functionality. This command does not require any special privileges.
+
 4. `SHOW DATABASES`: Shows only the existing set of multitenant databases.
 5. `USE DATABASE name`: Switches focus to a specific database (disabled during
    transactions).
@@ -80,6 +143,88 @@ granted.
 Access to all databases can be granted or revoked using wildcards:
 `GRANT DATABASE * TO user;`, `DENY DATABASE * TO user;` or 
 `REVOKE DATABASE * FROM user;`.
+
+### Multi-database queries and the memgraph database
+
+As of Memgraph v3.5 multi-database queries (such as `SHOW DATABASES`, `CREATE DATABASE`, `DROP DATABASE`, etc.) target the "memgraph" database and require access to it.
+
+To execute these queries, users must have:
+- The appropriate privileges (`MULTI_DATABASE_USE`, `MULTI_DATABASE_EDIT`)
+- **AND** access to the default "memgraph" database
+
+### Multi-tenant query syntax changes
+
+As of Memgraph v3.5 the syntax for certain queries in multi-tenant environments have changed. The `SHOW ROLE` and `SHOW PRIVILEGES` commands now require specifying the database context in some cases.
+
+**SHOW ROLE FOR USER**: This command does not require database specification and will show all roles assigned to the user across all databases.
+
+**SHOW PRIVILEGES FOR USER**: This command requires database specification in multi-tenant environments.
+
+**SHOW PRIVILEGES FOR ROLE**: This command does not require database specification and will show all privileges for the role.
+
+In multi-tenant environments, you must specify which database context to use when showing privileges for users:
+
+1. **Show roles for the user's main database:**
+```cypher
+SHOW ROLE FOR user_name ON MAIN;
+```
+
+2. **Show roles for the current database:**
+```cypher
+SHOW ROLE FOR user_name ON CURRENT;
+```
+
+3. **Show roles for a specific database:**
+```cypher
+SHOW ROLE FOR user_name ON DATABASE database_name;
+```
+
+#### SHOW PRIVILEGES syntax in multi-tenant environments
+
+Similarly, the `SHOW PRIVILEGES` command requires database context specification:
+
+1. **Show privileges for the user's main database:**
+```cypher
+SHOW PRIVILEGES FOR user_or_role ON MAIN;
+```
+
+2. **Show privileges for the current database:**
+```cypher
+SHOW PRIVILEGES FOR user_or_role ON CURRENT;
+```
+
+3. **Show privileges for a specific database:**
+```cypher
+SHOW PRIVILEGES FOR user_or_role ON DATABASE database_name;
+```
+
+These commands return the aggregated roles and privileges for the user in the specified database context. The `ON MAIN` option shows information for the user's main database, `ON CURRENT` shows information for whatever database is currently active, and `ON DATABASE` shows information for the explicitly specified database.
+
+#### Impact on multi-tenant environments
+
+In multi-tenant environments where users might not have access to the "memgraph" database, multi-database management operations will fail. This reinforces the recommendation to treat the "memgraph" database as an administrative/system database.
+
+#### Example: Admin user with multi-database privileges
+
+```cypher
+-- Create admin role with multi-database privileges
+CREATE ROLE multi_db_admin;
+GRANT MULTI_DATABASE_USE, MULTI_DATABASE_EDIT TO multi_db_admin;
+GRANT DATABASE memgraph TO multi_db_admin;
+
+-- Create user with multi-database admin role
+CREATE USER db_admin IDENTIFIED BY 'admin_password';
+SET ROLE FOR db_admin TO multi_db_admin;
+```
+
+In this setup, `db_admin` can:
+- Execute all multi-database queries (`SHOW DATABASES`, `CREATE DATABASE`, etc.)
+- Access the "memgraph" database for administrative operations
+- Manage the multi-tenant database configuration
+
+#### Best practice
+
+For multi-database management, ensure that users who need to perform multi-database operations have both the appropriate multi-database privileges and access to the "memgraph" database. This aligns with the overall recommendation to treat the "memgraph" database as an administrative database in multi-tenant environments.
 
 ### Additional multi-tenant privileges
 
