@@ -7,6 +7,7 @@ export default {
     "graph-style-script": "Graph Style Script (GSS)",
     "layout": "Layout",
     "logs": "Logs",
+    "multi-tenancy": "Multi-tenancy",
     "monitoring": "Monitoring",
     "run-history": "Run history",
     "sharing-features": "Sharing features",
