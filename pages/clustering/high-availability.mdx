@@ -685,6 +685,122 @@ distributed in any way you want between data centers. The failover time will be 
 We support deploying Memgraph HA as part of the Kubernetes cluster through Helm charts.
 You can see example configurations [here](/getting-started/install-memgraph/kubernetes#memgraph-high-availability-helm-chart).
 
+## In-Service Software Upgrade (ISSU)
+
+Memgraph's high availability supports ISSU. Here will be described steps which are needed to perform the upgrade when using [HA charts]((/getting-started/install-memgraph/kubernetes#memgraph-high-availability-helm-chart)) 
+but steps and the procedure are very similar for native deployment also. Although the upgrade process should always finish successfully, unexpected things can always happen. Therefore, we are strongly recommending doing 
+a backup of your `lib` directory on all of your `StatefulSets` or native instances depending on the deployment type.
+
+If you are using HA charts, make sure to set `updateStrategy.type` config parameter to `OnDelete` before actually doing any upgrade. Depending on the infrastructure on which you have your Memgraph cluster, the details
+will differ a bit, but the backbone is the same.
+
+
+First, backup all of your data from all instances so in the case something goes wrong during the upgrade, you can safely downgrade cluster to the last stable version you had. For the native deployment, tools like `cp` or `rsync`
+will suffice. When using K8s, create a `VolumeSnapshotClass` with the yaml file similar to this:
+
+```
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: csi-azure-disk-snapclass
+driver: disk.csi.azure.com
+deletionPolicy: Delete
+```
+
+`kubectl apply -f azure_class.yaml`
+
+
+If you are using Google Kubernetes Engine, the default CSI driver is `pd.csi.storage.gke.io` so make sure to change the field `driver`. If you are using AWS cluster, refer to the documentation [here](https://docs.aws.amazon.com/eks/latest/userguide/csi-snapshot-controller.html)
+to check how to take volume snapshots on your K8s deployment.
+
+Now you can create a `VolumeSnapshot` of the lib directory using the yaml file:
+
+```
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: coord-3-snap  # Use different names for all instances
+  namespace: default
+spec:
+  volumeSnapshotClassName: csi-azure-disk-snapclass
+  source:
+    persistentVolumeClaimName: memgraph-coordinator-3-lib-storage-memgraph-coordinator-3-0  # This is the lib PVC for the coordinator 3. Change the field to take a snapshot for other instances in the cluster.
+```
+
+```
+kubectl apply -f azure_snapshot.yaml
+```
+
+Repeat this step for all instances in the cluster.
+
+
+Next you should update `image.tag` field in the `values.yaml` configuration file to the version to which you want to upgrade your cluster. Run `helm upgrade <release> <chart> -f <path_to_values.yaml>`. Since we are using
+`updateStrategy.type=OnDelete`, this step will not restart any pod, rather it will just prepare pods for running the new version. If you are using natively deployed Memgraph HA cluster, just make sure you have your new
+binary ready to be started.
+
+Our procedure for achieving zero-downtime upgrades consists of restarting one instance at a time. Since we use primary-secondary type of replication, we should first upgrade replicas then main and then we will upgrade
+coordinator followers, finishing with the coordinator leader. In order to find out on which pod/server the current main and the current cluster leader sits, run `SHOW INSTANCES`.
+
+If you are using K8s, the upgrade can be performed by deleting the pod. Start by deleting the replica pod (in this example replica is running on the pod `memgraph-data-1-0`):
+
+```
+kubectl delete pod memgraph-data-1-0
+```
+
+For the native type of deployment, stop your old binary and start the new one.
+
+Before starting the upgrade of the next pod, it is important to wait until all pods are ready. Otherwise, you may end up with a data loss. On K8s you can easily achieve that by running:
+
+```
+kubectl wait --for=condition=ready pod -all
+```
+
+For the native deployment, check if all your instances are alived manually.
+
+This step should be repeated for all of your replicas in the cluster. After upgrading all of your replicas, you can delete the main pod. Right before upgrading the main pod, run `SHOW REPLICATION LAG` to check whether
+replicas are behind MAIN. In case they are, your upgrade will be prone to a data loss. In order to achieve zero-downtime upgrade without any data loss, your replicas should be running in the `STRICT_SYNC` mode which effectively
+disables writes while upgrading any `STRICT_SYNC` instance. Your read queries should however work without any issues.
+
+```
+kubectl delete pod memgraph-data-0-0
+kubectl wait --for=condition=ready pod --all
+```
+
+The upgrade of coordinators is done in exactly the same way. Start by upgrading followers and finish with deleting the leader pod. 
+
+```
+kubectl delete pod memgraph-coordinator-3-0
+kubectl wait --for=condition=ready pod --all
+kubectl delete pod memgraph-coordinator-2-0
+kubectl wait --for=condition=ready pod --all
+kubectl delete pod memgraph-coordinator-1-0
+kubectl wait --for=condition=ready pod --all
+```
+
+
+Your upgrade should be finished now, to check that everything works OK run `SHOW VERSION`, it should show you the new Memgraph version.
+
+
+If during the upgrade, you figured out that an error happened or even after upgrading all of your pods something doesn't work (e.g. write queries don't pass), you can safely downgrade your cluster to the previous version
+using `VolumeSnapshots` you took on K8s or file backups for native deployments. For the K8s deployment, run `helm uninstall <release>`. Open `values.yaml` and set `restoreDataFromSnapshot` for all instances to true. 
+Make sure to set correct name of the snapshot you will use to recover your instances.
+
+
+<Callout type="info">
+
+If you're doing an upgrade on `minikube`, it is important to make sure that the snapshot resides on the same node on which the `StatefulSet` is installed. Otherwise, it won't be able to restore `StatefulSet's` attached
+PersistentVolumeClaim from the `VolumeSnapshot`.
+
+</Callout>
+
+
+
+
+
+
+
+
+
 ## Docker Compose
 
 The following example shows you how to setup Memgraph cluster using Docker Compose. The cluster will use user-defined bridge network.
