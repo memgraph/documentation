@@ -2,6 +2,7 @@ export default {
     "collections": "Collections",
     "csv-file-import": "CSV file import",
     "custom-configuration": "Custom configuration",
+    "data-modeling": "Data modeling",
     "graphchat": "GraphChat",
     "graph-schema": "Graph schema",
     "graph-style-script": "Graph Style Script (GSS)",
