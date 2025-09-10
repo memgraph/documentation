@@ -4,6 +4,8 @@ export default {
   "case": "CASE",
   "create": "CREATE",
   "delete": "DELETE",
+  "drop-all-constraints": "DROP ALL CONSTRAINTS",
+  "drop-all-indexes": "DROP ALL INDEXES",
   "drop-graph": "DROP GRAPH",
   "explain": "EXPLAIN",
   "foreach": "FOREACH",
