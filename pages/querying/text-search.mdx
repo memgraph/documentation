@@ -109,6 +109,31 @@ YIELD node
 RETURN node;
 ```
 
+{<h4 className="custom-header">Example</h4>}
+
+```cypher
+CREATE TEXT INDEX complianceDocuments ON :Document;
+CREATE (:Document {title: 'Rules2024', version: 1});
+CREATE (:Document {title: 'Rules2024', version: 2});
+CREATE (:Document {title: 'Other', version: 2});
+
+// Search for documents with title containing 'Rules2024'
+CALL text_search.search('complianceDocuments', 'data.title:Rules2024') 
+YIELD node
+RETURN node.title AS title, node.version AS version
+ORDER BY version ASC;
+```
+
+Result:
+```
++-------------+-------------+
+| title       | version     |
++-------------+-------------+
+| "Rules2024" | 1           |
+| "Rules2024" | 2           |
++-------------+-------------+
+```
+
 ### Search over all indexed properties
 
 The `text_search.search_all` procedure looks for text-indexed nodes where at
@@ -137,6 +162,30 @@ YIELD node
 RETURN node;
 ```
 
+{<h4 className="custom-header">Example</h4>}
+
+```cypher
+CREATE TEXT INDEX complianceDocuments ON :Document;
+CREATE (:Document {title: 'Rules2024', fulltext: 'text words', version: 1});
+CREATE (:Document {title: 'Other', fulltext: 'Rules2024 here', version: 3});
+
+// Search for 'Rules2024' across all properties
+CALL text_search.search_all('complianceDocuments', 'Rules2024') 
+YIELD node
+RETURN node
+ORDER BY node.version ASC;
+```
+
+Result:
+```
++----------------------------------------------------------------------+
+| node                                                                 |
++----------------------------------------------------------------------+
+| (:Document {fulltext: "text words", title: "Rules2024", version: 1}) |
+| (:Document {fulltext: "Rules2024 here", title: "Other", version: 3}) |
++----------------------------------------------------------------------+
+```
+
 ### Regex search
 
 The `text_search.regex_search` procedure looks for text-indexed nodes where at
@@ -162,6 +211,30 @@ least one property value satisfies the `wor.*s` regex, e.g. "works" and "words":
 CALL text_search.regex_search("complianceDocuments", "wor.*s")
 YIELD node
 RETURN node;
+```
+
+{<h4 className="custom-header">Example</h4>}
+
+```cypher
+CREATE TEXT INDEX complianceDocuments ON :Document;
+CREATE (:Document {fulltext: 'words and things'});
+CREATE (:Document {fulltext: 'more words'});
+
+// Search using regex pattern 'wor.*s'
+CALL text_search.regex_search('complianceDocuments', 'wor.*s') 
+YIELD node
+RETURN node
+ORDER BY node.fulltext ASC;
+```
+
+Result:
+```
++--------------------------------------------+
+| node                                       |
++--------------------------------------------+
+| (:Document {fulltext: "more words"})       |
+| (:Document {fulltext: "words and things"}) |
++--------------------------------------------+
 ```
 
 ### Aggregations
@@ -196,10 +269,36 @@ The following query counts all nodes in the `complianceDocuments` index:
 CALL text_search.aggregate(
     "complianceDocuments",
     "data.title:Rules2024",
-    '{"count": {"value_count": {"field": "metadata.gid"}}}'
+    '{"count": {"value_count": {"field": "data.version"}}}'
 )
 YIELD aggregation
 RETURN aggregation;
+```
+
+{<h4 className="custom-header">Example</h4>}
+
+```cypher
+CREATE TEXT INDEX complianceDocuments ON :Document;
+CREATE (:Document {title: 'Rules2024', version: 1});
+CREATE (:Document {title: 'Rules2024', version: 2});
+
+// Count documents matching the search query
+CALL text_search.aggregate(
+    'complianceDocuments', 
+    'data.title:Rules2024', 
+    '{"count":{"value_count":{"field":"data.version"}}}'
+) 
+YIELD aggregation
+RETURN aggregation;
+```
+
+Result:
+```
++-------------------------------+
+| aggregation                   |
++-------------------------------+
+| "{\"count\":{\"value\":2.0}}" |
++-------------------------------+
 ```
 
 ## Drop text indices
@@ -213,9 +312,6 @@ This statement drops the text index named `complianceDocuments`:
 DROP TEXT INDEX complianceDocuments;
 ```
 
-If one attempts to delete an index with the same name twice, the statement will
-fail. 
-
 ## Compatibility
 
 Even though text search is an experimental feature, it supports most usage modalities
@@ -225,6 +321,6 @@ that are available in Memgraph from version 3.5. Refer to the table below for an
 |-------------------------|--------------------------------------------- |
 | Multitenancy            | ✅ Yes                                       |
 | Durability              | ✅ Yes                                       |
-| Storage modes           | ❌ No (doesn't work in IN_MEMORY_ANALYTICAL) |
 | Replication             | ✅ Yes (from version 3.5)                    |
 | Concurrent transactions | ✅ Yes (from version 3.5)                    |
+| Storage modes           | ❌ No (doesn't work in IN_MEMORY_ANALYTICAL) |
