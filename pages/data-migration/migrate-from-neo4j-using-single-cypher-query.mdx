@@ -45,24 +45,71 @@ If you are running Neo4j and Memgraph on the same server, ensure they are runnin
 docker run -it --rm -p 7688:7687 memgraph/memgraph-mage
 ```
 
-## Migrate the entire graph
+## Setup migration indices
+Before we do the magic Cypher command, we need to create 2 necessary indices in order to speed up the migration process:
+
+```cypher
+CREATE INDEX ON :__MigrationNode__;
+CREATE INDEX ON :__MigrationNode__(__elementId__);
+```
+
+We explain the necessity of these indices in the following paragraph.
+
+## The magic Cypher command for seamless migration
 To migrate the entire graph from Neo4j to Memgraph, use the following Cypher query in Memgraph:
 
 ```cypher
 CALL migrate.neo4j(
-    "MATCH (n)-[r]->(m) 
-     RETURN properties(n) AS from_properties, 
-            properties(r) AS edge_properties, 
-            properties(m) AS to_properties", 
-    {host: "localhost", port: 7687}) 
+  "MATCH (n)-[r]->(m) RETURN labels(n) AS src_labels, type(r) as rel_type, labels(m) AS dest_labels, elementId(n) AS src_id, elementId(m) AS dest_id, properties(n) AS src_props, properties(r) AS edge_props, properties(m) AS dest_props", 
+  {host: "localhost", port: 7687})
 YIELD row 
-RETURN row;
+MERGE (n:__MigrationNode__ {__elementId__: row.src_id})
+MERGE (m:__MigrationNode__ {__elementId__: row.dest_id})
+SET n:row.src_labels
+SET m:row.dest_labels
+SET n += row.src_props
+SET m += row.dest_props
+CREATE (n)-[r:row.rel_type]->(m)
+SET r += row.edge_props;
 ```
 
-- The `MATCH (n)-[r]->(m)` query selects all nodes and relationships.
-- The `RETURN` clause extracts node and relationship properties.
-- The `{host: "localhost", port: 7687}` parameter specifies the Neo4j instance to migrate from.
-- `YIELD row RETURN row` streams the data directly from Neo4j to Memgraph.
+- The query makes sure that all triplets are migrated from Neo4j to Memgraph.
+- Configuration object is the second argument in the query which is establishing a driver connection to Neo4j
+- Since nodes can have an arbitrary number of labels, it is therefore necessary to ensure a single index is utilized
+while performing the `MERGE` command. Furthermore, Neo4j has a built-in `elementId(node)` function which acts as a global ID
+for the merge command to successfully transition the correct set of nodes into Memgraph.
+- After we have correctly merged the nodes, we can then dinamically assign the labels with the `:row.src_labels` and `:row.dest_labels` constructs.
+- Relationship creation does not need a `MERGE` statement, since the cardinality of all triplets is in fact the cardinality of relationships in the graph.
+- Relationship type is a single string which is dinamically transported using the `:row.rel_type` constructs
+- Relationship properties are also added at the end of the query
+
+<Callout type="info">
+This command doesn't take into account orphan nodes, since the pattern we were doing was taking into account triplets. If you 
+have in your dataset orphan nodes, consider using this command to create all the nodes prior to the triplet migration:
+
+```cypher
+CALL migrate.neo4j(
+  "MATCH (n) RETURN labels(n) AS node_labels, elementId(n) as node_id, properties(n) as node_props", 
+  {host: "localhost", port: 7687})
+YIELD row 
+MERGE (n:__MigrationNode__ {__elementId__: row.node_id})
+SET n:row.node_labels
+SET n += row.node_props
+```
+</Callout>
+
+## Cleanup
+We actually don't need the `__MigrationNode__` label and the `__elementId__` property, so we will make sure to delete it from Memgraph:
+```cypher
+DROP INDEX ON :__MigrationNode__;
+DROP INDEX ON :__MigrationNode__(__elementId__);
+MATCH (n) SET n.__elementId__ = null;
+```
+
+## Create your own indices
+Now make sure you create all the label indices, label-property indices, and constraints, in order to improve performance and check 
+for data integrity. Indices and constraints are not part of openCypher and they need to be manually added into the dataset.
+
 
 ## Migrate specific data
 If you want to migrate only certain parts of the graph, use the following queries:
@@ -71,13 +118,15 @@ If you want to migrate only certain parts of the graph, use the following querie
 ```cypher
 CALL migrate.neo4j(":Person", {host: "localhost", port: 7687}) YIELD row RETURN row;
 ```
-This migrates all nodes with the `Person` label.
 
 ### Migrate relationships of a certain type
 ```cypher
 CALL migrate.neo4j("[:KNOWS]", {host: "localhost", port: 7687}) YIELD row RETURN row;
 ```
 This migrates only relationships of type `KNOWS`.
+
+The commands per-se do not create any relationships, as we just return the rows to the client. User is encouraged to use
+Cypher's expressiveness and create the graph based on its wishes, in order to ensure the graph has been correctly populated.
 
 ## Conclusion
 Using Memgraph’s `migrate` module, you can efficiently migrate your graph data from Neo4j with a single Cypher
