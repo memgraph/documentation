@@ -45,7 +45,7 @@ If you are running Neo4j and Memgraph on the same server, ensure they are runnin
 docker run -it --rm -p 7688:7687 memgraph/memgraph-mage
 ```
 
-## Setup migration indices
+## Create migration indices
 Before we do the magic Cypher command, we need to create 2 necessary indices in order to speed up the migration process:
 
 ```cypher
@@ -55,7 +55,7 @@ CREATE INDEX ON :__MigrationNode__(__elementId__);
 
 We explain the necessity of these indices in the following paragraph.
 
-## The magic Cypher command for seamless migration
+## Run the migration query
 To migrate the entire graph from Neo4j to Memgraph, use the following Cypher query in Memgraph:
 
 ```cypher
@@ -74,14 +74,13 @@ SET r += row.edge_props;
 ```
 
 - The query makes sure that all triplets are migrated from Neo4j to Memgraph.
-- Configuration object is the second argument in the query which is establishing a driver connection to Neo4j
-- Since nodes can have an arbitrary number of labels, it is therefore necessary to ensure a single index is utilized
-while performing the `MERGE` command. Furthermore, Neo4j has a built-in `elementId(node)` function which acts as a global ID
+- The second argument in the query is the configuration object, (`host` and `port`) which is establishing a driver connection to Neo4j.
+- Because nodes in Neo4j can have multiple labels, we need a reliable way to ensure a single index is utilized during the `MERGE` command. To achieve this, we use a single `__MigrationNode__ index`. Neo4j has a built-in `elementId(node)` function which acts as a global ID
 for the merge command to successfully transition the correct set of nodes into Memgraph.
 - After we have correctly merged the nodes, we can then dinamically assign the labels with the `:row.src_labels` and `:row.dest_labels` constructs.
 - Relationship creation does not need a `MERGE` statement, since the cardinality of all triplets is in fact the cardinality of relationships in the graph.
-- Relationship type is a single string which is dinamically transported using the `:row.rel_type` constructs
-- Relationship properties are also added at the end of the query
+- Relationship type is a single string which is dinamically transported using the `:row.rel_type` constructs.
+- Relationship properties are also added at the end of the query.
 
 <Callout type="info">
 This command doesn't take into account orphan nodes, since the pattern we were doing was taking into account triplets. If you 
@@ -98,7 +97,7 @@ SET n += row.node_props
 ```
 </Callout>
 
-## Cleanup
+## Clean up temporary data
 We actually don't need the `__MigrationNode__` label and the `__elementId__` property, so we will make sure to delete it from Memgraph:
 ```cypher
 DROP INDEX ON :__MigrationNode__;
@@ -106,8 +105,8 @@ DROP INDEX ON :__MigrationNode__(__elementId__);
 MATCH (n) SET n.__elementId__ = null;
 ```
 
-## Create your own indices
-Now make sure you create all the label indices, label-property indices, and constraints, in order to improve performance and check 
+## Rebuild indices and constraints
+Make sure you create all the label indices, label-property indices, and constraints, in order to improve performance and check 
 for data integrity. Indices and constraints are not part of openCypher and they need to be manually added into the dataset.
 
 
