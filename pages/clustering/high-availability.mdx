@@ -70,34 +70,60 @@ but from the availability perspective, it is better to separate them physically.
 
 ## Bolt+routing
 
-Directly connecting to the main instance isn't preferred in the HA cluster since the main instance changes due to various failures. Because of that, users
-can use bolt+routing so that write queries can always be sent to the correct data instance. This will prevent a split-brain issue since clients, when writing,
-won't be routed to the old main but rather to the new main instance on which failover got performed.
-This protocol works in a way that the client
-first sends a ROUTE bolt message to any coordinator instance. The coordinator replies to the message by returning the routing table with three entries specifying
-from which instance can the data be read, to which instance data can be written to and which instances behave as routers. 
-When a client connects directly to the cluster leader, the routing request is handled immediately. The leader returns the current routing table without any delays, as the Raft consensus
-protocol ensures that the leader always maintains the most up-to-date and accurate cluster state.
-When a routing request is received by a follower node, it forwards the request to the current cluster leader. This ensures that clients always receive the most current routing information,
-maintaining consistency across the cluster.
+Directly connecting to the main instance isn't preferred in the HA cluster since
+the main instance changes due to various failures. Because of that, users can
+use **Bolt with routing**,  which ensures that write queries are always sent to
+the current main instance. This prevents split-brain scenarios, as clients never
+write to the old main but are automatically routed to the new main after a
+failover. 
+The routing protocol works as follows: the client sends a `ROUTE` Bolt
+message to any coordinator instance. The coordinator responds with a **routing
+table** containing three entries:
 
-Key Benefits:
-- Consistency: All clients receive identical routing information regardless of their entry point
-- Reliability: The Raft consensus protocol guarantees data accuracy on the leader node
-- Transparency: Client requests are handled seamlessly whether connecting to leaders or followers
+1. Instances from which data can be read
+2. The instance where data can be written
+3. Instances acting as routers
 
+When a client connects directly to the cluster leader, the leader immediately
+returns the current routing table. Thanks to the Raft consensus protocol, the
+leader always has the most up-to-date cluster state. If a follower receives a
+routing request, it forwards the request to the current leader, ensuring the
+client always gets accurate routing information.
 
-In the Memgraph HA cluster, the main data instance is the only writeable instance, replicas are readable instances, and COORDINATORs behave as routers. However, the cluster can be configured in such a way 
-that main can also be used for reading. Check this [paragraph](#setting-config-for-highly-available-cluster) for more info. 
-Bolt+routing is the client-side routing protocol, meaning network endpoint resolution happens inside drivers. 
-For more details about the Bolt messages involved in the communication, check [the following link](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route).
+This ensures:
 
-Users only need to change the scheme they use for connecting to coordinators. This means instead of using `bolt://<main_ip_address>,` you should
-use `neo4j://<coordinator_ip_adresss>` to get an active connection to the current main instance in the cluster. You can find examples of how to 
-use bolt+routing in different programming languages [here](https://github.com/memgraph/memgraph/tree/master/tests/drivers).
+- **Consistency**: All clients receive the same routing information, regardless of
+their entry point.
+- **Reliability**: The Raft consensus protocol ensures data accuracy on the leader
+node.
+- **Transparency**: Client requests are handled seamlessly, whether connected to
+leaders or followers.
 
-It is important to note that setting up the cluster on one coordinator (registration of data instances and coordinators, setting main) must be done using bolt connection 
-since bolt+routing is only used for routing data-related queries, not coordinator-based queries.
+In the Memgraph HA cluster:
+
+- The **main instance** is the only writable instance
+- **Replicas** are readable instances
+- **Coordinators** act as routers
+
+However, the cluster can be configured in such a way that main can also be used
+for reading. Check this
+[paragraph](#setting-config-for-highly-available-cluster) for more info.
+Bolt+routing is the client-side routing protocol, meaning network endpoint
+resolution happens inside drivers. For more details about the Bolt messages
+involved in the communication, check [the following
+link](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route).
+
+Users only need to change the scheme they use for connecting to coordinators.
+This means instead of using `bolt://<main_ip_address>,` you should use
+`neo4j://<coordinator_ip_adresss>` to get an active connection to the current
+main instance in the cluster. You can find examples of how to use bolt+routing
+in different programming languages
+[here](https://github.com/memgraph/memgraph/tree/master/tests/drivers).
+
+It is important to note that setting up the cluster on one coordinator
+(registration of data instances and coordinators, setting main) must be done
+using bolt connection since bolt+routing is only used for routing data-related
+queries, not coordinator-based queries.
 
 ## System configuration
 
