@@ -75,13 +75,19 @@ can use bolt+routing so that write queries can always be sent to the correct dat
 won't be routed to the old main but rather to the new main instance on which failover got performed.
 This protocol works in a way that the client
 first sends a ROUTE bolt message to any coordinator instance. The coordinator replies to the message by returning the routing table with three entries specifying
-from which instance can the data be read, to which instance data can be written to and which instances behave as routers. If the user is connected to the cluster leader,
-the leader replies immediately with the current routing table which is most definitely correct since the Raft protocol guarantees the correctness of the current leader. If the routing
-request is received on followers, they propagate the request to the cluster leader so that clients have the correct routing table.
+from which instance can the data be read, to which instance data can be written to and which instances behave as routers. 
+When a client connects directly to the cluster leader, the routing request is handled immediately. The leader returns the current routing table without any delays, as the Raft consensus
+protocol ensures that the leader always maintains the most up-to-date and accurate cluster state.
+When a routing request is received by a follower node, it forwards the request to the current cluster leader. This ensures that clients always receive the most current routing information,
+maintaining consistency across the cluster.
+
+Key Benefits:
+- Consistency: All clients receive identical routing information regardless of their entry point
+- Reliability: The Raft consensus protocol guarantees data accuracy on the leader node
+- Transparency: Client requests are handled seamlessly whether connecting to leaders or followers
 
 
-In the Memgraph HA cluster, the main
-data instance is the only writeable instance, replicas are readable instances, and COORDINATORs behave as routers. However, the cluster can be configured in such a way 
+In the Memgraph HA cluster, the main data instance is the only writeable instance, replicas are readable instances, and COORDINATORs behave as routers. However, the cluster can be configured in such a way 
 that main can also be used for reading. Check this [paragraph](#setting-config-for-highly-available-cluster) for more info. 
 Bolt+routing is the client-side routing protocol, meaning network endpoint resolution happens inside drivers. 
 For more details about the Bolt messages involved in the communication, check [the following link](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route).
@@ -419,8 +425,8 @@ there is an additional risk of experiencing data loss. However, failover to an a
 manually perform a failover.
 
 
-Users can control the maximum allowed lag on the replica so that it is still considered up-to-date and read queries can be routed to. If replica lags behind the current main for more than
-the `max_replica_read_lag_` transactions on any database, read queries won't be routed to the data instance when the bolt+routing protocol is used.
+Users can control the maximum allowed replica lag to maintain read consistency. When a replica falls behind the current main by more than `max_replica_read_lag_` transactions, the
+bolt+routing protocol will exclude that replica from read query routing to ensure data freshness.
 
 The configuration value can be controlled using the query:
 
