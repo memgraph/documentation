@@ -70,23 +70,60 @@ but from the availability perspective, it is better to separate them physically.
 
 ## Bolt+routing
 
-Directly connecting to the main instance isn't preferred in the HA cluster since the main instance changes due to various failures. Because of that, users
-can use bolt+routing so that write queries can always be sent to the correct data instance. This will prevent a split-brain issue since clients, when writing,
-won't be routed to the old main but rather to the new main instance on which failover got performed.
-This protocol works in a way that the client
-first sends a ROUTE bolt message to any coordinator instance. The coordinator replies to the message by returning the routing table with three entries specifying
-from which instance can the data be read, to which instance data can be written to and which instances behave as routers. In the Memgraph HA cluster, the main
-data instance is the only writeable instance, replicas are readable instances, and COORDINATORs behave as routers. However, the cluster can be configured in such a way 
-that main can also be used for reading. Check this [paragraph](#setting-config-for-highly-available-cluster) for more info. 
-Bolt+routing is the client-side routing protocol, meaning network endpoint resolution happens inside drivers. 
-For more details about the Bolt messages involved in the communication, check [the following link](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route).
+Directly connecting to the main instance isn't preferred in the HA cluster since
+the main instance changes due to various failures. Because of that, users can
+use **Bolt with routing**,  which ensures that write queries are always sent to
+the current main instance. This prevents split-brain scenarios, as clients never
+write to the old main but are automatically routed to the new main after a
+failover. 
+The routing protocol works as follows: the client sends a `ROUTE` Bolt
+message to any coordinator instance. The coordinator responds with a **routing
+table** containing three entries:
 
-Users only need to change the scheme they use for connecting to coordinators. This means instead of using `bolt://<main_ip_address>,` you should
-use `neo4j://<coordinator_ip_adresss>` to get an active connection to the current main instance in the cluster. You can find examples of how to 
-use bolt+routing in different programming languages [here](https://github.com/memgraph/memgraph/tree/master/tests/drivers).
+1. Instances from which data can be read
+2. The instance where data can be written
+3. Instances acting as routers
 
-It is important to note that setting up the cluster on one coordinator (registration of data instances and coordinators, setting main) must be done using bolt connection 
-since bolt+routing is only used for routing data-related queries, not coordinator-based queries.
+When a client connects directly to the cluster leader, the leader immediately
+returns the current routing table. Thanks to the Raft consensus protocol, the
+leader always has the most up-to-date cluster state. If a follower receives a
+routing request, it forwards the request to the current leader, ensuring the
+client always gets accurate routing information.
+
+This ensures:
+
+- **Consistency**: All clients receive the same routing information, regardless of
+their entry point.
+- **Reliability**: The Raft consensus protocol ensures data accuracy on the leader
+node.
+- **Transparency**: Client requests are handled seamlessly, whether connected to
+leaders or followers.
+
+In the Memgraph HA cluster:
+
+- The **main instance** is the only writable instance
+- **Replicas** are readable instances
+- **Coordinators** act as routers
+
+However, the cluster can be configured in such a way that main can also be used
+for reading. Check this
+[paragraph](#setting-config-for-highly-available-cluster) for more info.
+Bolt+routing is the client-side routing protocol, meaning network endpoint
+resolution happens inside drivers. For more details about the Bolt messages
+involved in the communication, check [the following
+link](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route).
+
+Users only need to change the scheme they use for connecting to coordinators.
+This means instead of using `bolt://<main_ip_address>,` you should use
+`neo4j://<coordinator_ip_adresss>` to get an active connection to the current
+main instance in the cluster. You can find examples of how to use bolt+routing
+in different programming languages
+[here](https://github.com/memgraph/memgraph/tree/master/tests/drivers).
+
+It is important to note that setting up the cluster on one coordinator
+(registration of data instances and coordinators, setting main) must be done
+using bolt connection since bolt+routing is only used for routing data-related
+queries, not coordinator-based queries.
 
 ## System configuration
 
@@ -121,14 +158,15 @@ This architecture separates routing coordination from the user management, ensur
 ## Starting instances
 
 You can start the data and coordinator instances using environment flags or configuration flags.
-The main difference between data instance and coordinator is that data instances have `--management-port`, whereas coordinators must have `--coordinator-id` and `--coordinator-port`. 
+The main difference between data instance and coordinator is that data instances have `--management-port`,
+whereas coordinators must have `--coordinator-id` and `--coordinator-port`. 
 
 ### Configuration Flags
 
 #### Data instance
 
 Memgraph data instance must use flag `--management-port=<port>`. This flag is tied to the high availability feature, enables the coordinator to connect to the data instance, 
-and allows the Memgraph data instance to use the high availability feature.
+and allows the Memgraph data instance to use the high availability feature. The flag `--storage-wal-enabled` must be enabled, otherwise data instance won't be started. 
 
 ```
 docker run --name instance1 -p 7687:7687 -p 7444:7444 memgraph/memgraph-mage
@@ -409,6 +447,16 @@ By default, the value is `true`, which means that only sync replicas are candida
 there is an additional risk of experiencing data loss. However, failover to an async replica may be necessary when other sync replicas are down and you want to
 manually perform a failover.
 
+
+Users can control the maximum allowed replica lag to maintain read consistency. When a replica falls behind the current main by more than `max_replica_read_lag_` transactions, the
+bolt+routing protocol will exclude that replica from read query routing to ensure data freshness.
+
+The configuration value can be controlled using the query:
+
+
+```
+SET COORDINATOR SETTING 'max_replica_read_lag_' TO '10' ;
+```
 
 All run-time configuration options can be retrieved using:
 
