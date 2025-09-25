@@ -50,9 +50,17 @@ CREATE ROLE tenant2_user;
 
 -- Grant appropriate permissions to tenant roles
 GRANT MATCH, CREATE, MERGE, SET, DELETE, INDEX TO tenant1_admin;
+GRANT CREATE_DELETE ON LABELS * TO tenant1_admin;
+GRANT CREATE_DELETE ON EDGE_TYPES * TO tenant1_admin;
 GRANT MATCH, CREATE, MERGE, SET, DELETE TO tenant1_user;
+GRANT CREATE_DELETE ON LABELS * TO tenant1_user;
+GRANT CREATE_DELETE ON EDGE_TYPES * TO tenant1_user;
 GRANT MATCH, CREATE, MERGE, SET, DELETE, INDEX TO tenant2_admin;
+GRANT CREATE_DELETE ON LABELS * TO tenant2_admin;
+GRANT CREATE_DELETE ON EDGE_TYPES * TO tenant2_admin;
 GRANT MATCH, CREATE, MERGE, SET, DELETE TO tenant2_user;
+GRANT CREATE_DELETE ON LABELS * TO tenant2_user;
+GRANT CREATE_DELETE ON EDGE_TYPES * TO tenant2_user;
 
 -- Grant access only to tenant databases
 GRANT DATABASE tenant1_db TO tenant1_admin, tenant1_user;
