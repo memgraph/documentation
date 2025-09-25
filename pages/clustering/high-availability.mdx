@@ -429,7 +429,7 @@ server that coordinator instances use for communication. Flag `--instance-health
 check the status of the replication instance to update its status. Flag `--instance-down-timeout-sec` gives the user the ability to control how much time should
 pass before the coordinator starts considering the instance to be down. 
 
-There is also a configuration option for specifying whether reads from the main are enabled. The configuration value is by default false but can be changed in run-time 
+There is a configuration option for specifying whether reads from the main are enabled. The configuration value is by default false but can be changed in run-time 
 using the following query:
 
 ```
@@ -441,6 +441,23 @@ Users can also choose whether failover to the async replica is allowed by using 
 ```
 SET COORDINATOR SETTING 'sync_failover_only' TO 'true'/'false' ;
 ```
+
+Users can control the maximum transaction lag allowed during failover through configuration. If a replica is behind the main instance by more than the configured threshold, 
+that replica becomes ineligible for failover. This prevents data loss beyond the user's acceptable limits.
+
+To implement this functionality, we employ a caching mechanism on the cluster leader that tracks replicas' lag. The cache gets updated with each StateCheckRpc response from 
+replicas. During the brief failover window on the cooordinators' side, the new cluster leader may not have the current lag information for all data instances and in that case, 
+any replica can become main. This trade-off is intentional and it avoids flooding Raft logs with frequently-changing lag data while maintaining failover safety guarantees 
+in the large majority of situations.
+
+
+The configuration value can be controlled using the query:
+
+```
+SET COORDINATOR SETTING 'max_failover_replica_lag' TO '10' ;
+```
+
+
 
 
 By default, the value is `true`, which means that only sync replicas are candidates in the election. When the value is set to `false`, the async replica is also considered, but
@@ -551,11 +568,18 @@ about other replicas to which it will replicate data. Once that request succeeds
 
 ### Choosing new main from available replicas
 
-When failover is happening, some replicas can also be down. From the list of alive replicas, a new main is chosen. First, the leader coordinator contacts each alive replica
-to get info about each database's last commit timestamp. In the case of enabled multi-tenancy, from each instance coordinator will get info on all databases and their last commit
-timestamp. Currently, the coordinator chooses an instance to become a new main by comparing the latest commit timestamps of all databases. The instance which is newest on most 
-databases is considered the best candidate for the new main. If there are multiple instances which have the same number of newest databases, we sum timestamps of all databases
-and consider instance with a larger sum as the better candidate.
+
+During failover, the coordinator must select a new main instance from available replicas, as some may be offline. The leader coordinator queries each live replica to 
+retrieve the committed transaction count for every database.
+
+The selection algorithm prioritizes data recency using a two-phase approach:
+
+1. **Database majority rule**: The coordinator identifies which replica has the highest committed transaction count for each database. The replica that leads in the most
+databases becomes the preferred candidate.
+2. **Total transaction tiebreaker**: If multiple replicas tie for leading the most databases, the coordinator sums each replica's committed transactions across all databases.
+The replica with the highest total becomes the new main.
+
+This approach ensures the new main instance has the most up-to-date data across the cluster while maintaining consistency guarantees.
 
 ### Old main rejoining to the cluster
 
