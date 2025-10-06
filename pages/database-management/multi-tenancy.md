@@ -148,6 +148,12 @@ unified source of truth. A single user can access multiple databases with a
 global set of privileges, but currently, per-database privileges cannot be
 granted.
 
+<Callout type="warning">
+
+User-role mappings are simple maps located in the user. Deleting or renaming the database will not update this information. The admin needs to make sure the correct access is maintained at all times.
+
+</Callout>
+
 Access to all databases can be granted or revoked using wildcards:
 `GRANT DATABASE * TO user;`, `DENY DATABASE * TO user;` or 
 `REVOKE DATABASE * FROM user;`.
