@@ -119,7 +119,7 @@ based on configuration.
 Users interact with multi-tenant features through specialized Cypher queries:
 
 1. `CREATE DATABASE name`: Creates a new database.
-2. `DROP DATABASE name`: Deletes a specified database.
+2. `DROP DATABASE name [FORCE]`: Deletes a specified database.
 3. `SHOW DATABASE`: Shows the current used database. It will return `NULL` if
    no database is currently in use. You can also use `SHOW CURRENT DATABASE` for the same functionality. This command does not require any special privileges.
 
@@ -133,6 +133,35 @@ Users interact with multi-tenant features through specialized Cypher queries:
    context.
 9. `SET MAIN DATABASE name FOR user`: Sets a user's default (landing) database.
 10. `SHOW DATABASE PRIVILEGES FOR user`: Lists a user's database access rights.
+
+### DROP DATABASE with FORCE option
+
+The `DROP DATABASE` command supports an optional `FORCE` parameter that allows you to delete a database even when it's currently being used by active connections or transactions.
+
+**Syntax:**
+```cypher
+DROP DATABASE database_name [FORCE];
+```
+
+**Behavior:**
+
+- **Without FORCE**: The command will fail if the database is currently in use by any active connections or transactions.
+- **With FORCE**: The database will be immediately hidden from new connections, but actual deletion is deferred until it's safe to proceed. All active transactions using the database will be terminated.
+
+**Use cases for FORCE:**
+
+- **Emergency cleanup**: When you need to immediately remove a database that has stuck or long-running transactions
+- **Administrative maintenance**: When performing database maintenance that requires immediate database removal
+- **Development environments**: When you need to quickly reset test databases that may have active connections
+
+**Important considerations:**
+
+- The `FORCE` option requires the `MULTI_DATABASE_EDIT` privilege and access to the "memgraph" database
+- The `FORCE` option also requires the `TRANSACTION_MANAGEMENT` privilege to terminate active transactions
+- When using `FORCE`, all active transactions on the target database will be terminated
+- The database becomes immediately unavailable to new connections but deletion may be deferred until existing connections are properly closed
+- This operation cannot be undone once completed
+
 
 ### User's main database
 
