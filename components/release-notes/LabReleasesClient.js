@@ -62,7 +62,7 @@ export default function LabReleasesClient({ version }) {
                             <li className={`my-3 ${i === 0 ? 'mt-6' : ''}`} key={i}>
                                 {itemGroup.map((entry, j) => (
                                     <span key={j}>
-                                        {entry.type === "code" ? <code>{entry.value}</code> : entry.value}
+                                        {entry.type === "code" ? <code>{entry.value}</code> : entry.value.replace(/\*\*/g, "")}
                                     </span>
                                 ))}
                             </li>

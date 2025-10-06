@@ -13,11 +13,6 @@ Text search is an [experimental
 feature](/database-management/experimental-features) introduced in Memgraph
 2.15.1. To use it, start Memgraph with the `--experimental-enabled=text-search`
 flag.
-
-Make sure to start a fresh instance and then load your data. Snapshots and WALs
-created with version `vX.Y.Z` without the experimental flag are currently
-incompatible with the same version `vX.Y.Z` when the experimental flag is
-enabled.
 </Callout>
 
 Text search allows you to look up nodes with properties that contain specific content.
@@ -33,18 +28,42 @@ Text indices and search are powered by the
 Text indices are created with the `CREATE TEXT INDEX` command. You need to give
 a name to the new index and specify which labels it should apply to.
 
+### Index all properties
+
 This statement creates a text index named `complianceDocuments` for nodes with
-the `Report` label:
+the `Report` label, indexing all text-indexable properties:
 
 ```cypher
 CREATE TEXT INDEX complianceDocuments ON :Report;
+```
+
+### Index specific properties
+
+You can also create a text index on a subset of properties by specifying them explicitly:
+
+```cypher
+CREATE TEXT INDEX index_name ON :Label(prop1, prop2, prop3);
+```
+
+For example, to create an index only on the `title` and `content` properties of `Report` nodes:
+
+```cypher
+CREATE TEXT INDEX complianceDocuments ON :Report(title, content);
 ```
 
 If you attempt to create an index with an existing name, the statement will fail.
 
 ### What is indexed
 
-For any given node, if a text index applies to it, all its properties with text-indexable types (`String`, `Integer`, `Float`, or `Boolean`) are stored.
+For any given node, if a text index applies to it:
+- When no specific properties are listed, all properties with text-indexable types (`String`, `Integer`, `Float`, or `Boolean`) are stored.
+- When specific properties are listed, only those properties (if they have text-indexable types) are stored.
+
+<Callout type="warning">
+
+Changes made within the same transaction are not visible to the index. To see your changes in text search results, you need to commit the transaction first.
+
+</Callout>
 
 ## Show text indices
 
@@ -52,6 +71,13 @@ To list all text indices in Memgraph, use the `SHOW INDEX INFO`
 [statement](/fundamentals/indexes#show-created-indexes).
 
 ## Query text indices
+
+<Callout type="warning">
+
+Within a single transaction, repeated text searches may return different results if other transactions have committed their changes to the same index.
+For consistent results, avoid performing multiple identical searches within the same transaction when concurrent modifications are expected.
+
+</Callout>
 
 Querying text indices is done through query procedures.
 
@@ -90,6 +116,66 @@ YIELD node
 RETURN node;
 ```
 
+{<h4 className="custom-header">Example</h4>}
+
+```cypher
+CREATE TEXT INDEX complianceDocuments ON :Document;
+CREATE (:Document {title: 'Rules2024', version: 1});
+CREATE (:Document {title: 'Rules2024', version: 2});
+CREATE (:Document {title: 'Other', version: 2});
+
+// Search for documents with title containing 'Rules2024'
+CALL text_search.search('complianceDocuments', 'data.title:Rules2024') 
+YIELD node
+RETURN node.title AS title, node.version AS version
+ORDER BY version ASC;
+```
+
+Result:
+```
++-------------+-------------+
+| title       | version     |
++-------------+-------------+
+| "Rules2024" | 1           |
+| "Rules2024" | 2           |
++-------------+-------------+
+```
+
+### Boolean expressions
+
+You can use boolean logic in your search queries to create more complex search conditions. Boolean operators include `AND`, `OR`, and `NOT`, and you can use parentheses to group conditions.
+
+{<h3 className="custom-header"> Usage: </h3>}
+
+Boolean expressions allow you to combine multiple search conditions:
+- `AND` - both conditions must be true
+- `OR` - at least one condition must be true  
+- `NOT` - condition must be false
+- Use parentheses `()` to group conditions and control precedence
+
+{<h4 className="custom-header">Example</h4>}
+
+```cypher
+CREATE TEXT INDEX complianceDocuments ON :Document;
+CREATE (:Document {title: 'Rules2023', fulltext: 'nothing'});
+CREATE (:Document {title: 'Rules2024', fulltext: 'words', version: 2});
+
+// Search with boolean logic: (title is Rules2023 OR Rules2024) AND fulltext contains 'words'
+CALL text_search.search('complianceDocuments', '(data.title:Rules2023 OR data.title:Rules2024) AND data.fulltext:words') 
+YIELD node
+RETURN node.title AS title, node.version AS version
+ORDER BY version ASC, title ASC;
+```
+
+Result:
+```
++-------------+-------------+
+| title       | version     |
++-------------+-------------+
+| "Rules2024" | 2           |
++-------------+-------------+
+```
+
 ### Search over all indexed properties
 
 The `text_search.search_all` procedure looks for text-indexed nodes where at
@@ -118,6 +204,30 @@ YIELD node
 RETURN node;
 ```
 
+{<h4 className="custom-header">Example</h4>}
+
+```cypher
+CREATE TEXT INDEX complianceDocuments ON :Document;
+CREATE (:Document {title: 'Rules2024', fulltext: 'text words', version: 1});
+CREATE (:Document {title: 'Other', fulltext: 'Rules2024 here', version: 3});
+
+// Search for 'Rules2024' across all properties
+CALL text_search.search_all('complianceDocuments', 'Rules2024') 
+YIELD node
+RETURN node
+ORDER BY node.version ASC;
+```
+
+Result:
+```
++----------------------------------------------------------------------+
+| node                                                                 |
++----------------------------------------------------------------------+
+| (:Document {fulltext: "text words", title: "Rules2024", version: 1}) |
+| (:Document {fulltext: "Rules2024 here", title: "Other", version: 3}) |
++----------------------------------------------------------------------+
+```
+
 ### Regex search
 
 The `text_search.regex_search` procedure looks for text-indexed nodes where at
@@ -143,6 +253,30 @@ least one property value satisfies the `wor.*s` regex, e.g. "works" and "words":
 CALL text_search.regex_search("complianceDocuments", "wor.*s")
 YIELD node
 RETURN node;
+```
+
+{<h4 className="custom-header">Example</h4>}
+
+```cypher
+CREATE TEXT INDEX complianceDocuments ON :Document;
+CREATE (:Document {fulltext: 'words and things'});
+CREATE (:Document {fulltext: 'more words'});
+
+// Search using regex pattern 'wor.*s'
+CALL text_search.regex_search('complianceDocuments', 'wor.*s') 
+YIELD node
+RETURN node
+ORDER BY node.fulltext ASC;
+```
+
+Result:
+```
++--------------------------------------------+
+| node                                       |
++--------------------------------------------+
+| (:Document {fulltext: "more words"})       |
+| (:Document {fulltext: "words and things"}) |
++--------------------------------------------+
 ```
 
 ### Aggregations
@@ -177,10 +311,36 @@ The following query counts all nodes in the `complianceDocuments` index:
 CALL text_search.aggregate(
     "complianceDocuments",
     "data.title:Rules2024",
-    '{"count": {"value_count": {"field": "metadata.gid"}}}'
+    '{"count": {"value_count": {"field": "data.version"}}}'
 )
 YIELD aggregation
 RETURN aggregation;
+```
+
+{<h4 className="custom-header">Example</h4>}
+
+```cypher
+CREATE TEXT INDEX complianceDocuments ON :Document;
+CREATE (:Document {title: 'Rules2024', version: 1});
+CREATE (:Document {title: 'Rules2024', version: 2});
+
+// Count documents matching the search query
+CALL text_search.aggregate(
+    'complianceDocuments', 
+    'data.title:Rules2024', 
+    '{"count":{"value_count":{"field":"data.version"}}}'
+) 
+YIELD aggregation
+RETURN aggregation;
+```
+
+Result:
+```
++-------------------------------+
+| aggregation                   |
++-------------------------------+
+| "{\"count\":{\"value\":2.0}}" |
++-------------------------------+
 ```
 
 ## Drop text indices
@@ -194,25 +354,15 @@ This statement drops the text index named `complianceDocuments`:
 DROP TEXT INDEX complianceDocuments;
 ```
 
-If one attempts to delete an index with the same name twice, the statement will
-fail. 
-
 ## Compatibility
 
-Being an experimental feature, text search only supports some usage modalities
-that are available in Memgraph. Refer to the table below for an overview:
+Even though text search is an experimental feature, it supports most usage modalities
+that are available in Memgraph from version 3.5. Refer to the table below for an overview:
 
-| Feature                 | Support   |
-|-------------------------|-----------|
-| Multitenancy            | yes       |
-| Durability              | yes       |
-| Storage modes           | yes (all) |
-| Replication             | no        |
-| Concurrent transactions | no        |
-
-<Callout type="warning">
-
-Disclaimer: For now, text search is not guaranteed to work correctly in use
-cases that involve concurrent transactions and replication.
-
-</Callout>
+| Feature                 | Support                                                 |
+|-------------------------|---------------------------------------------------------|
+| Multitenancy            | ✅ Yes                                                  |
+| Durability              | ✅ Yes                                                  |
+| Replication             | ✅ Yes (from version 3.5)                               |
+| Concurrent transactions | ⚠️ Yes, but search results may vary within transactions |
+| Storage modes           | ❌ No (doesn't work in IN_MEMORY_ANALYTICAL)            |
