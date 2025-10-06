@@ -3,6 +3,8 @@ title: Multi-tenancy (Enterprise)
 description: Discover the benefits of multi-tenancy for scalability, resource utilization, and performance. Also learn how to manage few isolated databases within a single instance in our detailed documentation.
 ---
 
+import { Callout } from 'nextra/components'
+
 # Multi-tenancy (Enterprise)
 
 Multi-tenant support in Memgraph enables users to manage multiple isolated
@@ -120,19 +122,20 @@ Users interact with multi-tenant features through specialized Cypher queries:
 
 1. `CREATE DATABASE name`: Creates a new database.
 2. `DROP DATABASE name [FORCE]`: Deletes a specified database.
-3. `SHOW DATABASE`: Shows the current used database. It will return `NULL` if
+3. `RENAME DATABASE old_name TO new_name`: Renames a database.
+4. `SHOW DATABASE`: Shows the current used database. It will return `NULL` if
    no database is currently in use. You can also use `SHOW CURRENT DATABASE` for the same functionality. This command does not require any special privileges.
 
-4. `SHOW DATABASES`: Shows only the existing set of multitenant databases.
-5. `USE DATABASE name`: Switches focus to a specific database (disabled during
+5. `SHOW DATABASES`: Shows only the existing set of multitenant databases.
+6. `USE DATABASE name`: Switches focus to a specific database (disabled during
    transactions).
-6. `GRANT DATABASE name TO user`: Grants a user access to a specified database.
-7. `DENY DATABASE name FROM user`: Denies a user's access to a specified
+7. `GRANT DATABASE name TO user`: Grants a user access to a specified database.
+8. `DENY DATABASE name FROM user`: Denies a user's access to a specified
    database.
-8. `REVOKE DATABASE name FROM user`: Removes database from user's authentication
+9. `REVOKE DATABASE name FROM user`: Removes database from user's authentication
    context.
-9. `SET MAIN DATABASE name FOR user`: Sets a user's default (landing) database.
-10. `SHOW DATABASE PRIVILEGES FOR user`: Lists a user's database access rights.
+10. `SET MAIN DATABASE name FOR user`: Sets a user's default (landing) database.
+11. `SHOW DATABASE PRIVILEGES FOR user`: Lists a user's database access rights.
 
 ### DROP DATABASE with FORCE option
 
@@ -162,6 +165,35 @@ DROP DATABASE database_name [FORCE];
 - The database becomes immediately unavailable to new connections but deletion may be deferred until existing connections are properly closed
 - This operation cannot be undone once completed
 
+### RENAME DATABASE
+
+The `RENAME DATABASE` command allows you to rename an existing database to a new name. This simplifies administrative workflows by eliminating the need to create a new database, recover from a snapshot, and drop the old database.
+
+**Syntax:**
+```cypher
+RENAME DATABASE old_name TO new_name;
+```
+
+**Behavior:**
+
+- The database is renamed immediately without requiring unique access
+- If you are currently using the database being renamed, the current database context is automatically updated to the new name
+- All existing data, indexes, constraints, and other database objects are preserved
+
+<Callout type="info">
+Current implementation of RENAME does not update auth data. User/role database access and database-specific roles information is not updated.
+This can lead to unindented access to databases.
+</Callout>
+
+
+**Important considerations:**
+
+- The `RENAME DATABASE` command requires the `MULTI_DATABASE_EDIT` privilege and access to the "memgraph" database
+- The new database name must not already exist
+- The old database name must exist
+- This operation cannot be undone once completed
+- All active connections to the database will continue to work seamlessly with the new name
+
 
 ### User's main database
 
@@ -183,7 +215,7 @@ Access to all databases can be granted or revoked using wildcards:
 
 ### Multi-database queries and the memgraph database
 
-As of Memgraph v3.5 multi-database queries (such as `SHOW DATABASES`, `CREATE DATABASE`, `DROP DATABASE`, etc.) target the "memgraph" database and require access to it.
+As of Memgraph v3.5 multi-database queries (such as `SHOW DATABASES`, `CREATE DATABASE`, `DROP DATABASE`, `RENAME DATABASE`, etc.) target the "memgraph" database and require access to it.
 
 To execute these queries, users must have:
 - The appropriate privileges (`MULTI_DATABASE_USE`, `MULTI_DATABASE_EDIT`)
@@ -255,7 +287,7 @@ SET ROLE FOR db_admin TO multi_db_admin;
 ```
 
 In this setup, `db_admin` can:
-- Execute all multi-database queries (`SHOW DATABASES`, `CREATE DATABASE`, etc.)
+- Execute all multi-database queries (`SHOW DATABASES`, `CREATE DATABASE`, `DROP DATABASE`, `RENAME DATABASE`, etc.)
 - Access the "memgraph" database for administrative operations
 - Manage the multi-tenant database configuration
 
