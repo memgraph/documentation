@@ -7,26 +7,35 @@ import { Callout } from 'nextra/components'
 
 # Text search
 
-<Callout type="warning">
-
-Text search is an [experimental
-feature](/database-management/experimental-features) introduced in Memgraph
-2.15.1. To use it, start Memgraph with the `--experimental-enabled=text-search`
-flag.
-</Callout>
-
-Text search allows you to look up nodes with properties that contain specific content.
-For a node to be searchable, you first need to create a text index that applies
-to it.
-
+Text search allows you to look up nodes and edges with properties that contain specific content.
+For a node or edge to be searchable, you first need to create a text index that applies to it.
 
 Text indices and search are powered by the
 [Tantivy](https://github.com/quickwit-oss/tantivy) full-text search engine.
 
-## Create text indices
+<Callout type="info">
+Text search is no longer an experimental feature as of Memgraph version 3.6. You can use text search without any special configuration flags.
+</Callout>
 
-Text indices are created with the `CREATE TEXT INDEX` command. You need to give
-a name to the new index and specify which labels it should apply to.
+## Create text index
+
+To run text search, first create text index. 
+Text indices are created with the `CREATE TEXT INDEX` command. 
+To create the text index, you need to:
+1. Provide the index name
+2. Specify the label it applies to
+3. Optionally specify which properties to index
+
+Here is an example for nodes:
+
+```shell
+CREATE TEXT INDEX text_index_name ON :Label;
+```
+
+To create text index on edges, next syntax should be used:
+```shell
+CREATE TEXT EDGE INDEX text_index_name ON :EDGE_TYPE;
+```
 
 ### Index all properties
 
@@ -51,11 +60,25 @@ For example, to create an index only on the `title` and `content` properties of 
 CREATE TEXT INDEX complianceDocuments ON :Report(title, content);
 ```
 
+### Edge text indices
+
+Text indices can also be created on edges. To create a text index on edges:
+
+```cypher
+CREATE TEXT EDGE INDEX edge_index_name ON :EDGE_TYPE;
+```
+
+You can also specify specific properties for edge indices:
+
+```cypher
+CREATE TEXT EDGE INDEX edge_index_name ON :EDGE_TYPE(prop1, prop2);
+```
+
 If you attempt to create an index with an existing name, the statement will fail.
 
 ### What is indexed
 
-For any given node, if a text index applies to it:
+For any given node or edge, if a text index applies to it:
 - When no specific properties are listed, all properties with text-indexable types (`String`, `Integer`, `Float`, or `Boolean`) are stored.
 - When specific properties are listed, only those properties (if they have text-indexable types) are stored.
 
@@ -65,12 +88,22 @@ Changes made within the same transaction are not visible to the index. To see yo
 
 </Callout>
 
-## Show text indices
+## Run text search
+
+To run text search, you need to call `text_search` query module procedures.
+
+<Callout type="info">
+
+Unlike other index types, the query planner currently does not utilize text indices.
+
+</Callout>
+
+### Show text indices
 
 To list all text indices in Memgraph, use the `SHOW INDEX INFO`
 [statement](/fundamentals/indexes#show-created-indexes).
 
-## Query text indices
+### Query text index
 
 <Callout type="warning">
 
@@ -79,27 +112,27 @@ For consistent results, avoid performing multiple identical searches within the 
 
 </Callout>
 
-Querying text indices is done through query procedures.
-
-<Callout type="info">
-
-Unlike other index types, text indices are not used by the query planner.
-
-</Callout>
-
-
-### Search in specific properties
-
-The `text_search.search` procedure finds text-indexed nodes matching the given query.
+Use the `text_search.search()` and `text_search.search_edges()` procedures to search for text within
+a text index. These procedures allow you to find nodes or edges that match
+your search query based on their indexed properties.
 
 {<h3 className="custom-header"> Input: </h3>}
 
-- `index_name: String` - The text index to be searched.
-- `search_query: String` - The query applied to the text-indexed nodes.
+- `index_name: string` ➡ The text index to search.
+- `search_query: string` ➡ The query to search for in the index.
+- `limit: int (optional, default=1000)` ➡ The maximum number of results to return.
 
 {<h3 className="custom-header"> Output: </h3>}
 
-- `node: Node` - A node in `index_name` matching the given `search_query`.
+When the index is defined on nodes:
+
+- `node: Node` ➡ A node in the text index matching the given query.
+- `score: double` ➡ The relevance score of the match. Higher scores indicate more relevant results.
+
+When the index is defined on edges:
+
+- `edge: Relationship` ➡ An edge in the text index matching the given query.
+- `score: double` ➡ The relevance score of the match. Higher scores indicate more relevant results.
 
 {<h3 className="custom-header"> Usage: </h3>}
 
@@ -107,13 +140,13 @@ The syntax for the `search_query` parameter is available
 [here](https://docs.rs/tantivy/latest/tantivy/query/struct.QueryParser.html).
 If the query contains property names, attach the `data.` prefix to them.
 
-The following query searches the `complianceDocuments` index for nodes with the
-value of `title` property containing `Rules2024`:
+```shell
+CALL text_search.search("index_name", "data.title:Rules2024") YIELD node, score RETURN *;
+```
 
-```cypher
-CALL text_search.search("complianceDocuments", "data.title:Rules2024")
-YIELD node
-RETURN node;
+To query an index on edges, use:
+```shell
+CALL text_search.search_edges("index_name", "data.title:Rules2024") YIELD edge, score RETURN *;
 ```
 
 {<h4 className="custom-header">Example</h4>}
@@ -178,20 +211,29 @@ Result:
 
 ### Search over all indexed properties
 
-The `text_search.search_all` procedure looks for text-indexed nodes where at
+The `text_search.search_all` and `text_search.search_all_edges` procedures look for text-indexed nodes or edges where at
 least one property value matches the given query.
 
-Unlike `text_search.search`, this procedure searches over all properties, and
+Unlike `text_search.search`, these procedures search over all properties, and
 there is no need to specify property names in the query.
 
 {<h3 className="custom-header"> Input: </h3>}
 
-- `index_name: String` - The text index to be searched.
-- `search_query: String` - The query applied to the text-indexed nodes.
+- `index_name: string` ➡ The text index to be searched.
+- `search_query: string` ➡ The query applied to the text-indexed nodes or edges.
+- `limit: int (optional, default=1000)` ➡ The maximum number of results to return. 
 
 {<h3 className="custom-header"> Output: </h3>}
 
-- `node: Node` - A node in `index_name` matching the given `search_query`.
+When the index is defined on nodes:
+
+- `node: Node` ➡ A node in `index_name` matching the given `search_query`.
+- `score: double` ➡ The relevance score of the match. Higher scores indicate more relevant results.
+
+When the index is defined on edges:
+
+- `edge: Relationship` ➡ An edge in `index_name` matching the given `search_query`.
+- `score: double` ➡ The relevance score of the match. Higher scores indicate more relevant results.
 
 {<h3 className="custom-header"> Usage: </h3>}
 
@@ -202,6 +244,13 @@ least one property value contains `Rules2024`:
 CALL text_search.search_all("complianceDocuments", "Rules2024")
 YIELD node
 RETURN node;
+```
+
+To search edges:
+```cypher
+CALL text_search.search_all_edges("complianceEdges", "Rules2024")
+YIELD edge
+RETURN edge;
 ```
 
 {<h4 className="custom-header">Example</h4>}
@@ -230,17 +279,26 @@ Result:
 
 ### Regex search
 
-The `text_search.regex_search` procedure looks for text-indexed nodes where at
+The `text_search.regex_search` and `text_search.regex_search_edges` procedures look for text-indexed nodes or edges where at
 least one property value matches the given regular expression (regex).
 
 {<h3 className="custom-header"> Input: </h3>}
 
-- `index_name: String` - The text index to be searched.
-- `search_query: String` - The regex applied to the text-indexed nodes.
+- `index_name: string` ➡ The text index to be searched.
+- `search_query: string` ➡ The regex applied to the text-indexed nodes or edges.
+- `limit: int (optional, default=1000)` ➡ The maximum number of results to return. 
 
 {<h3 className="custom-header"> Output: </h3>}
 
-- `node: Node` - A node in `index_name` matching the given `search_query`.
+When the index is defined on nodes:
+
+- `node: Node` ➡ A node in `index_name` matching the given `search_query`.
+- `score: double` ➡ The relevance score of the match. Higher scores indicate more relevant results.
+
+When the index is defined on edges:
+
+- `edge: Relationship` ➡ An edge in `index_name` matching the given `search_query`.
+- `score: double` ➡ The relevance score of the match. Higher scores indicate more relevant results.
 
 {<h3 className="custom-header"> Usage: </h3>}
 
@@ -253,6 +311,13 @@ least one property value satisfies the `wor.*s` regex, e.g. "works" and "words":
 CALL text_search.regex_search("complianceDocuments", "wor.*s")
 YIELD node
 RETURN node;
+```
+
+To search edges:
+```cypher
+CALL text_search.regex_search_edges("complianceEdges", "wor.*s")
+YIELD edge
+RETURN edge;
 ```
 
 {<h4 className="custom-header">Example</h4>}
@@ -283,26 +348,27 @@ Result:
 
 Aggregations allow you to perform calculations on text search results. By using
 them, you can efficiently summarize the results, calculate averages or totals,
-identify min/max values, and count indexed nodes that meet specific criteria.
+identify min/max values, and count indexed nodes or edges that meet specific criteria.
 
-The `text_search.aggregate` procedure lets you define an aggregation and apply
+The `text_search.aggregate` and `text_search.aggregate_edges` procedures let you define an aggregation and apply
 it to the results of a search query.
 
 {<h3 className="custom-header"> Input: </h3>}
 
-- `index_name: String` - The text index to be searched.
-- `search_query: String` - The query applied to the text-indexed nodes.
-- `aggregation_query: String` - The aggregation (JSON-formatted) to be applied
+- `index_name: string` ➡ The text index to be searched.
+- `search_query: string` ➡ The query applied to the text-indexed nodes or edges.
+- `aggregation_query: string` ➡ The aggregation (JSON-formatted) to be applied
     to the output of `search_query`.
+- `limit: int (optional, default=1000)` ➡ The maximum number of results to return. 
 
 {<h3 className="custom-header"> Output: </h3>}
 
-- `aggregation: String` - JSON-formatted string with the output of aggregation.
+- `aggregation: string` ➡ JSON-formatted string with the output of aggregation.
 
 {<h3 className="custom-header"> Usage: </h3>}
 
 Aggregation queries and results are strings with Elasticsearch-compatible JSON
-format, where `"field"` corresponds to node properties. If the search or
+format, where `"field"` corresponds to node or edge properties. If the search or
 aggregation queries contain property names, attach the `data.` prefix to them.
 
 The following query counts all nodes in the `complianceDocuments` index:
@@ -310,6 +376,17 @@ The following query counts all nodes in the `complianceDocuments` index:
 ```cypher
 CALL text_search.aggregate(
     "complianceDocuments",
+    "data.title:Rules2024",
+    '{"count": {"value_count": {"field": "data.version"}}}'
+)
+YIELD aggregation
+RETURN aggregation;
+```
+
+To aggregate edges:
+```cypher
+CALL text_search.aggregate_edges(
+    "complianceEdges",
     "data.title:Rules2024",
     '{"count": {"value_count": {"field": "data.version"}}}'
 )
@@ -343,26 +420,22 @@ Result:
 +-------------------------------+
 ```
 
-## Drop text indices
+## Drop text index
 
-Text indices are dropped with the `DROP TEXT INDEX` command. You need to give
-the name of the index to be deleted.
+Text indices are dropped with the `DROP TEXT INDEX` command. You need to give the name of the index to be deleted.
 
-This statement drops the text index named `complianceDocuments`:
-
-```cypher
-DROP TEXT INDEX complianceDocuments;
+```shell
+DROP TEXT INDEX text_index_name;
 ```
 
 ## Compatibility
 
-Even though text search is an experimental feature, it supports most usage modalities
-that are available in Memgraph from version 3.5. Refer to the table below for an overview:
+Text search supports most usage modalities that are available in Memgraph. Refer to the table below for an overview:
 
 | Feature                 | Support                                                 |
 |-------------------------|---------------------------------------------------------|
 | Multitenancy            | ✅ Yes                                                  |
 | Durability              | ✅ Yes                                                  |
-| Replication             | ✅ Yes (from version 3.5)                               |
+| Replication             | ✅ Yes                                                  |
 | Concurrent transactions | ⚠️ Yes, but search results may vary within transactions |
 | Storage modes           | ❌ No (doesn't work in IN_MEMORY_ANALYTICAL)            |
