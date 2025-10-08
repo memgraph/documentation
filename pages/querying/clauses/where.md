@@ -22,7 +22,8 @@ order to avoid problems with performance or results.
    1.4. [Filter with node properties](#14-filter-with-node-properties)<br />
    1.5. [Filter with relationship properties](#15-filter-with-relationship-properties)<br />
    1.6. [Check if property is not null](#16-check-if-property-is-not-null)<br />
-   1.7. [Filter with pattern expressions](#17-filter-with-pattern-expressions)<br />
+   1.7. [Filter with EXISTS expressions](#17-filter-with-exists-expressions)<br />
+   1.8. [Filter with pattern expressions](#18-filter-with-pattern-expressions)<br />
 2. [String matching](#2-string-matching)<br />
 3. [Regular Expressions](#3-regular-expressions)
 4. [Existential subqueries](#4-existential-subqueries)<br />
@@ -166,9 +167,9 @@ Output:
 +----------------+----------------+
 ```
 
-### 1.7. Filter with pattern expressions
+### 1.7. Filter with EXISTS expressions
 
-Currently, we support pattern expression filters with the `exists(pattern)`
+Currently, we support `EXISTS` expression filters with the `exists(pattern)`
 function, which can perform filters based on neighboring entities:
 
 ```cypher
@@ -190,6 +191,30 @@ Output:
 | John           |
 +----------------+
 ```
+
+### 1.8. Filter with pattern expressions
+
+Currently, we support pattern expression filters inside the `WHERE` clause.
+
+```cypher
+MATCH (p:Person)
+WHERE (p)-[:LIVING_IN]->(:Country {name: 'Germany'})
+RETURN p.name
+ORDER BY p.name;
+```
+
+Output:
+
+```nocopy
++----------------+
+| c.name         |
++----------------+
+| Anna           |
+| John           |
++----------------+
+```
+
+The pattern expressions can't contain any additional symbols that are not introduced in the previously matched symbols.
 
 ## 2. String matching
 
