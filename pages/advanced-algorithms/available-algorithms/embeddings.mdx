@@ -1,0 +1,135 @@
+---
+title: embeddings
+description: Calculate sentence embeddings on vertex strings using pytorch.
+---
+
+# embeddings
+
+import { Cards } from 'nextra/components'
+import GitHub from '/components/icons/GitHub'
+
+The embeddings module provides tools for calculating sentence embeddings on vertex strings using pytorch.
+
+<Cards>
+  <Cards.Card
+    icon={<GitHub />}
+    title="Source code"
+    href="https://github.com/memgraph/mage/blob/main/python/embeddings.py"
+  />
+</Cards>
+
+| Trait               | Value               |
+| ------------------- | ------------------- |
+| **Module type**     | algorithm           |
+| **Implementation**  | Python              |
+| **Parallelism**     | parallel            |
+
+
+## Procedures
+
+### `compute()`
+
+The procedure computes the sentence embeddings on the string properties of vertices. Embeddings are 
+created as a property of the vertices in the graph.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `input_vertices: List[Vertex]` (**OPTIONAL**) ➡ The list of vertices to compute the embeddings for. If not provided, the embeddings are computed for all vertices in the graph.
+- `embedding_property: string` ➡ The name of the property to store the embeddings in. This property is `embedding` by default.
+- `excluded_properties: List[string]` ➡ The list of properties to exclude from the embeddings computation. This list is empty by default.
+- `model_name: string` ➡ The name of the model to use for the embeddings computation, buy default this module uses the `all-MiniLM-L6-v2` model provided by the `sentence-transformers` library.
+- `batch_size: int` ➡ The batch size to use for the embeddings computation. This is set to `2000` by default.
+- `chunk_size: int` ➡ The number of batches per "chunk". This is used when computing embeddings across multiple GPUs, as this has to be done by spawning multiple processes. Each spawned process computes the embeddings for a single chunk. This is set to 48 by default.
+- `device: string|int|List[string|int]` ➡ The device to use for the embeddings computation. This can be any of the following:
+    - `"cpu"` - Use CPU for computation.
+    - `"cuda"` or `"all"` - Use all available CUDA devices for computation.
+    - `"cuda:id"` - Use a specific CUDA device for computation.
+    - `id` - Use a specific device for computation.
+    - `[id1, id2, ...]` - Use a list of device ids for computation.
+    - `["cuda:id1", "cuda:id2", ...]` - Use a list of CUDA devices for computation.
+by default, the first device (`0`) is used.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `success: bool` ➡ Whether the embeddings computation was successful.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+To compute the embeddings across the entire graph with the default parameters, use the following query: 
+
+```cypher
+CALL embeddings.compute()
+YIELD success;
+```
+
+To compute the embeddings for a specific list of vertices, use the following query:
+
+
+```cypher
+MATCH (n)
+WITH n ORDER BY id(n)
+LIMIT 5
+WITH collect(n) AS subset
+CALL embeddings.compute(subset)
+YIELD success;
+```
+
+To run the computation on specific device(s), use the following query:
+
+```cypher
+CALL embeddings.compute(
+    NULL,
+    "embedding",
+    NULL,
+    "all-MiniLM-L6-v2",
+    2000,
+    48,
+    "cuda:1"
+)
+YIELD success;
+```
+
+
+## Example
+
+Create the following graph:
+
+```cypher
+CREATE (n:Vertex {id: 1, Title: "Stilton", Description: "A stinky cheese from the UK"});
+CREATE (n:Vertex {id: 2, Title: "Roquefort", Description: "A blue cheese from France"});
+CREATE (n:Vertex {id: 3, Title: "Cheddar", Description: "A yellow cheese from the UK"});
+CREATE (n:Vertex {id: 4, Title: "Gouda", Description: "A Dutch cheese"});
+CREATE (n:Vertex {id: 5, Title: "Parmesan", Description: "An Italian cheese"});
+CREATE (n:Vertex {id: 6, Title: "Red Leicester", Description: "The best cheese in the world"});
+```
+
+Run the following query to compute the embeddings:
+
+```cypher
+CALL embeddings.compute()
+YIELD success;
+
+MATCH (n) 
+WHERE n.embedding IS NOT NULL 
+RETURN n.Title, n.embedding;
+```
+
+Results:
+
+```plaintext
++---------+
+| success |
++---------+
+| true    |
++---------+
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+| n.Title                                                              | n.embedding                                                          |
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+| "Stilton"                                                            | [-0.0485366, -0.021823, 0.0159757, 0.0376443, 0.00594089, -0.0044... |
+| "Roquefort"                                                          | [-0.0252884, 0.0250485, -0.0249728, 0.0571037, 0.0386177, 0.03863... |
+| "Cheddar"                                                            | [-0.0129724, -0.00756301, -0.00379329, 0.0037531, -0.0134941, 0.0... |
+| "Gouda"                                                              | [0.0128716, 0.025435, -0.0288951, 0.0177759, -0.0624398, 0.043577... |
+| "Parmesan"                                                           | [-0.0755439, 0.00906182, -0.010977, 0.0208911, -0.0527448, 0.0085... |
+| "Red Leicester"                                                      | [-0.0244318, -0.0280038, -0.0373183, 0.0284436, -0.0277753, 0.066... |
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+```
