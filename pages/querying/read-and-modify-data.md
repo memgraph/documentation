@@ -468,6 +468,37 @@ SET p1 = p2
 RETURN p1, p2;
 ```
 
+#### Setting a nested property
+
+If the property of a node or relationship is a map, Memgraph supports setting nested
+properties within the map for more granular updates. The following command updates a nested
+property of a node:
+
+```cypher
+MATCH (h:Person {name: 'Harry'})
+SET h.details.age = 21;
+```
+
+If the map property does not exist beforehand, it will be created as an empty map with the nested properties placed inside.
+There are certain schema guarantees — you cannot modify a nested property if the parent property exists and is not of type `Map`.
+
+For more information, read the [guide on setting nested propertes](/querying/clauses/set#9-setting-nested-properties)
+
+#### Removing a nested property
+
+Similar to setting nested properties, Memgraph supports removing nested properties for more fine-grained manipulation of object data.
+The following Cypher query deletes a nested property from a node:
+
+```cypher
+MATCH (h:Person {name: 'Harry'})
+REMOVE h.details.age;
+```
+
+If the leaf property does not exist, the command will not raise an exception.
+However, if the parent property maps do not exist, the query will result in a runtime exception.
+
+For more information, read the [guide on removing nested propertes](/querying/clauses/set#10-removing-nested-properties)
+
 #### Bulk update
 
 You can use `SET` clause to do a bulk update. Here is an example of how to
