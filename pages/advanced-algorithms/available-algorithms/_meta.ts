@@ -28,6 +28,7 @@ export default {
   "igraphalg": "igraphalg",
   "import_util": "import_util",
   "json_util": "json_util",
+  "knn": "knn",
   "katz_centrality_online": "katz_centrality_online",
   "katz_centrality": "katz_centrality",
   "kmeans_clustering": "kmeans_clustering",
