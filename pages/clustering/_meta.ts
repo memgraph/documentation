@@ -1,5 +1,7 @@
 export default {
     "high-availability": "High availability",
-    "replication": "Replication"
+    "bolt-routing": "Bolt+routing protocol",
+    "ha-commands-reference": "High availability reference queries",
+    "replication": "Replication",
+    "faq": "FAQ"
 }
-  

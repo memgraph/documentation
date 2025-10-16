@@ -1,0 +1,275 @@
+---
+title: Bolt+routing protocol
+description: Learn how to use the bolt+routing protocol to connect to Memgraph high availability clusters with automatic failover and load balancing.
+---
+
+import { Callout } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# Bolt+routing protocol
+
+The bolt+routing protocol is Memgraph's solution for connecting to high availability clusters. It automatically routes queries to the appropriate instances and handles failover seamlessly, ensuring your applications remain connected even when cluster topology changes.
+
+## Overview
+
+In a high availability cluster, directly connecting to the main instance isn't recommended because the main instance can change due to various failures. The bolt+routing protocol solves this by providing intelligent routing that:
+
+- **Automatically routes write queries** to the current main instance
+- **Distributes read queries** across available replicas
+- **Handles failover** without application changes
+- **Prevents split-brain scenarios** by ensuring clients never write to old main instances
+
+## How bolt+routing works
+
+### Connection flow
+
+1. **Client connects** to any coordinator instance using `neo4j://` scheme
+2. **Coordinator responds** with a routing table containing:
+   - Instances from which data can be read
+   - The instance where data can be written
+   - Instances acting as routers
+3. **Client uses routing table** to direct subsequent queries appropriately
+
+### Routing table structure
+
+The routing table contains three types of entries:
+
+| Entry Type | Description | Usage |
+|------------|-------------|-------|
+| **Read instances** | Replica instances available for read queries | Load balancing read operations |
+| **Write instance** | Current main instance for write queries | All write operations |
+| **Router instances** | Coordinator instances for routing requests | Future routing requests |
+
+## Connection strings
+
+### Standard vs HA connections
+
+**Standard connection (single instance):**
+```
+bolt://<main_ip_address>:<port>
+```
+
+**HA connection with routing:**
+```
+neo4j://<coordinator_ip_address>:<port>
+```
+
+### Connection examples
+
+```javascript
+// Standard connection
+const driver = neo4j.driver("bolt://localhost:7687", auth);
+
+// HA connection with routing
+const driver = neo4j.driver("neo4j://localhost:7691", auth);
+```
+
+## Client-side routing
+
+Bolt+routing is a **client-side routing protocol**, meaning network endpoint resolution happens inside the drivers. This provides several benefits:
+
+- **Transparent failover**: Applications don't need to handle connection changes
+- **Automatic load balancing**: Read queries are distributed across replicas
+- **Consistent routing**: All clients receive the same routing information
+- **Reliability**: Raft consensus ensures accurate routing data
+
+## Cluster roles and routing
+
+### Instance roles in routing
+
+| Role | Function | Query Types |
+|------|----------|-------------|
+| **Main instance** | Primary writable instance | Write queries only (by default) |
+| **Replica instances** | Read-only instances | Read queries |
+| **Coordinator instances** | Routing and cluster management | Routing requests only |
+
+### Routing behavior
+
+- **Write queries**: Always routed to the current main instance
+- **Read queries**: Distributed across available replica instances
+- **Routing requests**: Handled by coordinator instances
+- **Failover**: Automatic promotion of replica to main when needed
+
+## Configuration options
+
+### Enable reads on main
+
+By default, the main instance only handles write queries. You can enable read queries on the main instance:
+
+```cypher
+SET COORDINATOR SETTING 'enabled_reads_on_main' TO 'true';
+```
+
+**Parameters:**
+- `'enabled_reads_on_main'` (string): Setting name
+- `'true'` (string): Enable reads on main instance
+
+### Replica read lag control
+
+Control the maximum allowed replica lag for read consistency:
+
+```cypher
+SET COORDINATOR SETTING 'max_replica_read_lag_' TO '10';
+```
+
+**Parameters:**
+- `'max_replica_read_lag_'` (string): Setting name
+- `'10'` (string): Maximum transaction lag as string
+
+**Behavior:**
+- Replicas behind by more than this threshold are excluded from read routing
+- Ensures data freshness for read operations
+
+## Connection examples by language
+
+### Python
+
+```python
+from neo4j import GraphDatabase
+
+# HA connection
+driver = GraphDatabase.driver("neo4j://localhost:7691", auth=("username", "password"))
+
+# Use the driver normally - routing is handled automatically
+with driver.session() as session:
+    result = session.run("MATCH (n) RETURN count(n)")
+    print(result.single()[0])
+```
+
+### JavaScript/Node.js
+
+```javascript
+const neo4j = require('neo4j-driver');
+
+// HA connection
+const driver = neo4j.driver("neo4j://localhost:7691", 
+    neo4j.auth.basic("username", "password"));
+
+// Use the driver normally
+const session = driver.session();
+session.run("MATCH (n) RETURN count(n)")
+    .then(result => console.log(result.records[0].get(0)));
+```
+
+### Java
+
+```java
+import org.neo4j.driver.*;
+
+// HA connection
+Driver driver = GraphDatabase.driver("neo4j://localhost:7691", 
+    AuthTokens.basic("username", "password"));
+
+// Use the driver normally
+try (Session session = driver.session()) {
+    Result result = session.run("MATCH (n) RETURN count(n)");
+    System.out.println(result.single().get(0));
+}
+```
+
+### C#
+
+```csharp
+using Neo4j.Driver;
+
+// HA connection
+using var driver = GraphDatabase.Driver("neo4j://localhost:7691", 
+    AuthTokens.Basic("username", "password"));
+
+// Use the driver normally
+using var session = driver.Session();
+var result = session.Run("MATCH (n) RETURN count(n)");
+Console.WriteLine(result.Single()[0]);
+```
+
+## Best practices
+
+### Connection management
+
+1. **Use connection pooling**: Most drivers provide built-in connection pooling
+2. **Handle connection failures**: Implement retry logic for transient failures
+3. **Monitor connection health**: Use driver health check features when available
+
+### Query optimization
+
+1. **Use read replicas**: Distribute read queries across replicas for better performance
+2. **Minimize cross-database queries**: Keep queries within the same database when possible
+3. **Use appropriate transaction types**: Read transactions for queries, write transactions for modifications
+
+### Error handling
+
+```python
+from neo4j import GraphDatabase
+from neo4j.exceptions import ServiceUnavailable
+
+def execute_with_retry(driver, query, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            with driver.session() as session:
+                return session.run(query)
+        except ServiceUnavailable as e:
+            if attempt == max_retries - 1:
+                raise e
+            time.sleep(2 ** attempt)  # Exponential backoff
+```
+
+## Troubleshooting
+
+### Common issues
+
+**Connection refused errors:**
+- Verify coordinator instances are running
+- Check firewall settings for coordinator ports
+- Ensure proper network connectivity
+
+**Routing table errors:**
+- Verify cluster state with `SHOW INSTANCES`
+- Check coordinator health and leadership
+- Ensure proper cluster configuration
+
+**Query routing issues:**
+- Verify instance roles (main/replica)
+- Check replication lag settings
+- Monitor cluster health metrics
+
+### Debugging connections
+
+1. **Check cluster state:**
+   ```cypher
+   SHOW INSTANCES;
+   ```
+
+2. **Verify coordinator settings:**
+   ```cypher
+   SHOW COORDINATOR SETTINGS;
+   ```
+
+3. **Monitor replication lag:**
+   ```cypher
+   SHOW REPLICATION LAG;
+   ```
+
+## Limitations and considerations
+
+### Cluster setup restrictions
+
+- **Setup commands must use bolt://**: Cluster management commands (registration, coordinator setup) require direct `bolt://` connections
+- **Routing only for data queries**: `neo4j://` connections only handle data-oriented queries, not cluster management
+
+### Network requirements
+
+- **Stable network**: Requires reliable network connectivity between instances
+- **Port accessibility**: All coordinator and data instance ports must be accessible
+- **DNS resolution**: Use DNS names instead of IP addresses for better reliability
+
+### Performance considerations
+
+- **Routing overhead**: Small additional latency for routing table requests
+- **Connection pooling**: May need to adjust pool sizes for HA workloads
+- **Load balancing**: Read distribution depends on replica availability
+
+<Callout type="info">
+For detailed examples of bolt+routing usage in different programming languages, check the [Memgraph drivers repository](https://github.com/memgraph/memgraph/tree/master/tests/drivers).
+</Callout>
+
+<CommunityLinks/>
