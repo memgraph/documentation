@@ -1,6 +1,6 @@
 ---
 title: RETURN clause
-description: Gain insights into the RETURN clause in Memgraph. A documentation, designed to simplify complexities for smooth graph computing and better develope experience. 
+description: Gain insights into the RETURN clause in Memgraph. A documentation, designed to simplify complexities for smooth graph computing and better developer experience. 
 ---
 
 # RETURN clause
@@ -233,7 +233,7 @@ Output:
 +-----------------------------------------------------------------------------------------------------+
 ```
 
-Aggregations functions can be also used with `DISTINCT` operator, which will performe calculations only on unique values:
+Aggregations functions can be also used with `DISTINCT` operator, which will perform calculations only on unique values:
 
 ```cypher
 MATCH ()-[:LIVING_IN]->(c)

@@ -16,5 +16,4 @@ export default {
   "data-streams": "Data streams",
   "help-center": "Help center",
   "release-notes": "Release notes",
-  "memgraph-in-production": "Memgraph in production"
 }

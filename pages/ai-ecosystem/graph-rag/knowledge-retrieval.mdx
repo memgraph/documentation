@@ -22,7 +22,7 @@ powerful tools and techniques to optimize retrieval for your knowledge graph.
 
 ## Retrieval types
 
-Finding relevant data in the wast amount of nodes and relationships in your
+Finding relevant data in the vast amount of nodes and relationships in your
 graph is not easy, and that's why Memgraph has a couple of strategies to
 facilitate that. 
 
@@ -39,6 +39,11 @@ the LLM to ground it and in that way avoid hallucinations. Additionally, to
 expand the search, you can perform [relevance expansion](#relevance-expansion)
 which includes advanced strategies to obtain relevant information. 
 
+Pivot search combined with relevance expansion is generally more reliable than
+directly generating Cypher queries from natural language. These approaches can
+leverage pre-built tools to ensure the resulting query is accurate and
+contextually appropriate. To improve Cypher query generation from natural
+language, [effective prompt engineering](#cypher-generation) is essential.
 
 ### Pivot search
 
@@ -184,6 +189,89 @@ or topics, ensuring the retrieval covers diverse or connecting concepts.
 
 For example, if there are multiple nodes as potential answers, you can rank the
 nodes by their PageRank scores to get the most important ones.
+
+### Cypher generation
+
+LLMs are trained on publicly available resources, including openCypher. Memgraph
+supports openCypher but has also extended its Cypher implementation with
+advanced constructs. While these enhancements improve usability, they can make
+it harder for LLMs to generate optimal Cypher queries tailored for Memgraph.
+
+To address this, we're continually increasing compatibility with each release
+and enhancing Memgraph's error messages. Here's a prompt that has been
+particularly helpful in the process, and mostly used in the
+[integrations](/ai-ecosystem/integrations) with other AI tools:
+
+```
+MEMGRAPH_GENERATION_TEMPLATE = """Your task is to directly translate natural language inquiry into precise and executable Cypher query for Memgraph database. 
+You will utilize a provided database schema to understand the structure, nodes and relationships within the Memgraph database.
+Instructions: 
+- Use provided node and relationship labels and property names from the
+schema which describes the database's structure. Upon receiving a user
+question, synthesize the schema to craft a precise Cypher query that
+directly corresponds to the user's intent. 
+- Generate valid executable Cypher queries on top of Memgraph database. 
+Any explanation, context, or additional information that is not a part 
+of the Cypher query syntax should be omitted entirely. 
+- Use Memgraph MAGE procedures instead of Neo4j APOC procedures. 
+- Do not include any explanations or apologies in your responses. 
+- Do not include any text except the generated Cypher statement.
+- For queries that ask for information or functionalities outside the direct
+generation of Cypher queries, use the Cypher query format to communicate
+limitations or capabilities. For example: RETURN "I am designed to generate
+Cypher queries based on the provided schema only."
+Schema: 
+{schema}
+
+With all the above information and instructions, generate Cypher query for the
+user question. 
+
+The question is:
+{question}"""
+```
+
+Still, there are some other advanced techniques that can be done. In
+[GraphChat](/memgraph-lab/features/graphchat), Memgraph Lab feature, we currently
+provide the following prompt:
+
+```
+Your task is to directly translate natural language inquiry into precise and executable Cypher query for Memgraph database. You will utilize a provided database schema to understand the structure, nodes and relationships within the Memgraph database.
+
+
+Rules:
+Use provided node and relationship labels and property names from the schema which describes the database's structure. Schema is defined after keyword Schema down below. Upon receiving a user question, synthesize the schema to craft a precise Cypher query that directly corresponds to the user's intent.
+Generate valid executable Cypher queries on top of Memgraph database. Any explanation, context, or additional information that is not a part of the Cypher query syntax should be omitted entirely.
+Use Memgraph MAGE procedures instead of Neo4j APOC procedures.
+Do not include any explanations or apologies in your responses.
+Do not include any text except the generated Cypher statement.
+For queries that ask for information or functionalities outside the direct generation of Cypher queries, use the Cypher query format to communicate limitations or capabilities. For example: RETURN "I am designed to generate Cypher queries based on the provided schema only."
+```
+
+We also attach schema, history of conversations (if needed), constraints for write permissions (e.g., if it is a `DELETE` command, dismiss that with the message: Sorry, can't do that! `DELETE` queries are not permitted.). 
+Also, we attach some Cypher specifics to the prompt:
+
+```
+Atom expressions
+Atom expressions are not supported, so if you need to do something like this:
+MATCH (n)
+RETURN n, size((n)-->()) AS edgeCount
+
+
+Use the following structure with OPTIONAL MATCH or a combination of queries using the keyword WITH:
+MATCH (n)
+OPTIONAL MATCH (n)-[r]->()
+RETURN n, count(r) AS edgeCount
+```
+
+To further improve Cypher query generation, we attach the failed attempts from
+Memgraph in a form of invalid Cypher queries and error messages they produced
+with the following instructions: 
+
+```
+Generate a new correct version of the Cypher query:
+Do not include any explanations or apologies in your responses.
+Do not wrap the Cypher query in backticks.
+```
 
 ## How to choose the best retrieval strategy
 

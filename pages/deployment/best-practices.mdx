@@ -1,0 +1,391 @@
+---
+title: Deployment best practices
+description: General suggestions when working with Memgraph, from testing to production. 
+---
+
+import { Callout } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+import { Steps } from 'nextra/components'
+
+# Deployment best practices
+
+This section provides guidance for getting started with Memgraph, regardless of the specific workload you plan to test.
+It's ideal for those evaluating Memgraph for the first time or working with a simple dataset.
+Once you determine the workload that best fits your data and use case, you can explore the more targeted guides in the
+[Workloads](/deployment/workloads) section for tailored recommendations.
+
+The general suggestions cover the following key areas:
+
+1. [Hardware requirements for running Memgraph](#hardware-requirements) <br />
+Learn how to select the best machine for Memgraph based on your resources, whether on-prem, in a data center, or via cloud offerings (e.g., AWS, GCP, Azure).
+
+2. [Hardware sizing](#hardware-sizing) <br />
+Since Memgraph is an in-memory database, estimating RAM requirements is crucial. This section helps you allocate memory based on dataset size and expected workloads.
+
+3. [Hardware configuration](#hardware-configuration) <br />
+Optimize your host machine configuration for Memgraph to run smoothly, including key parameters for effective operation.
+
+4. [Networking configuration](#networking-configuration) <br />
+Learn the best ways to configure networking to enable Memgraph’s interaction with the outside world and ensure smooth communication with external systems or users.
+
+5. [Deployment options](#deployment-options) <br />
+Understand the tradeoffs between running Memgraph natively on a host machine or in a containerized environment (Docker, K8s) to choose the best deployment method.
+
+6. [Choosing the right Memgraph flag set](#choosing-the-right-memgraph-flag-set) <br />
+Memgraph offers a variety of configuration flags for performance, persistence, and other features. This section guides you on setting the right flags based on your use case.
+
+7. [Choosing the right Memgraph storage mode](#choosing-the-right-memgraph-storage-mode) <br />
+Memgraph currently supports two in-memory storage modes - `IN_MEMORY_TRANSACTIONAL` and `IN_MEMORY_ANALYTICAL` - as well as one 
+disk-based storage mode: `ON_DISK_TRANSACTIONAL`. In this section, you'll find guidance on choosing the most suitable storage mode
+based on your specific use case.
+
+8. [Backup considerations](#backup-considerations) <br />
+Learn about how to preserve your data in Memgraph to prevent any data loss.
+
+9. [Importing mechanisms](#importing-mechanisms) <br />
+Discover the best methods for importing your dataset into Memgraph, including Cypher queries, bulk loading, and integrations with other data sources.
+
+10. [Enterprise features you might require](#enterprise-features-you-might-require)  <br />
+Memgraph offers a suite of enterprise-grade features that enhance scalability, security, and manageability.
+Key features include role-based access control (RBAC), advanced monitoring tools high availability cluster setups, 
+multitenancy, and more. These features ensure that your data is secure, available, and that Memgraph can scale to meet
+the demands of enterprise workloads.
+
+11. [Queries that best suit your workload](#queries-that-best-suit-your-workload)  <br />
+The type of queries you use can significantly affect performance, especially as the dataset grows or the workload 
+complexity increases. For general use cases, simple Cypher queries are sufficient, but as your workload 
+scales, more advanced query optimization techniques are necessary. Also, a different set of queries is needed based on the use case,
+which will be covered in the specific use case sections.
+
+## Hardware requirements
+
+To get started with Memgraph, we recommend checking the [system requirements](/getting-started/install-memgraph#system-requirements) listed
+in our installation guide. These requirements are sufficient for setting up Memgraph on your own servers.
+
+If you're deploying Memgraph using a cloud provider, read the [Environments](/deployment/environments) section for guidance on choosing the appropriate
+instance type for your specific cloud environment.
+
+## Hardware sizing
+
+The most critical factor in provisioning a server for Memgraph is **RAM**. Memgraph operates primarily in **in-memory mode**, meaning
+the entire dataset is loaded into RAM for optimal performance. Properly sizing your RAM is essential to ensuring your system runs efficiently
+and can scale with your workload.
+
+For a deeper dive into how memory usage is calculated, refer to our [memory storage documentation](/fundamentals/storage-memory-usage). Below is a
+simplified, rule-of-thumb approach to help you estimate your memory needs.
+
+### Memory components
+
+Memgraph’s memory usage consists of five main parts:
+
+1. **Node memory**  
+   Each node requires approximately **128 bytes**.
+
+2. **Relationship memory**  
+   Each relationship requires approximately **120 bytes**.
+
+3. **Property storage**  
+   Properties are stored in buffered arrays. The memory needed depends on property types and counts.
+
+4. **Indices**  
+   Additional overhead is introduced by indexing node labels, edge types, and properties.
+
+5. **Query execution memory**  
+   Temporary memory required to execute queries. This varies depending on the complexity of queries.
+
+<Callout type="info">
+Items 1–4 are referred to as **memory at rest**, while query execution memory is often called **compute memory**.
+</Callout>
+
+### RAM sizing guidelines
+
+Use the following steps to estimate the RAM required for your workload:
+
+<Steps>
+{<h4 className="custom-header"> Estimate base graph storage </h4>}
+For datasets with minimal properties (3–5 small properties), use this formula:
+```
+128 * N + 120 * R
+```
+Where:
+- `N` = number of nodes
+- `R` = number of relationships  
+The result gives you the dataset size in **bytes**. The size of properties is omitted as it will not impact the sizing.
+
+<Callout type="info">
+**Don’t know how many nodes or relationships you have?**  
+If your data is in a non-graph format (e.g., CSV), estimating the number of nodes and relationships isn’t always straightforward.
+For example, one line in a CSV file could represent a node, a relationship, or a mix of both. In some cases, nodes and relationships are
+split into separate CSV files.
+
+In such cases, we recommend importing a **sample of the dataset** (around 10%) into Memgraph and using the memory usage for that portion
+to extrapolate the estimated requirements for the full dataset. This empirical method provides a more accurate and context-aware estimate
+based on how your data is actually represented as a graph.
+</Callout>
+
+{<h4 className="custom-header"> Estimate property storage </h4>} 
+If your dataset includes many or complex properties, refer to the [memory storage documentation](/fundamentals/storage-memory-usage) for detailed
+calculations. Add this result to the base graph size from Step 1.
+
+{<h4 className="custom-header"> Add index overhead </h4>} 
+- If you use fewer than 10 indices, this can be skipped.
+- If you use many indices (e.g., 50+), add **~20% memory overhead** to the total from Steps 1 and 2.
+
+{<h4 className="custom-header"> Add query execution memory </h4>} 
+- For basic querying without graph algorithms: **1.5× multiplier**
+- For analytical workloads with algorithms (e.g., PageRank, Community Detection, Betweenness Centrality): **2× multiplier**
+</Steps>
+
+### Final recommendation
+
+Once you've completed these steps:
+
+- Round up your estimate to match available server configurations.
+- Example: If your estimate is **96GB**, choose a server with **128GB RAM** for safe headroom.
+
+<Callout type="info">
+Still having problems with estimating the size of your instance? Try out our [official storage calculator](https://memgraph.com/storage-calculator), 
+or [contact us on Discord](https://discord.gg/memgraph)!
+</Callout>
+
+## Hardware configuration
+
+One of the most important system settings when running Memgraph is configuring the kernel parameter `vm.max_map_count`.
+This setting ensures that the system can allocate enough virtual memory areas, which is critical for avoiding memory-related
+issues or unexpected crashes during Memgraph operations.
+
+You can find detailed setup instructions and context in our 
+[system configuration documentation](/database-management/system-configuration#recommended-values-for-the-vmmax_map_count-parameter).
+
+If you're deploying Memgraph on Kubernetes, our Helm charts include an **init container** that automatically sets `vm.max_map_count`
+during startup. However, this container requires **root privileges** to execute. If you're running in a restricted environment
+or prefer not to use privileged containers, you’ll need to **manually configure** this parameter on the host machine.
+
+Properly configuring `vm.max_map_count` is a one-time setup but essential for a stable and performant Memgraph deployment.
+
+For system-specific configuration steps and installation guidelines, refer to the [Install Memgraph guide](/getting-started/install-memgraph).
+
+## Networking configuration
+
+To ensure Memgraph functions properly in your environment, make sure the following ports are open and accessible on your server:
+
+- **7687** – Used for the **Bolt protocol**, which handles all client-to-database communication.
+- **3000** – Required if you're using **Memgraph Lab** as a visual interface.
+- **7444** – Needed for **streaming logs** from Memgraph to Memgraph Lab.
+- **9091** – Used for **system metrics**, an **Enterprise-only** feature. If you're using Prometheus or some other system for tracking system metrics,
+this port needs to be enabled.
+
+In addition to enabling these ports, be sure to:
+
+- Review and adjust **firewall settings** to allow traffic on the listed ports.
+- On **Red Hat-based systems**, even with the firewall properly configured, you might need to **disable SELinux**, as it can block
+Memgraph’s access to system resources.
+
+## Deployment options
+
+Memgraph can be deployed in two main ways: **natively** as a `.deb` or `.rpm` package on various Linux distributions, 
+or **containerized** using Docker on any operating system. While native installation can offer up to **10% better performance**,
+we generally recommend using the **containerized version**—whether via **Docker**, **Kubernetes manifests**, or **Helm charts**.
+
+When deploying via Helm, users can choose between:
+- The **Memgraph Standalone Helm chart** – ideal if you're working with a **single instance** setup.
+- The **Memgraph High Availability Helm chart** – designed for **production deployments** that require **redundancy and failover**
+  with multiple instances.
+
+The containerized deployment comes pre-packaged with all **MAGE algorithms** and utility tools, eliminating the need for 
+additional setup. In contrast, native installations require users to **compile C++ modules** and **manually install Python packages**
+to enable the full range of MAGE functionalities—an often complex and error-prone process for most users.
+
+For most use cases, especially during prototyping and production readiness, the containerized image provides the best balance between
+**performance**, **simplicity**, and **feature completeness**.
+
+More details and installation instructions can be found in the [Environments](/deployment/environments) section.
+
+## Choosing the right Memgraph flag set
+
+Memgraph offers a variety of configuration flags to tailor its behavior based on your environment and use case. Here are the most important 
+flags to consider:
+
+### Logging configuration
+
+- `--log-level`  
+  This flag controls the granularity of Memgraph's logs. In **production environments**, setting it to `INFO` or `DEBUG` 
+  is typically sufficient. For **diagnostics or experimentation**, using `TRACE` provides highly detailed logs 
+  that can help in troubleshooting—but keep in mind this will significantly increase **disk usage**. 
+  Memgraph **does not automatically delete old logs**, so you’ll need to manage log retention manually. This flag can be
+  adjusted at runtime using the `SET DATABASE SETTING 'log.level' TO 'value'` command.
+
+- `--also-log-to-stderr=true`  
+  Enables logging to **standard error** in addition to log files.
+
+<Callout type="info">
+  Optionally, users can manually stream the logs to another system such as **Splunk**, or use a containerized setup where
+  logs are collected from standard output streams.
+</Callout>
+
+### Data recovery configuration
+
+- `--storage-parallel-schema-recovery=true` and `--storage-recovery-thread-count=x`  
+  These flags enable **parallel recovery** of the schema during startup. Set `x` to the number of cores you want to dedicate
+  for recovery. This significantly speeds up the time it takes for Memgraph to become operational after a restart.
+
+### Memory limit configuration
+
+- `--memory-limit=x` (in MiB)  
+  This flag defines the **maximum memory** Memgraph can use. By default, it's set to **90% of available system memory**, but if 
+  you're running other processes on the same machine (like Memgraph Lab or others), it's advisable to **manually lower this limit**.
+  On Kubernetes, node memory is often shared with system components like **kubelets**, so the flag should be set to a value lower
+  than the actual available memory on the node.
+
+### Query timeout configuration
+
+- `--query-execution-timeout-sec=0`
+  This flag disables query timeouts entirely. By default, Memgraph limits query execution time to **600 seconds**. If you're performing **large data imports**—such as using `LOAD CSV` or the `migrate()` function—it can be helpful to temporarily set this flag to `0` to avoid interruptions.
+
+  Once the import is complete, you can restart Memgraph **without the flag** if your regular workloads don’t require extended execution times (e.g., during daily batch jobs).
+
+- **Runtime alternative (Cypher)**  
+  You can also configure the query timeout dynamically at runtime using:
+  ```cypher
+  SET DATABASE SETTING "query.timeout" TO "0";
+  ```
+
+  This is particularly useful in environments where you don’t want to restart Memgraph but still need to adjust timeout behavior for specific workloads.
+
+For more information on how to configure Memgraph, as well as what are all the flags that Memgraph can be configured on, please 
+check out the [configuration documentation page](/database-management/configuration).
+
+## Choosing the right Memgraph storage mode
+
+Memgraph currently supports two fully-featured and production-ready storage modes:  
+- `IN_MEMORY_TRANSACTIONAL`  
+- `IN_MEMORY_ANALYTICAL`
+
+A third mode, `ON_DISK_TRANSACTIONAL`, is still **experimental** and lacks many production-grade features.
+While it's part of Memgraph’s long-term roadmap, it’s **not recommended for production** use at this stage.
+
+For all current production deployments, users are strongly encouraged to choose either the **in-memory transactional** or
+**in-memory analytical** mode, based on the nature of their workload.
+
+You can set the storage mode in two ways:
+- Via a **Cypher query**:
+  ```cypher
+  STORAGE MODE IN_MEMORY_TRANSACTIONAL;
+  -- or --
+  STORAGE MODE IN_MEMORY_ANALYTICAL;
+  ```
+- Or by using a **configuration flag** at startup:
+  ```cypher
+  --storage-mode=IN_MEMORY_TRANSACTIONAL
+  --storage-mode=IN_MEMORY_ANALYTICAL
+  ```
+
+### Which mode should you choose?
+
+- **Transactional Mode (`IN_MEMORY_TRANSACTIONAL`)**  
+  Ideal for **mission-critical workloads** requiring **ACID guarantees**, **replication**, and **high availability**.
+  This mode supports safe concurrent access, durability, and rollback on failure.  
+  Keep in mind that **write-write conflicts** can occur and may need to be retried on the driver side.
+
+- **Analytical Mode (`IN_MEMORY_ANALYTICAL`)**  
+  Suited for **read-only** workloads or **on-demand graph analytics** where you need **multithreaded ingestion at scale**.
+  This mode supports extremely high write throughput, even reaching **millions of writes per second**, thanks to parallelized graph construction.  
+  However, it **does not support aborting or rolling back transactions**, as it does not track changes via delta objects.
+  Once a write is made, it becomes part of the current state.
+
+<Callout type="info">
+**Rule of thumb**:  
+Use **analytical mode** for high-speed, read-heavy, or bulk-ingest scenarios.  
+Use **transactional mode** for anything requiring **reliability, consistency, or fault tolerance**.
+</Callout>
+
+For more information about the implications of Memgraph storage mode offerings, please check out the
+[storage mode documentation](/fundamentals/storage-memory-usage).
+
+## Backup considerations
+
+Ensuring data durability and having a solid backup strategy is essential for any production deployment. 
+Memgraph provides built-in mechanisms for creating **snapshots** and **write-ahead logs (WALs)** to help 
+you recover from failures or restarts.
+
+By default, Memgraph retains the **latest 3 snapshots**, but this can be adjusted using the `--storage-snapshot-retention-count=x`
+flag. Older snapshots beyond this limit are automatically deleted to manage storage space.
+
+During recovery, Memgraph first restores the **latest snapshot**, followed by a **replay of the WALs**:
+- **Snapshot recovery** can be parallelized for faster startup using:  
+  - `--storage-parallel-schema-recovery=true`  
+  - `--storage-recovery-thread-count=x` (where `x` is the number of threads used)
+- **WALs are recovered sequentially**, and this step cannot yet be parallelized.
+
+<Callout type="info">
+🔒 Memgraph does **not yet support automatic backups** to third-party storage solutions like AWS S3 or GCP buckets.
+For now, users are encouraged to implement **manual redundancy** by syncing snapshots to external locations using 
+tools such as [**rclone**](https://rclone.org/), which is already in use by several Memgraph customers for this purpose.
+</Callout>
+
+For more detailed information, refer to the following docs:
+- [Data durability fundamentals](/fundamentals/data-durability)
+- [Backup and restore](/database-management/backup-and-restore)
+
+## Importing mechanisms
+
+Memgraph supports a variety of data importing mechanisms to help you efficiently bring your data into the graph. Whether
+you're working with CSV files, JSON streams, Kafka topics, or external data sources, choosing the right import strategy is key to a smooth migration.
+
+We strongly encourage users to review the [best practices for data migration](/data-migration/best-practices),
+which cover recommendations and tips to ensure a reliable and performant data import process tailored to Memgraph.
+
+## Enterprise features you might require
+
+Memgraph provides a rich set of **enterprise-grade features** designed to support production workloads at scale. These include:
+
+- [High Availability (HA) and automatic failover](/clustering/high-availability) for fault tolerance  
+- [System metrics monitoring](/database-management/monitoring#metrics-tracking-via-http-server-enterprise-edition) for observability and performance tracking  
+- [Role-based and fine-grained access control](/database-management/authentication-and-authorization/role-based-access-control) for secure, multi-user environments  
+- [Multi-tenancy](/database-management/multi-tenancy) for isolating and managing separate workloads within the same infrastructure  
+- [Advanced security features](/database-management/authentication-and-authorization) to meet compliance and operational requirements  
+
+There are additional Enterprise capabilities as well, tailored for advanced performance, scalability, and security needs.
+We recommend exploring [Workloads](/deployment/workloads) section, as they highlight how these
+features can be aligned with your specific use cases.
+
+Memgraph Enterprise License is enabled by issuing the following queries:
+```
+SET DATABASE SETTING 'organization.name' TO 'Organization';
+SET DATABASE SETTING 'enterprise.license' TO 'License';
+```
+
+However, the recommended way of specifying the Enterprise License would be through environment variables through Docker or making
+it visible to the process (if you're deploying Memgraph natively).
+
+```
+MEMGRAPH_ORGANIZATION_NAME=Organization
+MEMGRAPH_ENTERPRISE_LICENSE=License
+```
+
+The reason for that is that environment variables always override any system
+settings that are set via queries. Additionally, please check out [how to set up
+the Memgraph Lab Enterprise
+license](/memgraph-lab/configuration#adding-memgraph-enterprise-license).
+
+<Callout type="info">
+For more information about what Enterprise features are included with Memgraph Enterprise License, please check out the 
+[section on Memgraph Enterprise enablement](/database-management/enabling-memgraph-enterprise).
+</Callout>
+
+
+## Queries that best suit your workload
+
+Memgraph fully supports the **Cypher query language**, making it easy to express complex graph patterns. In addition to Cypher,
+Memgraph has **built-in path traversal capabilities** at the core of the database, enabling **lightning-fast traversals** optimized for
+performance-critical use cases. You can learn more about these in our
+[Deep path traversal guide](/advanced-algorithms/deep-path-traversal).
+
+For advanced analytics and utility functions, Memgraph also ships with the
+[MAGE library](/advanced-algorithms/available-algorithms), which includes a wide range of pre-built
+**graph algorithms** and **procedures** for tasks like community detection, centrality scoring, node similarity, and more.
+
+We encourage users to explore the [Workloads](/deployment/workloads) section, where you'll find detailed examples and recommendations on
+which types of queries are most effective based on your specific **workload and use case**.
+
+<CommunityLinks/>

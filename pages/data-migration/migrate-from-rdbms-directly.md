@@ -6,10 +6,14 @@ description: Easily transition from RDBMS to Memgraph using MAGE modules. Our de
 #  Migrate from RDBMS to Memgraph using MAGE modules
 
 This tutorial will help you import your data from a PostgreSQL database into Memgraph
-directly using MAGE query modules.
+directly using the Memgraph MAGE [`migrate`](/advanced-algorithms/available-algorithms/migrate) module.
+The migrate module contains a comprehensive list of data sources from which you're able to migrate your data
+to Memgraph in one step.
 
 This migration tutorial makes migration from an external source to Memgraph possible in one less step
 than described in [migrating from a RDBMS to Memgraph using CSV files](/data-migration/migrate-from-rdbms).
+The need for migrating directly from the source system arises from the fact that users so far needed to convert the
+data from the source system to CSV files in order to migrate to Memgraph.
 Make sure you read both tutorials to see what fits your needs.
 
 In two of our blog posts, we've covered the [differences between relational and
@@ -265,7 +269,7 @@ We will look at some other techniques which we use to lower memory:
 1. Omitting unnecessary columns when migrating
 2. Appropriate data type conversion
 
-####  1. Ommitting unnecessary columns when migrating
+####  1. Omitting unnecessary columns when migrating
 Most users will want to migrate full rows to Memgraph, which can sometimes be inefficient.
 The columns in Postgres are meant to be stored on
 disk, and therefore users can add new columns which can be big in size. This mainly is a concern

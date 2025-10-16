@@ -4,7 +4,7 @@ export default {
   "case": "CASE",
   "create": "CREATE",
   "delete": "DELETE",
-  "drop-graph": "DROP GRAPH",
+  "drop": "DROP",
   "explain": "EXPLAIN",
   "foreach": "FOREACH",
   "load-csv": "LOAD CSV",

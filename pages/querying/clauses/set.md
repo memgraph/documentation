@@ -14,7 +14,9 @@ The `SET` clause is used to update labels on nodes and properties on nodes and r
 5. [Remove a property](#5-remove-a-property) <br />
 6. [Copy all properties](#6-copy-all-properties) <br />
 7. [Replace all properties using map](#7-replace-all-properties-using-map) <br />
-8. [Update all properties using map](#8-update-all-properties-using-map)
+8. [Update all properties using map](#8-update-all-properties-using-map) <br />
+9. [Setting nested properties](#9-setting-nested-properties) <br />
+10. [Removing nested properties](#10-removing-nested-properties)
 
 ## Dataset
 
@@ -220,6 +222,72 @@ Output:
 | (:Country {continent: "Europe", language: "German", name: "Germany", population: "85000000"}) |
 +-----------------------------------------------------------------------------------------------+
 ```
+
+## 9. Setting nested properties
+
+Starting from **version 3.6**, Memgraph supports **nested properties**. Nested properties allow you to define and modify values inside `Map` property types.
+Before nested property support was introduced, users could only set base properties using queries such as:
+```cypher
+MATCH (n:Person {name: 'Harry'}) SET n.age = 21;
+```
+
+With nested property support, you can now **set properties inside a map**, such as:
+```cypher
+MATCH (n:Person {name: 'Harry'}) SET n.details.age = 21;
+```
+
+If the `details` property does not already exist, Memgraph automatically creates it as a map and assigns the nested property within it.
+
+This feature is especially useful when working with configuration objects or when optimizing graph storage, since maps typically consume less memory than multiple node or relationship objects.
+
+You can query a nested property the same way you would any other:
+
+```cypher
+MATCH (n:Person {name: 'Harry'}) 
+RETURN n.details.age AS age;
+
+Output:
+
+```nocopy
++-----+
+| age |
++-----+
+| 21  |
++-----+
+```
+
+There are a few edge cases when working with nested properties:
+If the parent property is not of type `Map`, the query will **throw an exception**:
+```cypher
+MATCH (n:Person {name: 'Harry'}) SET n.name.surname = 'Johnson' // ERROR because n.name is a string, not a map
+```
+
+{<h3 className="custom-header"> Appending to nested properties </h3>}
+
+You can also append to **existing map properties** using the `+=` operator:
+
+```cypher
+MATCH (n:Person {name: 'Harry'}) SET n.details += {age: 21};
+```
+
+When using this syntax:
+- The **right-hand side** must be a `Map`.
+- The **left-hand side** must also be a `Map` (and must exist).
+
+If either side is not a map, Memgraph will throw an exception.
+This ensures that map merging is always type-safe and consistent.
+
+## 10. Removing nested properties
+
+Starting from version v3.6, Memgraph also supports removing nested properties for easier manipulation of map objects
+within the node or relationship property store. The following query performs nested property removal:
+```cypher
+MATCH (n:Person {name: 'Harry'}) REMOVE n.details.age;
+```
+
+This removes only the specified nested property (`age`) while preserving all other keys in the parent map (`details`).
+
+If the property does not exist, Memgraph does not throw an exception - the behavior matches that of removing top-level properties.
 
 ## Dataset queries
 

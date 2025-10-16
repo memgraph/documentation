@@ -2,6 +2,9 @@ import {CommunityLinks} from '/components/social-card/CommunityLinks'
 import { Cards } from 'nextra/components'
 import { Callout } from 'nextra/components'
 import GitHub from '/components/icons/GitHub'
+import { SocialCards } from '/components/social-card/SocialCards'
+import { SocialCard } from '/components/social-card/SocialCard'
+import { Steps } from 'nextra/components'
 
 # Integrations
 
@@ -11,6 +14,10 @@ Memgraph's officially supported integrations:
 - [Model Context Protocol](#model-context-protocol-mcp)
 - [LlamaIndex](#llamaindex)
 - [LangChain](#langchain)
+- [Cognee](#cognee) 
+- [Mem0](#mem0)
+- [LightRAG](#lightrag)
+ 
 
 ## Model Context Protocol (MCP)
 
@@ -18,84 +25,233 @@ Memgraph's officially supported integrations:
   <Cards.Card
     icon={<GitHub />}
     title="Memgraph MCP Server"
-    href="https://github.com/memgraph/mcp-memgraph"
+    href="https://github.com/memgraph/ai-toolkit/tree/main/integrations/mcp-memgraph"
   />
 </Cards>
 
 Memgraph offers Memgraph the [Memgraph MCP
-Server](https://github.com/memgraph/mcp-memgraph) - a lightweight server
-implementation of the Model Context Protocol (MCP) designed to connect Memgraph
-with LLMs.
+Server](https://github.com/memgraph/ai-toolkit/tree/main/integrations/mcp-memgraph)
+- a lightweight server implementation of the Model Context Protocol (MCP)
+designed to connect Memgraph with LLMs.
 
 ![mcp-server](/pages/ai-ecosystem/integrations/mcp-server.png)
 
-<h3 className="custom-header">Quick start</h3>
 
-<h4 className="custom-header">1. Run Memgraph MCP Server</h4>
+### Run Memgraph MCP server
 
-1. Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/) and create `venv` with `uv venv`. Activate virtual environment with `.venv\Scripts\activate`. 
-2. Install dependencies: `uv add "mcp[cli]" httpx`
-3. Run Memgraph MCP server: `uv run server.py`.
+1. Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+2. Install [Claude for Desktop](https://claude.ai/download).
+3. Add the Memgraph server to Claude config:
 
-
-<h4 className="custom-header"> 2. Run MCP Client</h4>
-1. Install [Claude for Desktop](https://claude.ai/download).
-2. Add the Memgraph server to Claude config: 
+Open the config file in your favorite text editor. The location of the config
+file depends on your operating system:
 
 **MacOS/Linux**
 ```
-code ~/Library/Application\ Support/Claude/claude_desktop_config.json
+~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
 
 **Windows**
 
 ```
-code $env:AppData\Claude\claude_desktop_config.json
+$env:AppData\Claude\claude_desktop_config.json
 ```
 
-Example config:
-```
+Add the following config:
+```json
 {
     "mcpServers": {
       "mpc-memgraph": {
-        "command": "/Users/katelatte/.local/bin/uv",
+        "command": "uv",
         "args": [
-            "--directory",
-            "/Users/katelatte/projects/mcp-memgraph",
             "run",
-            "server.py"
+            "--with",
+            "mcp-memgraph",
+            "--python",
+            "3.13",
+            "mcp-memgraph"
         ]
      }
    }
 }
 ```
-<Callout type="info">
-You may need to put the full path to the uv executable in the command field. You can get this by running `which uv` on MacOS/Linux or `where uv` on Windows. Make sure you pass in the absolute path to your server.
+
+<Callout type="info"> 
+  You may need to put the full path to the uv executable in
+  the command field. You can get this by running `which uv` on MacOS/Linux or
+  `where uv` on Windows. Make sure you pass in the absolute path to your server.
 </Callout>
 
-<h4 className="custom-header">3. Chat with the database</h4>
+<h4 className="custom-header"> Chat with the database</h4>
+
 1. Run Memgraph MAGE:
    ```bash
    docker run -p 7687:7687 memgraph/memgraph-mage --schema-info-enabled=True
    ```
 
-   The `--schema-info-enabled` configuration setting is set to `True` to allow LLM to run `SHOW SCHEMA INFO` query.
-2. Open Claude Desktop and see the Memgraph tools and resources listed. Try it out! (You can load dummy data from Memgraph Lab [Datasets](/memgraph-lab/getting-started/data-migration#datasets))
+   The `--schema-info-enabled` configuration setting is set to `True` to allow
+   LLM to run `SHOW SCHEMA INFO` query.
+2. Open Claude Desktop and see the Memgraph tools and resources listed. Try it
+   out! (You can load dummy data from Memgraph Lab
+   [Datasets](/memgraph-lab/getting-started/data-migration#datasets))
 
+
+### Run Memgraph MCP server with Docker
+
+<Steps>
+
+<h3 className="custom-header">Build the Docker image</h3>
+
+To build the Docker image using your local `memgraph-toolbox` code, run from the
+root of the monorepo:
+
+```
+cd /path/to/ai-toolkit
+docker build -f integrations/mcp-memgraph/Dockerfile -t mcp-memgraph:latest .
+```
+
+This will install your local `memgraph-toolbox` into the image.
+
+
+<h3 className="custom-header">Run the Docker image</h3>
+
+**1. Streamable HTTP mode (recommended)**
+
+To expose the MCP HTTP server locally:
+
+```
+docker run --rm mcp-memgraph:latest
+```
+
+The server will be available at `http://localhost:8000/mcp/`
+
+**2. Stdio mode (for integration with MCP stdio clients)**
+
+Configure your MCP host to run the docker command and utilize stdio:
+
+```
+docker run --rm -i -e MCP_TRANSPORT=stdio mcp-memgraph:latest
+```
+
+<Callout type="info">
+  By default, the server will connect to a Memgraph instance running on
+  localhost docker network `bolt://host.docker.internal:7687`. If you have a
+  Memgraph instance running on a different host or port, you can specify it
+  using environment variables.
+</Callout>
+
+**3. Custom Memgraph connection (external instance, no host network)**
+
+To avoid using host networking, or to connect to an external Memgraph instance:
+
+```
+docker run --rm \
+  -p 8000:8000 \
+  -e MEMGRAPH_URL=bolt://memgraph:7687 \
+  -e MEMGRAPH_USER=myuser \
+  -e MEMGRAPH_PASSWORD=password \
+  mcp-memgraph:latest
+```
+
+<h3 className="custom-header">Connect from developer tools</h3>
+
+**Visual Studio Code (HTTP MCP extension)**
+
+If you are using VS Code MCP extension or similar, your configuration for an
+HTTP server would look like:
+
+```json
+{
+  "servers": {
+    "mcp-memgraph-http": {
+      "url": "http://localhost:8000/mcp/"
+    }
+  }
+}
+```
+
+<Callout type="info">
+  The URL must end in /mcp/
+</Callout>
+
+**Visual Studio Code (stdio using Docker)**
+
+You can also run the server using stdio for integration with MCP stdio clients:
+
+1. Open Visual Studio Code, open Command Palette (Ctrl+Shift+P or Cmd+Shift+P on
+   Mac), and select `MCP: Add server...`.
+2. Choose `Command (stdio)`
+3. Enter `docker` as the command to run.
+4. For Server ID enter `mcp-memgraph`.
+5. Choose "User" (adds to user-space `settings.json`) or "Workspace" (adds to
+   `.vscode/mcp.json`).
+
+When the settings open, enhance the args as follows:
+
+```json
+{
+  "servers": {
+    "mcp-memgraph": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-e", "MCP_TRANSPORT=stdio",
+        "mcp-memgraph:latest"
+      ]
+    }
+  }
+}
+```
+
+To connect to a remote Memgraph instance with authentication, add environment
+variables to the `args` list:
+
+```json
+{
+  "servers": {
+    "mcp-memgraph": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-e", "MCP_TRANSPORT=stdio",
+        "-e", "MEMGRAPH_URL=bolt://memgraph:7687",
+        "-e", "MEMGRAPH_USER=myuser",
+        "-e", "MEMGRAPH_PASSWORD=mypassword",
+        "mcp-memgraph:latest"
+      ]
+    }
+  }
+}
+```
+
+Then open GitHub Copilot in Agent mode, and interact with Memgraph using natural
+language.
+
+</Steps>
 
 <h3 className="custom-header">Resources</h3>
-- [Memgraph MCP Server Quick start](https://www.youtube.com/watch?v=0Tjw5QWj_qY): A video showcasing how to run Memgraph MCP Server. 
-- [Introducing the Memgraph MCP Server](https://memgraph.com/blog/introducing-memgraph-mcp-server): A blog post on how to run Memgraph MCP Server and what are the future plans. 
+
+- [Introducing the Memgraph MCP
+  Server](https://memgraph.com/blog/introducing-memgraph-mcp-server): A blog
+  post on how to run Memgraph MCP Server and what are the future plans. 
 
 ## LlamaIndex
 
-<Cards>
-  <Cards.Card
+<SocialCards>
+  <SocialCard 
     icon={<GitHub />}
     title="LlamaIndex integration"
     href="https://github.com/run-llama/llama_index/tree/main/llama-index-integrations/graph_stores/llama-index-graph-stores-memgraph"
+    is_external={true}
   />
-</Cards>
+</SocialCards>
+
 
 LlamaIndex is a simple, flexible data framework for connecting custom data
 sources to large language models. Currently, [Memgraph's
@@ -210,7 +366,7 @@ paths and in LlamaIndex, several node retrieval methods at once can be combined.
 If no sub-retrievers are provided, the defaults are
 [LLMSynonymRetriever](https://docs.llamaindex.ai/en/latest/module_guides/indexing/lpg_index_guide/#default-llmsynonymretriever)
 and
-[VectorContexRetriever](https://docs.llamaindex.ai/en/latest/module_guides/indexing/lpg_index_guide/#default-if-supported-vectorcontextretriever),
+[VectorContextRetriever](https://docs.llamaindex.ai/en/latest/module_guides/indexing/lpg_index_guide/#default-if-supported-vectorcontextretriever),
 if supported.
 
 From the latest update, LlamaIndex utilizes Memgraph's **[vector search](/querying/vector-search)** feature in
@@ -249,7 +405,7 @@ work together in real-world applications with these interactive demos:
   <Cards.Card
     icon={<GitHub />}
     title="LangChain integration"
-    href="https://github.com/memgraph/langchain-memgraph"
+    href="https://github.com/memgraph/ai-toolkit/tree/main/integrations/langchain-memgraph"
   />
 </Cards>
 
@@ -257,14 +413,14 @@ work together in real-world applications with these interactive demos:
 models (LLMs). 
 
 Memgraph has an [integration with
-LangChain](https://github.com/memgraph/langchain-memgraph) which supports
+LangChain](https://github.com/memgraph/ai-toolkit/tree/main/integrations/langchain-memgraph) which supports
 **Memgraph toolkit** for building agentic applications, **knowledge graph
 construction** from unstructured data and **MemgraphQAChain** for querying via
 natural language.
 
 <Callout type="info">
 Recently, we migrated the Memgraph LangChain integration to the
-[repository](https://github.com/memgraph/langchain-memgraph) under Memgraph
+[repository](https://github.com/memgraph/ai-toolkit/tree/main/integrations/langchain-memgraph) under Memgraph
 organization for easier management. 
 </Callout>
 
@@ -274,15 +430,31 @@ The [LangGraph](https://www.langchain.com/langgraph) framework enables users to
 build agentic applications. Memgraph now offers a toolkit for building agents
 that can autonomously interact with the Memgraph database. 
 
-Currently, the Memgraph toolkit supports the following tools:
+Currently, the Memgraph [toolkit](https://github.com/memgraph/ai-toolkit/blob/main/integrations/langchain-memgraph/langchain_memgraph/toolkits.py) supports the following tools:
 
-- [QueryMemgraphTool](https://github.com/memgraph/langchain-memgraph/blob/main/langchain_memgraph/tools.py#L34-L82): Tool for executing Cypher queries on Memgraph.
+- **RunQueryTool**: Executes Cypher queries on the Memgraph database.
+- **RunShowIndexInfoTool**: Retrieves information about the indexes in the
+  database.
+- **RunShowSchemaInfoTool**: Retrieves information about the schema in the
+  database.
+- **RunShowConfigTool**: Retrieves information about the configuration of the
+  database.
+- **RunShowStorageInfoTool**: Retrieves information about the storage engine of
+  the database.
+- **RunShowTriggersTool**: Retrieves information about the triggers in the
+  database.
+- **RunShowConstraintInfoTool**: Retrieves information about the constraints in
+  the database.
+- **RunBetweennessCentralityTool**: Calculates the betweenness centrality of
+  nodes in the graph.
+- **RunPageRankMemgraphTool**: Calculates the PageRank of nodes in the graph.
+
 
 <Callout type="info">
 We just started building Memgraph toolkit. In case you're interested into having
 more tools, please open an
-[issue](https://github.com/memgraph/langchain-memgraph/issues) on our repository
-or open a [pull request](https://github.com/memgraph/langchain-memgraph/pulls) and
+[issue](https://github.com/memgraph/ai-toolkit/issues) on our repository
+or open a [pull request](https://github.com/memgraph/ai-toolkit/pulls) and
 contribute. 
 </Callout>
 
@@ -298,7 +470,7 @@ pip install langchain langchain-openai langchain-memgraph langgraph
 Don't forget to install `langgraph`, as it is a prerequisite to use Memgraph
 toolkit.
 
-{<h4 className="custom-header">Enviroment setup </h4>}
+{<h4 className="custom-header">Environment setup </h4>}
 
 Make sure you have [Memgraph](/getting-started) running
 in the background.
@@ -316,7 +488,7 @@ from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
 
 from langchain_memgraph import MemgraphToolkit
-from langchain_memgraph.graphs.memgraph import Memgraph
+from memgraph_toolbox.api.memgraph import Memgraph
 
 
 """Setup Memgraph connection fixture."""
@@ -395,7 +567,7 @@ through quick start below.
 
 <Callout type="info">
 Recently, we migrated the Memgraph LangChain integration to the
-[repository](https://github.com/memgraph/langchain-memgraph) under Memgraph
+[repository](https://github.com/memgraph/ai-toolkit/tree/main/integrations/langchain-memgraph) under Memgraph
 organization for easier management. 
 </Callout>
 
@@ -521,5 +693,367 @@ In the image below, you can see what's happening under the hood to get the
 answer. 
 
 ![langchain-query](/pages/ai-ecosystem/integrations/langchain-retrieval.png)
+
+
+## Cognee
+
+<SocialCards>
+  <SocialCard 
+    icon={<GitHub />}
+    title="Cognee integration"
+    href="https://github.com/topoteretes/cognee/tree/main/cognee/infrastructure/databases/graph/memgraph"
+    is_external={true}
+  />
+</SocialCards>
+
+
+Cognee is an AI-powered toolkit for cognitive search and graph-based knowledge
+representation. It leverages LLMs to extract structured concepts and
+relationships from natural language, storing them in Memgraph as a knowledge
+graph. This enables semantic search and graph querying over unstructured text.
+You can follow the [Jupyter Notebook
+example](https://github.com/memgraph/ai-demos/blob/main/integrations/cognee/cognee.ipynb)
+or go through quick start below.
+
+{<h3 className="custom-header">Installation</h3>}
+
+Before you begin, ensure the following are installed:
+- **Docker**: [Install Docker](https://docs.docker.com/engine/install/)
+- **Memgraph**: Run Memgraph using the recommended script:
+
+```bash
+# macOS/Linux
+curl https://install.memgraph.com | sh
+
+# Windows
+iwr https://windows.memgraph.com | iex
+```
+
+This launches Memgraph on `localhost:3000`.
+
+- **Poetry and dependencies**:
+```bash
+poetry init
+poetry add cognee
+pip install neo4j
+```
+
+{<h3 className="custom-header">Environment setup</h3>}
+
+Create a `.env` file in your project root and define your configuration:
+
+```env
+LLM_API_KEY=sk-...
+LLM_MODEL=openai/gpt-4o-mini
+LLM_PROVIDER=openai
+EMBEDDING_PROVIDER=openai
+EMBEDDING_MODEL=openai/text-embedding-3-large
+GRAPH_DATABASE_PROVIDER=memgraph
+GRAPH_DATABASE_URL=bolt://localhost:7687
+GRAPH_DATABASE_USERNAME=" "
+GRAPH_DATABASE_PASSWORD=" "
+```
+
+In your script or notebook, load the environment:
+
+```python
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+{<h3 className="custom-header">Using Cognee</h3>}
+
+Once the environment is set up, you can start processing text with Cognee:
+
+```python
+import cognee
+import asyncio
+
+async def run():
+    text = "Natural language processing (NLP) is a subfield of computer science focused on the interaction between computers and human language."
+
+    # Add text to Cognee
+    await cognee.add(text)
+
+    # Generate the knowledge graph with LLMs
+    await cognee.cognify()
+
+    # Semantic search
+    results = await cognee.search(query_text="What is NLP?")
+    
+    print("Search Results:\n")
+    for result in results:
+        print(result)
+
+await run()
+```
+
+{<h4 className="custom-header">What happens under the hood?</h4>}
+
+- `cognee.add()`: Stores unstructured input text.
+- `cognee.cognify()`: Converts text to a structured graph using LLMs and stores
+  it in Memgraph.
+- `cognee.search()`: Runs semantic search queries using vector embeddings and
+  graph context.
+
+
+## Mem0
+
+<SocialCards>
+  <SocialCard 
+    icon={<GitHub />}
+    title="Mem0 integration"
+    href="https://github.com/mem0ai/mem0/blob/main/mem0/memory/memgraph_memory.py"
+    is_external={true}
+  />
+</SocialCards>
+
+
+Mem0 is a framework for managing memory in AI systems, with support for
+graph-based storage and retrieval. Memgraph can be used as a backend for Mem0’s
+Graph Memory, enabling scalable, queryable memory storage for agentic workflows
+and intelligent applications.
+
+{<h3 className="custom-header">Installation</h3>}
+
+Before you start, ensure you have the following are installed:
+
+1. **Docker**: [Install Docker](https://docs.docker.com/engine/install/)
+1. **Install Mem0 with Graph Memory support**
+Use pip to install Mem0 with support for graph memory:
+
+```bash
+pip install "mem0ai[graph]"
+```
+
+2. **Run Memgraph**
+Start Memgraph using Docker with schema support enabled:
+
+```bash
+docker run -p 7687:7687 memgraph/memgraph-mage:latest --schema-info-enabled=True
+```
+
+The `--schema-info-enabled` flag improves schema extraction and indexing
+performance.
+
+{<h3 className="custom-header">Configuration</h3>}
+
+First, import the required modules and configure the OpenAI API:
+
+```python
+from mem0 import Memory
+import os
+
+os.environ["OPENAI_API_KEY"] = "<your-openai-api-key>"
+```
+
+Define the configuration to use OpenAI for embedding and Memgraph for graph
+memory storage:
+
+```python
+config = {
+    "embedder": {
+        "provider": "openai",
+        "config": {
+            "model": "text-embedding-3-large",
+            "embedding_dims": 1536,
+        },
+    },
+    "graph_store": {
+        "provider": "memgraph",
+        "config": {
+            "url": "bolt://localhost:7687",
+            "username": "memgraph",
+            "password": "mem0graph",
+        },
+    },
+}
+```
+
+{<h3 className="custom-header">Graph Memory initialization</h3>}
+
+Initialize the Mem0 memory store using the configuration:
+
+```python
+m = Memory.from_config(config_dict=config)
+Mem0 will connect to Memgraph and prepare it for memory storage.
+```
+
+{<h3 className="custom-header">Store Memories</h3>}
+
+You can store structured conversations or memory entries like this:
+
+```python
+messages = [
+    {"role": "user", "content": "I'm planning to watch a movie tonight. Any recommendations?"},
+    {"role": "assistant", "content": "How about a thriller movie? They can be quite engaging."},
+    {"role": "user", "content": "I'm not a big fan of thriller movies but I love sci-fi movies."},
+    {"role": "assistant", "content": "Got it! I'll avoid thriller recommendations and suggest sci-fi movies in the future."},
+]
+
+result = m.add(messages, user_id="alice", metadata={"category": "movie_recommendations"})
+```
+
+The messages are stored in Memgraph with the associated user ID and metadata.
+
+{<h3 className="custom-header">Search Memories</h3>}
+
+You can query stored memories using semantic search:
+
+```python
+for result in m.search("what does alice love?", user_id="alice")["results"]:
+    print(result["memory"], result["score"])
+```
+
+Example output:
+
+```css
+Loves sci-fi movies 0.315
+Planning to watch a movie tonight 0.096
+Not a big fan of thriller movies 0.094
+```
+
+If you'd like a more in-depth look at how Mem0 works with Memgraph, check out
+the official [Mem0
+docs](https://docs.mem0.ai/open-source/graph_memory/overview#initialize-memgraph).
+
+
+## LightRAG
+
+<SocialCards>
+  <SocialCard 
+    icon={<GitHub />}
+    title="LightRAG integration"
+    href="https://github.com/HKUDS/LightRAG"
+    is_external={true}
+  />
+</SocialCards>
+
+LightRAG is a simple and fast retrieval-augmented generation framework that
+combines the power of graph databases with large language models. It provides
+efficient graph-based knowledge representation and retrieval capabilities,
+making it ideal for building RAG applications that require sophisticated
+understanding of entity relationships and context.
+
+LightRAG supports [Memgraph as a graph storage
+backend](https://github.com/HKUDS/LightRAG/blob/main/lightrag/kg/memgraph_impl.py),
+offering high-performance in-memory graph operations with full compatibility
+with the Neo4j Bolt protocol.
+
+{<h3 className="custom-header">Installation</h3>}
+
+To use LightRAG with Memgraph, you need to install LightRAG from source since
+Memgraph support is not yet available in the PyPI release:
+
+```shell
+# Clone the LightRAG repository
+git clone https://github.com/HKUDS/LightRAG.git
+cd LightRAG
+
+# Install from source
+pip install -e .
+```
+
+{<h3 className="custom-header">Environment setup</h3>}
+
+Before getting started, ensure you have [Memgraph](/getting-started) running.
+You can quickly start Memgraph using Docker:
+
+```bash
+docker run -p 7687:7687 memgraph/memgraph:latest
+```
+
+Configure your environment variables for Memgraph connection:
+
+```bash
+export MEMGRAPH_URI="bolt://localhost:7687"
+export MEMGRAPH_USERNAME=""  # Default is empty
+export MEMGRAPH_PASSWORD=""  # Default is empty
+export MEMGRAPH_DATABASE="memgraph"  # Default database name
+```
+
+{<h3 className="custom-header">Basic usage</h3>}
+
+Here's a simple example of using LightRAG with Memgraph:
+
+Export your `OPENAI_API_KEY` environment variable before running the script.
+
+```python
+import os
+import asyncio
+from lightrag import LightRAG, QueryParam
+from lightrag.llm.openai import gpt_4o_mini_complete, gpt_4o_complete, openai_embed
+from lightrag.kg.shared_storage import initialize_pipeline_status
+from lightrag.utils import setup_logger
+
+setup_logger("lightrag", level="INFO")
+
+WORKING_DIR = "./rag_storage"
+if not os.path.exists(WORKING_DIR):
+    os.mkdir(WORKING_DIR)
+
+async def initialize_rag():
+    rag = LightRAG(
+        working_dir=WORKING_DIR,
+        embedding_func=openai_embed,
+        llm_model_func=gpt_4o_mini_complete,
+        graph_storage="MemgraphStorage", #<-----------override KG default
+    )
+    # IMPORTANT: Both initialization calls are required!
+    await rag.initialize_storages()  # Initialize storage backends
+    await initialize_pipeline_status()  # Initialize processing pipeline
+    return rag
+
+async def main():
+    try:
+        # Initialize RAG instance
+        rag = await initialize_rag()
+        rag.insert("Your text")
+
+        # Perform hybrid search
+        mode = "hybrid"
+        print(
+          await rag.query(
+              "What are the top themes in this story?",
+              param=QueryParam(mode=mode)
+          )
+        )
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        if rag:
+            await rag.finalize_storages()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+{<h3 className="custom-header">Advanced configuration</h3>}
+
+LightRAG provides several configuration options for working with Memgraph:
+
+**Workspace isolation**: Use the `MEMGRAPH_WORKSPACE` environment variable to
+isolate data between different LightRAG instances:
+
+```bash
+export MEMGRAPH_WORKSPACE="project_a"
+```
+
+**Custom connection parameters**: You can also configure connection parameters
+through a `config.ini` file:
+
+```ini
+[memgraph]
+uri = bolt://localhost:7687
+username = 
+password = 
+database = memgraph
+```
+
+For more information about LightRAG's advanced configurations, features, and
+usage examples with Memgraph, visit the [LightRAG GitHub
+repository](https://github.com/HKUDS/LightRAG).
+
 
 <CommunityLinks/>
