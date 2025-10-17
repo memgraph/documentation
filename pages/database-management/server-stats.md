@@ -202,6 +202,12 @@ SHOW METRICS;
 | "DiskUsage"                              | "Memory"            | "Gauge"     | 81508835   |
 | "MemoryRes"                              | "Memory"            | "Gauge"     | 339640320  |
 | "PeakMemoryRes"                          | "Memory"            | "Gauge"     | 339775488  |
+| "GCLatency_us_50p"                       | "Memory"            | "Histogram" | 1000       |
+| "GCLatency_us_90p"                       | "Memory"            | "Histogram" | 1000       |
+| "GCLatency_us_99p"                       | "Memory"            | "Histogram" | 1000       |
+| "GCSkiplistCleanupLatency_us_50p"        | "Memory"            | "Histogram" | 500        |
+| "GCSkiplistCleanupLatency_us_90p"        | "Memory"            | "Histogram" | 500        |
+| "GCSkiplistCleanupLatency_us_99p"        | "Memory"            | "Histogram" | 500        |
 | "AccumulateOperator"                     | "Operator"          | "Counter"   | 0          |
 | "AggregateOperator"                      | "Operator"          | "Counter"   | 0          |
 | "ApplyOperator"                          | "Operator"          | "Counter"   | 0          |
@@ -283,6 +289,8 @@ SHOW METRICS;
 | "FailedQuery"                            | "Transaction"       | "Counter"   | 0          |
 | "RollbackedTransactions"                 | "Transaction"       | "Counter"   | 0          |
 | "SuccessfulQuery"                        | "Transaction"       | "Counter"   | 1          |
+| "TransientErrors"                        | "Transaction"       | "Counter"   | 0          |
+| "WriteWriteConflicts"                    | "Transaction"       | "Counter"   | 0          |
 | "TriggersCreated"                        | "Trigger"           | "Counter"   | 0          |
 | "TriggersExecuted"                       | "Trigger"           | "Counter"   | 0          |
 +------------------------------------------+---------------------+-------------+------------+
