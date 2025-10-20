@@ -1,0 +1,226 @@
+---
+title: Setup replication cluster with Docker
+description: See how one can setup a replication cluster with Docker inside the Memgraph Community Edition.
+---
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+
+# Setup replication cluster with Docker (Community)
+
+<Callout type="info">
+
+This guide is for **Memgraph Community** users who want to set up data replication across multiple instances.
+If you have a **Memgraph Enterprise** license, we recommend using the [high availability features](/clustering/high-availability) instead, which provide automatic failover, 
+load balancing, and comprehensive cluster management capabilities.
+
+</Callout>
+
+This example demonstrates how to create a simple cluster of nodes running
+Memgraph Community instances, and set up replication using various replication modes.
+
+### Cluster topology
+
+The cluster will consist of three nodes, one MAIN instance and two REPLICA
+instances. In order to showcase the creation of REPLICA instances with different
+replication modes, we will create:
+
+- The MAIN instance - contains the original data that will be replicated to
+  REPLICA instances
+- REPLICA instance 1 - replication in the SYNC mode
+- REPLICA instance 2 - replication in the ASYNC mode
+
+<Callout>
+
+The example is made on the local server, which poses a single point of failure if the server goes down. In production,
+it is best advised to deploy one Memgraph instance per server, to ensure robustness.
+
+</Callout>
+
+<Steps>
+
+### Run multiple instances
+
+This examples sets up replication on a single instance, so every Bolt port for receiving queries will need to be
+distinct on the host. 
+
+The MAIN instance:
+
+```
+docker run -p 7687:7687 memgraph/memgraph-mage --also-log-to-stderr=true
+```
+
+REPLICA instance 1:
+
+```
+docker run -p 7688:7687 memgraph/memgraph-mage --also-log-to-stderr=true
+```
+
+REPLICA instance 2:
+
+```
+docker run -p 7689:7687 memgraph/memgraph-mage --also-log-to-stderr=true
+```
+
+Memgraph by default [sets all the required flags](/clustering/replication/best-practices#which-command-line-flags-should-i-use)
+start replication without changing any configuration.
+
+You can connect to each instance using the Memgraph Lab, mgconsole, or a database driver, by changing the port:
+
+- MAIN instance - `localhost:7687`
+- REPLICA instance 1 - `localhost:7688`
+- REPLICA instance 2 - `localhost:7689`
+
+If you need to define volumes, each volume needs to be called differently.
+
+### Demote an instance to a REPLICA role
+
+Run the following query in both REPLICA instances to demote them to the
+REPLICA role:
+
+```
+SET REPLICATION ROLE TO REPLICA WITH PORT 10000;
+```
+
+This command does 2 things:
+- the instance is now aware that it is a REPLICA instance, and is no longer allowed to execute write queries
+- a replication server is started at port 10000, which receives data for the REPLICA
+
+The port 10000 is the default one in some of the replication commands, so the best practice is to use exactly
+that port for setting up the replication server.
+
+Otherwise, you can use any unassigned port between 1000 and 10000.
+
+### Register REPLICA instances
+
+To register a REPLICA instance, you need to find out the IP address of each
+instance. The container's IP address can be read by using the following command:
+
+```bash
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <container_name_or_id>
+```
+
+The IP addresses will probably be:
+
+- MAIN instance - `172.17.0.2`
+- REPLICA instance 1 - `172.17.0.3`
+- REPLICA instance 2 - `172.17.0.4`
+
+If they are not, please change the IP addresses in the following queries to
+match the [IP addresses on your cluster](/getting-started/install-memgraph/docker#issues-with-the-ip-address).
+
+Then, run the following queries from the MAIN instance to register REPLICA
+instances:
+
+1. REPLICA instance 1 at `172.17.0.3`
+
+   ```
+   REGISTER REPLICA REP1 SYNC TO "172.17.0.3";
+   ```
+
+   The command can be interpreted as following:
+   - REPLICA instance 1 is called REP1
+   - REP1 is registered using SYNC replication mode
+   - REP1 is located at the IP address `172.17.0.3.`
+   - REP1 has the replication server port `10000` open (it is the default one)
+
+   Once the MAIN instance commits a transaction, it will communicate the changes
+   to all REPLICA instances running in SYNC mode and wait until it receives a response that the changes have been applied to the REPLICAs or that a timeout has been reached.
+
+   If you used any port other than `10000` while demoting a REPLICA instance,
+   you will need to specify it like this: "172.17.0.3:5000"
+
+2. REPLICA instance 2 at `172.17.0.4`
+
+   ```
+   REGISTER REPLICA REP2 ASYNC TO "172.17.0.4";
+   ```
+
+   REPLICA instance 2 is called REP2, its replication mode is ASYNC, and it is
+   located at IP address `172.17.0.4.` with port `10000`.
+
+   When the REPLICA instance is running in ASYNC mode, the MAIN instance will
+   commit a transaction without receiving confirmation from REPLICA instances
+   that they have received the same transaction. ASYNC mode ensures system
+   availability and partition tolerance.
+
+   If you used any port other than `10000` while demoting a REPLICA instance (e.g. 5000),
+   you will need to specify it like this: "172.17.0.4:5000"
+
+### Check info about registered REPLICA instances
+
+Check REPLICA instances by running the following query from the MAIN
+instance:
+
+```
+SHOW REPLICAS;
+```
+
+```nocopy
++--------+--------------------+-----------+-------------+-------------------------------------------------+
+| name   | socket_address     | sync_mode | system_info | data_info                                       |
++--------+--------------------+-----------+-------------+-------------------------------------------------+
+| "REP1" | "172.17.0.3:10000" | "sync"    | Null        | {memgraph: {behind: 0, status: "ready", ts: 0}} |
+| "REP2" | "172.17.0.4:10000" | "async"   | Null        | {memgraph: {behind: 0, status: "ready", ts: 0}} |
++--------+--------------------+-----------+-------------+-------------------------------------------------+
+```
+
+The result has information regarding each individual replica:
+1. replica's name
+2. IP address where the REPLICA is reachable and the port where its replication server is open
+3. replication mode (sync/asyncs/trict_sync)
+4. system information
+5. tenant information (for each database, we provide the current timestamp, how many tick is the replica's version behind and the current status)
+
+### Create a node on MAIN
+
+On the MAIN instance, execute a write query
+
+```cypher
+CREATE (:Node);
+```
+
+### Observe the replicated data
+
+By showing replicas, we can see that the timestamp data info for the database `memgraph` changed.
+Replicas are not behind (`behind` is 0), and they're in a `ready` state. This means data has been
+successfully replicated.
+
+```
+SHOW REPLICAS;
+```
+
+```nocopy
++--------+--------------------+-----------+-------------+-------------------------------------------------+
+| name   | socket_address     | sync_mode | system_info | data_info                                       |
++--------+--------------------+-----------+-------------+-------------------------------------------------+
+| "REP1" | "172.17.0.3:10000" | "sync"    | Null        | {memgraph: {behind: 0, status: "ready", ts: 2}} |
+| "REP2" | "172.17.0.4:10000" | "async"   | Null        | {memgraph: {behind: 0, status: "ready", ts: 2}} |
++--------+--------------------+-----------+-------------+-------------------------------------------------+
+```
+
+If we now log into the REPLICA and execute:
+
+```cypher
+MATCH (n) RETURN n;
+```
+
+We get the replicated data:
+
+
+```nocopy
++---------+
+| n       |
++---------+
+| (:Node) |
++---------+
+```
+
+And that's it! You have successfully executed your first query on a replicated Memgraph server!
+</Steps>
+
+### Next steps
+
+We suggest you check our [supported replication queries in the
+Memgraph community version](/clustering/replication/replication-commands-reference),
+so that you can become an expert in managing a replicated Memgraph cluster.

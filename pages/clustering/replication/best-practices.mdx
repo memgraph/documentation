@@ -1,0 +1,66 @@
+---
+title: Best practices when setting up replication
+description: Various things for database administrators to bear in mind when deploying replication with Memgraph.
+---
+
+import { Callout } from 'nextra/components'
+
+# Best practices when setting up replication
+
+<Callout type="info">
+
+This guide is for **Memgraph Community** users who want to set up data replication across multiple instances.
+If you have a **Memgraph Enterprise** license, we recommend using the [high availability features](/clustering/high-availability) instead, which provide automatic failover, 
+load balancing, and comprehensive cluster management capabilities.
+
+</Callout>
+
+## Which storage mode to use?
+
+Data replication currently **works only in the in-memory transactional [storage
+mode](/fundamentals/storage-memory-usage)**.
+
+If you're using in-memory analytical storage mode for the fast import:
+1. import your data
+2. switch to in-memory transactional storage mode
+3. then and only then set up replication
+
+## Hardware requirements
+For replication, ensure all machines (MAIN and REPLICA instances) have exactly the same amount of
+RAM and the same CPU. This uniformity is crucial for consistent performance and reliability.
+
+
+## Which command line flags should I use?
+
+#### Data recovery on startup
+
+By default, Memgraph sets the data recovery on startup to true
+
+```bash
+--data_recovery_on_startup=true
+```
+The flag controls whether Memgraph will recover the persisted data during startup. It's necessary
+to keep this value to true so instances which have temporarily shut down can recover their data when
+they get back up.
+
+#### Restoring replication state on startup
+Instances need to remember their role and configuration details in a replication
+cluster upon restart, and that is by default enforced with the flag:
+
+```bash
+--replication-restore-state-on-startup=true
+```
+The flag should remain `true` throughout the instances' lifetime for replication to work correctly.
+If the flag is set to `false`, MAIN can't communicate with instance, because each
+REPLICA has a UUID of MAIN which can communicate with it, and it is set up only
+on instance registration. In case the flag is set to `false`, the way to go
+forward is first to unregister the instance on MAIN and register it again.
+
+#### Storage WAL file flush
+Users are advised to use the same value for configuration flag
+```bash
+--storage-wal-file-flush-every-n-txn
+```
+on MAIN and SYNC REPLICAs. Otherwise, the situation could occur in which there is a data which is
+fsynced on REPLICA and not on MAIN. In the case MAIN crashes, this could leave to conflicts in system
+that would need to be manually resolved by users.
