@@ -3405,7 +3405,36 @@ export default withNextra({
         destination: '/ai-ecosystem#graphchat',
         permanent: true
       },
-      
+      {
+        source: '/getting-started/build-memgraph-from-source#obtaining-the-source-code',
+        destination: '/getting-started/build-memgraph-from-source#obtain-the-source-code',
+        permanent: true
+      },
+      {
+        source: '/getting-started/build-memgraph-from-source#downloading-the-dependencies',
+        destination: '/getting-started/build-memgraph-from-source#download-dependencies-required-for-methods-1--2',
+        permanent: true
+      },
+      {
+        source: '/getting-started/build-memgraph-from-source#compiling',
+        destination: '/getting-started/build-memgraph-from-source#toolchain-installation-required-for-methods-1--2',
+        permanent: true
+      },
+      {
+        source: '/getting-started/build-memgraph-from-source#toolchain-installation-procedure',
+        destination: '/getting-started/build-memgraph-from-source#toolchain-installation-required-for-methods-1--2',
+        permanent: true
+      },
+      {
+        source: '/getting-started/build-memgraph-from-source#installing-memgraph-dependencies',
+        destination: '/getting-started/build-memgraph-from-source#download-dependencies-required-for-methods-1--2',
+        permanent: true
+      },
+      {
+        source: '/getting-started/build-memgraph-from-source#running-memgraph',
+        destination: '/getting-started/build-memgraph-from-source#run-memgraph',
+        permanent: true
+      },
       
 
       // END: NEW MEMGRAPH LAB REDIRECTS
