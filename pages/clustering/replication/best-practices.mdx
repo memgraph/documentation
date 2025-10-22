@@ -29,12 +29,24 @@ If you're using in-memory analytical storage mode for the fast import:
 For replication, ensure all machines (MAIN and REPLICA instances) have exactly the same amount of
 RAM and the same CPU. This uniformity is crucial for consistent performance and reliability.
 
+## Deployment requirements
+When running multiple instances, each on its own machine, run Memgraph as you
+usually would.
+
+If you are exploring replication and running multiple instances on one machine,
+you can run Memgraph with Docker, but if you are using volumes, they need to be
+called differently and each instance needs to be exposed via a different port.
+
+Check the example of creating [a replication
+cluster](/clustering/replication/setup-replication-cluster-docker).
+
+
 
 ## Which command line flags should I use?
 
 #### Data recovery on startup
 
-By default, Memgraph sets the data recovery on startup to true
+**By default, Memgraph sets the data recovery on startup to true:**
 
 ```bash
 --data_recovery_on_startup=true
@@ -43,9 +55,11 @@ The flag controls whether Memgraph will recover the persisted data during startu
 to keep this value to true so instances which have temporarily shut down can recover their data when
 they get back up.
 
+**Advice:** Do nothing since this is enforced by default.
+
 #### Restoring replication state on startup
 Instances need to remember their role and configuration details in a replication
-cluster upon restart, and that is by default enforced with the flag:
+cluster upon restart, and that is **by default enforced** with the flag:
 
 ```bash
 --replication-restore-state-on-startup=true
@@ -56,11 +70,82 @@ REPLICA has a UUID of MAIN which can communicate with it, and it is set up only
 on instance registration. In case the flag is set to `false`, the way to go
 forward is first to unregister the instance on MAIN and register it again.
 
+**Advice:** Do nothing since this is enforced by default.
+
 #### Storage WAL file flush
 Users are advised to use the same value for configuration flag
 ```bash
 --storage-wal-file-flush-every-n-txn
 ```
 on MAIN and SYNC REPLICAs. Otherwise, the situation could occur in which there is a data which is
-fsynced on REPLICA and not on MAIN. In the case MAIN crashes, this could leave to conflicts in system
+*fsynced* on REPLICA and not on MAIN. In the case MAIN crashes, this could leave to conflicts in system
 that would need to be manually resolved by users.
+
+**Advice:** Do nothing since this the value is identical for all instances by default. If you change the value
+for the flag, change it for all the respective instances accordingly.
+
+## Permissions to run replication queries
+
+As of Memgraph v3.5 replication queries (such as `REGISTER REPLICA`, `SHOW
+REPLICAS`, `DROP REPLICA`, etc.) target the default "memgraph" database and
+require access to it. The recommendation is to use the default "memgraph"
+database as an admin/system database and store graphs under other databases. 
+
+**In Memgraph community, every user is an admin user and there are no roles or privileges, so
+users will be able to execute any replication query.**
+
+### Requirements for replication queries (Enterprise)
+
+To execute replication queries, users must have:
+1. The `REPLICATION` privilege
+2. **AND** access to the default "memgraph" database
+
+**In Memgraph Enterprise edition, the very first created user is an admin user, which will be able to execute
+any replication query.**
+
+{<h4 className="custom-header">Example: Admin user with replication privileges</h4>}
+
+```cypher
+-- Create admin role with replication privileges
+CREATE ROLE replication_admin;
+GRANT REPLICATION TO replication_admin;
+GRANT DATABASE memgraph TO replication_admin;
+
+-- Create user with replication admin role
+CREATE USER repl_admin IDENTIFIED BY 'admin_password';
+SET ROLE FOR repl_admin TO replication_admin;
+```
+
+In this setup, `repl_admin` can:
+- Execute all replication queries (`REGISTER REPLICA`, `SHOW REPLICAS`, etc.)
+- Access the "memgraph" database for administrative operations
+- Manage the replication cluster configuration
+
+## How to manage replication with Memgraph Community Edition?
+
+### Manual failover
+
+**Leader election / automatic failover** is a part of Memgraph Enterprise Edition. For Memgraph 
+Community edition, users need to perform manual failover routines.
+
+The replication cluster should only have one MAIN instance in order to avoid
+errors in the replication system. If the original MAIN instance fails, you can
+promote a REPLICA instance to be the new MAIN instance by running the following
+query:
+
+```plaintext
+SET REPLICATION ROLE TO MAIN;
+```
+
+If the original instance was still alive when you promoted a new MAIN, you need
+to resolve any conflicts and manage replication manually.
+
+If you demote the new MAIN instance back to the REPLICA role, it will not
+retrieve its original function. You need to [drop
+it](/clustering/replication/replication-commands-reference#drop-replica) from the MAIN and 
+[register it](/clustering/replication/replication-commands-reference#replica-registration-commands) again.
+
+If the crashed MAIN instance goes back online once a new MAIN is already
+assigned, it cannot reclaim its previous role. It needs to be cleaned and demoted to
+become a REPLICA instance of the new MAIN instance. In the worst case, restarting that instance
+clean with new fresh storage is needed, in order for the REPLICA registration to pass successfully.

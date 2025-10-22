@@ -46,21 +46,29 @@ read queries.
 
 </Callout>
 
+During the initial startup, all instances are MAIN by default. When creating a replication cluster,
+one instance has to be chosen as the MAIN instance.
+The rest of the instances have to be **demoted to REPLICA roles**. Replicas receive data by creating an RPC 
+replication server which is listening on an arbitrary port.
+
 The way MAIN instance replicates data to the REPLICA instances can be carried out in a 
 **SYNC**, **ASYNC**, or **STRICT_SYNC** mode.
 The replication mode defines the terms by which the MAIN instance can commit the
 changes to the database, thus modifying the system to prioritize either
 consistency or availability.
-- **STRICT_SYNC mode** - After committing a transaction, the MAIN instance will communicate the 
-changes to all REPLICA instances and wait until it receives a response or information that a timeout is reached. 
+
+- **STRICT_SYNC mode** - Replication is implemented as a two-phase commit protocol.
+After committing a transaction, the MAIN instance will communicate the changes to all REPLICA instances
+and wait until it receives a response or information that a timeout is reached. 
 The STRICT_SYNC mode ensures consistency and partition tolerance (CP), but not availability for writes.
 If the primary database has multiple replicas, the system is highly available for reads. But, when a replica fails,
-the MAIN instance can’t process the write due to the nature of synchronous replication. It is implemented as
-two-phase commit protocol.
+the MAIN instance can’t process the write due to the nature of synchronous replication.
+
 - **SYNC mode** - After committing a transaction, the MAIN instance will communicate the changes to all
 REPLICA instances and wait until it receives a response or information that a timeout is reached.
 It is different from STRICT_SYNC mode because it the MAIN can continue committing even in situations when
 SYNC replica is down.
+
 - **ASYNC mode** - The MAIN instance will commit a transaction without receiving confirmation from
 REPLICA instances that they have received the same transaction. ASYNC mode ensures system availability
 and partition tolerance (AP), while data can only be eventually consistent.
@@ -83,13 +91,13 @@ implemented in Memgraph replication:
 
 - SYNC
 - ASYNC
+- STRICT_SYNC
 
-![](/pages/clustering/replication/memgraph-replication-async-sync.png)
+![](/pages/clustering/replication/replication-modes.png)
 
 When a REPLICA instance is registered and added to the cluster, it will start
 replicating to catch up to the current state of the MAIN instance. Initial replication
 when a REPLICA instance is registered is handled in ASYNC mode by design decision.
-
 
 When the REPLICA instance synchronizes with the MAIN
 instance, the replication mode will change according to the mode defined during
@@ -99,23 +107,16 @@ registration.
 
 SYNC mode is the most straightforward replication mode in which the main storage
 thread waits for the response and cannot continue until the response is
-received or a timeout is reached.
+received or a timeout is reached. If the REPLICA fails, MAIN instance will still commit
+the data and move forward. This behaviour does not block writes on REPLICA failure, and still
+ensures other REPLICAs to receive new data.
 
 The following diagrams express the behavior of the MAIN instance in cases when
 SYNC REPLICA doesn't answer within the expected timeout.
 
-**SYNC REPLICA going down when creating index, uniqueness constraint or existence constraint**
-
-![](/pages/clustering/replication/workflow_diagram_data_definition_creation.drawio.png)
-
-**SYNC REPLICA going down when dropping index, uniqueness constraint or existence constraint**
-
-![](/pages/clustering/replication/workflow_diagram_data_definition_dropping.drawio.png)
-
-**SYNC REPLICA going down adding/updating/deleting data**
-
-![](/pages/clustering/replication/workflow_diagram_data_manipulation.drawio.png)
-
+**SYNC replication ensures consistency and partition tolerance (CP).**
+However, there is an extremely minimal chance of data loss. For complete consistency without data loss,
+Memgraph offers STRICT_SYNC replication mode.
 
 #### STRICT_SYNC replication mode
 
@@ -124,10 +125,10 @@ SYNC mode except that MAIN **won't commit a transaction locally in a situation i
 which one of STRICT_SYNC replicas is down**. To achieve that, all instances run
 together a *two-phase commit* protocol which allows you such a synchronization. This 
 reduces the throughout but such a mode is super useful in a high-availability
-scenario in which a failover is the most operation to support. Such a mode then
+scenario in which a failover is the most critical operation to support. Such a mode then
 allows you a failover **without the fear of experiencing a data loss**.
 
-STRICT_SYNC mode ensures consistency and partition tolerance.
+**STRICT_SYNC mode ensures consistency and partition tolerance (CP).**
 
 #### ASYNC replication mode
 
@@ -142,21 +143,66 @@ replication tasks to the REPLICA instance, creates a custom thread pool pattern,
 and receives confirmations of successful replication from the REPLICATION
 instance.
 
+**ASYNC mode ensures system availability and partition tolerance (AP).**
+
 ![](/pages/clustering/replication/memgraph-replication-async.png)
 
-ASYNC mode ensures system availability and partition tolerance.
+### REPLICA state
 
-### Synchronizing instances
+There are 5 states in which replica can be at a point in time:
+- **READY** - replica is not lagging behind and all the data is replicated
+- **REPLICATING** - state the REPLICA is in when it's receiving transaction commits.
+If this action succeeds, the replica will again move to READY state. If it fails, it will move to INVALID.
+- **INVALID/BEHIND** - replica is behind, and needs to be synced with MAIN
+- **RECOVERY** - after MAIN detects that a REPLICA is invalid/behind, the REPLICA state is changed to RECOVERY.
+At this point, the transfer of durability files is performed in order for the REPLICA to catch up with MAIN
+- **DIVERGED** - this is a state in which REPLICA can be found if you're performing manual failover. Manual conflict
+resolution and recovery of the cluster is needed in order for this state to convert to READY.
 
-By comparing timestamps, the MAIN instance knows when a REPLICA instance is not
-synchronized and is missing some earlier transactions. The REPLICA instance is
+Based on RPC heartbeats, MAIN decides in which state the REPLICA is in at a point in time. REPLICA doesn't know by itself
+in which state it is in. It doesn't need to know that, as MAIN is the sole initiator of synchronization mechanisms when
+performing replication or recovery.
+
+// state diagram
+
+### How are instances synchronized?
+
+To understand how individual instances are keeping the state of the data in sync, we need to 
+understand the basic durability entities which are replicated from MAIN:
+- **Snapshots** - Point-in-time images of the full database state. Snapshots are the largest durability objects
+  that are replicated
+- **WALs (write-ahead logs)** - Append-only durability files that store sequences of committed deltas.
+  Because WALs are much smaller than snapshots, Memgraph prefers them for recovery when possible.
+- **Delta objects** - The smallest atomic updates produced when MAIN commits a transaction
+  (e.g., create/update/delete of nodes/edges/properties). A single transaction can have multiple deltas that need to be replicated
+  on commit. If the REPLICA is fully in sync, only Delta objects will be replicated during the commit time.
+  For more information about delta objects, please refer to the
+  [in-memory transactional storage mode guides](/fundamentals/storage-memory-usage#in-memory-analytical-storage-mode).
+
+<Callout type="info">
+
+To learn more about durability in Memgraph, check out the [data durability fundamentals](/fundamentals/data-durability).
+
+</Callout>
+
+Each transaction in Memgraph has an auto-incrementing timestamp which acts as a time variable.
+
+In the ideal scenario, the MAIN will just send the Delta objects to the REPLICA. In that case, REPLICA will
+transfer from READY to REPLICATING state, and then come back again to the READY state. Transfer of delta objects
+in real-time is the optimal approach, because they're the smallest units to be transferred over the network.
+This happy flow ensures the REPLICA is always in-sync with MAIN.
+
+There are a variety of scenarios when that happy flow can not be maintained, such as network issues, or failing of
+the instance. By comparing timestamps, the MAIN instance knows when a REPLICA instance is not
+synchronized and is missing some earlier transactions. **If the REPLICA is behind (INVALID replica state),
+it will have a lower timestamp than the MAIN instance.** The REPLICA instance is
 then set into a RECOVERY state, where it remains until it is fully synchronized
 with the MAIN instance.
 
 **The missing data changes can be sent as snapshots or WAL files, which are the main
-data durability files for Memgraph.** Snapshot files represent an image of the current state of 
-the database and are much larger than the WAL files, which only contain the changes, deltas.
-Because of the difference in file size, Memgraph favors the WAL files.
+data durability files for Memgraph.** Because of the difference in file size,
+Memgraph favors to send the WAL files over, rather than the snapshots. After all the
+necessary durability files have been sent over, REPLICA can then move to READY state.
 
 While the REPLICA instance is in the RECOVERY state, the MAIN instance
 calculates the optimal synchronization path based on the REPLICA instance's
@@ -171,7 +217,48 @@ The REPLICA instance can be synchronized using a snapshot and the 2 latest WAL
 files or using 5 WAL files. Both options would correctly synchronize the
 instances, but 5 WAL files are much smaller.
 
-The durability files are constantly being created, deleted, and updated. Also,
+If the RECOVERY did not succeed, the REPLICA again moves back and forth the INVALID and RECOVERY
+states. Reason for this can again be network issues, but also data corruption. If you believe the
+system is not able to recover at all, please contact our Enterprise support or Discord channel.
+
+### Replication of multi-tenant data (Enterprise)
+
+<Callout type="info">
+
+Memgraph's multi-tenancy offers management of multiple logically isolated databases. The word *database* here is a synonym
+to a *tenant*. Learn more about this in our [multi-tenancy documentation page](/database-management/multi-tenancy).
+
+</Callout>
+
+When running multi-tenancy, there can be multiple durability files sent over the network for
+each database. To ensure correct mapping between the MAIN and REPLICA databases, each database has its
+own database UUID. When creating a new database on MAIN, the database is also replicated to the REPLICAs,
+as well as the identical UUIDs of the databases. This ensures there is a mapping between the set of MAIN
+databases and the set of REPLICA databases.
+
+When sending replication data over the network, durability files are also assigned 
+the database UUID. It serves as a unique location of which database to apply the durability
+files to in the replicas.
+
+<Callout>
+
+Ensure replication / high-availability at the very beginning in order to make sure the correct information is replicated
+from MAIN to REPLICA. In this particular case, if you created databases respectively on the standalone
+instances, and then connected the cluster, it would not work because UUIDs are generated randomly.
+The operation would end up in a mismatch of database UUIDs, and you would not be able to recover the cluster.
+
+</Callout>
+
+### Advanced replication topics
+
+<Callout type="info">
+
+The following section explains highly technical topics, dedicated to those who would
+like to know more about technical implementations of replication in Memgraph.
+
+</Callout>
+
+The durability files are constantly being created, deleted, and appended to. Also,
 each replica could need a different set of files to sync. There are several ways
 to ensure that the necessary files persist and that instances can read the WAL
 files currently being updated without affecting the performance of the rest of
@@ -235,12 +322,7 @@ transactions which obstructed the snapshot isolation. To avoid this problem, the
 **timestamp on REPLICA instances isn't increased** because the read transactions
 don't produce any changes, so no deltas need to be timestamped.
 
-#### Incompatible instances
-
-To avoid issues when the durability files of two different database instances
-are stored in the same folder, a unique ID is assigned to each storage instance.
-The same ID is then assigned to the durability files. Replication uses the
-instance ID to validate that the files and the database are compatible.
+#### Epoch ID as a complement to timestamp ID
 
 A unique ID `epoch_id` is also assigned each time an instance is run as the MAIN
 instance in the replication cluster to check if the data is compatible for
@@ -255,5 +337,14 @@ indicate incomparability, thus preventing the original MAIN from reclaiming its
 original role.
 
 ![](/pages/clustering/replication/memgraph-replication-ids.png)
+
+#### System data replication
+
+We have outlined in the main section of this guide how graph data replication works.
+When we talk about data storage, we strictly mean the graph itself, along with the complementary
+performance and correctness data structures, such as nodes,  relationships, properties, indices,
+constraints, triggers, and streams.
+For replication support of non-graph data, such as authentication configurations, multi-tenant data, please refer 
+to the [system replication reference](/clustering/replication/system-replication).
 
 <CommunityLinks/>
