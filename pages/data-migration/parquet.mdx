@@ -1,0 +1,240 @@
+---
+title: Import data from Parquet files
+description: Leverage Parquet files in Memgraph operations. Our detailed guide simplifies the process for an enhanced graph computing journey.
+---
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+import { Tabs } from 'nextra/components'
+
+# Import data from Parquet file
+
+The data from Parquet files can be imported using the [`LOAD PARQUET` Cypher clause](#load-parquet-cypher-clause) from the local disk
+and from the s3.
+
+## `LOAD PARQUET` Cypher clause
+
+The `LOAD PARQUET` clause uses a background thread that reads column batches, assembles batch of 64K rows and puts it on the queue from
+where the main thread pulls the data. The main thread then reads row by row from the queue, binds the contents of the parsed row to the
+specified variable, populates the database if it is empty or appends new data to an existing dataset.
+
+### `LOAD PARQUET` clause syntax
+
+</Callout>
+
+The syntax of the `LOAD PARQUET` clause is:
+
+```cypher
+LOAD PARQUET FROM <parquet-location> AS <variable-name>
+```
+
+- TODO: (andi) Disk?
+- TODO: (andi) Measure the effect of IN_MEMORY_ANALYTICAL
+- TODO: (andi) Measure and/or describe USING PERIODIC COMMIT IMPROVEMENTS
+- TODO: (andi) S3 authentication
+- TODO: (andi) Describe how are null values handled
+- TODO: (andi) Here describe whether it is s3 or not
+- `<parquet-location>` is a string of the location of the Parquet file.<br/> Without a
+  s3:// prefix, it refers to a path on the local and with s3:// prefix, it pulls the file with specified URI from the S3.
+  There are no restrictions on where in
+  your file system the file can be located, as long as the path is valid (i.e.,
+  the file exists). If you are using Docker to run Memgraph, you will need to
+  [copy the files from your local directory into
+  Docker](/getting-started/first-steps-with-docker#copy-files-from-and-to-a-docker-container)
+  container where Memgraph can access them. <br/>
+
+* `<variable-name>` is a symbolic name representing the variable to which the
+  contents of the parsed row will be bound to, enabling access to the row
+  contents later in the query. The variable doesn't have to be used in any
+  subsequent clause.
+
+### `LOAD PARQUET` clause specificities
+
+When using the `LOAD PARQUET` clause please keep in mind:
+
+- The parser parses the values in their appropriate type so you should get the same type as in the Parquet file. Types `BOOL`, `INT8`, `INT16`, `INT32`, `INT64`, `UINT8`, `UINT16`, `UINT32`, `UINT64`,
+  `HALF_FLOAT`, `FLOAT`, `DOUBLE`, `STRING`, `LARGE_STRING`, `STRING_VIEW`, `DATE32`, `DATE64`, `TIME32`, `TIME64`, `TIMESTAMP`, `DURATION`, `DECIMAL128`, `DECIMAL256`, `BINARY`, `LARGE_BINARY`, `FIXED_SIZE_BINARY`,
+  `LIST` and `MAP` are supported. Unsupported types will be saved as string in Memgraph.
+
+- **The `LOAD PARQUET` clause is not a standalone clause**,  meaning a valid query
+  must contain at least one more clause, for example:
+
+  ```cypher
+  LOAD PARQUET FROM "/people.parquet" AS row
+  CREATE (p:People) SET p += row;
+  ```
+
+  In this regard, the following query will throw an exception:
+
+  ```cypher
+  LOAD PARQUET FROM "/file.parquet" AS row;
+  ```
+
+  **Adding a `MATCH` or `MERGE` clause before LOAD PARQUET** allows you to match certain
+  entities in the graph before running LOAD PARQUET, optimizing the process as
+  matched entities do not need to be searched for every row in the PARQUET file.  
+
+  But, the `MATCH` or `MERGE` clause can be used prior the `LOAD PARQUET` clause only
+  if the clause returns only one row. Returning multiple rows before calling the
+  `LOAD PARQUET` clause will cause a Memgraph runtime error.
+
+- **The `LOAD PARQUET` clause can be used at most once per query**, so queries like
+  the one below will throw an exception:
+
+  ```cypher
+  LOAD PARQUET FROM "/x.parquet" AS x
+  LOAD PARQUET FROM "/y.parquet" AS y
+  CREATE (n:A {p1 : x, p2 : y});
+  ```
+
+### Increase import speed
+
+The `LOAD PARQUET` clause will create relationships much faster and consequently
+speed up data import if you [create indexes](/fundamentals/indexes) on nodes or
+node properties once you import them:
+
+```cypher
+  CREATE INDEX ON :Node(id);
+```
+
+If the LOAD PARQUET clause is merging data instead of creating it, create indexes
+before running the LOAD PARQUET clause.
+
+TODO: (andi) Check that
+You can also speed up import if you switch Memgraph to [**analytical storage
+mode**](/fundamentals/storage-memory-usage#storage-modes). In the analytical
+storage mode there are no ACID guarantees besides manually created snapshots but
+it does **increase the import speed up to 6 times with 6 times less memory
+consumption**. After import you can switch the storage mode back to
+transactional and enable ACID guarantees.
+
+You can switch between modes within the session using the following query:
+
+```cypher
+STORAGE MODE IN_MEMORY_{TRANSACTIONAL|ANALYTICAL};
+```
+
+If you use `IN_MEMORY_ANALYTICAL` mode and have nodes and relationships stored in
+ separate PARQUET files, you can run multiple concurrent `LOAD PARQUET` queries to import data even faster.
+In order to achieve the best import performance, split your nodes and relationships
+files into smaller files and run multiple `LOAD PARQUET` queries in parallel. 
+The key is to run all `LOAD PARQUET` queries, which create nodes first. After that, run 
+all `LOAD PARQUET` queries that create relationships. 
+
+
+### Import multiple Parquet files with distinct graph objects
+
+In this example, the data is split across four files, each file contains nodes
+of a single label or relationships of a single type. 
+
+<Steps>
+
+  {<h3 className="custom-header">Download the files</h3>}
+
+  - [`people_nodes.parquet`](https://public-assets.memgraph.com/import-data/load-csv-cypher/multiple-types-nodes/people_nodes.parquet) is used to create nodes labeled `:Person`.<br/> The file contains the following data:
+    ```parquet
+    id,name,age,city
+    100,Daniel,30,London
+    101,Alex,15,Paris
+    102,Sarah,17,London
+    103,Mia,25,Zagreb
+    104,Lucy,21,Paris
+    ```
+- [`restaurants_nodes.parquet`](https://public-assets.memgraph.com/import-data/load-csv-cypher/multiple-types-nodes/restaurants_nodes.parquet) is used to create nodes labeled `:Restaurants`.<br/> The file contains the following data:
+    ```parquet
+    id,name,menu
+    200,Mc Donalds,Fries;BigMac;McChicken;Apple Pie
+    201,KFC,Fried Chicken;Fries;Chicken Bucket
+    202,Subway,Ham Sandwich;Turkey Sandwich;Foot-long
+    203,Dominos,Pepperoni Pizza;Double Dish Pizza;Cheese filled Crust
+    ```
+
+- [`people_relationships.parquet`](https://public-assets.memgraph.com/import-data/load-csv-cypher/multiple-types-nodes/people_relationships.parquet) is used to connect people with the `:IS_FRIENDS_WITH` relationship.<br/> The file contains the following data:
+    ```parquet
+    first_person,second_person,met_in
+    100,102,2014
+    103,101,2021
+    102,103,2005
+    101,104,2005
+    104,100,2018
+    101,102,2017
+    100,103,2001
+    ```
+-  [`restaurants_relationships.parquet`](https://public-assets.memgraph.com/import-data/load-csv-cypher/multiple-types-nodes/restaurants_relationships.parquet) is used to connect people with restaurants using the `:ATE_AT` relationship.<br/> The file contains the following data:
+    ```parquet
+    PERSON_ID,REST_ID,liked
+    100,200,true
+    103,201,false
+    104,200,true
+    101,202,false
+    101,203,false
+    101,200,true
+    102,201,true
+    ```
+
+  {<h3 className="custom-header">Check the location of the Parquet files</h3>}
+  If you are working with Docker, [copy the files from your local directory into
+  the Docker container](/getting-started/first-steps-with-docker#copy-files-from-and-to-a-docker-container)
+  so that Memgraph can access them.
+
+  {<h3 className="custom-header">Import nodes</h3>}
+
+  Each row will be parsed as a map, and the
+  fields can be accessed using the property lookup syntax (e.g. `id: row.id`).
+
+  The following query will load row by row from the file, and create a new node
+  for each row with properties based on the parsed row values:
+
+      ```cypher
+      LOAD PARQUET FROM "/path-to/people_nodes_wh.parquet" AS row
+      CREATE (n:Person {id: row.id, name: row.name, age: row.age, city: row.city});
+      ```
+
+  In the same manner, the following query will create new nodes for each restaurant:
+
+      ```cypher
+      LOAD PARQUET FROM "/path-to/restaurants_nodes.parquet" AS row
+      CREATE (n:Restaurant {id: row.id, name: row.name, menu: row.menu});
+      ```
+
+  {<h3 className="custom-header">Create indexes</h3>}
+
+  Creating an [index](/fundamentals/indexes) on a property used to connect nodes
+  with relationships, in this case, the `id` property of the `:Person` nodes,
+  will speed up the import of relationships, especially with large datasets:
+
+      ```cypher
+      CREATE INDEX ON :Person(id);
+      ```
+
+  {<h3 className="custom-header">Import relationships</h3>}
+  The following query will create relationships between the people nodes:
+
+  ```cypher
+  LOAD PARQUET FROM "/path-to/people_relationships.parquet" AS row
+  MATCH (p1:Person {id: row.first_person})
+  MATCH (p2:Person {id: row.second_person})
+  CREATE (p1)-[f:IS_FRIENDS_WITH]->(p2)
+  SET f.met_in = row.met_in;
+  ```
+
+  The following query will create relationships between people and restaurants where they ate:
+
+  ```cypher
+  LOAD PARQUET FROM "/path-to/restaurants_relationships.parquet" AS row
+  MATCH (p1:Person {id: row.PERSON_ID})
+  MATCH (re:Restaurant {id: row.REST_ID})
+  CREATE (p1)-[ate:ATE_AT]->(re)
+  SET ate.liked = ToBoolean(row.liked);
+  ```
+
+  {<h3 className="custom-header">Final result</h3>}
+  Run the following query to see how the imported data looks as a graph:
+
+  ```
+  MATCH p=()-[]-() RETURN p;
+  ```
+
+  ![](/pages/data-migration/csv/load_csv_restaurants_relationships.png)
+
+</Steps>
