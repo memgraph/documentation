@@ -1,6 +1,7 @@
 export default {
   "best-practices": "Best practices",
   "csv": "CSV",
+  "parquet": "PARQUET",
   "json": "JSON",
   "cypherl": "CYPHERL",
   "migrate-from-neo4j": "Migrate from Neo4j",
