@@ -1,0 +1,442 @@
+---
+title: Agents
+description: Memgraph Agents: Here to help you out in building Graph AI applications.
+---
+import { Callout, Steps } from 'nextra/components'
+
+
+# Memgraph Agents
+
+Memgraph Agents are specialized tools designed to streamline and enhance the development of Graph applications. These agents leverage Large Language Models (LLMs) to provide intelligent solutions for various graph-related tasks. By the nature of technology maturity, some agents may be experimental and are continuously evolving to better serve your needs.
+
+{<h3 className="custom-header">Available Agents</h3>}
+
+# SQL2Graph Agent 
+
+## Overview
+
+The **SQL2Graph Agent** is an intelligent database migration agent that transforms relational databases (MySQL, PostgreSQL) into graph databases using AI-powered analysis. 
+It leverages Large Language Models (LLMs) to understand the semantics of your relational schema and generate an optimized property graph model for Memgraph. The 
+agent enables interactive modeling and refinement of the graph schema, validation after the migration. 
+
+**Key Capabilities:**
+
+1. **Automatic Database Migration**: Performs end-to-end migration from SQL to graph with minimal user input. 
+2. **Interactive graph modeling**: Enables users to review and refine the generated graph model incrementally, before executing the migration.
+3. **Validation**: Provides pre- and post-migration validation to communicate the quality and correctness of the migration.
+
+
+The Agent supports two main **modeling strategies**:
+1. **Deterministic Strategy**: Rule-based mapping of tables to nodes and foreign keys to relationships.
+2. **LLM Strategy**: AI-powered analysis using LLMs to generate a semantically rich graph model.
+
+The agent can also be run in two **modes**:
+1. **Automatic Mode**: Fully automated migration without user interaction.
+2. **Incremental Mode**: Step-by-step review and refinement of the graph model before migration.
+
+These are controlled via CLI flags and environment variables.
+
+## How To Use The Agent
+
+From this point onward, it is assumed that you have Memgraph installed and running. If you haven't done so, please refer to the [Memgraph installation guide](https://memgraph.com/docs/memgraph/installation).
+
+Just make sure to start Memgraph with the `--schema-info-enabled=true` flag to enable schema information tracking:
+
+```bash
+docker run -p 7687:7687 memgraph/memgraph --schema-info-enabled
+```
+
+It is also assumed that you have a running instance of either PostgreSQL or MySQL with a sample database to migrate.
+
+### Installation
+
+In order to use you first need to clone the repository and install the dependencies:
+
+
+```bash
+# Clone the repository
+git clone https://github.com/memgraph/ai-toolkit
+
+# Navigate to the sql2graph directory
+cd agents/sql2graph
+
+# Install dependencies using uv
+uv pip install -e .
+```
+
+### Configuration
+
+The configuration enables you to control the agent flow via environment variables. The key information needed are the source database connection details, target Memgraph connection details, and LLM API keys and agent configuration. 
+
+Create a `.env` and fill the following variables:
+
+```bash
+# Source Database
+SOURCE_DB_TYPE=postgresql  # or mysql
+
+# PostgreSQL Configuration
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DATABASE=mydb
+POSTGRES_USER=username
+POSTGRES_PASSWORD=password
+POSTGRES_SCHEMA=public
+
+# MySQL Configuration (if using MySQL)
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_DATABASE=mydb
+MYSQL_USER=username
+MYSQL_PASSWORD=password
+
+# Target Memgraph Database
+MEMGRAPH_URL=bolt://localhost:7687
+MEMGRAPH_USERNAME=
+MEMGRAPH_PASSWORD=
+MEMGRAPH_DATABASE=memgraph
+
+# LLM API Keys (for AI-powered features)
+# Only provide the key for your chosen provider
+OPENAI_API_KEY=sk-...          # For GPT models
+# ANTHROPIC_API_KEY=sk-ant-...  # For Claude models
+# GOOGLE_API_KEY=AI...          # For Gemini models
+
+# Optional: Specify LLM model (defaults shown)
+# LLM_MODEL=gpt-4o-mini         # OpenAI default
+# LLM_MODEL=claude-3-5-sonnet-20241022  # Anthropic default
+# LLM_MODEL=gemini-2.0-flash-exp        # Google default
+
+# Migration Defaults (can be overridden via CLI flags)
+SQL2MG_MODE=automatic # Options: automatic, incremental
+SQL2MG_STRATEGY=deterministic # Options: deterministic, llm
+SQL2MG_META_POLICY=auto # Options: auto, reset, skip
+SQL2MG_LOG_LEVEL=INFO
+
+```
+
+There is an .env.example file in the `agents/sql2graph` directory that you can use as a template.
+
+**Important**: Ensure Memgraph is started with `--schema-info-enabled=true` for full functionality.
+
+#### Quick Start - Automatic Migration
+
+Run with default settings (automatic mode, deterministic strategy):
+
+```bash
+uv run main.py
+```
+
+The agent will:
+1. Validate your environment and database connections
+2. Analyze the source database schema
+3. Generate a complete graph model
+4. Execute the migration
+5. Validate the results
+
+In this mode, no user interaction is required, and the entire process is automated. This means the `SQL2MG_MODE` is set to `automatic`, and the SQL2MG_STRATEGY is set to `deterministic`. 
+`SQL2MG_MODE` refers **modeling mode**  and represents how much user interaction is involved, while `SQL2MG_STRATEGY` refers to how the graph model is generated.
+
+
+#### Refinement with Incremental Mode
+
+For more control, run in incremental mode to review and refine the model step-by-step:
+
+```bash
+uv run main.py --mode incremental
+```
+The agent will:
+1. Analyze the source database schema
+2. Generate an initial graph model
+3. Present each table's proposed transformation for review
+4. Allow you to accept, skip, or modify each table's mapping
+5. After reviewing all tables, optionally enter a refinement loop for final adjustments
+6. Execute the migration
+7. Validate the results
+
+This is predictable and repeatable flow so you can iteratively improve the graph model before migration.
+
+
+#### Interactive Migration with LLM
+
+Use LLM-powered modeling for AI driven design:
+
+```bash
+uv run main.py --strategy llm
+```
+
+The agent auto-detects which LLM provider to use based on available API keys. In this strategy, the agent will:
+1. Analyze your SQL schema semantically using LLM
+2. Generate an initial graph model with AI-optimized design
+3. Execute the migration
+4. Validate the results
+
+Keep in mind that in this mode, the entire migration is still automatic and LLM driven. 
+
+#### Incremental Migration with Review
+
+Control each step of the transformation:
+
+```bash
+uv run main.py --mode incremental --strategy llm
+```
+
+In incremental mode:
+1. The AI generates a complete graph model for all tables
+2. You review each table's mapping one at a time
+3. Accept or modify individual table transformations
+4. After processing all tables, optionally enter a refinement loop
+5. Interactively adjust the entire model before final migration
+
+
+## CLI Reference
+
+### Command-Line Options
+
+| Flag | Environment Variable | Description | Default |
+|------|---------------------|-------------|---------|
+| `--mode` | `SQL2MG_MODE` | `automatic` or `incremental` | interactive prompt |
+| `--strategy` | `SQL2MG_STRATEGY` | `deterministic` or `llm` | interactive prompt |
+| `--provider` | _(none)_ | `openai`, `anthropic`, or `gemini` | auto-detect from API keys |
+| `--model` | `LLM_MODEL` | Specific model name | provider default |
+| `--meta-graph` | `SQL2MG_META_POLICY` | `auto`, `skip`, or `reset` | `auto` |
+| `--log-level` | `SQL2MG_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
+
+### Usage Examples
+
+```bash
+# Use specific Gemini model
+uv run main.py --strategy llm --provider gemini --model gemini-2.0-flash-exp
+
+# Skip meta-graph comparison (treat as fresh migration)
+uv run main.py --meta-graph skip
+
+# Enable debug logging
+uv run main.py --log-level DEBUG
+
+# Fully configured non-interactive run
+uv run main.py \
+  --mode automatic \
+  --strategy deterministic \
+  --meta-graph reset \
+  --log-level INFO
+```
+
+---
+
+## LLM Provider Support
+
+### Provider Comparison
+
+| Provider | Models |
+|----------|--------|
+| **OpenAI** | GPT-4o, GPT-4o-mini |
+| **Anthropic** | Claude 3.5 Sonnet |
+| **Google** | Gemini 2.0 Flash |
+
+### Provider Selection
+
+The agent automatically selects a provider based on available API keys:
+1. Checks for `OPENAI_API_KEY`
+2. Falls back to `ANTHROPIC_API_KEY`
+3. Falls back to `GOOGLE_API_KEY`
+
+Override with `--provider` flag:
+
+```bash
+# Force Anthropic even if OpenAI key exists
+uv run main.py --strategy llm --provider anthropic
+```
+
+### Model Selection
+
+Each provider has sensible defaults:
+- **OpenAI**: `gpt-4o-mini` 
+- **Anthropic**: `claude-3-5-sonnet-20241022`
+- **Google**: `gemini-2.0-flash-exp` 
+
+Override with `--model` or `LLM_MODEL` env variable:
+
+```bash
+# Use more powerful OpenAI model
+uv run main.py --strategy llm --model gpt-4o
+
+# Or via environment variable
+export LLM_MODEL=claude-3-opus-20240229
+uv run main.py --strategy llm --provider anthropic
+```
+
+---
+
+## Interactive Features
+
+### Incremental Mode Workflow
+
+When you run with `--mode incremental`:
+
+1. **Initial Analysis**: Agent analyzes all tables and generates complete model
+2. **Table-by-Table Review**: 
+   - Shows proposed transformation for each table
+   - Displays nodes, relationships, and properties
+   - Options: Accept, Skip, or Modify
+3. **Post-Processing Options**:
+   - Accept entire model as-is
+   - Enter refinement loop for adjustments
+   - Abort migration
+
+### Refinement Loop Operations
+
+In the interactive refinement loop, you can:
+
+#### View Current Model
+```
+Current Graph Model:
+  Nodes: 12
+  Relationships: 15
+  Indexes: 18
+  Constraints: 8
+```
+
+#### Add Nodes
+```
+Enter operation: add node Customer
+Label: Customer
+Properties: id (int), name (string), email (string)
+```
+
+#### Modify Properties
+```
+Enter operation: make User.email required
+Creating uniqueness constraint on User.email
+```
+
+#### Add Relationships
+```
+Enter operation: add relationship PURCHASED from Customer to Product
+Creating PURCHASED relationship with properties:
+  - purchased_at (timestamp)
+  - quantity (int)
+```
+
+#### Remove Elements
+```
+Enter operation: remove index on User.created_at
+Removed index: User.created_at
+```
+
+#### Natural Language Modifications
+The AI interprets commands like:
+- "Make email unique on Customer nodes"
+- "Add an index on Product name and category"
+- "Remove the metadata property from all nodes"
+- "Change the OWNS relationship to HAS"
+
+---
+
+## Advanced Features
+
+### Meta-Graph Storage
+
+The agent tracks graph model evolution using a meta-graph:
+
+**Storage Location**: Memgraph database as special nodes with label `__MetaGraph__`
+
+**Contents**:
+- Previous node definitions
+- Previous relationship definitions
+- User-applied modifications
+- Migration timestamps
+
+**Policies**:
+- `auto` (default): Use meta-graph if available, skip if not
+- `skip`: Ignore meta-graph, treat as fresh migration
+- `reset`: Clear meta-graph, start from scratch
+
+### Change Detection
+
+In incremental mode with meta-graph enabled:
+- Detects added tables
+- Detects removed tables
+- Detects column changes (type, nullability, new columns)
+- Detects relationship changes
+- Shows diff view for each changed table
+
+### Validation System
+
+**Pre-Migration Validation**:
+- Node labels are valid
+- Properties have valid types
+- Relationships reference existing nodes
+- Indexes target existing properties
+- Constraints are consistent
+
+**Post-Migration Validation**:
+- Expected node counts match
+- Relationships connect correctly
+- Indexes were created
+- Constraints are enforced
+- No data loss occurred
+
+**Validation Reports**:
+```
+Validation Results:
+✅ Schema: 45 checks passed
+✅ Data: 12 tables verified
+⚠️  Warnings: 2
+   - Missing index on User.email (high selectivity)
+   - Large node degree on Product (>10k relationships)
+❌ Errors: 0
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### "API key must be set"
+**Problem**: LLM provider API key not found
+**Solution**: Set the appropriate environment variable:
+```bash
+export OPENAI_API_KEY=sk-...
+# or
+export ANTHROPIC_API_KEY=sk-ant-...
+# or  
+export GOOGLE_API_KEY=AI...
+```
+
+#### "Connection refused" to Memgraph
+**Problem**: Memgraph not running or wrong connection details
+**Solution**: 
+```bash
+# Start Memgraph with schema info enabled
+docker run -p 7687:7687 memgraph/memgraph --schema-info-enabled=true
+
+```
+
+## Architecture Overview
+
+If you like the implementation details, here is a high-level overview of the project structure:
+
+```
+sql2graph/
+├── main.py                    # CLI entry point
+├── core/
+│   ├── migration_agent.py     # Main orchestration
+│   └── hygm/                  # Graph modeling engine
+│       ├── hygm.py            # HyGM core
+│       ├── models/            # Data models
+│       ├── strategies/        # Modeling strategies
+│       └── validation/        # Validation system
+├── database/
+│   ├── analyzer.py            # Schema analysis
+│   ├── factory.py             # Database adapter factory
+│   └── adapters/              # DB-specific adapters
+├── query_generation/
+│   ├── cypher_generator.py    # Cypher query builder
+│   └── schema_utilities.py   # Schema helpers
+└── utils/
+    ├── environment.py         # Env validation
+    └── config.py              # Configuration
+```
+
+
