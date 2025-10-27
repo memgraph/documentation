@@ -19,6 +19,7 @@ export default {
   "degree_centrality": "degree_centrality",
   "distance_calculator": "distance_calculator",
   "elasticsearch_synchronization": "elasticsearch_synchronization",
+  "embeddings": "embeddings",
   "export_util": "export_util",
   "gnn_link_prediction": "gnn_link_prediction",
   "gnn_node_classification": "gnn_node_classification",
