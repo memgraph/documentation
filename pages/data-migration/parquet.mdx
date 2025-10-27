@@ -25,17 +25,16 @@ specified variable, populates the database if it is empty or appends new data to
 The syntax of the `LOAD PARQUET` clause is:
 
 ```cypher
-LOAD PARQUET FROM <parquet-location> AS <variable-name>
+LOAD PARQUET FROM <parquet-location> ( WITH CONFIG configs=configMap ) ? AS <variable-name>
 ```
 
+- TODO: (andi) config_map = {'aws_region': 'region', 'aws_access_key': 'acc_key', 'aws_secret_key': 'secret_key', 'aws_endpoint_url': 'endpoint_url'}
 - TODO: (andi) Disk?
 - TODO: (andi) Measure the effect of IN_MEMORY_ANALYTICAL
 - TODO: (andi) Measure and/or describe USING PERIODIC COMMIT IMPROVEMENTS
-- TODO: (andi) S3 authentication
 - TODO: (andi) Describe how are null values handled
-- TODO: (andi) Here describe whether it is s3 or not
 - `<parquet-location>` is a string of the location of the Parquet file.<br/> Without a
-  s3:// prefix, it refers to a path on the local and with s3:// prefix, it pulls the file with specified URI from the S3.
+  s3:// prefix, it refers to a path on the local and with s3:// prefix, it pulls the file with specified URI from the S3-compatible storage.
   There are no restrictions on where in
   your file system the file can be located, as long as the path is valid (i.e.,
   the file exists). If you are using Docker to run Memgraph, you will need to
@@ -43,7 +42,12 @@ LOAD PARQUET FROM <parquet-location> AS <variable-name>
   Docker](/getting-started/first-steps-with-docker#copy-files-from-and-to-a-docker-container)
   container where Memgraph can access them. <br/>
 
-* `<variable-name>` is a symbolic name representing the variable to which the
+- `<configs>` Represents an optional configuration map through which you can specify configuration options: `aws_region`, `aws_access_key`, `aws_secret_key` and `aws_endpoint_url`.
+  - `<aws_region>`: The region in which your S3 service is being located
+  - `<aws_access_key>`: Access key used to connect to S3 service
+  - `<aws_secret_key>`: Secret key used to connect S3 service
+  - `<aws_endpoint_url`>: Optional configuration parameter. Can be used to set the URL of the S3 compatible storage.
+- `<variable-name>` is a symbolic name representing the variable to which the
   contents of the parsed row will be bound to, enabling access to the row
   contents later in the query. The variable doesn't have to be used in any
   subsequent clause.
@@ -55,6 +59,10 @@ When using the `LOAD PARQUET` clause please keep in mind:
 - The parser parses the values in their appropriate type so you should get the same type as in the Parquet file. Types `BOOL`, `INT8`, `INT16`, `INT32`, `INT64`, `UINT8`, `UINT16`, `UINT32`, `UINT64`,
   `HALF_FLOAT`, `FLOAT`, `DOUBLE`, `STRING`, `LARGE_STRING`, `STRING_VIEW`, `DATE32`, `DATE64`, `TIME32`, `TIME64`, `TIMESTAMP`, `DURATION`, `DECIMAL128`, `DECIMAL256`, `BINARY`, `LARGE_BINARY`, `FIXED_SIZE_BINARY`,
   `LIST` and `MAP` are supported. Unsupported types will be saved as string in Memgraph.
+
+- Authentication parameters (`aws_region`, `aws_access_key`, `aws_secret_key` and `aws_endpoint_url`) can be provided in the `LOAD PARQUET` query using WITH CONFIG construct, through environment variables 
+  (`AWS_REGION`, `AWS_ACCESS_KEY`, `AWS_SECRET_KEY` and `AWS_ENDPOINT_URL`) and through run-time database settings. For setting authentication parameters through run-time settings, use `SET DATABASE SETTING <key> to <value>;`
+  query. Keys of this authentication parameters are `aws.access_key`, `aws.region`, `aws.secret_key` and `aws.endpoint_url`.
 
 - **The `LOAD PARQUET` clause is not a standalone clause**,  meaning a valid query
   must contain at least one more clause, for example:
@@ -100,12 +108,21 @@ node properties once you import them:
 If the LOAD PARQUET clause is merging data instead of creating it, create indexes
 before running the LOAD PARQUET clause.
 
-TODO: (andi) Check that
+
+The construct `USING PERIODIC COMMIT <BATCH_SIZE>` also improves the import speed because
+it optimizes some of the memory allocation patterns. In our benchmarks, this construct
+speeds up the execution from 25% to 35%.
+
+```cypher
+  USING PERIODIC COMMMIT 1024 LOAD PARQUET FROM "/x.parquet" AS x
+  CREATE (n:A {p1 : x, p2 : y});
+```
+
+
 You can also speed up import if you switch Memgraph to [**analytical storage
 mode**](/fundamentals/storage-memory-usage#storage-modes). In the analytical
-storage mode there are no ACID guarantees besides manually created snapshots but
-it does **increase the import speed up to 6 times with 6 times less memory
-consumption**. After import you can switch the storage mode back to
+storage mode there are no ACID guarantees besides manually created snapshots.
+After import you can switch the storage mode back to
 transactional and enable ACID guarantees.
 
 You can switch between modes within the session using the following query:
@@ -118,7 +135,7 @@ If you use `IN_MEMORY_ANALYTICAL` mode and have nodes and relationships stored i
  separate PARQUET files, you can run multiple concurrent `LOAD PARQUET` queries to import data even faster.
 In order to achieve the best import performance, split your nodes and relationships
 files into smaller files and run multiple `LOAD PARQUET` queries in parallel. 
-The key is to run all `LOAD PARQUET` queries, which create nodes first. After that, run 
+The key is to run all `LOAD PARQUET` queries which create nodes first. After that, run 
 all `LOAD PARQUET` queries that create relationships. 
 
 
