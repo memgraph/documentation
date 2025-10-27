@@ -1,0 +1,156 @@
+---
+title: K-nearest neighbours (KNN)
+description: Discover Memgraph's k-nearest neighbors algorithm for finding similar nodes based on cosine similarity. Access comprehensive documentation and examples to efficiently identify the most similar nodes in your graph data.
+---
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+import { Cards } from 'nextra/components'
+import GitHub from '/components/icons/GitHub'
+
+# K-nearest neighbours
+
+The **k-nearest neighbors** algorithm finds the k most similar nodes to each node in the graph based 
+on cosine similarity between their properties. The algorithm is based on the paper 
+["Efficient k-nearest neighbor graph construction for generic similarity measures"](https://dl.acm.org/doi/abs/10.1145/1963405.1963487)
+and offers efficient parallel computation.
+
+The algorithm calculates cosine similarity between node properties. If multiple properties are specified, 
+the similarities are averaged to produce a single similarity score. This makes it particularly useful for 
+finding nodes with similar embeddings, features, or other vector-based properties.
+
+<Cards>
+  <Cards.Card
+    icon={<GitHub />}
+    title="Source code"
+    href="https://github.com/memgraph/mage/tree/main/cpp/knn_module"
+  />
+</Cards>
+
+| Trait               | Value               |
+| ------------------- | ------------------- |
+| **Module type**     | algorithm           |
+| **Implementation**  | C++                 |
+| **Graph direction** | directed/undirected |
+| **Edge weights**    | unweighted          |
+| **Parallelism**     | parallel            |
+
+## Procedures
+
+<Callout type="info">
+You can execute this algorithm on [graph projections, subgraphs or portions of the graph](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph).
+</Callout>
+
+### `get()`
+
+The procedure finds the k most similar neighbors for each node based on cosine similarity between their properties.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `subgraph: Graph` (**OPTIONAL**) ➡ A specific subgraph, which is an [object of type Graph](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph) returned by the `project()` function, on which the algorithm is run. 
+If subgraph is not specified, the algorithm is computed on the entire graph by default.
+
+- `nodeProperties: string | List[string]` ➡ Property name(s) to calculate similarity on. If multiple properties are provided, similarities will be averaged. This field is required, and the properties must all be of List[double] type.
+- `topK: integer` ➡ Number of nearest neighbors to find for each node.
+- `similarityCutoff: double (default=0.0)` ➡ Minimum similarity threshold. Neighbors with similarity below this value will not be returned.
+- `concurrency: integer (default=1)` ➡ Number of parallel threads to use for computation.
+- `maxIterations: integer (default=100)` ➡ Number of iterations algorithm will perform, if not yet converted.
+- `sampleRate: double (default=0.5)` ➡ Sampling rate used to introduce new neighbours to respective nodes.
+- `deltaThreshold: double (default=0.001)` ➡ Early termination parameter based on the algorithm paper for convergence.
+- `randomSeed: integer` ➡ Random seed for deterministic results. If not specified, the seed will be randomly generated.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `node` ➡ Source node for which neighbors are found.
+- `neighbour` ➡ Neighbor node that is similar to the source node.
+- `similarity` ➡ Cosine similarity score between the source node and neighbor (0.0 to 1.0).
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+To find k-nearest neighbors for all nodes in the graph:
+
+```cypher
+CALL knn.get({nodeProperties: "embedding", concurrency: 10, topK: 2}) 
+YIELD node, neighbour, similarity
+CREATE (node)-[:IS_SIMILAR_TO {similarity: similarity}]->(neighbour);
+```
+
+To find k-nearest neighbors on a subgraph:
+
+```cypher
+MATCH (n:SpecialNode)
+WITH collect(n) as special_nodes
+WITH project(special_nodes, []) as subgraph 
+CALL knn.get(subgraph, {nodeProperties: "embedding", concurrency: 10, topK: 2}) 
+YIELD node, neighbour, similarity
+CREATE (node)-[:IS_SIMILAR_TO {similarity: similarity}]->(neighbour);
+```
+
+## Example
+
+<Steps>
+
+{<h3 className="custom-header"> Database state </h3>} 
+
+The database contains nodes with embedding properties:
+
+```cypher
+CREATE (:Node {id: 1, embedding: [0.1, 0.2, 0.3, 0.4]});
+CREATE (:Node {id: 2, embedding: [0.15, 0.25, 0.35, 0.45]});
+CREATE (:Node {id: 3, embedding: [0.9, 0.8, 0.7, 0.6]});
+CREATE (:Node {id: 4, embedding: [0.95, 0.85, 0.75, 0.65]});
+CREATE (:Node {id: 5, embedding: [0.2, 0.1, 0.4, 0.3]});
+```
+
+{<h3 className="custom-header"> Find k-nearest neighbors </h3>} 
+
+Find the 2 most similar neighbors for each node:
+
+```cypher
+CALL knn.get({nodeProperties: "embedding", topK: 2, concurrency: 4}) 
+YIELD node, neighbour, similarity
+RETURN node.id as source_node, neighbour.id as neighbor_node, similarity
+ORDER BY source_node, similarity DESC;
+```
+
+Results:
+
+```plaintext
++-------------------------+-------------------------+-------------------------+
+| source_node             | neighbor_node           | similarity              |
++-------------------------+-------------------------+-------------------------+
+| 1                       | 2                       | 0.999999                |
+| 1                       | 5                       | 0.894427                |
+| 2                       | 1                       | 0.999999                |
+| 2                       | 5                       | 0.894427                |
+| 3                       | 4                       | 0.999999                |
+| 3                       | 1                       | 0.447214                |
+| 4                       | 3                       | 0.999999                |
+| 4                       | 2                       | 0.447214                |
+| 5                       | 1                       | 0.894427                |
+| 5                       | 2                       | 0.894427                |
++-------------------------+-------------------------+-------------------------+
+```
+
+{<h3 className="custom-header"> Create similarity relationships </h3>} 
+
+Create relationships between similar nodes:
+
+```cypher
+CALL knn.get({nodeProperties: "embedding", topK: 2, similarityCutoff: 0.8}) 
+YIELD node, neighbour, similarity
+CREATE (node)-[:SIMILAR_TO {similarity: similarity}]->(neighbour);
+```
+
+{<h3 className="custom-header"> Multiple properties example </h3>} 
+
+When using multiple properties, similarities are averaged:
+
+```cypher
+CALL knn.get({nodeProperties: ["embedding", "features"], topK: 3, concurrency: 8}) 
+YIELD node, neighbour, similarity
+RETURN node.id as source_node, neighbour.id as neighbor_node, similarity
+ORDER BY source_node, similarity DESC;
+```
+
+</Steps>
