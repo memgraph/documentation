@@ -14,11 +14,29 @@ Memgraph at the moment doesn't support chaining REPLICA instances, that is, a RE
 instance cannot be replicated on another REPLICA instance.
 
 #### Can a REPLICA listen to multiple MAIN instances?
+Memgraph enforces the behaviour that REPLICA can only listen to exactly one MAIN instance.
 When starting any Memgraph instance, it is assigned a unique UUID of the instance. This is communicated
 when a replica is registered, to ensure REPLICA does not receive replication data from another MAIN instance.
 A REPLICA stores the UUID of the MAIN instance it listens to.
 The instance UUID of each Memgraph is persisted on disk across restarts, so this behaviour is enforced throughout the
 cluster lifecycle.
+
+#### Can a REPLICA create snapshots by itself?
+No. REPLICA can only receive snapshots during the recovery phase.
+
+#### Can a REPLICA create WALs by itself?
+Actually, this is being done in the system. When a MAIN is committing, it is sending the Delta objects to the REPLICA.
+Here the replica is doing two things:
+- it is applying the Delta objects from MAIN to catch up
+- it is writing the Delta objects to its own WAL files
+
+Why is this important?
+Picture the following scenario. REPLICA is up to date with the MAIN. MAIN is constantly sending delta objects to the REPLICA.
+After a while, the MAIN goes down and REPLICA is promoted to be the "new MAIN". The new MAIN would not have any durability
+files, if it didn't write WALs during its period of being a REPLICA. If the old MAIN rises, the new MAIN would perhaps have
+insufficient information to be sent to the new REPLICA. That's why REPLICA always needs to write down in WALs what it's
+being received.
+
 
 ### High availability with Docker
 
