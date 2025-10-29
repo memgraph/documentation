@@ -1,0 +1,346 @@
+---
+title: High availability reference queries
+description: Complete reference guide for all high availability commands in Memgraph, including cluster management, instance operations, and monitoring queries.
+---
+
+import { Callout } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# High availability reference queries
+
+This page provides a comprehensive reference for all commands available in Memgraph's high availability cluster management.
+
+## Cluster setup commands
+
+### ADD COORDINATOR
+
+Adds a coordinator instance to the cluster.
+
+```cypher
+ADD COORDINATOR coordinatorId WITH CONFIG {"bolt_server": boltServer, "coordinator_server": coordinatorServer, "management_server": managementServer};
+```
+
+**Parameters:**
+- `coordinatorId` (integer): Unique identifier for the coordinator
+- `bolt_server` (string): External bolt server endpoint for client connections
+- `coordinator_server` (string): Server endpoint for Raft communication
+- `management_server` (string): Server endpoint for health checks and cluster management
+
+**Example:**
+```cypher
+ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "127.0.0.1:7691", "coordinator_server": "127.0.0.1:10111", "management_server": "127.0.0.1:12111"};
+```
+
+<Callout type="info">
+This command needs to be run for all coordinators in the cluster. The order of adding coordinators and data instances doesn't matter.
+</Callout>
+
+### REGISTER INSTANCE
+
+Registers a data instance to the cluster.
+
+```cypher
+REGISTER INSTANCE instanceName ( AS ASYNC | AS STRICT_SYNC ) ? WITH CONFIG {"bolt_server": boltServer, "management_server": managementServer, "replication_server": replicationServer};
+```
+
+**Parameters:**
+- `instanceName` (string): Unique name for the data instance
+- `AS ASYNC | AS STRICT_SYNC` (string, optional): Optional replication mode (defaults to SYNC)
+- `bolt_server` (string): External bolt server endpoint
+- `management_server` (string): Server endpoint for coordinator communication
+- `replication_server` (string): Server endpoint for data replication
+
+**Replication modes:**
+- `ASYNC`: Asynchronous replication (fastest, potential data loss)
+- `SYNC`: Synchronous replication (balanced, minimal data loss)
+- `STRICT_SYNC`: Strict synchronous replication (slowest, no data loss)
+
+**Example:**
+```cypher
+REGISTER INSTANCE instance_1 AS SYNC WITH CONFIG {"bolt_server": "localhost:7687", "management_server": "instance1:13011", "replication_server": "instance1:10001"};
+```
+
+## Instance management commands
+
+### SET INSTANCE TO MAIN
+
+Promotes a data instance to become the main (writable) instance.
+
+```cypher
+SET INSTANCE instanceName TO main;
+```
+
+**Parameters:**
+- `instanceName` (string): Name of the instance to promote
+
+**Behavior:**
+- Registers all other instances as replicas to the new main
+- Fails if the target instance is unavailable
+- Fails if there's already a main instance in the cluster
+- Results in writing to the Raft log
+
+**Example:**
+```cypher
+SET INSTANCE instance_3 TO main;
+```
+
+### DEMOTE INSTANCE
+
+Demotes the current main instance to replica status.
+
+```cypher
+DEMOTE INSTANCE instanceName;
+```
+
+**Parameters:**
+- `instanceName` (string): Name of the instance to demote
+
+**Behavior:**
+- Manually demotes the main instance to replica
+- Requires manual promotion of another instance to main
+- Results in writing to the Raft log
+
+<Callout type="info">
+Combining `DEMOTE INSTANCE` and `SET INSTANCE TO MAIN` provides manual failover capability, useful during maintenance work.
+</Callout>
+
+### UNREGISTER INSTANCE
+
+Removes a data instance from the cluster.
+
+```cypher
+UNREGISTER INSTANCE instanceName;
+```
+
+**Parameters:**
+- `instanceName` (string): Name of the instance to remove
+
+**Requirements:**
+- The instance being unregistered must NOT be the main instance
+- The cluster must have an alive main instance during unregistration
+- The instance will be removed from the current main's replica set
+
+**Example:**
+```cypher
+UNREGISTER INSTANCE instance_2;
+```
+
+### REMOVE COORDINATOR
+
+Removes a coordinator instance from the cluster.
+
+```cypher
+REMOVE COORDINATOR coordinatorId;
+```
+
+**Parameters:**
+- `coordinatorId` (integer): ID of the coordinator to remove
+
+**Restrictions:**
+- Can only be executed on the leader coordinator
+- Cannot remove the current leader (prohibited by NuRaft)
+- To remove the current leader, first trigger a leadership change
+
+**Example:**
+```cypher
+REMOVE COORDINATOR 2;
+```
+
+## Cluster state management
+
+### FORCE RESET CLUSTER STATE
+
+Forces a reset of the cluster state when the cluster gets stuck.
+
+```cypher
+FORCE RESET CLUSTER STATE;
+```
+
+**Actions performed:**
+1. Demotes each alive instance to replica
+2. Chooses a new main instance from alive instances
+3. Instances that are down will be demoted to replicas when they come back up
+
+**Usage:**
+- Execute on the leader coordinator
+- Results in writing to the Raft log
+- Use only when the cluster is in an inconsistent state
+
+## Monitoring and information commands
+
+### SHOW INSTANCES
+
+Displays the state of all instances in the cluster.
+
+```cypher
+SHOW INSTANCES;
+```
+
+**Information displayed:**
+- Network endpoints for cluster management
+- Health state of each server
+- Role (main, replica, LEADER, FOLLOWER, or unknown)
+- Time since last response to leader's health ping
+
+**Behavior:**
+- Can be run on leader or followers
+- Followers forward the request to the leader for accurate information
+- If leader is unavailable, followers return instances with "down" health state
+
+**Example output:**
+```
+| name          | bolt_server    | coordinator_server | management_server | health | role     | last_succ_resp_ms |
+| ------------- | -------------- | ------------------ | ----------------- | ------ | -------- | ----------------  |
+| coordinator_1 | localhost:7691 | localhost:10111    | localhost:12121   | up     | leader   |  0                |
+| instance_1    | localhost:7687 |       ""           | localhost:13011   | up     | replica  |  39               |
+| instance_3    | localhost:7689 |       ""           | localhost:13013   | up     | main     |  91               |
+```
+
+### SHOW INSTANCE
+
+Shows information about the current coordinator instance.
+
+```cypher
+SHOW INSTANCE;
+```
+
+**Information returned:**
+- Instance name
+- External bolt server endpoint
+- Coordinator server for Raft communication
+- Management server for inter-coordinator communication
+- Cluster role (leader or follower)
+
+**Note:** If `ADD COORDINATOR` wasn't run for the current instance, the bolt server value will be empty.
+
+### SHOW REPLICATION LAG
+
+Displays the current replication lag for each instance.
+
+```cypher
+SHOW REPLICATION LAG;
+```
+
+**Information provided:**
+- Replication lag expressed as number of committed transactions
+- Made durable through snapshots and WALs
+- Useful for manual failover to check data loss risk
+
+**Usage:**
+- Run on the cluster's leader
+- Helps assess data consistency before failover operations
+
+## Configuration commands
+
+### SET COORDINATOR SETTING
+
+Configures various cluster settings at runtime.
+
+#### Enable reads on main
+
+```cypher
+SET COORDINATOR SETTING 'enabled_reads_on_main' TO 'true'/'false';
+```
+
+**Parameters:**
+- `'enabled_reads_on_main'` (string): Setting name
+- `'true'/'false'` (string): Boolean value as string
+
+Controls whether read queries are allowed on the main instance (default: false).
+
+#### Sync failover only
+
+```cypher
+SET COORDINATOR SETTING 'sync_failover_only' TO 'true'/'false';
+```
+
+**Parameters:**
+- `'sync_failover_only'` (string): Setting name
+- `'true'/'false'` (string): Boolean value as string
+
+Controls whether failover to async replicas is allowed (default: true).
+
+#### Maximum failover replica lag
+
+```cypher
+SET COORDINATOR SETTING 'max_failover_replica_lag' TO '10';
+```
+
+**Parameters:**
+- `'max_failover_replica_lag'` (string): Setting name
+- `'10'` (string): Numeric value as string representing transaction count
+
+Sets the maximum transaction lag allowed during failover. Replicas behind by more than this threshold become ineligible for failover.
+
+#### Maximum replica read lag
+
+```cypher
+SET COORDINATOR SETTING 'max_replica_read_lag_' TO '10';
+```
+
+**Parameters:**
+- `'max_replica_read_lag_'` (string): Setting name
+- `'10'` (string): Numeric value as string representing transaction count
+
+Controls the maximum allowed replica lag for read consistency. Replicas behind by more than this threshold are excluded from read query routing.
+
+### SHOW COORDINATOR SETTINGS
+
+Displays all current coordinator configuration settings.
+
+```cypher
+SHOW COORDINATOR SETTINGS;
+```
+
+Returns all runtime configuration options and their current values.
+
+## Connection and routing
+
+### Bolt+routing protocol
+
+When using high availability, connect to coordinators using the `neo4j://` scheme instead of `bolt://`:
+
+**Standard connection:**
+```
+bolt://<main_ip_address>
+```
+
+**HA connection with routing:**
+```
+neo4j://<coordinator_ip_address>
+```
+
+**Benefits:**
+- Automatic routing to current main instance
+- Prevents split-brain scenarios
+- Seamless failover handling
+- Write queries always go to the current main
+- Read queries can be distributed across replicas
+
+<Callout type="warning">
+Cluster setup commands (registration, coordinator management) must be done using standard `bolt://` connections, not `neo4j://` routing connections.
+</Callout>
+
+## Best practices
+
+### Command execution order
+
+1. **Start all instances** (coordinators and data instances)
+2. **Add coordinators** to the cluster
+3. **Register data instances** to the cluster
+4. **Set one instance as main**
+5. **Verify cluster state** with `SHOW INSTANCES`
+
+### Health monitoring
+
+- Use `SHOW INSTANCES` regularly to monitor cluster health
+- Check `SHOW REPLICATION LAG` before manual failovers
+- Monitor coordinator settings with `SHOW COORDINATOR SETTINGS`
+
+### Failover considerations
+
+- Use `SHOW REPLICATION LAG` to assess data loss risk
+- Consider replication modes when planning failovers
+- Test failover procedures in non-production environments
+
+<CommunityLinks/>
