@@ -3435,6 +3435,11 @@ export default withNextra({
         destination: '/getting-started/build-memgraph-from-source#run-memgraph',
         permanent: true
       },
+      {
+        source: '/data-migration/migrate-from-neo4j-using-single-cypher-query',
+        destination: 'data-migration/migrate-from-neo4j/using-single-cypher-query',
+        permanent: true
+      },
       
 
       // END: NEW MEMGRAPH LAB REDIRECTS
