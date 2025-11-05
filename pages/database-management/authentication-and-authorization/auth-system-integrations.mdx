@@ -67,6 +67,12 @@ The built-in SSO modules (used with the `saml-entra-id`, `saml-okta`,
 `oidc-entra-id`, and `oidc-okta` auth schemes) are further configured using
 **environment variables**. See their respective sections below for more details.
 
+> **Note:** Unlike the SSO modules, which can be configured entirely via
+**environment variables**, the LDAP module requires a configuration file
+(`/etc/memgraph/auth/ldap.yaml`). This means that in simple deployments (e.g.,
+Docker) configuration is less flexible and cannot yet be passed purely via
+environment variables.
+
 ## Auth module architecture
 
 ### Communication protocol
@@ -611,13 +617,13 @@ Python 3 libraries installed:
 The module configuration file is located at:
 
 ```
-/etc/memgraph/auth_module/ldap.yaml
+/etc/memgraph/auth/ldap.yaml
 ```  
 
 An example configuration file with all settings documented is provided at:
 
 ```
-/etc/memgraph/auth_module/ldap.example.yaml
+/etc/memgraph/auth/ldap.example.yaml
 ```
 
 For quick setup, you can copy the example configuration file into the module
@@ -628,12 +634,72 @@ configuration file.
 To enable LDAP authentication and authorization, start Memgraph with:
 
 ```
---auth-module-mappings=basic
+--auth-module-mappings=basic:/usr/lib/memgraph/auth_module/ldap.py
 ```
 
 You can also combine this with other configuration flags listed in
 [Configuration flags](#configuration-flags) as needed.
 
+#### Docker deployment note
+
+If you are deploying Memgraph with LDAP in Docker, you must ensure that roles
+exist before enabling authentication.
+
+You can achieve this easily using the `--init-file` flag, which runs a Cypher
+script before the database starts.
+
+A recommended workflow:
+
+<Steps>
+{<h4 className="custom-header">Create a local directory for your Docker setup</h4>}
+
+```
+my_ldap_init/
+├── Dockerfile
+└── roles.cypherl
+```
+
+{<h4 className="custom-header">Define roles in `roles.cypherl`</h4>}
+
+```cypher
+CREATE ROLE superuser;
+GRANT ALL PRIVILEGES TO superuser;
+CREATE ROLE moderator;
+```
+
+{<h4 className="custom-header">Create the Dockerfile</h4>}
+
+```dockerfile
+FROM memgraph/memgraph:latest
+
+USER root
+COPY roles.cypherl /usr/lib/memgraph/roles.cypherl
+USER memgraph
+```
+
+{<h4 className="custom-header">Build the Docker image</h4>}
+
+```
+docker build -t memgraph-ldap .
+```
+
+{<h4 className="custom-header">Run Memgraph without authentication first (optional)</h4>}
+
+This step is optional if you are embedding the init file in your image.
+You can skip it and go straight to the next step.
+
+{<h4 className="custom-header">Run Memgraph with LDAP enabled and init file executed on startup</h4>}
+
+```
+docker run -it -p 7687:7687 -p 7444:7444 \
+  memgraph-ldap \
+  --init-file=/usr/lib/memgraph/roles.cypherl \
+  --auth-module-mappings=basic:/usr/lib/memgraph/auth_module/ldap.py
+```
+</Steps>
+
+This avoids the need to manually stop and restart multiple containers or
+recreate volumes.
 
 #### Example LDAP directory
 
@@ -758,7 +824,7 @@ To enable LDAP integration specify the following flag:
 ```
 
 Also, add the following LDAP module configuration to
-`/etc/memgraph/auth_module/ldap.yaml`:
+`/etc/memgraph/auth/ldap.yaml`:
 
 ```yaml
 server:
