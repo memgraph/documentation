@@ -3435,6 +3435,82 @@ export default withNextra({
         destination: '/getting-started/build-memgraph-from-source#run-memgraph',
         permanent: true
       },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#flags',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#configuration-flags',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#communication',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#communication-protocol',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#single-role-response-backward-compatible',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#multiple-roles-support',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#multiple-roles-response-new-format',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#multiple-roles-support',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#single-role-in-array-format',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#multiple-roles-support',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#entra-id',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#configuration-1',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#okta',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#configuration-1',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#openid-connect-oidc',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#openid-connect',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#custom-auth',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#custom-oidc-provider',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#username',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#username-configuration',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#basic-username--password-auth',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#basic-authentication',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#ldap',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#ldap-authentication',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#example',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#example-ldap-directory',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#authentication',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#authentication-workflow',
+        permanent: true
+      },
+      {
+        source: '/database-management/authentication-and-authorization/auth-system-integrations#authorization',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations#authorization-and-role-mapping',
+        permanent: true
+      },
+
       
 
       // END: NEW MEMGRAPH LAB REDIRECTS
