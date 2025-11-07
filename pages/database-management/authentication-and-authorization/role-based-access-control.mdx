@@ -530,8 +530,8 @@ GRANT permission ON EDGES OF TYPE edge_type_list TO user_or_role;
 where:
 - `permission` is either `NOTHING`, or a comma-separated list containing one or
 more of: `CREATE`, `READ`, `UPDATE` or `DELETE`
-- edge_type_list is a set of edge types, separated with a comma and with a colon
-in front of each type (e.g. `:KNOWS, :FOLLOWS`), or `*` for all edge types
+- `edge_type_list` is a set of edge types, separated with a comma and with a
+colon in front of each type (e.g. `:KNOWS, :FOLLOWS`), or `*` for all edge types
 - `user_or_role` is the already created user or role in Memgraph
 
 Note that edge type permissions do not support MATCHING clauses: edges can only
@@ -590,6 +590,53 @@ For example, if a user has Role A granting `READ` on `:Item` and Role B granting
 `:Item` nodes. However, if Role C grants `NOTHING` on `:Item`, the explicit deny
 overrides all grants, and the user will have no access to any `:Item` nodes.
 
+##### When multiple rules match the same vertex
+
+When a vertex matches multiple label specifications, all matching rules are
+applied and their permissions are combined:
+
+- The effective permissions for a vertex are the union (OR) of all permissions
+from matching rules
+- If any matching rule grants `NOTHING`, the vertex is denied (explicit deny
+overrides all grants)
+- Rules are matched based on their label specification and matching mode
+
+For example, given the following rules:
+
+```cypher
+GRANT READ ON NODES CONTAINING LABELS :User MATCHING ANY TO charlie;
+GRANT UPDATE ON NODES CONTAINING LABELS :Employee MATCHING ANY TO charlie;
+```
+
+A vertex with labels `:User:Employee` matches both rules. `charlie` will have both
+`READ` and `UPDATE` permissions on this vertex, since permissions from all
+matching rules are combined.
+
+However, if we add an explicit deny:
+
+```cypher
+GRANT NOTHING ON NODES CONTAINING LABELS :Admin MATCHING ANY TO charlie;
+```
+
+A vertex with labels `:User:Employee:Admin` matches all three rules. `charlie`
+will have `NOTHING` (explicit deny) on this vertex, since `NOTHING` takes
+precedence over any granted permissions.
+
+The `MATCHING` mode also affects which rules apply:
+
+```cypher
+GRANT READ ON NODES CONTAINING LABELS :User, :Employee MATCHING EXACTLY TO charlie;
+GRANT UPDATE ON NODES CONTAINING LABELS :Employee MATCHING ANY TO charlie;
+```
+
+- A vertex with labels `:User:Employee` (only these two labels) matches the first
+rule exactly, and the second rule (has `:Employee`). `charlie` has both `READ`
+and `UPDATE`
+- A vertex with labels `:User:Employee:Admin` matches only the second
+rule (has `:Employee`, but not exactly `:User:Employee`). `charlie` has only
+`UPDATE`
+- A vertex with labels `:Employee` matches only the second rule. `charlie` has
+only `UPDATE`
 
 #### Show privileges for label-based access control
 
