@@ -423,8 +423,9 @@ relationships
 **Breaking change in v3.7.0**: Label-based access control has significant changes:
 
 - Label-based permissions have changed from a fixed hierarchical model to
-flexible discrete permission bits. The `CREATE_DELETE` permission has been split
-into separate `CREATE` and `DELETE` permissions.
+discrete permissions. The `CREATE_DELETE` permission has been split into
+separate `CREATE` and `DELETE` permissions. `CREATE`/`DELETE` no longer implies
+`UPDATE` and `READ`, and `UPDATE` no longer implies `READ`.
 
 - Fine-grained access control rules are now set on sets of labels, and these
 apply to nodes either `MATCHING ANY` of the given labels, or `MATCHING EXACTLY`
@@ -446,8 +447,8 @@ with the legend:
 - `permission` is either `NOTHING`, or a comma-separated list containing one
   or more of: `CREATE`, `READ`, `UPDATE` or `DELETE`
 - `label_list` is a set of node labels, separated with a comma and with a colon
-in front of each label (e.g. `:Person`), or `*` for specifying all labels in the
-graph
+in front of each label (e.g. `:Person`), or `*` for creating a global rule
+matching all labels in the graph
 - `user_or_role` is the already created user or role in Memgraph
 - `MATCHING ANY` means that the rule will apply to any vertex having one or more
 of the specified labels, regardless of any additional labels that the vertex may
@@ -455,6 +456,7 @@ have
 - `MATCHING EXACTLY` will mean that the rule will apply to any vertex having
 all of the labels specified, and no additional labels
 - If the `MATCHING` clause is omitted, `MATCHING ANY` is assumed by default
+- `MATCHING` clauses cannot be used when creating global (`*`) rules
 
 For example, granting a `READ` permission on any vertices with labels `User` or
 `Product` to user `charlie` would be written as:
@@ -514,7 +516,7 @@ Note that revoking all permissions for a label specification is not the same as
 `GRANT`ing `NOTHING`. The former removes already `GRANT`ed permissions for the
 label specification; the latter sets an explicit `DENY` on that label
 specification. This distinction is particularly important when it comes to
-merging permissions.
+[merging permissions](#merging-permissions).
 
 #### Relationship permissions
 
@@ -571,7 +573,7 @@ As with node permissions, revoking all permissions is not the same as granting
 NOTHING. Revoking removes granted permissions, while NOTHING creates an explicit
 DENY rule.
 
-#### Permission merging
+#### Merging permissions
 
 When a user has multiple roles, or when a user has both role-based and
 user-specific permissions, individual permission bits (`CREATE`, `READ`,
@@ -590,15 +592,15 @@ For example, if a user has Role A granting `READ` on `:Item` and Role B granting
 `:Item` nodes. However, if Role C grants `NOTHING` on `:Item`, the explicit deny
 overrides all grants, and the user will have no access to any `:Item` nodes.
 
-##### When multiple rules match the same vertex
+#### Combining matching rules
 
 When a vertex matches multiple label specifications, all matching rules are
 applied and their permissions are combined:
 
 - The effective permissions for a vertex are the union (OR) of all permissions
 from matching rules
-- If any matching rule grants `NOTHING`, the vertex is denied (explicit deny
-overrides all grants)
+- If any matching rule grants `NOTHING`, the vertex is denied: explicit deny
+overrides all grants
 - Rules are matched based on their label specification and matching mode
 
 For example, given the following rules:
@@ -635,7 +637,7 @@ and `UPDATE`
 - A vertex with labels `:User:Employee:Admin` matches only the second
 rule (has `:Employee`, but not exactly `:User:Employee`). `charlie` has only
 `UPDATE`
-- A vertex with labels `:Employee` matches only the second rule. `charlie` has
+- A vertex with label `:Employee` matches only the second rule. `charlie` has
 only `UPDATE`
 
 ##### Global permissions and label-specific rules
@@ -651,9 +653,9 @@ GRANT READ, UPDATE ON NODES CONTAINING LABELS * TO charlie;
 GRANT NOTHING ON NODES CONTAINING LABELS :Confidential MATCHING ANY TO charlie;
 ```
 
-- A vertex with labels `:User` has no specific rule match, so the global `*`
+- A vertex with label `:User` has no specific rule match, so the global `*`
 permission applies. `charlie` has `READ` and `UPDATE`
-- A vertex with labels `:Confidential` matches the specific rule. The specific
+- A vertex with label `:Confidential` matches the specific rule. The specific
 `NOTHING` rule overrides the global permission, so `charlie` has no access
 
 Another example:
@@ -663,9 +665,9 @@ GRANT READ ON NODES CONTAINING LABELS * TO charlie;
 GRANT UPDATE ON NODES CONTAINING LABELS :Document MATCHING ANY TO charlie;
 ```
 
-- A vertex with labels `:User` matches only the global rule. `charlie` has
+- A vertex with label `:User` matches only the global rule. `charlie` has
 `READ`
-- A vertex with labels `:Document` matches the specific rule. `charlie` has
+- A vertex with label `:Document` matches the specific rule. `charlie` has
 `UPDATE` from the specific rule, but the global `READ` is replaced by the
 specific rule, so `charlie` has only `UPDATE`
 - A vertex with labels `:Document:Draft` matches the specific rule (has
