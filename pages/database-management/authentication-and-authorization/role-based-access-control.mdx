@@ -20,18 +20,18 @@ privileges to roles, but for even more control over who can access certain data,
 Memgraph Enterprise offers [fine-grained access
 control](#fine-grained-access-control). Additionally, you can use [user
 profiles](/database-management/authentication-and-authorization/user-profiles)
-to set resource limits for users. 
+to set resource limits for users.
 
 <Callout type="info"> [Multi-role users and multi-tenant
 roles](/database-management/authentication-and-authorization/multiple-roles) for
 more information regarding assigning multiple roles to users or assigning roles
 for a specific database. </Callout>
 
-## User roles 
+## User roles
 
 Users can be assigned multiple roles simultaneously, with permissions from all
 roles being combined. User roles are abstractions that capture the privilege
-levels of a set of users. 
+levels of a set of users.
 
 For example, suppose that `Dominik` and `Marko` belong to the upper management
 of a certain company. It makes sense to grant them a set of privileges that
@@ -52,7 +52,9 @@ following rules:
   permission
 - **Database Access**: If any role grants access to a database, the user has
   access
-- **Fine-grained Permissions**: Combined using the same grant/deny logic
+- **Fine-grained Permissions**: Label-based and edge type permissions are merged
+using grant/deny logic. See [Label-based access control](#label-based-access-control)
+below for details on how fine-grained permissions work and are combined.
 
 To create a user role, run the following query:
 
@@ -186,7 +188,7 @@ roles. All system queries (auth, replication and multi-database) now target the
 default "memgraph" database. Meaning that in order to execute one of these
 queries, a user must have the appropriate privilege AND access to "memgraph"
 database. The recommendation is to use the default "memgraph" database as an
-admin/system database and store graphs under other databases. 
+admin/system database and store graphs under other databases.
 
 </Callout>
 
@@ -272,7 +274,7 @@ NULL        | DENY        | DENY
 NULL        | NULL        | DENY
 
 Once the privileges are changed, they take full effect once the user reconnects
-to the database. 
+to the database.
 
 #### Grant privileges
 
@@ -289,7 +291,7 @@ For example, to grant `AUTH` and `INDEX` privileges to users with the
 ```cypher
 GRANT AUTH, INDEX TO moderator:
 ```
-#### Deny privileges 
+#### Deny privileges
 
 Similarly, denying privileges is done using the `DENY` keyword instead of
 `GRANT`.
@@ -341,11 +343,11 @@ REVOKE ALL PRIVILEGES FROM <user>;
 The user needs to reconnect to the database for the changes to take effect.
 </Callout>
 
-<Callout type="info"> 
+<Callout type="info">
 If you get an error: `Vertex not created due to not having
 enough permission!` you probably need to grant the fine-grained access control
 to the user. The [fine-grained access control](#fine-grained-access-control)
-section provides more details. 
+section provides more details.
 </Callout>
 
 
@@ -380,7 +382,7 @@ SHOW PRIVILEGES FOR user_or_role ON DATABASE database_name;
 These commands return the aggregated privileges (including label-based
 permissions) for the user or role in the specified database context.
 
-**Note**: 
+**Note**:
 - For **users**: In multi-tenant environments, you must specify the database
   context.
 - For **roles**: This command does not require database specification, even in
@@ -407,14 +409,29 @@ adequate permission.
 
 ### Label-based access control
 
-Label-based permissions are divided into 4 hierarchical parts or levels:
+Label-based permissions are set using `CREATE`, `READ`, `UPDATE`, and `DELETE`
+permissions, along with `NOTHING` to deny access:
 - `NOTHING` - denies user visibility and manipulation over nodes and
-  relationships
+relationships
+- `CREATE` - grants the user creation of a node or relationship
 - `READ` - grants the user visibility over nodes and relationships
 - `UPDATE` - grants the user visibility and the ability to edit nodes and
-  relationships 
-- `CREATE_DELETE` - grants the user visibility, editing, creation, and deletion
-of a node or a relationship
+relationships
+- `DELETE` - grants the user deletion of a node or a relationship
+
+<Callout type="warning">
+**Breaking change in v3.7.0**: Label-based access control has significant changes:
+
+- Label-based permissions have changed from a fixed hierarchical model to
+flexible discrete permission bits. The `CREATE_DELETE` permission has been split
+into separate `CREATE` and `DELETE` permissions.
+
+- Fine-grained access control rules are now set on sets of labels, and these
+apply to nodes either `MATCHING ANY` of the given labels, or `MATCHING EXACTLY`
+the rule's label specification.
+
+See the [migration guide](link-to-migration-guide) for details.
+</Callout>
 
 #### Node permissions
 
@@ -422,72 +439,157 @@ Granting a certain set of node permissions can be done similarly to the clause
 privileges using the following command:
 
 ```cypher
-GRANT permission_level ON LABELS label_list TO user_or_role;
+GRANT permission ON NODES CONTAINING LABELS label_list [MATCHING ANY| MATCHING EXACTLY] TO user_or_role;
 ```
 
 with the legend:
-- `permission_level` is either `NOTHING`, `READ`, `UPDATE` or `CREATE_DELETE`
+- `permission` is either `NOTHING`, or a comma-separated list containing one
+  or more of: `CREATE`, `READ`, `UPDATE` or `DELETE`
 - `label_list` is a set of node labels, separated with a comma and with a colon
-in front of each label (e.g. `:L1`), or `*` for specifying all labels in the
+in front of each label (e.g. `:Person`), or `*` for specifying all labels in the
 graph
 - `user_or_role` is the already created user or role in Memgraph
+- `MATCHING ANY` means that the rule will apply to any vertex having one or more
+of the specified labels, regardless of any additional labels that the vertex may
+have
+- `MATCHING EXACTLY` will mean that the rule will apply to any vertex having
+all of the labels specified, and no additional labels
+- If the `MATCHING` clause is omitted, `MATCHING ANY` is assumed by default
 
-For example, granting a `READ` permission on labels `L1` and `L2` would be
-written as:
-
-```cypher
-GRANT READ ON LABELS :L1, :L2 TO charlie;
-```
-
-while granting both `READ` and `EDIT` permissions for all labels in the graph,
-would be written as:
-
-```cypher
-GRANT UPDATE ON LABELS * TO charlie;
-```
-
-For denying visibility to a node, the command would be written as:
+For example, granting a `READ` permission on any vertices with labels `User` or
+`Product` to user `charlie` would be written as:
 
 ```cypher
-GRANT NOTHING ON LABELS :L1 TO charlie;
+GRANT READ ON NODES CONTAINING LABELS :User, :Product MATCHING ANY TO charlie;
 ```
+
+Note that the `MATCHING ANY` clause may be omitted because this is the default
+for labels. The following statement behaves identically to the previous example:
+
+```cypher
+GRANT READ ON NODES CONTAINING LABELS :User, :Product TO charlie;
+```
+
+Multiple permissions can be granted using multiple statements, building up the
+allowed permissions piece-by-piece:
+
+```cypher
+GRANT CREATE ON NODES CONTAINING LABELS :Item TO charlie;
+GRANT READ ON NODES CONTAINING LABELS :Item TO charlie;
+GRANT UPDATE ON NODES CONTAINING LABELS :Item TO charlie;
+```
+
+Or they can be granted in a single statement using a comma-separated permission
+list:
+
+```cypher
+GRANT CREATE, READ, UPDATE ON NODES CONTAINING LABELS :Item TO charlie;
+```
+
+Global permissions for all labels can be granted using `*` instead of a list of
+labels:
+
+```cypher
+GRANT READ ON NODES CONTAINING LABELS * TO charlie;
+```
+
+For denying visibility to a node, use the `NOTHING` permission. Granting
+`NOTHING` creates an explicit DENY rule for the given label specification,
+which overrides any existing permissions.
+
+```cypher
+GRANT NOTHING ON NODES CONTAINING LABELS :User, :Person TO charlie;
+```
+
+Permissions can be revoked using the following syntax:
+
+```cypher
+REVOKE permission ON NODES CONTAINING LABELS label_list [MATCHING ANY| MATCHING EXACTLY] FROM user_or_role;
+```
+
+The rules for specifying `REVOKE` label specifications are identical to those
+when using `GRANT`.
+
+Note that revoking all permissions for a label specification is not the same as
+`GRANT`ing `NOTHING`. The former removes already `GRANT`ed permissions for the
+label specification; the latter sets an explicit `DENY` on that label
+specification. This distinction is particularly important when it comes to
+merging permissions.
 
 #### Relationship permissions
 
-Relationship permission queries are in essence the same as node permission
-queries, with the one difference that the name of the relationship type is
-`EDGE_TYPE` and not `LABEL`.
+Edge type permissions work similarly to node permissions, and have the same
+permission types (`CREATE`, `READ`, `UPDATE`, `DELETE`, and `NOTHING`).
 
-Granting a certain set of edge type permissions can be done similarly to the
-clause privileges by issuing the following command:
+Permissions can be granted using the following syntax:
 
 ```cypher
-GRANT permission_level ON EDGE_TYPES edge_type_list TO user_or_role;
-```
-
-with the same legend as the node permissions.
-
-For example, granting a `READ` permission on relationship type `:CONNECTS` would
-be written as:
-
-```cypher
-GRANT READ ON EDGE_TYPES :CONNECTS TO charlie;
-```
-
-#### Revoke label-based permissions
-
-To revoke any of the label-based permissions, users can use one of the following
-commands:
-
-```cypher
-REVOKE (LABELS | EDGE_TYPES) label_or_edge_type_list FROM user_or_role
+GRANT permission ON EDGES OF TYPE edge_type_list TO user_or_role;
 ```
 
 where:
-- `label_or_edge_type_list` is a list of labels or edge types with a colon in
-front of each label or edge type (or `*` for specifying all labels or edge
-types)
-- `user_or_role` is the existing user or role in Memgraph
+- `permission` is either `NOTHING`, or a comma-separated list containing one or
+more of: `CREATE`, `READ`, `UPDATE` or `DELETE`
+- edge_type_list is a set of edge types, separated with a comma and with a colon
+in front of each type (e.g. `:KNOWS, :FOLLOWS`), or `*` for all edge types
+- `user_or_role` is the already created user or role in Memgraph
+
+Note that edge type permissions do not support MATCHING clauses: edges can only
+have a single type, so matching modes are not applicable.
+
+For example, granting `READ` permission on edge type `:CONNECTS` to user charlie:
+
+```cypher
+GRANT READ ON EDGES OF TYPE :CONNECTS TO charlie;
+```
+
+Granting multiple permissions on multiple edge types:
+
+```cypher
+GRANT CREATE, READ, UPDATE ON EDGES OF TYPE :KNOWS, :FOLLOWS TO charlie;
+```
+
+Global permissions for all edge types:
+
+```cypher
+GRANT READ ON EDGES OF TYPE * TO charlie;
+```
+
+Revoking edge type permissions uses similar syntax:
+
+```cypher
+REVOKE permission ON EDGES OF TYPE edge_type_list FROM user_or_role;
+```
+
+For example:
+
+```cypher
+REVOKE CREATE ON EDGES OF TYPE :KNOWS FROM charlie;
+```
+
+As with node permissions, revoking all permissions is not the same as granting
+NOTHING. Revoking removes granted permissions, while NOTHING creates an explicit
+DENY rule.
+
+#### Permission merging
+
+When a user has multiple roles, or when a user has both role-based and
+user-specific permissions, individual permission bits (`CREATE`, `READ`,
+`UPDATE`, `DELETE`) are combined using OR logic for grants and explicit denies:
+
+- If any role or the user grants a specific permission on a label specification,
+the user has that permission
+- If any role or the user grants `NOTHING` (explicit deny) on a label
+specification, the user is denied all access to that label specification,
+overriding any grants
+- Each label specification is evaluated independently based on its label list
+and matching mode
+
+For example, if a user has Role A granting `READ` on `:Item` and Role B granting
+`UPDATE` on `:Item`, the user will have both `READ` and `UPDATE` permissions on
+`:Item` nodes. However, if Role C grants `NOTHING` on `:Item`, the explicit deny
+overrides all grants, and the user will have no access to any `:Item` nodes.
+
 
 #### Show privileges for label-based access control
 
@@ -520,7 +622,7 @@ SHOW PRIVILEGES FOR user_or_role ON DATABASE database_name;
 These commands return the aggregated privileges (including label-based
 permissions) for the user or role in the specified database context.
 
-**Note**: 
+**Note**:
 - For **users**: In multi-tenant environments, you must specify the database
   context.
 - For **roles**: This command does not require database specification, even in
@@ -534,8 +636,8 @@ To grant all privileges to a superuser (admin):
 ```
 GRANT ALL PRIVILEGES TO admin;
 GRANT DATABASE * to admin;
-GRANT CREATE_DELETE ON LABELS * TO admin;
-GRANT CREATE_DELETE ON EDGE_TYPES * TO admin;
+GRANT CREATE, READ, UPDATE, DELETE ON NODES CONTAINING LABELS * TO admin;
+GRANT CREATE, READ, UPDATE, DELETE ON EDGES OF TYPE * TO admin;
 ```
 
 To grant all read and write privileges:
@@ -543,22 +645,22 @@ To grant all read and write privileges:
 ```
 DENY ALL PRIVILEGES TO readWrite;
 GRANT CREATE, DELETE, MERGE, SET, REMOVE, INDEX, MATCH, STATS TO readWrite;
-GRANT CREATE_DELETE ON LABELS * TO readWrite;
-GRANT CREATE_DELETE ON EDGE_TYPES * TO readWrite;
+GRANT CREATE, READ, UPDATE, DELETE ON NODES CONTAINING LABELS * TO readWrite;
+GRANT CREATE, READ, UPDATE, DELETE ON EDGES OF TYPE * TO readWrite;
 ```
 
-To grant read only privileges: 
+To grant read only privileges:
 
 ```
 DENY ALL PRIVILEGES TO readonly;
 GRANT MATCH, STATS TO readonly;
-GRANT READ ON LABELS * TO readonly;
-GRANT READ ON EDGE_TYPES * TO readonly;
+GRANT READ ON NODES CONTAINING LABELS * TO readonly;
+GRANT READ ON EDGES OF TYPE * TO readonly;
 ```
 
 ### Examples
 
-Below are several examples of using the Enterprise security features. 
+Below are several examples of using the Enterprise security features.
 
 #### Grant read permissions
 
@@ -598,14 +700,10 @@ Since Bob is not an administrator, he was not able to see any data points in the
 graph. In other words, he does not have `READ` permission on the `DataPoint`
 label.
 
-Memgraph's label-based access control is hierarchically constructed, and the
-first permission one can be given on node labels or relationship edge types is
-`READ`.
-
 Alice now updates Bob's permissions by executing:
 
 ```cypher
-GRANT READ ON LABELS :DataPoint TO analyst;
+GRANT READ ON NODES CONTAINING LABELS :DataPoint TO analyst;
 ```
 
 Bob is now executing his queries normally and is able to get insights from the
@@ -627,7 +725,7 @@ doesn't have permission to view the relationships. The database administrator
 executes the following command to solve the problem:
 
 ```cypher
-GRANT READ ON EDGE_TYPES :NEXT TO analyst;
+GRANT READ ON EDGES OF TYPE :NEXT TO analyst;
 ```
 
 Since the users are initially constructed without any permission, they would
@@ -644,7 +742,7 @@ updating the classes of the data points if they are labeled incorrectly. For
 example, the class of one `DataPoint` might be 'dog', while in fact it is an
 'elephant', but it was wrongly selected in the rush of labeling many data
 points. Charlie needs to update the wrongly labeled data points, and he already
-has the IDs of all the nodes he must update. 
+has the IDs of all the nodes he must update.
 
 The administrator has already set up his account with the following commands:
 
@@ -656,8 +754,8 @@ GRANT DATABASE exampledb TO Charlie;
 
 GRANT MATCH, SET TO tester;
 
-GRANT READ ON LABELS :DataPoint TO tester;
-GRANT READ ON EDGE_TYPES :NEXT TO tester;
+GRANT READ ON NODES CONTAINING LABELS :DataPoint TO tester;
+GRANT READ ON EDGES OF TYPE :NEXT TO tester;
 ```
 
 He now has read privileges just like all the data analysts, but when he gets an
@@ -672,7 +770,7 @@ nodes in the graph. The database administrator needs to update Charlie's
 permissions and grant him access to update the node properties with:
 
 ```cypher
-GRANT UPDATE ON LABELS :DataPoint TO tester;
+GRANT UPDATE ON NODES CONTAINING LABELS :DataPoint TO tester;
 ```
 
 Charlie is now able to update the labeled categories of any data point in the
@@ -694,8 +792,8 @@ GRANT DATABASE exampledb TO David;
 
 GRANT MATCH, DELETE TO dataEngineer;
 
-GRANT UPDATE ON LABELS :DataPoint TO dataEngineer;
-GRANT UPDATE ON EDGE_TYPES :NEXT TO dataEngineer;
+GRANT UPDATE ON NODES CONTAINING LABELS :DataPoint TO dataEngineer;
+GRANT UPDATE ON EDGES OF TYPE :NEXT TO dataEngineer;
 ```
 
 However, `UPDATE` privilege capabilities only grant manipulation of properties,
@@ -705,13 +803,13 @@ not the nodes and relationships themselves. Therefore, the query:
 MATCH (n:DataPoint) WHERE localDateTime() - n.date > Duration({day:365}) DETACH DELETE n;
 ```
 
-results in an error. The permission that grants read, update, create, and delete
-rights over the nodes and relationships in the graph is `CREATE_DELETE`. By
+results in an error. To delete nodes and relationships, David needs both
+`CREATE` and `DELETE` permissions (as well as `READ` to query them). By
 executing the following commands:
 
 ```cypher
-GRANT CREATE_DELETE ON LABELS :DataPoint TO dataEngineer;
-GRANT CREATE_DELETE ON EDGE_TYPES :NEXT TO dataEngineer;
+GRANT CREATE, READ, DELETE ON NODES CONTAINING LABELS :DataPoint TO dataEngineer;
+GRANT CREATE, READ, DELETE ON EDGES OF TYPE :NEXT TO dataEngineer;
 ```
 
 The permission is executed on relationships as well, since David needs to detach
@@ -737,8 +835,8 @@ GRANT DATABASE exampledb TO Eve;
 
 GRANT MATCH, DELETE TO seniorEngineer;
 
-GRANT CREATE_DELETE ON LABELS * TO seniorEngineer;
-GRANT NOTHING ON LABELS :SecretLabel TO seniorEngineer;
+GRANT CREATE, READ, UPDATE, DELETE ON NODES CONTAINING LABELS * TO seniorEngineer;
+GRANT NOTHING ON NODES CONTAINING LABELS :SecretLabel TO seniorEngineer;
 ```
 
 When granting `NOTHING`, the user is denied both visibility and manipulation of
