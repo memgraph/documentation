@@ -3436,6 +3436,11 @@ export default withNextra({
         permanent: true
       },
       {
+        source: '/data-migration/migrate-from-neo4j-using-single-cypher-query',
+        destination: 'data-migration/migrate-from-neo4j/using-single-cypher-query',
+        permanent: true
+      },
+      {
         source: '/database-management/authentication-and-authorization/auth-system-integrations#flags',
         destination: '/database-management/authentication-and-authorization/auth-system-integrations#configuration-flags',
         permanent: true
