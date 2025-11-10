@@ -5,21 +5,30 @@ description: Easily transition from RDBMS to Memgraph using MAGE modules. Our de
 
 #  Migrate from RDBMS to Memgraph using MAGE modules
 
-This tutorial will help you import your data from a PostgreSQL database into Memgraph
-directly using the Memgraph MAGE [`migrate`](/advanced-algorithms/available-algorithms/migrate) module.
-The migrate module contains a comprehensive list of data sources from which you're able to migrate your data
-to Memgraph in one step.
+This tutorial will help you import your data from a PostgreSQL database into
+Memgraph directly using the Memgraph MAGE
+[`migrate`](/advanced-algorithms/available-algorithms/migrate) module. The
+migrate module contains a comprehensive list of data sources from which you're
+able to migrate your data to Memgraph in one step.
 
-This migration tutorial makes migration from an external source to Memgraph possible in one less step
-than described in [migrating from a RDBMS to Memgraph using CSV files](/data-migration/migrate-from-rdbms).
-The need for migrating directly from the source system arises from the fact that users so far needed to convert the
-data from the source system to CSV files in order to migrate to Memgraph.
-Make sure you read both tutorials to see what fits your needs.
+This migration tutorial makes migration from an external source to Memgraph
+possible in one less step than described in [migrating from a RDBMS to Memgraph
+using CSV files](/data-migration/migrate-from-rdbms). The need for migrating
+directly from the source system arises from the fact that users so far needed to
+convert the data from the source system to CSV files in order to migrate to
+Memgraph. Make sure you read both tutorials to see what fits your needs.
 
 In two of our blog posts, we've covered the [differences between relational and
 graph database](https://memgraph.com/blog/graph-database-vs-relational-database)
 and outlined the [benefits of graph
 databases](https://memgraph.com/blog/the-benefits-of-using-a-graph-database-instead-of-sql).
+
+
+<Callout type="info" title="SQL2Graph Agent"> 
+If you have a SQL data model and
+want to migrate to Memgraph, you can try out our [Agent](/ai-ecosystem/agents)
+that leverages the LLM to automate the process of modeling and migration.
+</Callout>
 
 ## Prerequisites
 
