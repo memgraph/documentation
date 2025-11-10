@@ -44,6 +44,26 @@ troubleshoot in production.
 
 ### Memgraph v3.7.0 - November 18th, 2025
 
+{<h4 className="custom-header">⚠️ Breaking changes</h4>}
+
+- Changed the way Memgraph is built (only relevant if you are building Memgraph
+  from source) and dropped support for Debian 11.
+  [#2691](https://github.com/memgraph/memgraph/pull/2691)
+- Changed fine-grained access configuration syntax and semantics to be more
+  flexible. Permissions can be set on groups of labels matching any or exactly
+  what is set in the `GRANT` statement. `CREATE`, `READ`, `UPDATE`, and
+  `DELETE` permissions are no longer organised in a hierarchy and can be
+  granted or revoked independently. This is a breaking change, and the
+  fine-grained access syntax and semantics of Memgraph 3.6 and earlier are no
+  longer supported. Migrated databases must be manually configured to grant
+  permissions based on the new rules.
+  [#3343](https://github.com/memgraph/memgraph/pull/3343)
+
+{<h4 className="custom-header">✨ New features</h4>}
+
+- Enable InList optimisation (caching a set for O(1) lookup) on more
+  expressions. Now `x IN range(0,1000)` and other expressions benefit from this
+  optimisation. [#3347](https://github.com/memgraph/memgraph/pull/3347)
 - Added support for loading Parquet files directly from the local filesystem or
   S3-like storage. Users can now use `LOAD PARQUET FROM /path/to/file.parquet;`
   in their Cypher queries for efficient bulk data import. The feature enhances
@@ -51,6 +71,94 @@ troubleshoot in production.
   significantly faster import performance for large datasets.
   [#3356](https://github.com/memgraph/memgraph/pull/3356)
   [#3378](https://github.com/memgraph/memgraph/pull/3378)
+  [#3395](https://github.com/memgraph/memgraph/pull/3395)
+- Allow the use of a self-signed identity server when authenticating via custom
+  SSO. Users can now add their identity server's certificates via the
+  `MEMGRAPH_SSO_CUSTOM_OIDC_EXTRA_CA_CERTS` env variable.
+  [#3389](https://github.com/memgraph/memgraph/pull/3389)
+
+{<h4 className="custom-header">🛠️ Improvements</h4>}
+
+- Added new toolchain (v7) with OpenMP, updated `clang`, `cmake`, `boost` and
+  more. Updated Linux distributions support: added Fedora 42 (x86_64 and
+  aarch64), Debian 13 (x86_64 and aarch64) and Rocky 10 (x86_64 only); dropped
+  support for Debian 11.
+  [#2691](https://github.com/memgraph/memgraph/pull/2691)
+- Expanded the list of supported Linux distributions by modifying bash scripts
+  to allow building on distributions that are binary compatible with supported
+  ones (e.g., Linux Mint -> Ubuntu; AlmaLinux -> CentOS). Fixed the IPO not
+  supported issue. [#3231](https://github.com/memgraph/memgraph/pull/3231)
+- Changed fine-grained access configuration syntax and semantics to be more
+  flexible. Permissions can be set on groups of labels matching any or exactly
+  what is set in the `GRANT` statement. `CREATE`, `READ`, `UPDATE`, and
+  `DELETE` permissions are no longer organised in a hierarchy and can be
+  granted or revoked independently. This is a breaking change, and the
+  fine-grained access syntax and semantics of Memgraph 3.6 and earlier are no
+  longer supported. Migrated databases must be manually configured to grant
+  permissions based on the new rules.
+  [#3343](https://github.com/memgraph/memgraph/pull/3343)
+- Added `relwithdebinfo` builds which use `malloc` instead of `jemalloc`; also
+  included `heaptrack` in all `relwithdebinfo` Docker images.
+  [#3346](https://github.com/memgraph/memgraph/pull/3346)
+- Improved `RECOVER SNAPSHOT` by not backing up snapshot and WAL files
+  indefinitely; instead, a single backup is performed. There will now be a
+  single .old directory under the snapshots and wals directories. Files already
+  present in the .old will be deleted every time a backup is performed. This
+  means only a single backup is present at any time.
+  [#3354](https://github.com/memgraph/memgraph/pull/3354)
+  [#3355](https://github.com/memgraph/memgraph/pull/3355)
+- Optimize how the WAL file gets finalised. If the replication process isn't
+  using the current WAL file, the file will be renamed instead of copied with
+  the new name. Users can expect better performance, especially when importing
+  data. [#3381](https://github.com/memgraph/memgraph/pull/3381)
+- Vector index recovery performance has been improved by fixing an issue where
+  the index specification wasn’t updated after resizing. This prevents
+  unnecessary resizing during recovery and speeds up startup. No user action is
+  required. [#3390](https://github.com/memgraph/memgraph/pull/3390)
+
+{<h4 className="custom-header">🐞 Bug fixes</h4>}
+
+- Fixed an issue where the Cartesian-to-HashJoin rewrite produced incorrect
+  results for nested property lookups. Queries using nested properties will now
+  always return correct results without requiring any user action.
+  [#3337](https://github.com/memgraph/memgraph/pull/3337) 
+- Fixed incorrect list comprehension aggregation logic that caused crashes in
+  certain queries. List comprehension queries now execute correctly without
+  errors. No user action is required.
+  [#3338](https://github.com/memgraph/memgraph/pull/3338)
+- Fixing Memgraph running under k8s. It was impossible to move the file from
+  `/tmp` to `/var/lib/memgraph` when Memgraph is deployed on K8s because `/tmp`
+  and `/var/lib/memgraph` were on different partitions. Data directory
+  (`/var/lib/memgraph`) is used through PVC, while /tmp is locally attached
+  storage. The replica instance will now save incoming WAL files and snapshots
+  to the `tmp` folder, located in the data directory. Previously, it was using
+  `/tmp`, but then an issue arose when attempting to move files from `/tmp` to
+  the data directory because the directories were located on different
+  partitions. [#3359](https://github.com/memgraph/memgraph/pull/3359)
+- Fixed certain list comprehensions that were previously not possible by fixing
+  the input of the operator tree. Queries like `RETURN [()-->()|1];` should
+  work now. [#3365](https://github.com/memgraph/memgraph/pull/3365)
+- Fixed dropping of the global edge index, which wasn't properly working,
+  causing a replica to crash. Users can now expect normal working when dropping
+  the global edge index.
+  [#3382](https://github.com/memgraph/memgraph/pull/3382)
+- Fixed the case when edge indices skip deleted edges regardless of transaction
+  start time and isolation level. Users who use edge indices will now see the
+  correct result based on their transaction and isolation.
+  [#3383](https://github.com/memgraph/memgraph/pull/3383)
+- Fixed an issue of planner incorrectly discarding edge type filters when using
+  global edge property indices `CREATE GLOBAL EDGE INDEX ON :(p);`. Queries
+  that use a global edge index no longer ignore edge type filters.
+  [#3392](https://github.com/memgraph/memgraph/pull/3392)
+- Replica will now send an `InProgressRpc` message when it takes more time to
+  make deltas durable. Previously, deltas might have been processed quickly,
+  but due to writing to disk, the `MAIN` process thought the replica was down.
+  This caused transactions to be aborted in `STRICT SYNC` mode. On the other
+  hand, in `SYNC` mode, the transaction would be committed, with the exception
+  being thrown, which would confuse the user about what actually happened in
+  the system. [#3400](https://github.com/memgraph/memgraph/pull/3400)
+- Fixed an issue where `SHOW INDEX INFO` would fail due to the presence of a
+  global edge index. [#3411](https://github.com/memgraph/memgraph/pull/3411)
 
 ### MAGE v3.7.0 - November 18th, 2025
 
