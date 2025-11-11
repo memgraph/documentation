@@ -7,6 +7,230 @@ import { Callout } from 'nextra/components'
 
 # Best practices when setting up high availability
 
-## How can I run data instances or coordinator instances?
+## Hardware requirements
 
-Depending on how configuration flags are set, Memgraph can run as a data instance or coordinator instance.
+### Coordinator RAM space
+
+When deploying coordinators to servers, you can use the instance of almost any size. Instances of 4GiB or
+8GiB will suffice since coordinators' job mainly involves network communication and storing Raft metadata. Coordinators
+and data instances can in theory be deployed on same servers (pairwise) but from the availability perspective, it is
+better to separate them physically. 
+
+### Coordinator disk space
+
+When setting up disk space, you should always make sure that there is at least space for `--snapshot-retention-count+1`
+snapshots + few WAL files. That's because we first create (N+1)th snapshot and then delete the oldest one so we
+could guarantee that the creation of a new snapshot ended successfully. This is especially important when using Memgraph HA in
+K8s, since in K8s there is usually a limit set on the disk space used.
+
+## Which command line flags should I set?
+
+### Data instance command line flags
+
+#### management port
+The flag `--management-port` is a novelty with respect to a Memgraph standalone instance. It serves for the leader coordinator
+to ping the health status of the data instance (`StateCheckRpc`). If you plan on using HA, then this flag needs to be configured.
+Since the best advice is to set every data instance on its own machine, you can set each of the data instances' management port
+to be identical for easier management. Setting this flag will create an RPC server on instances capable of responding
+to the coordinator’s RPC messages.
+
+
+**Example:** `--management-port=10000`
+
+#### storage wal enabled
+The flag `--storage-wal-enabled` needs to be set to `true` (enforced by default, so no need to configure).
+The flag controls whether WAL files will be created. WAL files are essential for replication, and it doesn't make sense to
+run any replication / HA without the flag. Memgraph will make an exception if the cluster tries to register an instance with 
+`--storage-wal-enabled=false`
+
+**Example:** `--storage-wal-enabled=true`
+
+### Coordinator command line flags
+
+#### coordinator id
+The flag `--cordinator-id` is a unique identifier of a coordinator. For each coordinator, set this to a different ID integer.
+
+**Example:** `--coordinator-id=1` for the first coordinator,
+`--coordinator-id=2` for the second coordinator, and `--coordinator-id=3` for the third coordinator.
+
+#### coordinator port
+
+The flag `--coordinator-port` is used for synchronization and log replication between the coordinators. Consider using the
+same identical port on every coordinator.
+
+**Example: `--coordinator-port=12000`**
+
+#### coordinator hostname
+
+`--coordinator-hostname` is used for followers to ping the leader coordinator on the correct IP address and return 
+the health state about the cluster. You can set this configuration flag to the IP address, the fully
+qualified domain name (FQDN), or even the DNS name. The suggested approach is to use DNS, otherwise, in case the IP address changes,
+network communication between instances in the cluster will stop working.
+
+If you're working with K8s especially, you should use DNS/FQDN, as the IP addresses are ephemeral.
+
+When testing on a local setup, the flag `--coordinator-hostname` should be set to `localhost` for each instance.
+
+#### management port
+
+The flag `--management-port` on the coordinator instance is used for the leader coordinator to get the health state from each of
+the other coordinators. Advice is to always use the same management port on all the instances. Setting this flag will create
+an RPC server on instances capable of responding to the coordinator’s RPC messages.
+
+**Example:** `--management-port=10000`
+
+#### instance health check frequency sec
+
+Flag `--instance-health-check-frequency-sec` is by default set to one second, meaning the coordinator will ping for the data instance
+liveness every second. There is no specific need to change this behaviour.
+
+**Example:** `--instance-health-check-frequency-sec=1`
+
+#### instance down timeout sec
+
+Flag `--instance-down-timeout-sec` is by default set to 5, meaning after 5 seconds of not receiving a successful health check, the
+data instance will be considered to be *down* by the coordinator. There is no specific need to change this behaviour.
+
+**Example:** `--instance-down-timeout-sec=1`
+
+### Health check behaviour
+
+Every `--instance-health-check-frequency-sec` seconds, the coordinator contacts each instance. 
+The instance is not considered to be down unless `--instance-down-timeout-sec` has passed and the instance hasn't responded to
+the coordinator in the meantime. 
+Users must set `--instance-health-check-frequency-sec` to be less or equal to the `--instance-down-timeout-sec` but we advise
+users to set `--instance-down-timeout-sec` to 
+a multiplier of `--instance-health-check-frequency-sec`. Set the multiplier coefficient to be N>=2. 
+For example, set `--instance-down-timeout-sec=5` and `--instance-health-check-frequency-sec=1` which will result in coordinator
+contacting each instance every second and 
+the instance is considered dead after it doesn't respond 5 times (5 seconds / 1 second).
+
+
+## Which environment variables should I use?
+
+There is an additional way to set high availability instances using environment variables.
+It is important to say that for the following configuration options, **you can either use
+environment variables or configuration flags**:
+
+- bolt port (`MEMGRAPH_BOLT_PORT`)
+- coordinator port (`MEMGRAPH_COORDINATOR_PORT`)
+- coordinator id (`MEMGRAPH_COORDINATOR_ID`)
+- management port (`MEMGRAPH_MANAGEMENT_PORT`)
+- path to nuraft log file (`MEMGRAPH_NURAFT_LOG_FILE`)
+- coordinator hostname (`MEMGRAPH_COORDINATOR_HOSTNAME`)
+
+#### Data instances
+
+Here are the environment variables you need to use to set data instance using only environment variables:
+
+```
+export MEMGRAPH_MANAGEMENT_PORT=13011
+export MEMGRAPH_BOLT_PORT=7692
+```
+
+When using any of these environment variables, flags `--bolt-port` and `--management-port` will be ignored.
+
+
+#### Coordinator instances
+
+```
+export MEMGRAPH_COORDINATOR_PORT=10111
+export MEMGRAPH_COORDINATOR_ID=1
+export MEMGRAPH_BOLT_PORT=7687
+export MEMGRAPH_NURAFT_LOG_FILE="<path-to-log-file>"
+export MEMGRAPH_COORDINATOR_HOSTNAME="localhost"
+export MEMGRAPH_MANAGEMENT_PORT=12121
+```
+
+When using any of these environment variables, flags for `--bolt-port`, `--coordinator-port`, `--coordinator-id` and
+`--coordinator-hostname` will be ignored.
+
+
+There is an additional environment variable you can use to set the path to the file with cypher queries used to start a
+high availability cluster. Here, you can use queries we define in the next chapter called User API.
+
+```
+export MEMGRAPH_HA_CLUSTER_INIT_QUERIES=<file_path>
+```
+After the coordinator instance is started, Memgraph will run queries one by one from this file to set up a high availability cluster.
+
+<Callout>
+You should either use the command line arguments, or the environment variables. Bear in mind that **environment variables
+have precedence over command line arguments**, and any set environment variable will override the command line argument.
+</Callout>
+
+
+## Coordinator settings
+
+### enabled reads on main
+
+There is a configuration option for specifying whether reads from the main are enabled. The configuration value is by
+default false but can be changed in run-time using the following query:
+
+```
+SET COORDINATOR SETTING 'enabled_reads_on_main' TO 'true'/'false' ;
+```
+
+### sync failover only
+
+Users can also choose whether failover to the async replica is allowed by using the following query:
+
+```
+SET COORDINATOR SETTING 'sync_failover_only' TO 'true'/'false' ;
+```
+
+### max failover replica lag
+
+Users can control the maximum transaction lag allowed during failover through configuration. If a replica is behind the main instance by more than the configured threshold, 
+that replica becomes ineligible for failover. This prevents data loss beyond the user's acceptable limits.
+
+To implement this functionality, we employ a caching mechanism on the cluster leader that tracks replicas' lag. The cache gets updated with each StateCheckRpc response from 
+replicas. During the brief failover window on the cooordinators' side, the new cluster leader may not have the current lag information for all data instances and in that case, 
+any replica can become main. This trade-off is intentional and it avoids flooding Raft logs with frequently-changing lag data while maintaining failover safety guarantees 
+in the large majority of situations.
+
+
+The configuration value can be controlled using the query:
+
+```
+SET COORDINATOR SETTING 'max_failover_replica_lag' TO '10' ;
+```
+
+By default, the value is `true`, which means that only sync replicas are candidates in the election. When the value is set to `false`, the async replica is also considered, but
+there is an additional risk of experiencing data loss. However, failover to an async replica may be necessary when other sync replicas are down and you want to
+manually perform a failover.
+
+### max_replica_read_lag_ ???
+
+
+Users can control the maximum allowed replica lag to maintain read consistency. When a replica falls behind the current main by more than `max_replica_read_lag_` transactions, the
+bolt+routing protocol will exclude that replica from read query routing to ensure data freshness.
+
+The configuration value can be controlled using the query:
+
+```
+SET COORDINATOR SETTING 'max_replica_read_lag_' TO '10' ;
+```
+
+## Observability
+
+Monitoring the cluster state is very important and tracking various metrics can provide us with a valuable information.
+Some of the important metrics that we collect on the cluster level are:
+- latencies RPC messages (p50, p90 and p99)
+- duration of the recovery process
+- time needed to react to changes in the cluster
+- number of different RPC messages exchanged
+- number of failed requests
+
+and many more.
+
+The aforementioned metrics are contained inside Memgraph's system metrics, which are available as a part of Memgraph Enterprise Edition.
+Memgraph exposes an HTTP port for these system metrics, and also offers a [Prometheus exporter](https://github.com/memgraph/prometheus-exporter)
+in order to forward these system metrics to Prometheus. The Prometheus exporter is also [enabled for helm charts, and can be configured within 
+the values file](https://github.com/memgraph/helm-charts/blob/main/charts/memgraph-high-availability/values.yaml).
+You can see the full list of metrics [on the system metrics monitoring page](/database-management/monitoring#system-metrics).
+
+## Data center failure
+
+The architecture we currently use allows us to deploy coordinators in 3 data centers and hence tolerate a failure of the whole data center. Data instances can be freely
+distributed in any way you want between data centers. The failover time will be slightly increased due to the network communication needed.

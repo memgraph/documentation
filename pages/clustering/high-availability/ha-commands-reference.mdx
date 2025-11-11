@@ -10,337 +10,171 @@ import {CommunityLinks} from '/components/social-card/CommunityLinks'
 
 This page provides a comprehensive reference for all commands available in Memgraph's high availability cluster management.
 
-## Cluster setup commands
+## User API
 
-### ADD COORDINATOR
+### Register instance
 
-Adds a coordinator instance to the cluster.
+Registering instances should be done on a single coordinator. The chosen coordinator will become the cluster's leader.
 
-```cypher
-ADD COORDINATOR coordinatorId WITH CONFIG {"bolt_server": boltServer, "coordinator_server": coordinatorServer, "management_server": managementServer};
-```
+Register instance query will result in several actions:
+1. The coordinator instance will connect to the data instance on the `management_server` network address.
+2. The coordinator instance will start pinging the data instance every `--instance-health-check-frequency-sec` seconds to check its status.
+3. Data instance will be demoted from main to replica.
+4. Data instance will start the replication server on `replication_server`.
 
-**Parameters:**
-- `coordinatorId` (integer): Unique identifier for the coordinator
-- `bolt_server` (string): External bolt server endpoint for client connections
-- `coordinator_server` (string): Server endpoint for Raft communication
-- `management_server` (string): Server endpoint for health checks and cluster management
-
-**Example:**
-```cypher
-ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "127.0.0.1:7691", "coordinator_server": "127.0.0.1:10111", "management_server": "127.0.0.1:12111"};
-```
-
-<Callout type="info">
-This command needs to be run for all coordinators in the cluster. The order of adding coordinators and data instances doesn't matter.
-</Callout>
-
-### REGISTER INSTANCE
-
-Registers a data instance to the cluster.
-
-```cypher
+```plaintext
 REGISTER INSTANCE instanceName ( AS ASYNC | AS STRICT_SYNC ) ? WITH CONFIG {"bolt_server": boltServer, "management_server": managementServer, "replication_server": replicationServer};
 ```
 
-**Parameters:**
-- `instanceName` (string): Unique name for the data instance
-- `AS ASYNC | AS STRICT_SYNC` (string, optional): Optional replication mode (defaults to SYNC)
-- `bolt_server` (string): External bolt server endpoint
-- `management_server` (string): Server endpoint for coordinator communication
-- `replication_server` (string): Server endpoint for data replication
+This operation will result in writing to the Raft log.
 
-**Replication modes:**
-- `ASYNC`: Asynchronous replication (fastest, potential data loss)
-- `SYNC`: Synchronous replication (balanced, minimal data loss)
-- `STRICT_SYNC`: Strict synchronous replication (slowest, no data loss)
+In case the main instance already exists in the cluster, a replica instance will be automatically connected to the main. Constructs ( AS ASYNC | AS STRICT_SYNC ) serve to specify
+instance's replication mode when the instance behaves as replica. You can only have `STRICT_SYNC` and `ASYNC` or `SYNC` and `ASYNC` replicas together in the cluster. Combining `STRICT_SYNC`
+and `SYNC` replicas together doesn't have proper semantic meaning so it is forbidden.
 
-**Example:**
-```cypher
-REGISTER INSTANCE instance_1 AS SYNC WITH CONFIG {"bolt_server": "localhost:7687", "management_server": "instance1:13011", "replication_server": "instance1:10001"};
+
+### Add coordinator instance
+
+The user can choose any coordinator instance to run cluster setup queries. This can be done before or after registering data instances,
+the order isn't important. 
+
+```plaintext
+ADD COORDINATOR coordinatorId WITH CONFIG {"bolt_server": boltServer, "coordinator_server": coordinatorServer}; 
 ```
 
-## Instance management commands
+<Callout type="info">
 
-### SET INSTANCE TO MAIN
+`ADD COORDINATOR` query needs to be run for all coordinators in the cluster.
 
-Promotes a data instance to become the main (writable) instance.
-
-```cypher
-SET INSTANCE instanceName TO main;
+```
+ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "127.0.0.1:7691", "coordinator_server": "127.0.0.1:10111", "management_server": "127.0.0.1:12111"};
+ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "127.0.0.1:7692", "coordinator_server": "127.0.0.1:10112", "management_server": "127.0.0.1:12112"};
+ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "127.0.0.1:7693", "coordinator_server": "127.0.0.1:10113", "management_server": "127.0.0.1:12113"};
 ```
 
-**Parameters:**
-- `instanceName` (string): Name of the instance to promote
+</Callout>
 
-**Behavior:**
-- Registers all other instances as replicas to the new main
-- Fails if the target instance is unavailable
-- Fails if there's already a main instance in the cluster
-- Results in writing to the Raft log
+### Remove coordinator instance
 
-**Example:**
-```cypher
-SET INSTANCE instance_3 TO main;
+If during cluster setup or at some later stage of cluster life, the user decides to remove some coordinator instance, `REMOVE COORDINATOR` query can be used.
+Only on leader can this query be executed in order to remove followers. Current cluster's leader cannot be removed since this is prohibited
+by NuRaft. In order to remove the current leader, you first need to trigger leadership change.
+
+```plaintext
+REMOVE COORDINATOR <COORDINATOR-ID>;
 ```
 
-### DEMOTE INSTANCE
 
-Demotes the current main instance to replica status.
+### Set instance to main
 
-```cypher
+Once all data instances are registered, one data instance should be promoted to main. This can be achieved by using the following query:
+
+```plaintext
+SET INSTANCE instanceName to main;
+```
+
+This query will register all other instances as replicas to the new main. If one of the instances is unavailable, setting the instance to main will not succeed.
+If there is already a main instance in the cluster, this query will fail. 
+
+This operation will result in writing to the Raft log.
+
+### Demote instance
+
+Demote instance query can be used by an admin to demote the current main to replica. In this case, the leader coordinator won't perform a failover, but as a user, 
+you should choose promote one of the data instances to main using the `SET INSTANCE `instance` TO main` query.
+
+```plaintext
 DEMOTE INSTANCE instanceName;
 ```
 
-**Parameters:**
-- `instanceName` (string): Name of the instance to demote
-
-**Behavior:**
-- Manually demotes the main instance to replica
-- Requires manual promotion of another instance to main
-- Results in writing to the Raft log
+This operation will result in writing to the Raft log.
 
 <Callout type="info">
-Combining `DEMOTE INSTANCE` and `SET INSTANCE TO MAIN` provides manual failover capability, useful during maintenance work.
+
+By combining the functionalities of queries `DEMOTE INSTANCE instanceName` and `SET INSTANCE instanceName TO main` you get the manual failover capability. This can be useful
+e.g during a maintenance work on the instance where the current main is deployed.
+
 </Callout>
 
-### UNREGISTER INSTANCE
 
-Removes a data instance from the cluster.
+### Unregister instance
 
-```cypher
+There are various reasons which could lead to the decision that an instance needs to be removed from the cluster. The hardware can be broken,
+network communication could be set up incorrectly, etc. The user can remove the instance from the cluster using the following query:
+
+```plaintext
 UNREGISTER INSTANCE instanceName;
 ```
 
-**Parameters:**
-- `instanceName` (string): Name of the instance to remove
+When unregistering an instance, ensure that the instance being unregistered is
+**not** the main instance. Unregistering main can lead to an inconsistent
+cluster state. Additionally, the cluster must have an **alive** main instance
+during the unregistration process. If no main instance is available, the
+operation cannot be guaranteed to succeed.
 
-**Requirements:**
-- The instance being unregistered must NOT be the main instance
-- The cluster must have an alive main instance during unregistration
-- The instance will be removed from the current main's replica set
+The instance requested to be unregistered will also be unregistered from the current main's replica set.
 
-**Example:**
-```cypher
-UNREGISTER INSTANCE instance_2;
-```
+### Force reset cluster state
 
-### REMOVE COORDINATOR
+In case the cluster gets stuck there is an option to do the force reset of the cluster. You need to execute a command on the leader coordinator. 
+This command will result in the following actions:
 
-Removes a coordinator instance from the cluster.
+1. The coordinator instance will demote each alive instance to replica.
+2. From the alive instance it will choose a new main instance.
+3. Instances that are down will be demoted to replicas once they come back up.
 
-```cypher
-REMOVE COORDINATOR coordinatorId;
-```
-
-**Parameters:**
-- `coordinatorId` (integer): ID of the coordinator to remove
-
-**Restrictions:**
-- Can only be executed on the leader coordinator
-- Cannot remove the current leader (prohibited by NuRaft)
-- To remove the current leader, first trigger a leadership change
-
-**Example:**
-```cypher
-REMOVE COORDINATOR 2;
-```
-
-## Cluster state management
-
-### FORCE RESET CLUSTER STATE
-
-Forces a reset of the cluster state when the cluster gets stuck.
-
-```cypher
+```plaintext
 FORCE RESET CLUSTER STATE;
 ```
 
-**Actions performed:**
-1. Demotes each alive instance to replica
-2. Chooses a new main instance from alive instances
-3. Instances that are down will be demoted to replicas when they come back up
+This operation will result in writing to the Raft log.
 
-**Usage:**
-- Execute on the leader coordinator
-- Results in writing to the Raft log
-- Use only when the cluster is in an inconsistent state
+### Show instances
 
-## Monitoring and information commands
+You can check the state of the whole cluster using the `SHOW INSTANCES` query. The query will display all the Memgraph servers visible in the cluster. With
+each server you can see the following information:
+ 1. Network endpoints they are using for managing cluster state
+ 2. Health state of server
+ 3. Role - main, replica, LEADER, FOLLOWER or unknown if not alive
+ 4. The time passed since the last response time to the leader's health ping 
 
-### SHOW INSTANCES
+This query can be run on either the leader or followers. Since only the leader knows the exact status of the health state and last response time, 
+followers will execute actions in this exact order:
+  1. Try contacting the leader to get the health state of the cluster, since the leader has all the information. 
+  If the leader responds, the follower will return the result as if the `SHOW INSTANCES` query was run on the leader.
+  2. When the leader doesn't respond or currently there is no leader, the follower will return all the Memgraph servers
+   with the health state set to "down".
 
-Displays the state of all instances in the cluster.
-
-```cypher
+```plaintext
 SHOW INSTANCES;
 ```
 
-**Information displayed:**
-- Network endpoints for cluster management
-- Health state of each server
-- Role (main, replica, LEADER, FOLLOWER, or unknown)
-- Time since last response to leader's health ping
 
-**Behavior:**
-- Can be run on leader or followers
-- Followers forward the request to the leader for accurate information
-- If leader is unavailable, followers return instances with "down" health state
+### Show instance
 
-**Example output:**
-```
-| name          | bolt_server    | coordinator_server | management_server | health | role     | last_succ_resp_ms |
-| ------------- | -------------- | ------------------ | ----------------- | ------ | -------- | ----------------  |
-| coordinator_1 | localhost:7691 | localhost:10111    | localhost:12121   | up     | leader   |  0                |
-| instance_1    | localhost:7687 |       ""           | localhost:13011   | up     | replica  |  39               |
-| instance_3    | localhost:7689 |       ""           | localhost:13013   | up     | main     |  91               |
-```
+You can check the state of the current coordinator to which you are connected by running the following query:
 
-### SHOW INSTANCE
-
-Shows information about the current coordinator instance.
-
-```cypher
+```plaintext
 SHOW INSTANCE;
 ```
 
-**Information returned:**
-- Instance name
-- External bolt server endpoint
-- Coordinator server for Raft communication
-- Management server for inter-coordinator communication
-- Cluster role (leader or follower)
+This query will return the information about:
+1. instance name 
+2. external bolt server to which you can connect using Memgraph clients 
+3. coordinator server over which Raft communication is done 
+4. management server which is also used for inter-coordinators communication and 
+5. cluster role: whether the coordinator is currently a leader of the follower.
 
-**Note:** If `ADD COORDINATOR` wasn't run for the current instance, the bolt server value will be empty.
+If the query `ADD COORDINATOR` wasn't run for the current instance, the value of the bolt server will be "".
 
-### SHOW REPLICATION LAG
+### Show replication lag
 
-Displays the current replication lag for each instance.
+The user can find the current replication lag on each instance by running `SHOW REPLICATION LAG` on the cluster's leader. The replication lag is expressed with
+the number of committed transactions. Such an info is made durable through snapshots and WALs so restarts won't cause the information loss. The information
+about the replication lag can be useful when manually performing a failover to check whether there is a risk of a data loss.
 
-```cypher
+```plaintext
 SHOW REPLICATION LAG;
 ```
-
-**Information provided:**
-- Replication lag expressed as number of committed transactions
-- Made durable through snapshots and WALs
-- Useful for manual failover to check data loss risk
-
-**Usage:**
-- Run on the cluster's leader
-- Helps assess data consistency before failover operations
-
-## Configuration commands
-
-### SET COORDINATOR SETTING
-
-Configures various cluster settings at runtime.
-
-#### Enable reads on main
-
-```cypher
-SET COORDINATOR SETTING 'enabled_reads_on_main' TO 'true'/'false';
-```
-
-**Parameters:**
-- `'enabled_reads_on_main'` (string): Setting name
-- `'true'/'false'` (string): Boolean value as string
-
-Controls whether read queries are allowed on the main instance (default: false).
-
-#### Sync failover only
-
-```cypher
-SET COORDINATOR SETTING 'sync_failover_only' TO 'true'/'false';
-```
-
-**Parameters:**
-- `'sync_failover_only'` (string): Setting name
-- `'true'/'false'` (string): Boolean value as string
-
-Controls whether failover to async replicas is allowed (default: true).
-
-#### Maximum failover replica lag
-
-```cypher
-SET COORDINATOR SETTING 'max_failover_replica_lag' TO '10';
-```
-
-**Parameters:**
-- `'max_failover_replica_lag'` (string): Setting name
-- `'10'` (string): Numeric value as string representing transaction count
-
-Sets the maximum transaction lag allowed during failover. Replicas behind by more than this threshold become ineligible for failover.
-
-#### Maximum replica read lag
-
-```cypher
-SET COORDINATOR SETTING 'max_replica_read_lag_' TO '10';
-```
-
-**Parameters:**
-- `'max_replica_read_lag_'` (string): Setting name
-- `'10'` (string): Numeric value as string representing transaction count
-
-Controls the maximum allowed replica lag for read consistency. Replicas behind by more than this threshold are excluded from read query routing.
-
-### SHOW COORDINATOR SETTINGS
-
-Displays all current coordinator configuration settings.
-
-```cypher
-SHOW COORDINATOR SETTINGS;
-```
-
-Returns all runtime configuration options and their current values.
-
-## Connection and routing
-
-### Bolt+routing protocol
-
-When using high availability, connect to coordinators using the `neo4j://` scheme instead of `bolt://`:
-
-**Standard connection:**
-```
-bolt://<main_ip_address>
-```
-
-**HA connection with routing:**
-```
-neo4j://<coordinator_ip_address>
-```
-
-**Benefits:**
-- Automatic routing to current main instance
-- Prevents split-brain scenarios
-- Seamless failover handling
-- Write queries always go to the current main
-- Read queries can be distributed across replicas
-
-<Callout type="warning">
-Cluster setup commands (registration, coordinator management) must be done using standard `bolt://` connections, not `neo4j://` routing connections.
-</Callout>
-
-## Best practices
-
-### Command execution order
-
-1. **Start all instances** (coordinators and data instances)
-2. **Add coordinators** to the cluster
-3. **Register data instances** to the cluster
-4. **Set one instance as main**
-5. **Verify cluster state** with `SHOW INSTANCES`
-
-### Health monitoring
-
-- Use `SHOW INSTANCES` regularly to monitor cluster health
-- Check `SHOW REPLICATION LAG` before manual failovers
-- Monitor coordinator settings with `SHOW COORDINATOR SETTINGS`
-
-### Failover considerations
-
-- Use `SHOW REPLICATION LAG` to assess data loss risk
-- Consider replication modes when planning failovers
-- Test failover procedures in non-production environments
 
 <CommunityLinks/>
