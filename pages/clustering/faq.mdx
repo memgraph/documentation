@@ -9,9 +9,23 @@ import { CommunityLinks } from '/components/social-card/CommunityLinks'
 
 ## High availability (general)
 
+#### Do I need Memgraph Enterprise license for replication / HA?
+Memgraph offers replication-only features within the community edition. However, you need to perform failover
+techniques manually, or keep the system as-is and ensure that the instances are not down at any time.
+
+For automatic failover, ensuring high availability, and observability of the whole cluster,
+you do need an Enterprise License, as it is a quality-of-life improvement, and requires little to no management.
+
+Enterprise license can be validated if injected correctly by issueing the following command:
+```
+SHOW LICENSE INFO;
+```
+
 #### Does Memgraph support chaining REPLICA instances?
 Memgraph at the moment doesn't support chaining REPLICA instances, that is, a REPLICA
-instance cannot be replicated on another REPLICA instance.
+instance cannot be replicated on another REPLICA instance. As the role of the instance is very
+distinct, the instance at a point in time can just be a MAIN instance, or a REPLICA instance, and
+can't serve as both.
 
 #### Can a REPLICA listen to multiple MAIN instances?
 Memgraph enforces the behaviour that REPLICA can only listen to exactly one MAIN instance.
@@ -22,7 +36,8 @@ The instance UUID of each Memgraph is persisted on disk across restarts, so this
 cluster lifecycle.
 
 #### Can a REPLICA create snapshots by itself?
-No. REPLICA can only receive snapshots during the recovery phase.
+No. REPLICA can only receive snapshots during the recovery phase. REPLICA instance is ensuring durability by
+receiving replication data from MAIN, and writing to its own disk storage.
 
 #### Can a REPLICA create WALs by itself?
 Actually, this is being done in the system. When a MAIN is committing, it is sending the Delta objects to the REPLICA.
@@ -37,19 +52,62 @@ files, if it didn't write WALs during its period of being a REPLICA. If the old 
 insufficient information to be sent to the new REPLICA. That's why REPLICA always needs to write down in WALs what it's
 being received.
 
+#### What is the difference between SYNC and STRICT_SYNC replication mode?
+In SYNC mode, if a REPLICA does not commit, MAIN will still continue and commit its own data. This is to ensure at least some
+availability, because if the commit didn't pass, the whole system would be stuck on writes. However, this doesn't guarantee
+data consistency across instances, as MAIN instance can be ahead of a SYNC replica.
 
-### High availability with Docker
+Because of this behaviour, Memgraph also supports STRICT_SYNC, which will commit the changes only if all instances agreed to
+commit. This ensures data consistency, but if any instance fails to commit, writes will not pass through MAIN.
 
-### High availability with Docker Compose
+### High availability (setting up the cluster)
+
+#### Which instance should I use to register the cluster?
+Registering instances should be done on a single coordinator. The chosen coordinator will become the cluster's leader.
+
+#### Can I combine all three replication modes for registering REPLICAs in the cluster?
+You can only have 2 combinations of different replication modes:
+- `STRICT_SYNC` and `ASYNC` replicas
+- `SYNC` and `ASYNC` replicas
+
+Combining `STRICT_SYNC` and `SYNC` replicas together doesn't have proper semantic meaning so it is forbidden. Reason for this
+is because MAIN will advance to commit the change in `SYNC` mode, while in the `STRICT_SYNC` mode it will fail.
+
+### High availability (architecture)
+
+#### Which replication mode should I use for achieving no data loss?
+For achieving no data loss, users should use the STRICT_SYNC replication mode, which is performing the two phase commit (2PC)
+protocol during the commit stage.
+
+#### Which replication mode should I use for achieving maximum performance?
+For achieving maximum performance, users should use the ASYNC replication mode, which is using a background thread to replicate
+data. This mode is eventually consistent, but the MAIN instance does not wait for the REPLICAs to commit their changes.
+
+#### Which replication mode should I use for cross datacenter deployment?
+This again depends on whether you're okay with data loss, or eventual consistency:
+- no data-loss is a must: STRICT_SYNC
+- eventual consistency is fine: ASYNC
+- performance: ASYNC
+- no specific requirements: SYNC (default)
 
 ### High availability with K8s
 
+#### Log files are filling up my disk space, what should I do?
+Memgraph currently does not support log retention. The best way currently to deal with this, is to specify the following
+two flags:
+- `--also-log-to-stderr=true`
+- `--log-file=` (yes, empty value)
 
+on every data and coordinator instance.
+Additional thing you can do is to tail the container logs into a log aggregator, such as [OpenSearch](https://opensearch.org/),
+with which you will gain even more searching capabilities when troubleshooting.
+
+If you don't have a log aggregator, the user is expected to periodically clean the log files, in order to manage the disk space,
+or reduce the log level of the instances.
+
+Log levels are a setting which can be changed at runtime, with the command:
+```
+SET DATABASE SETTING `log.level` TO 'INFO';
+```
 
 <CommunityLinks/>
-
-
-Validate license is correctly set
-All the following queries can be run by querying directly coordinator 1, which we can conventionally assume to be the leader for the cluster.
-
-First, let’s validate that the license has been correctly set, by executing the following query:
