@@ -1,0 +1,245 @@
+---
+title: embeddings
+description: Calculate sentence embeddings on node strings using pytorch.
+---
+
+# embeddings
+
+import { Cards } from 'nextra/components'
+import GitHub from '/components/icons/GitHub'
+import { Callout } from 'nextra/components'
+
+The embeddings module provides tools for calculating sentence embeddings on node strings using pytorch.
+
+<Cards>
+  <Cards.Card
+    icon={<GitHub />}
+    title="Source code"
+    href="https://github.com/memgraph/mage/blob/main/python/embeddings.py"
+  />
+</Cards>
+
+| Trait               | Value               |
+| ------------------- | ------------------- |
+| **Module type**     | algorithm           |
+| **Implementation**  | Python              |
+| **Parallelism**     | parallel            |
+
+
+## Procedures
+
+### `node_sentence()`
+
+The procedure computes the sentence embeddings on the string properties of nodes. Embeddings are 
+created as a property of the nodes in the graph.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `input_nodes: List[Vertex]` (**OPTIONAL**) ➡ The list of nodes to compute the embeddings for. If not provided, the embeddings are computed for all nodes in the graph.
+- `configuration`: (`mgp.Map`, **OPTIONAL**): User defined parameters from query module. Defaults to `{}`.
+
+**Configuration options:**
+
+| Name                       | Type         | Default           | Description                                                                                              |
+|----------------------------|--------------|-------------------|----------------------------------------------------------------------------------------------------------|
+| `embedding_property`       | string       | `"embedding"`     | The name of the property to store the embeddings in.                                                     |
+| `excluded_properties`      | List[string] | `[]`              | The list of properties to exclude from the embeddings computation.                                       |
+| `model_name`               | string       | `"all-MiniLM-L6-v2"` | The name of the model to use for the embeddings computation, provided by the `sentence-transformers` library. |
+| `return_embeddings`        | bool         | `False`           | Whether to return the embeddings as an additional output or not.                                                                 |
+| `batch_size`               | int          | `2000`            | The batch size to use for the embeddings computation.                                                    |
+| `chunk_size`               | int          | `48`              | The number of batches per "chunk". This is used when computing embeddings across multiple GPUs, as this has to be done by spawning multiple processes. Each spawned process computes the embeddings for a single chunk. |
+| `device`                   | NULL\|string\| int\|List[string\|int] | `NULL` | The device to use for the embeddings computation (see below).                                                                                                      |
+
+<Callout type="info">
+The `device` parameter can be one of the following:
+    - `NULL` (default) - Use first GPU if available, otherwise use CPU.
+    - `"cpu"` - Use CPU for computation.
+    - `"cuda"` or `"all"` - Use all available CUDA devices for computation.
+    - `"cuda:id"` - Use a specific CUDA device for computation.
+    - `id` - Use a specific device for computation.
+    - `[id1, id2, ...]` - Use a list of device ids for computation.
+    - `["cuda:id1", "cuda:id2", ...]` - Use a list of CUDA devices for computation.
+
+**Note**: If you're running on a GPU device, make sure to start your container
+with the `--gpus=all` flag.  
+For more details, see the [Install MAGE
+documentation](/advanced-algorithms/install-mage).
+</Callout>
+
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `success: bool` ➡ Whether the embeddings computation was successful.
+- `embeddings: List[List[float]]|NULL` ➡ The list of embeddings. Only returned if the 
+`return_embeddings` parameter is set to `true` in the configuration, otherwise `NULL`.
+- `dimension: int` ➡ The dimension of the embeddings.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+To compute the embeddings across the entire graph with the default parameters,
+use the following query: 
+
+```cypher
+CALL embeddings.node_sentence()
+YIELD success;
+```
+
+To compute the embeddings for a specific list of nodes, use the following query:
+
+
+```cypher
+MATCH (n)
+WITH n ORDER BY id(n)
+LIMIT 5
+WITH collect(n) AS subset
+CALL embeddings.node_sentence(subset)
+YIELD success;
+```
+
+To run the computation on specific device(s), use the following query:
+
+```cypher
+WITH {device: "cuda:1"} AS configuration
+CALL embeddings.node_sentence(NULL, configuration)
+YIELD success;
+```
+
+To return the embeddings as an additional output, use the following query:
+
+```cypher
+WITH {return_embeddings: True} AS configuration
+CALL embeddings.node_sentence(NULL, configuration)
+YIELD success, embeddings;
+```
+
+
+### `text()`
+
+This procedure can be used to return a list of embeddings when given a list of strings.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `strings: List[string]` ➡ The list of strings to compute the embeddings for.
+- `configuration: mgp.Map` (**OPTIONAL**) ➡ User defined parameters from query module. Defaults to `{}`.
+
+**Configuration options:**
+
+| Name                       | Type         | Default           | Description                                                                                              |
+|----------------------------|--------------|-------------------|----------------------------------------------------------------------------------------------------------|
+| `model_name`               | string       | `"all-MiniLM-L6-v2"` | The name of the model to use for the embeddings computation, provided by the `sentence-transformers` library. |
+| `batch_size`               | int          | `2000`            | The batch size to use for the embeddings computation.                                                    |
+| `chunk_size`               | int          | `48`              | The number of batches per "chunk". This is used when computing embeddings across multiple GPUs, as this has to be done by spawning multiple processes. Each spawned process computes the embeddings for a single chunk. |
+| `device`                   | NULL\|string\| int\|List[string\|int] | `NULL` | The device to use for the embeddings computation.                                                                                                      |
+
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `success: bool` ➡ Whether the embeddings computation was successful.
+- `embeddings: List[List[float]]` ➡ The list of embeddings.
+- `dimension: int` ➡ The dimension of the embeddings.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+To compute the embeddings for a list of strings, use the following query:
+
+```cypher
+CALL embeddings.text(["Hello", "World"])
+YIELD success, embeddings;
+```
+
+### `model_info()`
+
+The procedure returns the information about the model used for the embeddings computation.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `configuration: mgp.Map` (**OPTIONAL**) ➡ User defined parameters from query module. Defaults to `{}`.
+The key `model_name` is used to specify the name of the model to use for the embeddings computation.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `model_info: mgp.Map` ➡ The information about the model used for the embeddings computation.
+
+| Name                       | Type         | Default           | Description                                                                                              |
+|----------------------------|--------------|-------------------|----------------------------------------------------------------------------------------------------------|
+| `model_name`               | string       | `"all-MiniLM-L6-v2"` | The name of the model to use for the embeddings computation, provided by the `sentence-transformers` library. |
+| `dimension`                | int          | `384`               | The dimension of the embeddings. |
+| `max_seq_length`           | int          | `256`               | The maximum sequence length. |
+
+## Example
+
+Create the following graph:
+
+```cypher
+CREATE (a:Node {id: 1, Title: "Stilton", Description: "A stinky cheese from the UK"}),
+(b:Node {id: 2, Title: "Roquefort", Description: "A blue cheese from France"}),
+(c:Node {id: 3, Title: "Cheddar", Description: "A yellow cheese from the UK"}),
+(d:Node {id: 4, Title: "Gouda", Description: "A Dutch cheese"}),
+(e:Node {id: 5, Title: "Parmesan", Description: "An Italian cheese"}),
+(f:Node {id: 6, Title: "Red Leicester", Description: "The best cheese in the world"});
+```
+
+Run the following query to compute the embeddings:
+
+```cypher
+CALL embeddings.node_sentence()
+YIELD success;
+
+MATCH (n) 
+WHERE n.embedding IS NOT NULL 
+RETURN n.Title, n.embedding;
+```
+
+Results:
+
+```plaintext
++---------+
+| success |
++---------+
+| true    |
++---------+
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+| n.Title                                                              | n.embedding                                                          |
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+| "Stilton"                                                            | [-0.0485366, -0.021823, 0.0159757, 0.0376443, 0.00594089, -0.0044... |
+| "Roquefort"                                                          | [-0.0252884, 0.0250485, -0.0249728, 0.0571037, 0.0386177, 0.03863... |
+| "Cheddar"                                                            | [-0.0129724, -0.00756301, -0.00379329, 0.0037531, -0.0134941, 0.0... |
+| "Gouda"                                                              | [0.0128716, 0.025435, -0.0288951, 0.0177759, -0.0624398, 0.043577... |
+| "Parmesan"                                                           | [-0.0755439, 0.00906182, -0.010977, 0.0208911, -0.0527448, 0.0085... |
+| "Red Leicester"                                                      | [-0.0244318, -0.0280038, -0.0373183, 0.0284436, -0.0277753, 0.066... |
++----------------------------------------------------------------------+----------------------------------------------------------------------+
+```
+
+To compute the embeddings for a list of strings, use the following query:
+
+```cypher
+CALL embeddings.text(["Hello", "World"])
+YIELD success, embeddings;
+```
+
+Results:
+
+```plaintext
++----------------------------------------------------------+----------------------------------------------------------------------------------+
+| success                                                  | embeddings                                                                       |
++----------------------------------------------------------+----------------------------------------------------------------------------------+
+| true                                                     | [[-0.0627718, 0.0549588, 0.0521648, 0.08579, -0.0827489, -0.074573, 0.0685547... |
++----------------------------------------------------------+----------------------------------------------------------------------------------+
+```
+
+To get the information about the model used for the embeddings computation, use the following query:
+
+```cypher
+CALL embeddings.model_info()
+YIELD info;
+```
+
+Results:
+
+```plaintext
++----------------------------------------------------------------------------+
+| info                                                                       |
++----------------------------------------------------------------------------+
+| {dimension: 384, max_sequence_length: 256, model_name: "all-MiniLM-L6-v2"} |
++----------------------------------------------------------------------------+
+```
