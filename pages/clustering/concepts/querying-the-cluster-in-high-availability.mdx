@@ -1,0 +1,117 @@
+---
+title: Querying the cluster in high availability
+description: Learn about the underlying implementation of routing throughout the cluster.
+---
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+
+# Querying the cluster in high availability (Enterprise)
+
+<Callout type="info">
+
+Please read the guides on [how replication works](/clustering/concepts/how-replication-works) and 
+[how high availability works](/clustering/concepts/how-high-availability-works) in Memgraph to get
+introduced to the replication and high availability concepts.
+
+</Callout>
+
+## Why bolt protocol is not enough?
+
+When we talk about standalone instances, the most straightforward way to connect is by using the `bolt://` protocol.
+This is not optimal if you are running a cluster of Memgraph instances for multiple reasons:
+1. Bolt protocol is a simple protocol for interacting with one instance. You need to connect to each instance separately in a cluster
+in order to forward queries to that specific instance. We already have 5 instances in a typical Memgraph cluster with 2 data instances
+and 3 coordinator instances.
+3. You don't know which instance is MAIN due to automatic failovers which can happen at any time. If you issue a WRITE query to
+a REPLICA, the query will fail as the REPLICA is not allowed to write.
+
+## Introducing bolt+routing
+
+Because of that, users can use the **Bolt + routing (`neo4j://`)** protocol, which ensures that write queries are always sent to
+the current MAIN instance, and reads are routed arbitrarily to a MAIN or one of the REPLICAs.
+This prevents split-brain scenarios, as clients never write to the old main but are automatically
+routed to the new main after a failover. 
+
+The routing protocol works as follows:
+1. The client sends a `ROUTE` Bolt message to any coordinator instance
+2. The coordinator responds with a **routing table** containing three entries:
+  - Instances from which data can be read (REPLICAs + optionally MAIN, depending on system configuration)
+  - The instance where data can be written (MAIN)
+  - Instances acting as routers (COORDINATORs)
+3. Client proceeds by picking the correct route to forward the query again.
+
+When a client connects directly to the cluster leader, the leader immediately
+returns the current routing table. Thanks to the Raft consensus protocol, the
+leader always has the most up-to-date cluster state. If a follower receives a
+routing request, it forwards the request to the current leader, ensuring the
+client always gets accurate routing information.
+
+This ensures:
+
+- **Consistency**: All clients receive the same routing information, regardless of
+their entry point.
+- **Reliability**: The Raft consensus protocol ensures data accuracy on the leader
+node.
+- **Transparency**: Client requests are handled seamlessly, whether connected to
+leaders or followers.
+
+On the image below, we can see the effect of executing a WRITE query with bolt+routing protocol on a coordinator.
+The query is routed towards the MAIN instance.
+![](/pages/clustering/high-availability/bolt_routing_writes.png)
+
+On the image below, we can see the effect of executing a READ query with bolt+routing protocol on a coordinator.
+The query is routed towards the REPLICA instance.
+![](/pages/clustering/high-availability/bolt_routing_reads.png)
+
+**Bolt+routing is a client-side routing protocol**, meaning network endpoint
+resolution happens inside the database drivers.
+For more details about the Bolt messages involved in the communication, check [the following
+link](https://neo4j.com/docs/bolt/current/bolt/message/#messages-route).
+
+<Callout>
+Memgraph currently does not implement server-side routing.
+</Callout>
+
+Users only need to change the scheme they use for connecting to coordinators.
+This means instead of using `bolt://<main_ip_address>,` you should use
+`neo4j://<coordinator_ip_adresss>` to get an active connection to the current
+main instance in the cluster. You can find examples of how to use bolt+routing
+in different programming languages
+[here](https://github.com/memgraph/memgraph/tree/master/tests/drivers).
+
+<Callout>
+
+**Bolt+routing protocol should only be used to connect to any of the coordinators in order to
+execute data queries.**
+
+**Bolt+routing should not be used in order to setup the cluster (register coordinators and data instances).**
+In that case, users should connect to COORDINATOR using the plain old `bolt` protocol.
+
+</Callout>
+
+## Authentication
+
+User accounts exist exclusively on data instances - coordinators do not manage user authentication. Therefore, coordinator instances prohibit:
+  - Environment variables `MEMGRAPH_USER` and `MEMGRAPH_PASSWORD`.
+  - Authentication queries such as `CREATE USER`.
+
+When using the **bolt+routing protocol**, provide credentials for users that exist on the data instances. The authentication flow works as follows:
+
+1. Client connects to a **coordinator**.
+2. Coordinator responds with the **routing table** (without authenticating).
+3. Client connects to the **designated data instance** using the **same credentials**.
+4. Data instance **authenticates the user and processes the request**.
+
+This architecture separates routing coordination from the user management, ensuring that authentication occurs only where user data resides.
+
+<Callout>
+1. You can connect to a coordinator via the bolt protocol without any authentication.
+2. You need to pass in credentials when using bolt+routing protocol, as the authentication will be performed against
+  the respective data instance.
+
+</Callout>
+
+<CommunityLinks/>
