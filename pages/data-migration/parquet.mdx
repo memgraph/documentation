@@ -6,6 +6,7 @@ description: Leverage Parquet files in Memgraph operations. Our detailed guide s
 import { Callout } from 'nextra/components'
 import { Steps } from 'nextra/components'
 import { Tabs } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
 
 # Import data from Parquet file
 
@@ -14,9 +15,13 @@ and from the s3.
 
 ## `LOAD PARQUET` Cypher clause
 
-The `LOAD PARQUET` clause uses a background thread that reads column batches, assembles batch of 64K rows and puts it on the queue from
-where the main thread pulls the data. The main thread then reads row by row from the queue, binds the contents of the parsed row to the
-specified variable, populates the database if it is empty or appends new data to an existing dataset.
+The `LOAD PARQUET` clause uses a background thread that reads the Parquet file
+in column batches, assembles them into row batches of 64K rows and places those
+batches into a queue. The main thread then pulls each batch from the queue and
+processes it row by row. For every row, it binds the parsed values to the
+specified variables and either populates the database (if it is empty) or
+appends the new rows to an existing dataset.
+
 
 ### `LOAD PARQUET` clause syntax
 
@@ -26,20 +31,25 @@ The syntax of the `LOAD PARQUET` clause is:
 LOAD PARQUET FROM <parquet-location> ( WITH CONFIG configs=configMap ) ? AS <variable-name>
 ```
 
-- `<parquet-location>` is a string of the location of the Parquet file.<br/> Without a
-  s3:// prefix, it refers to a path on the local and with s3:// prefix, it pulls the file with specified URI from the S3-compatible storage.
-  There are no restrictions on where in
-  your file system the file can be located, as long as the path is valid (i.e.,
-  the file exists). If you are using Docker to run Memgraph, you will need to
+- `<parquet-location>` is a string that specifies where the Parquet file is
+  located.<br/>
+  If the path **does not** start with `s3://`, it is treated as a local file
+  path. If it **does** start with `s3://`, Memgraph retrieves the file from the
+  S3-compatible storage using the provided URI. There are no restrictions on the
+  file’s location within your local file system, as long as the path is valid
+  and the file exists. If you are using Docker to run Memgraph, you will need to
   [copy the files from your local directory into
   Docker](/getting-started/first-steps-with-docker#copy-files-from-and-to-a-docker-container)
   container where Memgraph can access them. <br/>
 
-- `<configs>` Represents an optional configuration map through which you can specify configuration options: `aws_region`, `aws_access_key`, `aws_secret_key` and `aws_endpoint_url`.
+- `<configs>` Represents an optional configuration map through which you can
+  specify configuration options: `aws_region`, `aws_access_key`,
+  `aws_secret_key` and `aws_endpoint_url`.
   - `<aws_region>`: The region in which your S3 service is being located
   - `<aws_access_key>`: Access key used to connect to S3 service
   - `<aws_secret_key>`: Secret key used to connect S3 service
-  - `<aws_endpoint_url`>: Optional configuration parameter. Can be used to set the URL of the S3 compatible storage.
+  - `<aws_endpoint_url`>: Optional configuration parameter. Can be used to set
+    the URL of the S3 compatible storage.
 - `<variable-name>` is a symbolic name representing the variable to which the
   contents of the parsed row will be bound to, enabling access to the row
   contents later in the query. The variable doesn't have to be used in any
@@ -49,14 +59,30 @@ LOAD PARQUET FROM <parquet-location> ( WITH CONFIG configs=configMap ) ? AS <var
 
 When using the `LOAD PARQUET` clause please keep in mind:
 
-- The parser parses the values in their appropriate type so you should get the same type as in the Parquet file. Types `BOOL`, `INT8`, `INT16`, `INT32`, `INT64`, `UINT8`, `UINT16`, `UINT32`, `UINT64`,
-  `HALF_FLOAT`, `FLOAT`, `DOUBLE`, `STRING`, `LARGE_STRING`, `STRING_VIEW`, `DATE32`, `DATE64`, `TIME32`, `TIME64`, `TIMESTAMP`, `DURATION`, `DECIMAL128`, `DECIMAL256`, `BINARY`, `LARGE_BINARY`, `FIXED_SIZE_BINARY`,
-  `LIST` and `MAP` are supported. Unsupported types will be saved as string in Memgraph. Note that `UINT64_T` numbers will be cast to `INT64_T` since Memgraph doesn't support them and
-  Cypher standard specifies the use of `INT64_T` numbers.
+- **Type handling:** <br/>
+  The parser reads each value using its native Parquet type, so you should
+  receive the same data type inside Memgraph. The following types are supported:
+  **BOOL, INT8, INT16, INT32, INT64, UINT8, UINT16, UINT32, UINT64, HALF_FLOAT,
+  FLOAT, DOUBLE, STRING, LARGE_STRING, STRING_VIEW, DATE32, DATE64, TIME32,
+  TIME64, TIMESTAMP, DURATION, DECIMAL128, DECIMAL256, BINARY, LARGE_BINARY,
+  FIXED_SIZE_BINARY, LIST, MAP.** <br/>
+  Any unsupported types are automatically stored as strings. Note that
+  `UINT64_T` values are cast to `INT64_T` because Memgraph does not support
+  unsigned 64-bit integers, and the Cypher standard only defines 64-bit signed
+  integers.
+ 
+- **Authentication parameters:** <br/>
+  Parameters for accessing S3-compatible storage (`aws_region`,
+  `aws_access_key`, `aws_secret_key`, and `aws_endpoint_url`) can be provided in
+  three ways:
 
-- Authentication parameters (`aws_region`, `aws_access_key`, `aws_secret_key` and `aws_endpoint_url`) can be provided in the `LOAD PARQUET` query using WITH CONFIG construct, through environment variables 
-  (`AWS_REGION`, `AWS_ACCESS_KEY`, `AWS_SECRET_KEY` and `AWS_ENDPOINT_URL`) and through run-time database settings. For setting authentication parameters through run-time settings, use `SET DATABASE SETTING <key> to <value>;`
-  query. Keys of this authentication parameters are `aws.access_key`, `aws.region`, `aws.secret_key` and `aws.endpoint_url`.
+  1. Directly in the `LOAD PARQUET` query using the `WITH CONFIG` clause.
+  2. Through environment variables: `AWS_REGION`, `AWS_ACCESS_KEY`,
+     `AWS_SECRET_KEY`, and `AWS_ENDPOINT_URL`.
+  3. Through run-time database settings, using: `SET DATABASE SETTING <key> TO
+     <value>;` The corresponding setting keys are: `aws.access_key`,
+     `aws.region`, `aws.secret_key`, and `aws.endpoint_url`.
+
 
 - **The `LOAD PARQUET` clause is not a standalone clause**,  meaning a valid query
   must contain at least one more clause, for example:
@@ -72,16 +98,17 @@ When using the `LOAD PARQUET` clause please keep in mind:
   LOAD PARQUET FROM "/file.parquet" AS row;
   ```
 
-  **Adding a `MATCH` or `MERGE` clause before LOAD PARQUET** allows you to match certain
-  entities in the graph before running LOAD PARQUET, optimizing the process as
-  matched entities do not need to be searched for every row in the PARQUET file.  
+  **Adding a `MATCH` or `MERGE` clause before `LOAD PARQUET`** allows you to
+  match certain entities in the graph before running `LOAD PARQUET`, optimizing
+  the process as matched entities do not need to be searched for every row in
+  the `PARQUET` file.  
 
-  But, the `MATCH` or `MERGE` clause can be used prior the `LOAD PARQUET` clause only
-  if the clause returns only one row. Returning multiple rows before calling the
-  `LOAD PARQUET` clause will cause a Memgraph runtime error.
+  But, the `MATCH` or `MERGE` clause can be used prior the `LOAD PARQUET` clause
+  only if the clause returns only one row. Returning multiple rows before
+  calling the `LOAD PARQUET` clause will cause a Memgraph runtime error.
 
-- **The `LOAD PARQUET` clause can be used at most once per query**, so queries like
-  the one below will throw an exception:
+- **The `LOAD PARQUET` clause can be used at most once per query**, so queries
+  like the one below will throw an exception:
 
   ```cypher
   LOAD PARQUET FROM "/x.parquet" AS x
@@ -91,52 +118,64 @@ When using the `LOAD PARQUET` clause please keep in mind:
 
 ### Increase import speed
 
-The `LOAD PARQUET` clause will create relationships much faster and consequently
-speed up data import if you [create indexes](/fundamentals/indexes) on nodes or
-node properties once you import them:
+You can significantly increase data-import speed when using the `LOAD PARQUET`
+clause by taking advantage of indexing, batching, and analytical storage mode.
+
+#### 1. Create indexes
+
+`LOAD PARQUET` can establish relationships much faster if
+[indexes](/fundamentals/indexes) on nodes or node properties are created *after*
+loading the associated nodes:
 
 ```cypher
-  CREATE INDEX ON :Node(id);
+CREATE INDEX ON :Node(id);
 ```
 
-If the LOAD PARQUET clause is merging data instead of creating it, create indexes
-before running the LOAD PARQUET clause.
+If `LOAD PARQUET` is **merging** existing data rather than creating new records,
+then create the indexes **before** running the import.
 
+#### 2. Use Periodic commits
 
-The construct `USING PERIODIC COMMIT <BATCH_SIZE>` also improves the import speed because
-it optimizes some of the memory allocation patterns. In our benchmarks, this construct
-speeds up the execution from 25% to 35%.
+The `USING PERIODIC COMMIT <BATCH_SIZE>` construct optimizes memory allocation
+and can improve import speed by **25–35%** based on our benchmarks.
 
 ```cypher
-  USING PERIODIC COMMMIT 1024 LOAD PARQUET FROM "/x.parquet" AS x
-  CREATE (n:A {p1 : x, p2 : y});
+USING PERIODIC COMMIT 1024
+LOAD PARQUET FROM "/x.parquet" AS x
+CREATE (n:A {p1: x, p2: y});
 ```
 
+#### 3. Switch to analytical storage mode
 
-You can also speed up import if you switch Memgraph to [**analytical storage
-mode**](/fundamentals/storage-memory-usage#storage-modes). In the analytical
-storage mode there are no ACID guarantees besides manually created snapshots.
-After import you can switch the storage mode back to
-transactional and enable ACID guarantees.
+Import performance can also improve by switching Memgraph to [analytical storage
+mode](/fundamentals/storage-memory-usage#storage-modes), which relaxes ACID
+guarantees except for manually created snapshots. Once the import is complete,
+you can switch back to transactional mode to restore full ACID guarantees.
 
-You can switch between modes within the session using the following query:
+Switch storage modes within a session:
 
-```cypher
+```
 STORAGE MODE IN_MEMORY_{TRANSACTIONAL|ANALYTICAL};
 ```
 
-If you use `IN_MEMORY_ANALYTICAL` mode and have nodes and relationships stored in
- separate PARQUET files, you can run multiple concurrent `LOAD PARQUET` queries to import data even faster.
-In order to achieve the best import performance, split your nodes and relationships
-files into smaller files and run multiple `LOAD PARQUET` queries in parallel. 
-The key is to run all `LOAD PARQUET` queries which create nodes first. After that, run 
-all `LOAD PARQUET` queries that create relationships. 
+#### 4. Run Imports in Parallel
+
+When using `IN_MEMORY_ANALYTICAL` mode and storing nodes and relationships in
+separate Parquet files, you can run multiple concurrent `LOAD PARQUET` queries
+to accelerate the import even further.
+
+For best performance:
+
+1. Split node and relationship data into smaller files.
+2. Run all `LOAD PARQUET` statements that **create nodes** first.
+3. Then run all `LOAD PARQUET` statements that **create relationships**.
 
 
-### Import multiple Parquet files with distinct graph objects
+### Usage example
 
-In this example, the data is split across four files, each file contains nodes
-of a single label or relationships of a single type. 
+In this example, we will import multiple Parquet files with distinct graph
+objects. The data is split across four files, each file contains nodes of a
+single label or relationships of a single type. 
 
 <Steps>
 
@@ -244,3 +283,5 @@ of a single label or relationships of a single type.
   ![](/pages/data-migration/csv/load_csv_restaurants_relationships.png)
 
 </Steps>
+
+<CommunityLinks/>
