@@ -245,6 +245,7 @@ You can query a nested property the same way you would any other:
 ```cypher
 MATCH (n:Person {name: 'Harry'}) 
 RETURN n.details.age AS age;
+```
 
 Output:
 
