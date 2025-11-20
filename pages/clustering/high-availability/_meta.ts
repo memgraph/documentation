@@ -4,4 +4,5 @@ export default {
     "setup-ha-cluster-k8s": "Setup HA cluster with K8s",
     "best-practices": "Best practices",
     "ha-commands-reference": "Reference commands",
+    "ha-reference-architectures": "Reference architectures",
 }
