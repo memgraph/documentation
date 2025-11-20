@@ -8,6 +8,7 @@ export default {
   "explain": "EXPLAIN",
   "foreach": "FOREACH",
   "load-csv": "LOAD CSV",
+  "load-parquet": "LOAD PARQUET",
   "match": "MATCH",
   "merge": "MERGE",
   "optional-match": "OPTIONAL MATCH",

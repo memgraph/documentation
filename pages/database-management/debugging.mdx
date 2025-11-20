@@ -67,7 +67,8 @@ container, necessary for running debugging tools.
 Memgraph supports the following debug capabilities:
 1. [Using GDB](#using-gdb): Attaching Memgraph with `GDB` and inspecting threads
 2. [Generating a core dump](#generating-core-dump-via-docker) after Memgraph crashed
-3. [Using `perf`](#profiling-with-perf) to identify performance bottlenecks
+3. [Running Memgraph in GDB inside Docker](#running-memgraph-in-gdb-inside-docker): Directly running Memgraph or MAGE in GDB inside a Docker container.
+4. [Using `perf`](#profiling-with-perf) to identify performance bottlenecks
 
 
 ### Using GDB
@@ -234,6 +235,105 @@ services:
       - QUICK_CONNECT_MG_PORT=7687
 ```
 
+### Running Memgraph in GDB inside Docker
+
+
+To run Memgraph or MAGE in GDB inside a Docker container, you can use the following 
+commands to override the entry point and create a bind mount for core dumps:
+
+```bash
+# create a directory with sufficient permissions to save the core on the host
+mkdir -p cores
+chmod 777 cores
+
+# run memgraph via the debug script by overriding the entry point, and creating a bind mount for the core dump
+docker run --rm \
+  --name memgraph \
+  -v "$(pwd)/cores:/tmp/cores" \
+  --entrypoint /usr/lib/memgraph/run_with_gdb.sh \
+  -p 7687:7687 \
+  memgraph/memgraph:3.7-relwithdebinfo
+```
+
+Optionally, the core dump path can be overridden by setting the `CORE_PATH` variable:
+
+```bash
+docker run --rm \
+  --name memgraph \
+  -v "$(pwd)/cores:/some/other/dir/cores" \
+  -e CORE_PATH=/some/other/dir/cores/core.dump \
+  --entrypoint /usr/lib/memgraph/run_with_gdb.sh \
+  -p 7687:7687 \
+  memgraph/memgraph:3.7-relwithdebinfo
+```
+
+In the case where Memgraph crashes, a core dump will be created in the directory 
+specified by the `CORE_PATH` variable (`tmp/cores/core` by default) and the full
+backtrace will be printed to the terminal.
+
+
+### Using `heaptrack` with Docker
+
+All `RelWithDebInfo` images come with `heaptrack` installed. You can use it to track the memory usage of Memgraph.
+
+Before starting the container, create a directory to store the heaptrack data:
+
+```bash
+mkdir -p /tmp/heaptrack
+chmod a+rwx /tmp/heaptrack
+```
+
+Then start the container with the following command:
+
+```bash
+docker run -d --rm \
+  --name memgraph \
+  -v /tmp/heaptrack:/data \
+  --entrypoint /usr/bin/heaptrack \
+  memgraph/memgraph:3.6.1-relwithdebinfo \
+  --output /data/heaptrack.memgraph \
+  -- \
+  /usr/lib/memgraph/memgraph
+```
+
+<Callout>
+  Running the MAGE container using this method will result in a segmentation fault due to the way 
+  that `heaptrack` interacts with Python, so memgraph should be launched by `heaptrack` using the `--use-inject` flag:
+
+  ```bash
+  docker run -d --rm \
+    --name memgraph \
+    -p 7687:7687 \
+    -v /tmp/heaptrack:/data \
+    --entrypoint /usr/bin/heaptrack \
+    memgraph/memgraph-mage:3.6.1-relwithdebinfo \
+    --output /data/heaptrack.memgraph \
+    --use-inject /usr/lib/memgraph/memgraph
+  ```
+</Callout>
+
+To stop `memgraph` gracefully:
+
+```bash
+docker exec memgraph bash -c "kill -SIGINT \$(pidof memgraph)"
+```
+
+Then the `heaptrack` GUI can be used to inspect the heaptrack data on the host machine:
+
+```bash
+heaptrack /tmp/heaptrack/heaptrack.memgraph.gz
+```
+
+<Callout>
+  The `heaptrack` GUI can be installed on the host machine by issuing the command (Debian/Ubuntu):
+  ```bash
+  sudo apt install heaptrack
+  ```
+  or by issuing the command (Fedora):
+  ```bash
+  sudo dnf install heaptrack
+  ```
+</Callout>
 
 ### Profiling with `perf`
 

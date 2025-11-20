@@ -67,6 +67,81 @@ The built-in SSO modules (used with the `saml-entra-id`, `saml-okta`,
 `oidc-entra-id`, and `oidc-okta` auth schemes) are further configured using
 **environment variables**. See their respective sections below for more details.
 
+> **Note:** Unlike the SSO modules, which can be configured entirely via
+**environment variables**, the LDAP module requires a configuration file
+(`/etc/memgraph/auth/ldap.yaml`). This means that in simple deployments (e.g.,
+Docker) configuration is less flexible and cannot yet be passed purely via
+environment variables.
+
+### Docker deployment note
+
+When deploying Memgraph with **any external authentication module** (for
+example, LDAP, SAML, OIDC, or a custom auth module), you must ensure that all
+required **roles exist in the database before enabling authentication**.  
+
+External modules return one or more roles for each authenticated user, and
+Memgraph matches these roles to existing roles defined in the database. If a
+role does not exist at startup, affected users will not be able to log in.
+
+In containerized environments such as **Docker**, this initialization step can
+be automated using the `--init-file` flag, which runs a Cypher script before the
+database starts. This approach avoids having to manually stop and restart
+containers to create roles later.
+
+A recommended workflow:
+
+<Steps>
+{<h4 className="custom-header">Create a local directory for your Docker setup</h4>}
+
+```
+my_auth_init/
+├── Dockerfile
+└── roles.cypherl
+```
+
+{<h4 className="custom-header">Define roles in `roles.cypherl`</h4>}
+
+```cypher
+CREATE ROLE superuser;
+GRANT ALL PRIVILEGES TO superuser;
+CREATE ROLE moderator;
+```
+
+{<h4 className="custom-header">Create the Dockerfile</h4>}
+
+```dockerfile
+FROM memgraph/memgraph:latest
+
+USER root
+COPY roles.cypherl /usr/lib/memgraph/roles.cypherl
+USER memgraph
+```
+
+{<h4 className="custom-header">Build the Docker image</h4>}
+
+```
+docker build -t memgraph-auth .
+```
+
+{<h4 className="custom-header">Run Memgraph with authentication enabled and the init file executed on startup</h4>}
+
+```
+docker run -it -p 7687:7687 -p 7444:7444 \
+  memgraph-auth \
+  --init-file=/usr/lib/memgraph/roles.cypherl \
+  --auth-module-mappings=basic:/usr/lib/memgraph/auth_module/ldap.py
+```
+
+> Replace the module mapping with your chosen authentication scheme, e.g.
+> oidc-okta, saml-entra-id, etc.
+
+</Steps>
+
+
+This approach ensures that all roles are created before the external
+authentication module is activated, allowing users to log in seamlessly across
+all supported authentication methods.
+
 ## Auth module architecture
 
 ### Communication protocol
@@ -470,6 +545,18 @@ You can determine token audiences by decoding tokens via tools like `jwt.io` and
  inspecting the `aud` field. In many cases, both tokens use the same audience
 (for example, Entra ID uses the client ID).
 
+{<h5 className="custom-header">Self-signed certificates</h5>}
+
+If your custom OIDC identity provider uses self-signed certificates, you can
+configure Memgraph to trust them by setting the `MEMGRAPH_SSO_CUSTOM_OIDC_EXTRA_CA_CERTS`
+environment variable. This variable should point to a file containing the CA
+certificates that should be trusted when connecting to your
+identity server.
+
+```bash
+MEMGRAPH_SSO_CUSTOM_OIDC_EXTRA_CA_CERTS=/path/to/ca-certificates
+```
+
 #### Connect via Neo4j drivers
 
 When connecting through a Neo4j driver, you can provide:
@@ -611,13 +698,13 @@ Python 3 libraries installed:
 The module configuration file is located at:
 
 ```
-/etc/memgraph/auth_module/ldap.yaml
+/etc/memgraph/auth/ldap.yaml
 ```  
 
 An example configuration file with all settings documented is provided at:
 
 ```
-/etc/memgraph/auth_module/ldap.example.yaml
+/etc/memgraph/auth/ldap.example.yaml
 ```
 
 For quick setup, you can copy the example configuration file into the module
@@ -628,7 +715,7 @@ configuration file.
 To enable LDAP authentication and authorization, start Memgraph with:
 
 ```
---auth-module-mappings=basic
+--auth-module-mappings=basic:/usr/lib/memgraph/auth_module/ldap.py
 ```
 
 You can also combine this with other configuration flags listed in
@@ -758,7 +845,7 @@ To enable LDAP integration specify the following flag:
 ```
 
 Also, add the following LDAP module configuration to
-`/etc/memgraph/auth_module/ldap.yaml`:
+`/etc/memgraph/auth/ldap.yaml`:
 
 ```yaml
 server:
