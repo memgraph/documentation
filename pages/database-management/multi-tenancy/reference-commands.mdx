@@ -9,16 +9,6 @@ import { Callout } from 'nextra/components'
 
 ## Multi-database queries
 
-<Callout>
-As of Memgraph v3.5 multi-database queries (such as `SHOW DATABASES`, `CREATE
-DATABASE`, `DROP DATABASE`, `RENAME DATABASE`, etc.) target the "memgraph"
-database and require access to it.
-
-To execute these queries, users must have:
-- The appropriate privileges (`MULTI_DATABASE_USE`, `MULTI_DATABASE_EDIT`)
-- **AND** access to the default "memgraph" database
-</Callout>
-
 ### CREATE DATABASE
 
 Command used for creating a new database.
@@ -149,7 +139,7 @@ SHOW CURRENT DATABASE;
 ```
 
 **Privileges required:**
-- `MULTI_DATABASE_EDIT` privilege
+- `MULTI_DATABASE_USE` privilege
 - Access to the `memgraph` database
 - `TRANSACTION_MANAGEMENT` privilege (if you're using `FORCE`, to terminate active transactions)
 
@@ -162,7 +152,7 @@ SHOW DATABASES;
 ```
 
 **Privileges required:**
-- `MULTI_DATABASE_EDIT` privilege
+- `MULTI_DATABASE_USE` privilege
 - Access to the `memgraph` database
 - `TRANSACTION_MANAGEMENT` privilege (if you're using `FORCE`, to terminate active transactions)
 
@@ -185,7 +175,7 @@ what if the database does not exist ???
 what if you don't have access to the database ???
 
 **Privileges required:**
-- `MULTI_DATABASE_EDIT` privilege
+- `MULTI_DATABASE_USE` privilege
 - Access to the `memgraph` database
 - `TRANSACTION_MANAGEMENT` privilege (if you're using `FORCE`, to terminate active transactions)
 
@@ -201,15 +191,15 @@ USE DATABASE my_database;
 Grants a user access to a specified database.
 
 ```cypher
-GRANT DATABASE databaseName TO user;
+GRANT DATABASE databaseName TO user_or_role;
 ```
 
 **Parameters:**
 - `databaseName` (symbolic name) - name of the database the user will be granted access with
-- `user` (symbolic name) - name of the user which will receive the grant
+- `user_or_role` (symbolic name) - name of the user or role which will receive the grant
 
 **Behaviour:**
-- After the command has been executed, the user will be granted access to the database.
+- After the command has been executed, the user or role will be granted access to the database.
 
 **Example:**
 ```cypher
@@ -222,15 +212,15 @@ GRANT DATABASE my_database TO marko;
 Denies a user's access to a specified database.
 
 ```cypher
-DENY DATABASE databaseName FROM user;
+DENY DATABASE databaseName FROM user_or_role;
 ```
 
 **Parameters:**
 - `databaseName` (symbolic name) - name of the database to deny the access to the user
-- `user` (symbolic name) - name of the user which will be denied the access
+- `user_or_role` (symbolic name) - name of the user or role which will be denied the access
 
 **Behaviour:**
-- After the command has been executed, the user will be denied access to the database.
+- After the command has been executed, the user or role will be denied access to the database.
 
 **Example:**
 ```cypher
@@ -242,12 +232,12 @@ DENY DATABASE my_database FROM marko;
 Removes database from user's authentication context.
 
 ```cypher
-REVOKE DATABASE databaseName FROM user;
+REVOKE DATABASE databaseName FROM user_or_role;
 ```
 
 **Parameters:**
 - `databaseName` (symbolic name) - name of the database to revoke from user's authentication context
-- `user` (symbolic name) - name of the user to revoke the context from
+- `user_or_role` (symbolic name) - name of the user or role to revoke the context from
 
 **Behaviour:**
 - After the command has been executed, the user's authentication context will have no information about
@@ -262,20 +252,21 @@ REVOKE DATABASE my_database FROM marko;
 
 ### SET MAIN DATABASE FOR USER
 
-Sets a user's default (landing) database.
+Sets a user's default (landing) database when connecting to a database session.
 
 ```cypher
-SET MAIN DATABASE databaseName FOR user;
+SET MAIN DATABASE databaseName FOR user_or_role;
 ```
 
 **Parameters:**
 - `databaseName` (symbolic name) - name of the database which will become the default for the user
-- `user` (symbolic name) - name of the user to set the default database to
+- `user_or_role` (symbolic name) - name of the user or role to set the default database to
 
 **Behaviour:**
 - After the command has been executed, the user will on log in be placed in that main database.
 
 **Implications:**
+- Database needs to be granted to the user in order to successfully set it as main.
 - If the command is not executed, by default everyone will land into the system's default `memgraph` database.
 
 **Example:**
@@ -283,16 +274,23 @@ SET MAIN DATABASE databaseName FOR user;
 SET MAIN DATABASE databaseName FOR marko;
 ```
 
+<Callout>
+At the moment, Memgraph doesn't have a command for showing the users main database. If the command
+for setting the main database executed successfully, it will become the users main database.
+</Callout>
+
+## Display of privileges for users and roles
+
 ### SHOW DATABASE PRIVILEGES FOR USER
 
 Lists a user's database access rights (granted and denied).
 
 ```cypher
-SHOW DATABASE PRIVILEGES FOR user;
+SHOW DATABASE PRIVILEGES FOR user_or_role;
 ```
 
 **Parameters:**
-- `user` (symbolic name) - name of the user to check the database privileges
+- `user_or_role` (symbolic name) - name of the user or role to check the database privileges
 
 **Behaviour:**
 - The command will show 2 columns: `grants` and `denies` with the list of databases in each one.
@@ -300,84 +298,79 @@ SHOW DATABASE PRIVILEGES FOR user;
 **Implications:**
 - A user has access to the database if he has an explicit grant and no denies to the database.
 - If the user has `*` in the grants, it is granted every database (if there are no explicit denies).
+- The first user ever created in Memgraph gets all the privileges, and therefore gets the grant of every database in Memgraph
+- All subsequent users get no privileges, but have access to the default Memgraph database
 
 **Example:**
 ```cypher
+-- Example output for the admin user which has access to all the databases
+SHOW DATABASE PRIVILEGES FOR admin;
++--------+--------+
+| grants | denies |
++--------+--------+
+| "*"    | []     |
++--------+--------+
+
+-- Example output for the non admin user which by default gets granted only the memgraph database to connect
 SHOW DATABASE PRIVILEGES FOR marko;
++--------------+--------+
+| grants       | denies |
++--------------+--------+
+| ["memgraph"] | []     |
++--------------+--------+
 ```
 
+### SHOW ROLE FOR USER
 
+The command will output roles for the user across all databases.
 
+**Implications:**
+- The command does not enforce a specific database.
 
-
-
-
-
-
-
-
-
-
-
-
-
-## Multi-tenant query syntax changes
-
-As of Memgraph v3.5 the syntax for certain queries in multi-tenant environments
-have changed. The `SHOW ROLE` and `SHOW PRIVILEGES` commands now require
-specifying the database context in some cases.
-
-**SHOW ROLE FOR USER**: This command does not require database specification and
-will show all roles assigned to the user across all databases.
-
-**SHOW PRIVILEGES FOR USER**: This command requires database specification in
-multi-tenant environments.
-
-**SHOW PRIVILEGES FOR ROLE**: This command does not require database
-specification and will show all privileges for the role.
-
-In multi-tenant environments, you must specify which database context to use
-when showing privileges for users:
-
-1. **Show roles for the user's main database:**
+**Example:**
 ```cypher
-SHOW ROLE FOR user_name ON MAIN;
+SHOW ROLE FOR marko;
 ```
 
-2. **Show roles for the current database:**
+**Example:**
 ```cypher
-SHOW ROLE FOR user_name ON CURRENT;
+-- on the user's main database
+SHOW ROLE FOR user_or_role ON MAIN;
+
+-- on the user's database inside the session
+SHOW ROLE FOR user_or_role ON CURRENT;
+
+-- on an arbitrary database
+SHOW ROLE FOR user_or_role ON DATABASE my_database;
 ```
 
-3. **Show roles for a specific database:**
+??? show role for user on database
+
+### SHOW PRIVILEGES FOR USER_OR_ROLE ON DATABASE
+
+Shows user or role privileges on a desired database. 
+
+**Implications:**
+- In a multi-tenant environment, the database needs to be specified.
+- Database specified is either: `MAIN`, `CURRENT` or any other valid database name.
+- In case of the user, an aggregated view for both user's specific privileges, and all
+  his role privileges on the database is shown.
+
+**Example:**
 ```cypher
-SHOW ROLE FOR user_name ON DATABASE database_name;
+-- on the user's main database
+SHOW PRIVILEGES FOR marko ON MAIN;
+
+-- on the user's database inside the session
+SHOW PRIVILEGES FOR marko ON CURRENT;
+
+-- on an arbitrary database
+SHOW PRIVILEGES FOR marko ON DATABASE my_database;
 ```
 
-### SHOW PRIVILEGES syntax in multi-tenant environments
-
-Similarly, the `SHOW PRIVILEGES` command requires database context specification:
-
-1. **Show privileges for the user's main database:**
-```cypher
-SHOW PRIVILEGES FOR user_or_role ON MAIN;
-```
-
-2. **Show privileges for the current database:**
-```cypher
-SHOW PRIVILEGES FOR user_or_role ON CURRENT;
-```
-
-3. **Show privileges for a specific database:**
-```cypher
-SHOW PRIVILEGES FOR user_or_role ON DATABASE database_name;
-```
-
-These commands return the aggregated roles and privileges for the user in the
-specified database context. The `ON MAIN` option shows information for the
-user's main database, `ON CURRENT` shows information for whatever database is
-currently active, and `ON DATABASE` shows information for the explicitly
-specified database.
+<Callout>
+A given set of privileges is available to all the granted databases for a user or role.
+</Callout>
 
 ## Multi-tenant privileges
 
