@@ -1,0 +1,202 @@
+---
+title: "Migrate to v3.7 label-based access control"
+description: "Guide for upgrading from v3.6 label-based access control to v3.7 multi-label based access control"
+---
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+
+# Migrate to v3.7 label-based access control <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+<Callout type="warning">
+**Breaking change in v3.7.0**: [Label-based access control](/database-management/authentication-and-authorization/role-based-access-control#fine-grained-access-control)
+has been upgraded with significant changes. If you use fine-grained access control, read this guide before upgrading.
+</Callout>
+
+## Motivation for the breaking change
+Current label-based access control implementation was good for a number of use cases, but there are certain things that it could not do:
+- It had **hierarchical access rights** ➡ If a user had `CREATE_DELETE` permission, he would be given full manipulation access to the node.
+  Sometimes, you only want to grant `CREATE` separately, without `DELETE`.
+- Permission lists of for the nodes were not expressive ➡ An example could be that a data science team wants to manipulate all the nodes that have `:DataScience`
+  label in it. They would also need to be granted additional labels in order to see their nodes, just because the rule was to have permission for EVERY label in the node.
+  This per se is not troubling if you have one team. **If you have multiple teams**, their permission intersection is zero, meaning they can't have shared visibility ownership
+  of a node.
+
+## What's changed?
+
+### Node label matching semantics
+
+**Before (v3.6):**
+Rules matched exact label sets only. By executing the following query:
+```cypher
+GRANT READ ON LABELS :User
+```
+
+the permission would be granted only to nodes which matched exactly the `:User` label. If any other label was present to which you don't have permission,
+e.g. (`:User:Admin`), you would be denied access.
+
+**After (v3.7):** Rules use flexible matching modes.
+- `GRANT READ ON NODES CONTAINING LABELS :User` ➡ if a node contains the label `:User`, grant `READ` on that node
+- `GRANT READ ON NODES CONTAINING LABELS :User MATCHING ANY` ➡ same behaviour as above
+- `GRANT READ ON NODES CONTAINING LABELS :User MATCHING EXACTLY` ➡ Grants `READ` if the node has exactly the set of labels (`:User` and no more, no less)
+
+### Permission model change
+
+**Before (v3.6):** Hierarchical permissions
+- `NOTHING` ➡ user doesn't have any grants
+- `READ` ➡ user can read a node or a relationship
+- `UPDATE` ➡ user can read and update a node or a relationship
+- `CREATE_DELETE` ➡ user has the full CRUD access on a node or a relationship
+
+**After (v3.7):** Discrete permissions
+- `NOTHING`, `CREATE`, `READ`, `UPDATE`, `DELETE`
+- Each permission is independent and must be granted explicitly. Any combination
+of `CREATE`, `READ`, `UPDATE`, and `DELETE` can be granted.
+
+### Syntax changes
+
+| v3.6                                                  | v3.7                                                                | Description                                             |
+|-------------------------------------------------------|---------------------------------------------------------------------|---------------------------------------------------------|
+| `GRANT READ ON LABELS :User, :Client TO alice`        | `GRANT READ ON NODES CONTAINING LABELS :User, :Client TO alice`     | Added `CONTAINING` keyword.                             |
+| `GRANT UPDATE ON LABELS :Document TO bob`             | `GRANT READ, UPDATE ON NODES CONTAINING LABELS :Document TO bob`    | Separated access rights with discrete permissions.      |
+| `GRANT CREATE_DELETE ON EDGE_TYPES :KNOWS TO charlie` | `GRANT CREATE, DELETE ON EDGES OF TYPE :KNOWS TO charlie`           | Added `OF TYPE` for readability.                        |
+| Not possible in this version                          | `GRANT READ ON NODES CONTAINING LABELS :User MATCHING ANY TO alice` | Added more expressiveness.                              |
+
+For more details, please read the guide to
+[label-based access control](/database-management/authentication-and-authorization/role-based-access-control#fine-grained-access-control).
+
+## Before upgrading to v3.7
+
+<Steps>
+
+### Export current permissions
+
+```cypher
+SHOW USERS;
+// For each user
+SHOW PRIVILEGES FOR username;
+
+SHOW ROLES;
+// For each role
+SHOW PRIVILEGES FOR rolename;
+```
+
+Save the output: you'll need it to recreate per-label rules.
+
+### Back up auth storage
+
+```bash
+# Default location. Adjust if using a custom data directory
+cp -r /var/lib/memgraph/auth/backup/location/auth-backup <your_backup_location>
+```
+
+</Steps>
+
+## What gets migrated automatically
+
+Global permissions only (grants on `*`)
+
+| v3.6 Permission | Migrates to v3.7             |
+|-----------------|------------------------------|
+| NOTHING         | NOTHING                      |
+| READ            | READ                         |
+| UPDATE          | READ, UPDATE                 |
+| CREATE_DELETE   | CREATE, READ, UPDATE, DELETE |
+
+Example:
+```cypher
+// v3.6
+GRANT UPDATE ON LABELS * TO alice;
+
+// After automatic migration
+GRANT READ, UPDATE ON NODES CONTAINING LABELS * TO alice;
+```
+
+## What you must recreate manually
+
+<Callout type="error">
+**All per-label and per-edge type rules are dropped** during migration and must
+be manually recreated.
+Specifically:
+- Any `GRANT ... ON LABELS :Label` rules must be recreated
+- Any `GRANT ... ON EDGE_TYPES :EdgeType` rules must be recreated
+
+**This also applies to init scripts and any configuration queries which were using label-based access controls.**
+</Callout>
+
+Review your pre-upgrade `SHOW PRIVILEGES` output to identify which users/roles
+had per-label permissions. For each permission that you need to recreate:
+
+<Steps>
+
+### Determine the equivalent v3.7 permission set
+- If they had `READ` ➡ `GRANT READ`
+- If they had `UPDATE` ➡ `GRANT READ, UPDATE`
+- If they had `CREATE_DELETE` ➡ `GRANT CREATE, READ, UPDATE, DELETE`
+
+### Choose matching mode
+  - `MATCHING EXACTLY` - vertex must have exactly the specified labels, no more, no less
+  - `MATCHING ANY` (default) - vertex must have one or more of the specified labels
+
+### Write the new GRANT statement
+- Use `GRANT ... ON NODES CONTAINING LABELS ... [MATCHING ANY|MATCHING EXACTLY]
+TO user` for vertex label rules
+- Use `GRANT ... ON EDGES OF TYPE ... TO user` for edge type rules
+
+</Steps>
+
+## Verify behaviour
+
+<Steps>
+
+### Verify global permissions
+
+```cypher
+SHOW USERS;
+// For each user
+SHOW PRIVILEGES FOR username;
+
+SHOW ROLES;
+// For each role
+SHOW PRIVILEGES FOR rolename;
+```
+
+Check that global (`*`) permissions were migrated correctly.
+
+### Recreate per-label rules
+
+Execute the `GRANT` statements you prepared to recreate all per-label and
+per-edge type rules.
+
+### Test access
+
+Connect as each user and verify:
+- Access to vertices with different label combinations works as expected
+- Edge type access works
+
+</Steps>
+
+## Example scenario
+
+Your `SHOW PRIVILEGES` output shows:
+- `alice` has `READ` on `:User` node
+- `bob` has `UPDATE` on `:Document` node
+- `charlie` has `CREATE_DELETE` on `:User` node and `CREATE_DELETE` on `:KNOWS` relationship
+- `dave` has `READ` on `:Transportation` and `:Airplane`
+- `eve` has `READ` on `:Transportation`, `:Airplane`, `:Bus`, `:Car` ➡ she can see all transportations
+
+Based on this information, the new rewritten authorization queries should be:
+```cypher
+GRANT READ ON NODES CONTAINING LABELS :User MATCHING EXACTLY TO alice;
+
+GRANT READ, UPDATE ON NODES CONTAINING LABELS :Document MATCHING EXACTLY TO bob;
+
+GRANT CREATE, READ, UPDATE, DELETE ON NODES CONTAINING LABELS :User MATCHING EXACTLY TO charlie;
+GRANT CREATE, READ, UPDATE, DELETE ON EDGES OF TYPE :KNOWS TO charlie;
+
+GRANT READ ON NODES CONTAINING LABELS :Transportation, :Airplane MATCHING EXACTLY TO dave;
+GRANT READ ON NODES CONTAINING LABELS :Transportation MATCHING ANY TO eve;
+```
+
+### Changelog
+For additional details, refer to the [RBAC documentation](/database-management/authentication-and-authorization/role-based-access-control) and the complete [summary of changes](/release-notes#memgraph-v370---november-19th-2025) in version 3.7.

@@ -1,0 +1,200 @@
+---
+title: User profiles
+description: Learn how to manage user profiles and set resource limits for users in Memgraph Enterprise.
+---
+
+# User profiles
+
+User profiles allow you to set resource limits for users in Memgraph Enterprise. You can define limits on the number of sessions and memory usage to control resource consumption and prevent abuse.
+
+User profiles provide a way to:
+- Set resource limits for individual users
+- Control the number of concurrent sessions per user
+- Limit query memory usage over all active
+- Monitor resource consumption in real-time
+- Enforce resource quotas to prevent system abuse
+
+## Prerequisites
+
+To use user profiles, you need:
+- [Memgraph Enterprise Edition](/database-management/enabling-memgraph-enterprise)
+- The [`PROFILE_RESTRICTION` privilege](/database-management/authentication-and-authorization/role-based-access-control#privileges) to manage profiles. 
+
+## Creating profiles
+
+You can create a profile with default unlimited limits:
+
+```cypher
+CREATE PROFILE profile_name;
+```
+
+Or create a profile with specific limits:
+
+```cypher
+CREATE PROFILE profile_name LIMIT sessions 10, transactions_memory 100MB;
+```
+
+### Available limits
+
+- **sessions**: Maximum number of concurrent sessions (default: unlimited)
+- **transactions_memory**: Maximum memory usage over all active transactions (default: unlimited)
+
+### Limit values
+
+You can specify limits in different formats:
+
+- **Unlimited**: `UNLIMITED` (default)
+- **Quantity**: A positive number (e.g., `10`)
+- **Memory**: A number with unit MB/KB (e.g., `100MB`, `512KB`)
+
+### Examples
+
+```cypher
+-- Create a profile with session limit only
+CREATE PROFILE session_limited LIMIT sessions 5;
+
+-- Create a profile with memory limit only
+CREATE PROFILE memory_limited LIMIT transactions_memory 50MB;
+
+-- Create a profile with both limits
+CREATE PROFILE strict_profile LIMIT sessions 3, transactions_memory 25MB;
+
+-- Create a profile with different memory units
+CREATE PROFILE small_profile LIMIT transactions_memory 1KB;
+```
+
+## Managing profiles
+
+### Update a profile
+
+```cypher
+UPDATE PROFILE profile_name LIMIT sessions 5, transactions_memory 50MB;
+```
+
+### Drop a profile
+
+```cypher
+DROP PROFILE profile_name;
+```
+
+**Note**: When you drop a profile, all users assigned to that profile will have their limits reset and profile assignment cleared.
+
+
+### Clear a profile assignment
+
+```cypher
+CLEAR PROFILE FOR username;
+```
+
+This removes the profile assignment, returning the user to unlimited resources.
+
+## Viewing profile assignments
+
+### Show profile for a user
+
+```cypher
+SHOW PROFILE FOR username;
+```
+
+### Show users assigned to a profile
+
+```cypher
+SHOW USERS FOR PROFILE profile_name;
+```
+
+## Monitoring resource usage
+
+### Show resource usage for a user
+
+```cypher
+SHOW RESOURCE USAGE FOR username;
+```
+
+This command shows the current resource consumption and imposed limits for the specified user, including:
+- Number of active sessions
+- Current memory usage over all active transactions
+
+## Profile management
+
+User profiles are assigned directly to users and provide resource limits for those specific users. Each user can have one profile assigned at a time.
+
+### Profile assignment behavior
+
+**Important**: Profile assignment is a simple mapping between profile names and usernames. This means:
+
+- **Users don't need to exist** when you assign a profile to them
+- You can assign a profile to a username that hasn't been created yet
+- You can assign a profile to a SSO user that will never exist in Memgraph
+- The profile will be automatically applied when that user connects to the database
+- Dropping a profile **does remove the mapping**
+
+## Error handling
+
+The system provides clear error messages for invalid operations:
+
+- **Duplicate profile creation**: Error when trying to create a profile with an existing name
+- **Non-existent profile operations**: Error when trying to show, update, or drop non-existent profiles
+- **Invalid limit values**: Error for negative numbers or invalid memory units
+- **Invalid limit names**: Error for unsupported limit types
+
+**Note**: Assigning a profile to a non-existent user will **not** cause an error. The assignment will be stored and applied when the user connects to the database.
+
+## Best practices
+
+1. **Start with unlimited profiles**: Create profiles without limits first, then gradually add restrictions
+2. **Monitor usage**: Regularly check resource usage to understand actual consumption patterns
+
+## Examples
+
+### Complete workflow example
+
+```cypher
+-- 1. Create users
+CREATE USER developer1;
+CREATE USER developer2;
+
+-- 2. Create profiles with different restrictions
+CREATE PROFILE basic_profile LIMIT sessions 10;
+CREATE PROFILE strict_profile LIMIT sessions 3, transactions_memory 50MB;
+
+-- 3. Assign profiles
+SET PROFILE FOR developer1 TO basic_profile;
+SET PROFILE FOR developer2 TO strict_profile;
+
+-- 4. Verify assignments
+SHOW PROFILE FOR developer1;
+SHOW USERS FOR PROFILE basic_profile;
+
+-- 5. Monitor usage
+SHOW RESOURCE USAGE FOR developer1;
+
+-- 6. Update limits based on usage patterns
+UPDATE PROFILE strict_profile LIMIT sessions 5, transactions_memory 25MB;
+
+-- 7. Verify limits
+SHOW RESOURCE USAGE FOR developer2;
+```
+
+## Syntax reference
+
+| Command | Description |
+|---------|-------------|
+| `CREATE PROFILE name [LIMIT limit_list]` | Create a new profile |
+| `UPDATE PROFILE name LIMIT limit_list` | Update existing profile limits |
+| `DROP PROFILE name` | Delete a profile |
+| `SHOW PROFILES` | List all profiles |
+| `SHOW PROFILE name` | Show specific profile details |
+| `SET PROFILE FOR user TO profile` | Assign profile to user |
+| `CLEAR PROFILE FOR user` | Remove profile assignment |
+| `SHOW PROFILE FOR user` | Show profile assigned to user |
+| `SHOW USERS FOR PROFILE name` | List users assigned to profile |
+| `SHOW RESOURCE USAGE FOR user` | Show current resource usage |
+
+### Limit syntax
+
+```
+limit_list: limit_item [, limit_item]*
+limit_item: sessions number | transactions_memory memory_value
+memory_value: number (MB | KB)
+number: positive integer
+```
