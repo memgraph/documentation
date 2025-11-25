@@ -1,0 +1,240 @@
+---
+title: Unstructured2Graph
+description: Learn how to use Unstructured2Graph to transform unstructured data into structured graph data within Memgraph.
+---
+import { Callout } from 'nextra/components' import { Steps, Tabs } from
+'nextra/components' import { CommunityLinks } from
+'/components/social-card/CommunityLinks'
+
+# Unstructured2Graph
+
+Every company sits on a pile of unstructured documents—reports, PDFs, research
+papers, policies, or meeting notes. They contain valuable knowledge, but little
+of it is connected or searchable.
+
+With **Unstructured2Graph**, part of the Memgraph AI Toolkit, you can turn that
+unstructured text into a connected knowledge graph that LLMs can query and
+reason over.
+
+Unstructured2Graph combines two powerful components:
+
+- **Unstructured IO** — extracts, cleans, and chunks documents of various
+  formats such as PDF, DOCX, or TXT.
+- **LightRAG** — a graph-based reasoning layer that handles prompt engineering
+  and entity extraction automatically, mapping entities and relationships into
+  Memgraph.
+
+Together, they convert raw text into a knowledge graph with nodes, edges, and
+embeddings ready for retrieval.
+
+
+## Getting started
+
+In this guide, you'll learn how to use the Unstructured2Graph step by step.
+You'll quickly go from setting up your project to creating your first entity
+graph.
+
+<Steps>
+
+### Start Memgraph
+
+Start by preparing your workspace and running Memgraph locally using Docker:
+
+```bash
+docker run -p 7687:7687 -p 7444:7444 --name memgraph memgraph/memgraph-mage
+```
+
+Open your terminal, VS Code, Cursor, or any other development environment you
+prefer. This is where you'll run Python scripts connected to your Memgraph
+instance.
+
+You are now ready to start building your graph.
+
+### Clone the Memgraph AI Toolkit
+
+Next, clone the AI Toolkit repository, which contains the Unstructured2Graph
+module:
+
+```bash
+git clone https://github.com/memgraph/ai-toolkit.git
+cd ai-toolkit/unstructured2graph
+```
+
+### Install dependencies
+
+Install `uv`, the package manager used in the AI Toolkit:
+
+```bash
+# Install dependencies using uv
+uv pip install -e .
+```
+
+Detailed steps are available in the [uv
+documentation](https://docs.astral.sh/uv/). Once installed, you can use it to
+run the AI Toolkit packages easily.
+
+### Configure environment variables
+
+Create a `.env` file to configure your OpenAI API key for LLM-based entity
+extraction:
+
+```bash
+# Required for LLM-based entity extraction
+OPENAI_API_KEY=your_api_key_here
+```
+
+### Ingest documents
+
+Start by selecting the documents you want to process. Unstructured2Graph
+supports multiple file types through Unstructured.io, including PDF, DOCX, TXT,
+and HTML. It extracts readable text, removes unwanted elements such as headers
+or page numbers, and divides the content into structured chunks based on
+document layout. Each chunk is then ready for LightRAG to perform entity and
+relationship extraction.
+
+Here is a complete example of how to ingest documents and create a knowledge graph:
+
+```python
+import asyncio
+import logging
+from memgraph_toolbox.api.memgraph import Memgraph
+from lightrag_memgraph import MemgraphLightRAGWrapper
+from unstructured2graph import from_unstructured, create_index, compute_embeddings, create_vector_search_index
+
+async def ingest_documents():
+    # Connect to Memgraph and clear existing data
+    memgraph = Memgraph()
+    memgraph.query("MATCH (n) DETACH DELETE n;")
+    create_index(memgraph, "Chunk", "hash")
+
+    # Initialize LightRAG for entity extraction
+    lrag = MemgraphLightRAGWrapper()
+    await lrag.initialize()
+
+    # Define your document sources
+    sources = [
+        "docs/paper.pdf",                # local file
+        "https://example.com/page.html"  # remote URL
+    ]
+
+    # Process documents and extract entities
+    await from_unstructured(
+        sources=sources,
+        memgraph=memgraph,
+        lightrag_wrapper=lrag,
+        only_chunks=False,  # create chunks and extract entities
+        link_chunks=True    # link chunks sequentially with NEXT edges
+    )
+
+    await lrag.afinalize()
+
+    # Create embeddings and vector index for semantic search
+    compute_embeddings(memgraph, "Chunk")
+    create_vector_search_index(memgraph, "Chunk", "embedding")
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(ingest_documents())
+```
+
+Here's what happens step by step:
+
+1. Text is extracted, cleaned, and chunked by Unstructured IO.
+2. Each chunk becomes a `Chunk` node in Memgraph with properties like `hash` and
+   `text`.
+3. LightRAG performs entity recognition and relationship extraction, creating
+   `base` nodes.
+4. Entities are linked to chunks with `MENTIONED_IN` edges.
+5. Chunks are connected sequentially with `NEXT` edges for traversal.
+6. Embeddings are generated and a vector index is created for semantic search.
+
+After processing, your Memgraph instance will hold a complete, queryable
+knowledge graph ready for GraphRAG.
+
+### Query with GraphRAG
+
+Once your data is ingested, you can perform GraphRAG retrieval directly inside
+Memgraph with a single query. This combines semantic search with graph traversal
+to retrieve the most relevant context for your questions.
+
+```python
+import os
+from memgraph_toolbox.api.memgraph import Memgraph
+from openai import OpenAI
+
+def graphrag_query(prompt: str):
+    memgraph = Memgraph()
+    
+    # Retrieve relevant chunks using vector search + graph traversal
+    retrieved_chunks = []
+    for row in memgraph.query(
+        f"""
+        CALL embeddings.text(['{prompt}']) YIELD embeddings, success
+        CALL vector_search.search('vs_name', 5, embeddings[0]) YIELD distance, node, similarity
+        MATCH (node)-[r*bfs]-(dst:Chunk)
+        WITH DISTINCT dst, degree(dst) AS degree ORDER BY degree DESC
+        RETURN dst LIMIT 5;
+        """
+    ):
+        if "text" in row["dst"]:
+            retrieved_chunks.append(row["dst"]["text"])
+
+    if not retrieved_chunks:
+        print("No chunks retrieved.")
+        return
+
+    # Send retrieved context to LLM for summarization
+    context = "\n\n".join(retrieved_chunks)
+    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    
+    completion = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "Answer the question based on the provided context."},
+            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {prompt}"},
+        ],
+        temperature=0.1,
+    )
+    
+    answer = completion.choices[0].message.content
+    print(f"Question: {prompt}")
+    print(f"Answer: {answer}")
+
+if __name__ == "__main__":
+    graphrag_query("What are the key findings in the document?")
+```
+
+Here's what the GraphRAG query does:
+
+1. Converts the input prompt into an embedding.
+2. Searches for the most semantically relevant chunks using vector search.
+3. Expands context through connected nodes in the graph using BFS traversal.
+4. Sends the retrieved text to an LLM for summarization or question answering.
+
+### Visualize the graph in Memgraph Lab
+
+Open [Memgraph Lab](/memgraph-lab) and connect to your local instance. Then run:
+
+```cypher
+MATCH (n)-[r]->(m) RETURN n, r, m;
+```
+
+You'll see:
+
+- `Chunk` nodes for text sections
+- `base` nodes for extracted entities
+- `MENTIONED_IN` edges linking entities to their source chunks
+- `NEXT` edges connecting sequential chunks
+
+Explore this graph visually to understand how your content has been transformed
+into a connected network of knowledge.
+
+
+<Callout type="info"> **Try it in Memgraph Cloud**
+
+Want to skip local setup? You can also use Unstructured2Graph directly with
+[Memgraph Cloud](https://cloud.memgraph.com/). Sign up, create a new project,
+and start building your knowledge graph in minutes. </Callout>
+
+<CommunityLinks />
+
