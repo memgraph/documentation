@@ -2,5 +2,6 @@ export default {
     "graph-rag": "GraphRAG",
     "integrations": "Integrations",
     "machine-learning": "Machine learning",
-    "agents": "Agents"
+    "agents": "Agents",
+    "unstructured2graph": "Unstructured2Graph"
 }
