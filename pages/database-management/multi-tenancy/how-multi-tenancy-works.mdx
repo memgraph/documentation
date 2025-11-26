@@ -1,0 +1,113 @@
+---
+title: How multi-tenancy works
+description: Learn how multi-tenancy works in Memgraph, including default database, isolated databases, configuration, and backwards compatibility.
+---
+
+import { Callout } from 'nextra/components'
+
+# How multi-tenancy works
+Multi-tenant support in Memgraph enables users to manage multiple isolated
+databases within a single instance. The primary objective is to facilitate
+efficient resource isolation, maintain data integrity, and manage access for
+different clients.
+
+Memgraph for tenant uses the term `database`. Tenant here is a synonym, and multi-tenancy
+refers to having multiple databases inside one Memgraph instance. The instance is what in
+relational databases would refer to RDBMS (the Memgraph process, graph management system, which
+manages all the databases).
+
+## Databases specification
+
+### Default database
+
+A default database named `memgraph` is automatically created during startup. This database
+is also the default database for those who don't use multi-tenancy, or use Memgraph Community
+Edition.
+
+New users are granted access only to this default database (they can connect to this database).
+The default database name cannot be altered.
+
+### Access requirements and privileges
+<Callout>
+All multi-tenant operations require:
+- Access to the default `memgraph` database
+- The appropriate privileges, depending on the actual query
+</Callout>
+
+Additionally, replication, authentication, and authorization queries conform to the same principle.
+
+For multi-database operations specifically, the privileges are the following:
+- `MULTI_DATABASE_USE` privilege - for switching and listing databases
+- `MULTI_DATABASE_EDIT` privilege - for creating, deleting, and renaming databases
+- Access to the `memgraph` database
+
+Without access to the `memgraph` database, these operations will fail.
+
+### Isolated databases
+
+Isolated databases within Memgraph function as distinct single-database Memgraph
+instances. Queries executed on a specific database should operate as if it were
+the sole database in the system, preventing cross-database contamination. Users
+interact with individual databases, and cross-database queries are prohibited.
+
+<Callout>
+Cross-database queries are not yet implemented. If you require this feature in Memgraph,
+please open a Github issue, or contact our sales team!
+</Callout>
+
+Every database has its own database UUID, which can be read by running the `SHOW
+STORAGE INFO` query on a particular database.
+
+## Main database for user
+
+Administrators assign default databases to users, ensuring a seamless and secure
+connection experience. Users cannot connect to Memgraph if they lack access
+rights to their default database. This situation may arise from database
+deletion or revoked access rights.
+
+## Data storage separation between databases
+
+The distinction of databases lies in the location of the data directory. The designated
+data directory serves as the root and retains data associated with the default
+database. Other databases are housed in new directories within
+`data_directory/databases/*db_name*`.
+
+The default `memgraph` database also includes a directory
+`data_directory/databases/memgraph`, which contains symbolic links leading back
+to the root. Some links are proactively generated and their status may vary
+based on configuration.
+
+## Users, roles, and privileges in the multi-tenant context
+
+Privileges can be granted in two ways:
+- **Directly to users**: Privileges are granted directly to a user account (e.g. `GRANT MATCH TO marko`)
+- **Via roles**: Privileges are granted to a role, and then the role is assigned to users
+  (e.g. `GRANT MATCH TO markos_role`)
+
+### How privileges apply to databases
+
+Privileges granted to a user or role apply to **all databases** that the user or role has access to.
+This means:
+
+- If you grant privileges to a role and grant that role access to multiple databases, users with
+  that role will have those privileges for all of those databases
+- If you grant privileges directly to a user and grant that user access to multiple databases,
+  the user will have those privileges for all of those databases
+
+<Callout type="info">
+For clean architecture, it is recommended to grant **one and only one database per role**.
+This ensures clear separation of concerns and makes privilege management more straightforward.
+</Callout>
+
+## Backwards compatibility
+
+The multi-tenant feature ensures backwards compatibility, facilitating smooth
+version upgrades and downgrades without disrupting user experience. During an
+upgrade, previous data is migrated to the default database, while downgrading
+retains data solely in the default database.
+
+## Sharing of resources between tenants
+
+In the current version, all isolated databases share the underlying resources so
+there is no provision to restrict CPU or RAM usage for a specific database.
+Instead, global limitations are imposed on Memgraph as a whole.
