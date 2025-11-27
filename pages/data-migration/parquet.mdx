@@ -10,8 +10,8 @@ import {CommunityLinks} from '/components/social-card/CommunityLinks'
 
 # Import data from Parquet file
 
-The data from Parquet files can be imported using the [`LOAD PARQUET` Cypher clause](#load-parquet-cypher-clause) from the local disk
-and from the s3.
+The data from Parquet files can be imported using the [`LOAD PARQUET` Cypher clause](#load-parquet-cypher-clause) from the local disk, http, https, ftp
+and from the s3 servers.
 
 ## `LOAD PARQUET` Cypher clause
 
@@ -20,7 +20,7 @@ in column batches, assembles them into row batches of 64K rows and places those
 batches into a queue. The main thread then pulls each batch from the queue and
 processes it row by row. For every row, it binds the parsed values to the
 specified variables and either populates the database (if it is empty) or
-appends the new rows to an existing dataset.
+appends the new rows to an existing dataset. 
 
 
 ### `LOAD PARQUET` clause syntax
@@ -115,6 +115,113 @@ When using the `LOAD PARQUET` clause please keep in mind:
   LOAD PARQUET FROM "/y.parquet" AS y
   CREATE (n:A {p1 : x, p2 : y});
   ```
+
+### Loading from HTTP and S3
+
+The `LOAD PARQUET` clause supports loading files from HTTP/HTTPS/FTP URLs and S3 buckets.
+
+#### Loading from HTTP/HTTPS/FTP
+
+When loading from HTTP, HTTPS, or FTP URLs, the file will be downloaded to the `/tmp` directory before being imported:
+
+```cypher
+LOAD PARQUET FROM "https://download.memgraph.com/asset/docs/people_nodes.parquet" AS row
+CREATE (n:Person {id: row.id, name: row.name, age: row.age, city: row.city});
+```
+
+You can also use FTP URLs:
+
+```cypher
+LOAD PARQUET FROM "ftp://example.com/data/nodes.parquet" AS row
+CREATE (n:Node) SET n += row;
+```
+
+#### Loading from S3
+
+To load files from S3, you can provide AWS credentials in three ways:
+
+1. Using WITH CONFIG clause (Recommended for query-specific credentials)
+
+```cypher
+LOAD PARQUET FROM "s3://my-bucket/path/to/file.parquet"
+WITH CONFIG {
+  aws_region: "us-east-1",
+  aws_access_key: "YOUR_ACCESS_KEY",
+  aws_secret_key: "YOUR_SECRET_KEY"
+}
+AS row
+CREATE (n:Node) SET n += row;
+```
+
+For S3-compatible services (like MinIO), you can also specify the endpoint URL:
+
+```cypher
+LOAD PARQUET FROM "s3://my-bucket/data/nodes.parquet"
+WITH CONFIG {
+  aws_region: "us-east-1",
+  aws_access_key: "YOUR_ACCESS_KEY",
+  aws_secret_key: "YOUR_SECRET_KEY",
+  aws_endpoint_url: "https://s3-compatible-service.example.com"
+}
+AS row
+CREATE (n:Node) SET n += row;
+```
+
+2. Using environment variables
+
+Set environment variables before starting Memgraph:
+
+```
+export AWS_REGION="us-east-1"
+export AWS_ACCESS_KEY="YOUR_ACCESS_KEY"
+export AWS_SECRET_KEY="YOUR_SECRET_KEY"
+export AWS_ENDPOINT_URL="https://s3-compatible-service.example.com"  # Optional
+```
+
+Then you can load files without specifying credentials in the query:
+
+```cypher
+LOAD PARQUET FROM "s3://my-bucket/path/to/file.parquet" AS row
+CREATE (n:Node) SET n += row;
+```
+
+3. Using database settings
+
+Set database-level AWS credentials:
+
+```cypher
+SET DATABASE SETTING 'aws.region' TO 'us-east-1';
+SET DATABASE SETTING 'aws.access_key' TO 'YOUR_ACCESS_KEY';
+SET DATABASE SETTING 'aws.secret_key' TO 'YOUR_SECRET_KEY';
+SET DATABASE SETTING 'aws.endpoint_url' TO 'https://s3-compatible-service.example.com';  -- Optional
+```
+
+Then load files without credentials in the query:
+
+```cypher
+LOAD PARQUET FROM "s3://my-bucket/path/to/file.parquet" AS row
+CREATE (n:Node) SET n += row;
+```
+
+Credential precedence: If credentials are provided in multiple ways, the order of precedence is:
+1. WITH CONFIG clause in the query (highest priority)
+2. Environment variables
+3. Database settings (lowest priority)
+
+When loading files from remote locations (HTTP, FTP, or S3), the file is first downloaded to /tmp before being loaded into memory. Ensure you have sufficient disk space for large files. 
+The download can be interrupted using `TERMINATE TRANSACTIONS <tx_id>` without
+waiting for the full download to complete.
+
+Use `file.download_conn_timeout_sec` run-time configuration to specify the connection timeout when establishing a connection to the remote server.
+
+
+| Option           | Required | Description                                                        |
+|------------------|----------|--------------------------------------------------------------------|
+| aws_region       | Yes      | The AWS region where your S3 bucket is located (e.g., "us-east-1") |
+| aws_access_key   | Yes      | Your AWS access key ID                                             |
+| aws_secret_key   | Yes      | Your AWS secret access key                                         |
+| aws_endpoint_url | No       | Custom endpoint URL for S3-compatible services                     |
+
 
 ### Increase import speed
 
