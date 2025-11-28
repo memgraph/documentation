@@ -1,0 +1,274 @@
+---
+title: Replication commands reference
+description: Complete reference guide for all replication commands in Memgraph Community Edition, including role management, replica registration, and cluster monitoring.
+---
+
+import { Callout } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# Replication commands reference
+
+This page provides a comprehensive reference for all commands available in Memgraph Community 
+Edition replication.
+
+<Callout type="info">
+
+This reference is for **Memgraph Community** users. If you have a **Memgraph
+Enterprise** license, we recommend using the [high availability
+features](/clustering/high-availability) instead, which provide automatic
+failover, load balancing, and comprehensive cluster management capabilities.
+
+</Callout>
+
+## Role management commands
+
+### SET REPLICATION ROLE TO REPLICA
+
+Demotes an instance to the REPLICA role and sets the replication port.
+
+```cypher
+SET REPLICATION ROLE TO REPLICA WITH PORT <port_number>;
+```
+
+**Parameters:**
+- `port_number` (integer): Port number for replication communication
+  (1000-10000)
+
+**Behavior:**
+- Demotes the current instance from MAIN to REPLICA
+- Sets the replication port for communication with the MAIN instance
+- REPLICA instances can only accept read queries
+- Default port 10000 is recommended for easier registration (used implicitly in
+  other commands)
+
+**Example:**
+```cypher
+SET REPLICATION ROLE TO REPLICA WITH PORT 10000;
+```
+
+**When to use:**
+Use this as a first command on the instances you have chosen to be replicas.
+
+### SET REPLICATION ROLE TO MAIN
+
+Promotes a REPLICA instance to become the MAIN instance.
+
+```cypher
+SET REPLICATION ROLE TO MAIN;
+```
+
+**Behavior:**
+- Promotes the current REPLICA instance to MAIN
+- If the instance is already MAIN, command will make an exception
+- Only one MAIN instance should exist in a replication cluster (pay close attention when managing this)
+- If the original MAIN is still alive, conflicts may occur
+- Requires manual conflict resolution if multiple MAINs exist
+
+**When to use:**
+Memgraph when being run first time is always thinking it's main, so there's no real need to run this query at the start.
+Only time you would need this query is to perform manual leader election.
+
+### SHOW REPLICATION ROLE
+
+Displays the current replication role of the instance.
+
+```cypher
+SHOW REPLICATION ROLE;
+```
+
+**Returns:**
+- Current replication role: "main" or "replica"
+
+**Example output:**
+```nocopy
++------------------+
+| replication role |
++------------------+
+| "replica"        |
++------------------+
+```
+
+**When to use:**
+Since there is no out of the box routing mechanism in Memgraph Community, you can use this command to determine which instance is the MAIN instance.
+It should give you enough information to decide on which instance you can perform writes or reads.
+
+## Replica registration commands
+
+### REGISTER REPLICA (SYNC)
+
+Registers a REPLICA instance with synchronous replication mode.
+
+```cypher
+REGISTER REPLICA name SYNC TO <socket_address>;
+```
+
+**Parameters:**
+- `name` (string): Unique name for the replica
+- `socket_address` (string): Network address in format `"IP_ADDRESS|DNS_NAME:PORT_NUMBER"` or `"IP_ADDRESS|DNS_NAME"` (default port `10000`)
+
+**Behavior:**
+- MAIN will register a REPLICA instance under SYNC replication mode and sync its own data with the REPLICA
+
+**Implications:**
+- MAIN waits for confirmation from SYNC replicas before committing transactions
+- if SYNC replica is down, MAIN can still commit and move on (unlike STRICT_SYNC),
+  while the REPLICAs are expected to recover and catch-up eventually
+- ensures data consistency, but with slower write performance
+- there is a minimal chance for data loss, in which case manual intervention is needed to recover the data
+
+**Example:**
+```cypher
+REGISTER REPLICA REP1 SYNC TO "172.17.0.3:10000";
+```
+
+### REGISTER REPLICA (ASYNC)
+
+Registers a REPLICA instance with asynchronous replication mode.
+
+```cypher
+REGISTER REPLICA name ASYNC TO <socket_address>;
+```
+
+**Parameters:**
+- `name` (string): Unique name for the replica
+- `socket_address` (string): Network address in format "IP_ADDRESS|DNS_NAME:PORT_NUMBER" or "IP_ADDRESS|DNS_NAME" (default port 10000)
+
+**Behavior:**
+- MAIN will register a REPLICA instance under ASYNC replication mode and sync its own data with the REPLICA
+
+**Implications:**
+- MAIN commits transactions without waiting for replica confirmation, as data is replicated using a background thread
+- ensures high availability and partition tolerance
+- data is eventually consistent
+- best performance but potential data loss on failover
+
+**Example:**
+```cypher
+REGISTER REPLICA REP2 ASYNC TO "172.17.0.4";
+```
+
+### REGISTER REPLICA (STRICT_SYNC)
+
+Registers a REPLICA instance with strict synchronous replication mode.
+
+```cypher
+REGISTER REPLICA name STRICT_SYNC TO <socket_address>;
+```
+
+**Parameters:**
+- `name` (string): Unique name for the replica
+- `socket_address` (string): Network address in format "IP_ADDRESS|DNS_NAME:PORT_NUMBER" or "IP_ADDRESS|DNS_NAME" (default port 10000)
+
+**Behavior:**
+- MAIN will register a REPLICA instance under STRICT_SYNC replication mode and sync its own data with the REPLICA
+
+**Implications:**
+- uses two-phase commit protocol (2PC)
+- MAIN cannot commit if STRICT_SYNC replica is down
+- ensures no data loss but reduces throughput because of 2PC
+- best for high-availability scenarios requiring zero data loss
+
+**Example:**
+```cypher
+REGISTER REPLICA REP3 STRICT_SYNC TO "172.17.0.5:10000";
+```
+
+### DROP REPLICA
+
+Removes a REPLICA instance from the replication cluster.
+
+```cypher
+DROP REPLICA <name>;
+```
+
+**Parameters:**
+- `name` (string): Name of the replica to remove
+
+**Behavior:**
+- unregisters the replica from the MAIN instance
+- stops replication to the specified replica
+- replica instance continues running as REPLICA but is no longer part of the cluster
+
+**Example:**
+```cypher
+DROP REPLICA REP1;
+```
+
+**When to use:**
+If all else fails, and the REPLICA can not recover, you can always drop and re-register the REPLICA to start fresh. We advise `DROP REPLICA`
+followed by `REGISTER REPLICA` after which the recovery process should start, and the REPLICA should again catch up with the MAIN.
+
+## Monitoring commands
+
+### SHOW REPLICAS
+
+Lists all registered REPLICA instances and their details.
+
+```cypher
+SHOW REPLICAS;
+```
+
+**Returns:**
+- replica name
+- network address of the REPLICA + port of the replication server
+- replication mode (SYNC/ASYNC/STRICT_SYNC)
+- system information
+- tenant information (lag, status, timestamp)
+
+**Example output:**
+```nocopy
++--------+--------------------+-----------+-------------+-------------------------------------------------+
+| name   | socket_address     | sync_mode | system_info | data_info                                       |
++--------+--------------------+-----------+-------------+-------------------------------------------------+
+| "REP1" | "172.17.0.3:10000" | "sync"    | Null        | {memgraph: {behind: 0, status: "ready", ts: 0}} |
+| "REP2" | "172.17.0.4:10000" | "async"   | Null        | {memgraph: {behind: 0, status: "ready", ts: 0}} |
++--------+--------------------+-----------+-------------+-------------------------------------------------+
+```
+
+## Socket address formats
+
+### IP address format
+
+```cypher
+"IP_ADDRESS|DNS_NAME:PORT_NUMBER"
+```
+
+**Example:**
+```cypher
+"172.17.0.4:10050"
+```
+
+### IP address with default port
+
+```cypher
+"IP_ADDRESS"
+```
+
+**Example:**
+```cypher
+"172.17.0.5"
+```
+
+### DNS name format
+
+```cypher
+"DNS_NAME:PORT_NUMBER"
+```
+
+**Example:**
+```cypher
+"memgraph-replica.memgraph.net:10050"
+```
+
+### DNS name with default port
+
+```cypher
+"DNS_NAME"
+```
+
+**Example:**
+```cypher
+"memgraph-replica.memgraph.net"
+```
+
+<CommunityLinks/>
