@@ -4,105 +4,136 @@ description: Various things for database administrators to bear in mind when dep
 ---
 
 import { Callout } from 'nextra/components'
+import { CommunityLinks } from '/components/social-card/CommunityLinks'
 
 # Best practices when setting up replication
 
 <Callout type="info">
 
-This guide is for **Memgraph Community** users who want to set up data replication across multiple instances.
-If you have a **Memgraph Enterprise** license, we recommend using the [high availability features](/clustering/high-availability) instead, which provide automatic failover, 
-load balancing, and comprehensive cluster management capabilities.
+This guide is for **Memgraph Community** users who want to set up data
+replication across multiple instances. If you have a **Memgraph Enterprise**
+license, we recommend using the [high availability
+features](/clustering/high-availability) instead, which provide automatic
+failover, load balancing, and comprehensive cluster management capabilities.
 
 </Callout>
 
-## Which replication mode should I use?
-If your critical requirement is **performance**, and you're okay with being **eventually consistent**, then you should
-**use ASYNC replication mode**, as that replication mode replicates using a background thread, and doesn't wait
-for responses or timeouts when committing.
+## Choose replication mode
 
-If your critical requirement is **no data loss** - **use STRICT_SYNC replication mode**,
-as it implements two-phase commit protocol to ensure no data loss replication.
+Replication mode determines whether your cluster prioritizes **performance** or
+**consistency**:
 
-The most commonly used replication mode is SYNC. It ensures decent performance along with consistency.
-There is, however, a minimal probability of a data loss.
+- Use **ASYNC** if you want **maximum performance and availability**, and can
+  tolerate eventual consistency. The MAIN commits immediately without waiting
+  for REPLICAs.
+- Use **STRICT_SYNC** if you want **zero data loss**, guaranteed by the
+  two-phase commit protocol. This comes at the cost of lower throughput.
+- **SYNC** is the most common choice, balancing safety and performance. There is
+  a very small chance of data loss.
 
-For **cross data center deployment, it is best to use ASYNC replication mode** as in the most cases the replication latency
-requirements are relaxed in that case.
+For **cross-data-center deployments**, we recommend **ASYNC**, since network
+latency between regions usually makes synchronous modes impractical.
 
-### Combining different replication modes
-You're well welcome to combine different replication modes for respective replicas. However, you can not pair SYNC with
-STRICT_SYNC replicas, because SYNC implies that MAIN can continue the commit synchronously,
-while STRICT_SYNC doesn't allow that.
-Possible pairs are:
-- SYNC + ASYNC replicas
-- STRICT_SYNC + ASYNC replicas
+### Combine different replication modes
 
-## Which storage mode to use?
+You can run REPLICAs with different modes in the same cluster. Valid
+combinations:
 
-Data replication currently **works only in the in-memory transactional [storage
-mode](/fundamentals/storage-memory-usage)**.
+- SYNC + ASYNC
+- STRICT_SYNC + ASYNC
 
-If you're using in-memory analytical storage mode for the fast import:
-1. import your data
-2. switch to in-memory transactional storage mode
-3. then and only then set up replication
+Invalid:
+
+- SYNC + STRICT_SYNC  
+  (because SYNC allows the MAIN to proceed even if a SYNC replica is down,
+  while STRICT_SYNC forbids it)
+
+
+## Storage mode requirements
+
+Replication works **only** in the [in-memory transactional storage
+mode](/fundamentals/storage-memory-usage#in-memory-transactional-storage-mode-default).
+
+If you imported data using **in-memory analytical mode**, you must:
+
+1. Import the data  
+2. Switch the instance to **in-memory transactional mode**  
+3. Then configure replication  
+
 
 ## Hardware requirements
-For replication, ensure all machines (MAIN and REPLICA instances) have exactly the same amount of
-RAM and the same CPU. This uniformity is crucial for consistent performance and reliability.
+
+For predictable performance, all instances (MAIN and REPLICAs) should have:
+
+- the **same amount of RAM**  
+- the **same CPU configuration**
+
+This ensures consistent workload distribution and prevents unexpected bottlenecks.
 
 ## Deployment requirements
+
 When running multiple instances, each on its own machine, run Memgraph as you
-usually would.
+usually would:
 
-If you are exploring replication and running multiple instances on one machine,
-you can run Memgraph with Docker, but if you are using volumes, they need to be
-called differently and each instance needs to be exposed via a different port.
+- **Production environments**: run each Memgraph instance on its own machine.
+- **Local development**: you can run multiple replicas on a single machine using
+  Docker, but ensure:
+  - each instance uses a **different port**
+  - each volume has a **unique** directory name
 
-Check the example of creating [a replication
-cluster](/clustering/replication/setup-replication-cluster-docker).
+See the full Docker example:
+[Setup replication cluster (Docker)](/clustering/replication/setup-replication-cluster-docker)
 
-## Which command line flags should I use?
 
-#### Data recovery on startup
+## Recommended command-line flags
+
+### Data recovery on startup
 
 **By default, Memgraph sets the data recovery on startup to true:**
 
 ```bash
 --data_recovery_on_startup=true
 ```
-The flag controls whether Memgraph will recover the persisted data during startup. It's necessary
-to keep this value to true so instances which have temporarily shut down can recover their data when
-they get back up.
 
-**Advice:** Do nothing since this is enforced by default.
+The flag controls whether Memgraph will recover the persisted data during
+startup. It's necessary to keep this value to true so instances which have
+temporarily shut down can recover their data when they get back up.
 
-#### Restoring replication state on startup
+**Advice:** Keep the default value.
+
+### Restoring replication state on startup
+
 Instances need to remember their role and configuration details in a replication
 cluster upon restart, and that is **by default enforced** with the flag:
 
 ```bash
 --replication-restore-state-on-startup=true
 ```
-The flag should remain `true` throughout the instances' lifetime for replication to work correctly.
-If the flag is set to `false`, MAIN can't communicate with instance, because each
-REPLICA has a UUID of MAIN which can communicate with it, and it is set up only
-on instance registration. In case the flag is set to `false`, the way to go
-forward is first to unregister the instance on MAIN and register it again.
+The flag should remain `true` throughout the instances' lifetime for replication
+to work correctly. If the flag is set to `false`, MAIN can't communicate with
+instance, because each REPLICA has a UUID of MAIN which can communicate with it,
+and it is set up only on instance registration. In case the flag is set to
+`false`, the way to go forward is first to unregister the instance on MAIN and
+register it again.
 
-**Advice:** Do nothing since this is enforced by default.
+**Advice:** Keep the default value.
 
-#### Storage WAL file flush
+
+### Storage WAL file flush
+
 Users are advised to use the same value for configuration flag
 ```bash
 --storage-wal-file-flush-every-n-txn
 ```
-on MAIN and SYNC REPLICAs. Otherwise, the situation could occur in which there is a data which is
-*fsynced* on REPLICA and not on MAIN. In the case MAIN crashes, this could leave to conflicts in system
-that would need to be manually resolved by users.
+on MAIN and SYNC REPLICAs. Otherwise, the situation could occur in which there
+is a data which is *fsynced* on REPLICA and not on MAIN. In the case MAIN
+crashes, this could leave to conflicts in system that would need to be manually
+resolved by users.
 
-**Advice:** Do nothing since this the value is identical for all instances by default. If you change the value
-for the flag, change it for all the respective instances accordingly.
+**Advice:** Do nothing since this the value is identical for all instances by
+default. If you change the value for the flag, change it for all the respective
+instances accordingly.
+
 
 ## Permissions to run replication queries
 
@@ -111,19 +142,20 @@ REPLICAS`, `DROP REPLICA`, etc.) target the default "memgraph" database and
 require access to it. The recommendation is to use the default "memgraph"
 database as an admin/system database and store graphs under other databases. 
 
-**In Memgraph community, every user is an admin user and there are no roles or privileges, so
-users will be able to execute any replication query.**
+**In Memgraph community, every user is an admin user and there are no roles or
+privileges, so users will be able to execute any replication query.**
 
-### Requirements for replication queries (Enterprise)
+### Requirements for replication queries <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
 
 To execute replication queries, users must have:
 1. The `REPLICATION` privilege
 2. **AND** access to the default "memgraph" database
 
-**In Memgraph Enterprise edition, the very first created user is an admin user, which will be able to execute
-any replication query.**
+**In Memgraph Enterprise edition, the very first created user is an admin user,
+which will be able to execute any replication query.**
 
-{<h4 className="custom-header">Example: Admin user with replication privileges</h4>}
+{<h4 className="custom-header">Example: Admin user with replication
+privileges</h4>}
 
 ```cypher
 -- Create admin role with replication privileges
@@ -141,12 +173,13 @@ In this setup, `repl_admin` can:
 - Access the "memgraph" database for administrative operations
 - Manage the replication cluster configuration
 
-## How to manage replication with Memgraph Community Edition?
+## Manage replication in Memgraph community
 
 ### Manual failover
 
-**Leader election / automatic failover** is a part of Memgraph Enterprise Edition. For Memgraph 
-Community edition, users need to perform manual failover routines.
+**Leader election / automatic failover** is a part of Memgraph Enterprise
+Edition. For Memgraph Community edition, users need to perform manual failover
+routines.
 
 The replication cluster should only have one MAIN instance in order to avoid
 errors in the replication system. If the original MAIN instance fails, you can
@@ -162,10 +195,15 @@ to resolve any conflicts and manage replication manually.
 
 If you demote the new MAIN instance back to the REPLICA role, it will not
 retrieve its original function. You need to [drop
-it](/clustering/replication/replication-commands-reference#drop-replica) from the MAIN and 
-[register it](/clustering/replication/replication-commands-reference#replica-registration-commands) again.
+it](/clustering/replication/replication-commands-reference#drop-replica) from
+the MAIN and [register
+it](/clustering/replication/replication-commands-reference#replica-registration-commands)
+again.
 
 If the crashed MAIN instance goes back online once a new MAIN is already
-assigned, it cannot reclaim its previous role. It needs to be cleaned and demoted to
-become a REPLICA instance of the new MAIN instance. In the worst case, restarting that instance
-clean with new fresh storage is needed, in order for the REPLICA registration to pass successfully.
+assigned, it cannot reclaim its previous role. It needs to be cleaned and
+demoted to become a REPLICA instance of the new MAIN instance. In the worst
+case, restarting that instance clean with new fresh storage is needed, in order
+for the REPLICA registration to pass successfully.
+
+<CommunityLinks/>
