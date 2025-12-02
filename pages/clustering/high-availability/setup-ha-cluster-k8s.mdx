@@ -5,22 +5,25 @@ description: See how one can setup a high availability cluster with Kubernetes.
 
 import { Callout } from 'nextra/components'
 import { Steps } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
 
-# Setup high availability cluster with K8s (Enterprise)
+# Set up HA cluster with K8s <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
 
 <Callout>
-**Users are advised to first read the guide on [how replication works](/clustering/concepts/how-replication-works), followed
-by the guide on [how high availability works](/clustering/concepts/how-high-availability-works)**, and
-how to [query the cluster](/clustering/concepts/querying-the-cluster-in-high-availability).
+Users are advised to first read the guide on [how replication
+works](/clustering/concepts/how-replication-works), followed by the guide on
+[how high availability
+works](/clustering/concepts/how-high-availability-works), and how to [query
+the cluster](/clustering/concepts/querying-the-cluster-in-high-availability).
 </Callout>
 
-### Installing the Memgraph HA Helm chart
+## Install Memgraph HA on Kubernetes
 
-To include Memgraph HA cluster as a part of your Kubernetes cluster, you need to
-[add the repository](#add-the-repository-1) and [install
-Memgraph](#install-memgraph-ha).
+To deploy a Memgraph High Availability (HA) cluster on Kubernetes, you must
+first [add the Memgraph Helm repository](#add-the-helm-repository) and then
+[install the HA Helm chart](#install-memgraph-ha).
 
-#### Add the repository
+### Add the Helm repository
 
 Add the Memgraph Helm chart repository to your local Helm setup by running the
 following command:
@@ -35,9 +38,11 @@ Make sure to update the repository to fetch the latest Helm charts available:
 helm repo update
 ```
 
-#### Install Memgraph HA
+### Install Memgraph HA
 
-Since Memgraph HA requires an [Enterprise license](/database-management/enabling-memgraph-enterprise), you need to provide the license and organization name during the installation.
+Since Memgraph HA requires an [Enterprise
+license](/database-management/enabling-memgraph-enterprise), you need to provide
+the license and organization name during the installation.
 
 ```
 helm install <release-name> memgraph/memgraph-high-availability --set env.MEMGRAPH_ENTERPRISE_LICENSE=<your-license>,env.MEMGRAPH_ORGANIZATION_NAME=<your-organization-name>
@@ -47,18 +52,21 @@ Replace `<release-name>` with a name of your choice for the release and set the
 Enterprise license.
 
 
-<Callout type="info"> 
-When installing a chart, it's best practice to specify the exact version you
-want to use. Using the latest tag can lead to issues, as a pod restart may pull
-a newer image, potentially causing unexpected changes or incompatibilities.
-</Callout>
+<Callout type="info"> **Tip:** Always install a specific chart version. Using
+the `latest` tag can lead to unexpected behavior if pods restart and pull newer,
+incompatible images. </Callout>
 
-### Install Memgraph HA chart with `minikube`
+### Install Memgraph HA with `minikube`
 
-If you are installing Memgraph HA chart locally with `minikube`, we are strongly recommending to enable `csi-hostpath-driver` and use its storage class. Otherwise,
+If you are installing Memgraph HA chart locally with `minikube`, we are strongly
+recommending to enable `csi-hostpath-driver` and use its storage class.
+Otherwise,
 you could have problems with attaching PVCs to pods.
 
-1. Enable `csi-hostpath-driver`
+<Steps>
+
+{<h4 className="custom-header"> Enable csi-hostpath-driver </h4>}
+
 ```
 minikube addons disable storage-provisioner
 minikube addons disable default-storageclass
@@ -66,7 +74,7 @@ minikube addons enable volumesnapshots
 minikube addons enable csi-hostpath-driver
 ```
 
-2. Create a storage class with `csi-hostpath-driver` as a provider (file sc.yaml)
+{<h4 className="custom-header">Create a StorageClass (save as sc.yaml) </h4>}
 
 ```
 apiVersion: storage.k8s.io/v1
@@ -78,22 +86,46 @@ volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Delete
 ```
 
-3. `kubectl apply -f sc.yaml`
+{<h4 className="custom-header"> Apply the StorageClass </h4>}
 
-4. Set `libStorageClassName` to `csi-hostpath-delayed` in `values.yaml`
+```kubectl apply -f sc.yaml```
+
+{<h4 className="custom-header"> Configure the Helm chart </h4>}
+
+In your `values.yaml`, set:
+
+```yaml
+storage:
+  libStorageClassName: csi-hostpath-delayed
+```
+
+</Steps>
 
 
-### Changing the default chart values
+## Configure the Helm chart
 
-To change the default chart values, run the command with the specified set of
-flags:
+### Override default chart values
+
+You can customize the Memgraph HA Helm chart either inline with `--set` flags or
+by using a `values.yaml` file.
+
+**Option 1: Override values inline**
+
+```bash
+helm install <release-name> memgraph/memgraph-high-availability \
+  --set <flag1>=<value1>,<flag2>=<value2>,...
 ```
-helm install <resource-name> memgraph/memgraph-high-availability --set <flag1>=<value1>,<flag2>=<value2>,...
+
+**Option 2: Use a values file**
+
+```bash
+helm install <release-name> memgraph/memgraph-high-availability \
+  -f values.yaml
 ```
-Or you can modify a `values.yaml` file and override the desired values:
-```
-helm install <resource-name> memgraph/memgraph-high-availability -f values.yaml
-```
+
+You can also combine both approaches. Values specified with `--set` override
+those in `values.yaml`.
+
 
 ### Upgrade Helm chart
 
@@ -102,7 +134,8 @@ To upgrade the helm chart you can use:
 helm upgrade <release-name> memgraph/memgraph-high-availability --set <flag1>=<value1>,<flag2>=<value2>
 ```
 
-Again it is possible use both `--set` and values.yaml to set configuration options.
+Again it is possible use both `--set` and values.yaml to set configuration
+options.
 
 If you're using `IngressNginx` and performing an upgrade, the attached public IP
 should remain the same. It will only change if the release includes specific
@@ -117,30 +150,57 @@ Uninstallation is done with:
 helm uninstall <release-name>
 ```
 
-Uninstalling the chart won't trigger deletion of persistent volume claims (PVCs) which means that even if the reclaim policy of the default storage class is set to 'Delete'
-(which often is), the data from persistent volumes (PVs) won't be lost. However, we advise users to set the reclaim policy to 'Retain' as suggested in the 
-[Storage chapter](#high-availability-storage).
+Uninstalling the chart does **not** delete PersistentVolumeClaims (PVCs). Even
+if the default StorageClass reclaim policy is `Delete`, data on the underlying
+PersistentVolumes (PVs) will not be removed automatically when uninstalling the
+chart.
+
+However, we still recommend configuring the reclaim policy to `Retain`, as
+described in the [High availability storage](#high-availability-storage)
+section.
+
+
+## Runtime environment & security
 
 ### Security context
 
-All instances are started as `StatefulSet` with one pod. The pod has two or three containers depending on whether the sysctlInitContainer.enabled is used. The **memgraph-coordinator** container is the one which
-actually runs Memgraph image. The process is run by non-root **memgraph** user without any Linux capabilities. Privileges cannot escalate.
+All Memgraph HA instances run as Kubernetes `StatefulSet` workloads, each with a
+single pod. Depending on configuration, the pod contains two or three
+containers:
+- **memgraph-coordinator** - runs the Memgraph binary.
+- **Optional init container** - enabled when `sysctlInitContainer.enabled` is set.
+
+Memgraph processes run as the non-root **memgraph** user with **no Linux capabilities
+and no privilege escalation**.
+
 
 ### High availability storage
 
-Memgraph HA chart will always use persistent volume claims (PVCs) for storing data and logs. By default they will use **1Gi** so most likely you will need to set this parameter to a 
-higher value. Access mode is by default set to `ReadWriteOnce` (RWO) and can be changed to one of values: `ReadWriteOnce`, `ReadOnlyMany`, `ReadWriteMany` and 
-`ReadWriteOncePod`. All PVCs will use a default storage class. You can use parameters `libStorageClassName` and `logStorageClassName` to specify which storage classes will
-be used for storing data and logs on data and coordinator instances. Default storage classes usually have a reclaim policy set to `Delete` which means that if you delete PVCs, 
-attached PVs will also get deleted. We advise users to set the reclaim policy to `Retain` One of the ways to achieve this is to run the following script after starting your cluster:
+Memgraph HA always uses PersistentVolumeClaims (PVCs) to store database files
+and logs.
+
+- Default storage size: **1Gi** (you will likely need to increase this).
+- Default access mode: `ReadWriteOnce` (can be set to `ReadOnlyMany`,
+  `ReadWriteMany`, or `ReadWriteOncePod`).
+- PVCs use the cluster’s **default StorageClass**, unless overridden.
+
+You can explicitly set storage classes using:
+
+- `storage.libStorageClassName` - for data volumes
+- `storage.logStorageClassName` - for log volumes
+
+Most default StorageClasses use a `Delete` reclaim policy, meaning deleting the
+PVC deletes the underlying PersistentVolume (PV). We recommend switching to
+`Retain`.
+
+---
+
+After your cluster is running, you can patch all PVs:
 
 ```bash
 #!/bin/bash
-
-# Get all Persistent Volume names
 PVS=$(kubectl get pv --no-headers -o custom-columns=":metadata.name")
 
-# Loop through each PV and patch it
 for pv in $PVS; do
   echo "Patching PV: $pv"
   kubectl patch pv $pv -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
@@ -149,188 +209,294 @@ done
 echo "All PVs have been patched."
 ```
 
-<Callout type="info"> 
-Kubernetes uses a concept called "Storage Object in Use Protection", which
-delays the deletion of PersistentVolumeClaims (PVCs) until the pods using them
-are deleted. Similarly, PersistentVolumes (PVs) won't be deleted until their
-associated PVCs are removed.
+<Callout type="info">
+Kubernetes uses **Storage Object in Use Protection**, preventing deletion of
+PVCs while still attached to pods.  
+Similarly, PVs will remain until their PVCs are fully removed.
 
-If PVC deletion is stuck, you can try removing its finalizers by running:
+If a PVC is stuck terminating, you can remove its finalizers:
 
 ```bash
 kubectl patch pvc PVC_NAME -p '{"metadata":{"finalizers": []}}' --type=merge
 ```
+
 </Callout>
 
 ### Network configuration
 
-All instances which are part of Memgraph HA cluster use the internal Cluster IP network for communicating between themselves. By default, management port is on all instances opened on
-10000, replication port on data instances is opened on 20000 while coordinator port is opened on 12000. You can change this configuration by specifying `ports.managementPort`, 
-`ports.replicationPort` and `ports.coordinatorPort`. 
+All Memgraph HA components communicate internally using ClusterIP network for
+communicating between themselves.
 
-#### External network configuration
+**Default ports:**
 
-Since Memgraph HA works with client-side routing, the resolution of all DNS entries happens outside internal Cluster IP network. Because of that, we need one more type of network
-which will be used for clients accessing instances inside the cluster. 
+- Management: **10000**
+- Replication (data instances): **20000**
+- Coordinator communication: **12000**
 
-- `IngressNginx`: Using only one load balancer you can access all instances from outside.
-- `NodePort`: The cheapest option because it will open port on each node. For this to work, you need to enable public IPs on each node.
-- `LoadBalancer`: This option will use one load balancer for each instance in the cluster. Load balancer is mostly interesting here because it comes with public IP out of the box.
+You can change this configuration by specifying:
 
-For coordinators, there is an additional option of using `CommonLoadBalancer`. In this scenario, there is one load balancer sitting in front of coordinators. You can save the cost
-of two load balancers compared to `LoadBalancer` option since usually you don't need to distinguish specific coordinators while using Memgraph capabilities. The default Bolt port
-is opened on 7687 but you can change it by setting `ports.boltPort`.
+```yaml
+ports:
+  managementPort: <value>
+  replicationPort: <value>
+  coordinatorPort: <value>
+```
 
-Read more in the [guide](#using-memgraph-ha-chart-with-ingressnginx-resource) for installing Memgraph HA with `IngressNginx`. 
+{<h4 className="custom-header"> External network configuration </h4>}
 
-By default, no configuration is provided for external network access so users can customize their settings in an easier manner.
+Memgraph HA uses **client-side routing**, so DNS resolution happens internal Cluster IP network. Because of that, we need
+one more type of network which will be used for clients accessing instances
+inside the cluster. 
 
-### Node affinity 
+- **IngressNginx** - one LoadBalancer for all instances.
+- **NodePort** - exposes ports on each node (requires public node IPs).
+- **LoadBalancer** - one LoadBalancer per instance (highest cost).
+- **CommonLoadBalancer (coordinators only)** - single LB for all coordinators.
 
-Since HA Memgraph deploys multiple pods, you can control on which nodes pods get
-distributed in the cluster. 
+For coordinators, there is an additional option of using `CommonLoadBalancer`.
+In this scenario, there is one load balancer sitting in front of coordinators.
+You can save the cost of two load balancers compared to `LoadBalancer` option
+since usually you don't need to distinguish specific coordinators while using
+Memgraph capabilities. The default Bolt port is opened on 7687 but you can
+change it by setting `ports.boltPort`.
 
-The Memgraph HA Helm chart provides the following node affinity options:
+For more detailed IngressNginx setup, see [Using Memgraph HA chart with
+IngressNginx](#use-memgraph-ha-chart-with-ingressnginx).
 
-- `default`:  Default affinity will try to schedule the data pods and
- coordinator pods on the nodes where there is no other pod with the same role.
- If there is no such node, the pods will still be scheduled on the same node,
- and deployment will not fail. 
-- `unique`: This is achieved with the `affinity.unique` set to `true`.
-  This option will try to deploy the data pods and coordinator pods on different
- nodes in the cluster so that each pod is on a unique node. If there are no
- sufficient nodes, this deployment will fail.
-- `parity`: This is achieved with the `affinity.parity` set to `true`.
-  This option will try to deploy the data pods and coordinator pods on the same node
- with maximum one coordinator and one data pod on the node. If there are no
- sufficient nodes to deploy the pods, this deployment will fail. Coordinators
- get scheduled first. After that, data pods are looking for the nodes with
- coordinators. 
-- `nodeSelection`: This is achieved with the `affinity.nodeSelection`
-  set to `true`. This option will try to deploy the data pods and coordinator
- pods on the nodes with specific labels. You can set the labels with the
- `affinity.dataNodeLabelValue` and
-  `affinity.coordinatorNodeLabelValue` parameters. If all the nodes
- with labels are occupied by the pods with the same role, the deployment will
+By default, the chart does **not** expose any external network services.
+
+### Node affinity
+
+Memgraph HA deploys multiple pods, and you can control pod placement with
+affinity settings.
+
+Supported strategies:
+
+- **default** Attempts to to schedule the data pods and coordinator pods on the
+ nodes where there is no other pod with the same role. If there is no such node,
+ the pods will still be scheduled on the same node, and deployment will not
  fail. 
 
-<Callout type="info"> 
-During the usage of `nodeSelection` affinity, make sure that the nodes are
-properly labeled, the default key for the role label is `role`, and default
-values are `data-node` and `coordinator-node`. Labels can be added to nodes
-using the `kubectl label nodes <node-name> <key>=<value>` command.
-[Here](https://github.com/memgraph/helm-charts/tree/main/charts/memgraph-high-availability/aks)
-is an example of how to deploy Memgraph HA cluster in AKS.
-</Callout>
+- **unique** (`affinity.unique = true`)
+  Each coordinator and data pod must be placed on separate nodes. If not enough
+  nodes exist, deployment fails. Coordinators get scheduled first. After that,
+  data pods are looking for the nodes with coordinators. 
 
+- **parity** (`affinity.parity = true`)
+  Schedules at most **one coordinator + one data pod per node**.
+  Coordinators schedule first; data pods follow.
+
+- **nodeSelection** (`affinity.nodeSelection = true`)
+  Pods are scheduled onto explicitly labeled nodes using
+  `affinity.dataNodeLabelValue` and `affinity.coordinatorNodeLabelValue`. If all
+ the nodes with labels are occupied by the pods with the same role, the
+ deployment will fail. 
+
+<Callout type="info">
+When using `nodeSelection`, ensure that nodes are labeled correctly.  
+Default role label key: `role`  
+Default values: `data-node`, `coordinator-node`
+
+Example:
+
+```bash
+kubectl label nodes <node-name> role=data-node
+```
+
+A full AKS example is available in the [chart
+repository]((https://github.com/memgraph/helm-charts/tree/main/charts/memgraph-high-availability/aks)). 
+</Callout>
 
 ### Sysctl options
 
-You can use `sysctlInitContainer` configuration parameter to [increase the `vm_max_map_count`](/database-management/system-configuration#increasing-memory-map-areas) which is necessary for high memory loads in Memgraph.
+Use the `sysctlInitContainer` to configure kernel parameters required for
+high-memory workloads, such as increasing:
+
+- [`vm.max_map_count`](/database-management/system-configuration#increasing-memory-map-areas)
 
 
 ### Authentication
 
-By default, there is no user or password configured for Memgraph instances. You can use `secrets` configuration parameter 
-to create the user with the password. The secret can be created in the following way:
+By default, Memgraph HA starts **without authentication** enabled.
 
+To configure credentials, create a Kubernetes `secret`:
+
+```bash
+kubectl create secret generic memgraph-secrets \
+  --from-literal=USER=memgraph \
+  --from-literal=PASSWORD=memgraph
 ```
-kubectl create secret generic memgraph-secrets --from-literal=USER=memgraph --from-literal=PASSWORD=memgraph
-```
 
-The same user will then be created on all coordinator and data instances through Memgraph's environment variables.
+The same user will then be created on all coordinator and data instances through
+Memgraph's environment variables.
 
-### Setting up the cluster
 
-Although there are many configuration options you can use to set up HA cluster (especially for networking), the set-up process
-stays always the same:
+## Setting up the cluster
 
-**1.** Provision the cluster
+Although many configuration options exist, especially for networking, the overall
+workflow for creating a Memgraph HA cluster is always the same:
 
-**2.** Label nodes based on the affinity strategy
+1. **Provision the Kubernetes cluster.** Ensure your nodes, storage, and
+   networking are ready.
 
-**3.** Install `memgraph/memgraph-high-availability` chart using `helm install`
+2. **Label nodes (optional)** according to your chosen affinity strategy. For
+   example, when using `nodeSelection`, label nodes as `data-node` or
+   `coordinator-node`.
 
-**4.** Install any other auxiliary resources, e.g `ingress-nginx` if you are using that type of external network configuration.
+3. **Install the Memgraph HA Helm chart** using `helm install`.
 
-**5.** Connect instances to form the cluster
+4. **Install auxiliary components** (if needed), such as `ingress-nginx` for
+   external access.
 
-The last step, connecting instances, needs to be done manually to provide
-information to instances about their external addresses on which they are
-available. Otherwise, client-side routing wouldn't work. To connect instances,
-we use the following queries and execute them against any coordinator:
+5. **Connect the Memgraph instances** to form the HA cluster.
+
+### Connect instances
+
+The final step, connecting instances, is **manual**. Each instance must be
+informed about the **external addresses** through which it is reachable. Without
+this, client-side routing cannot work.
+
+Run the following Cypher queries on **any coordinator**:
 
 ```cypher
-ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "<bolt-server-coord1>", "management_server":  "memgraph-coordinator-1.default.svc.cluster.local:10000", "coordinator_server":  "memgraph-coordinator-1.default.svc.cluster.local:12000"};
-ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "<bolt-server-coord2>", "management_server":  "memgraph-coordinator-2.default.svc.cluster.local:10000", "coordinator_server":  "memgraph-coordinator-2.default.svc.cluster.local:12000"};
-ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "<bolt-server-coord3>", "management_server":  "memgraph-coordinator-3.default.svc.cluster.local:10000", "coordinator_server":  "memgraph-coordinator-3.default.svc.cluster.local:12000"};
-REGISTER INSTANCE instance_0 WITH CONFIG {"bolt_server": "<bolt-server-instance0>", "management_server": "memgraph-data-0.default.svc.cluster.local:10000", "replication_server": "memgraph-data-0.default.svc.cluster.local:20000"};
-REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "<bolt-server-instance1>", "management_server": "memgraph-data-1.default.svc.cluster.local:10000", "replication_server": "memgraph-data-1.default.svc.cluster.local:20000"};
+ADD COORDINATOR 1 WITH CONFIG {
+  "bolt_server": "<bolt-server-coord1>",
+  "management_server": "memgraph-coordinator-1.default.svc.cluster.local:10000",
+  "coordinator_server": "memgraph-coordinator-1.default.svc.cluster.local:12000"
+};
+
+ADD COORDINATOR 2 WITH CONFIG {
+  "bolt_server": "<bolt-server-coord2>",
+  "management_server": "memgraph-coordinator-2.default.svc.cluster.local:10000",
+  "coordinator_server": "memgraph-coordinator-2.default.svc.cluster.local:12000"
+};
+
+ADD COORDINATOR 3 WITH CONFIG {
+  "bolt_server": "<bolt-server-coord3>",
+  "management_server": "memgraph-coordinator-3.default.svc.cluster.local:10000",
+  "coordinator_server": "memgraph-coordinator-3.default.svc.cluster.local:12000"
+};
+
+REGISTER INSTANCE instance_0 WITH CONFIG {
+  "bolt_server": "<bolt-server-instance0>",
+  "management_server": "memgraph-data-0.default.svc.cluster.local:10000",
+  "replication_server": "memgraph-data-0.default.svc.cluster.local:20000"
+};
+
+REGISTER INSTANCE instance_1 WITH CONFIG {
+  "bolt_server": "<bolt-server-instance1>",
+  "management_server": "memgraph-data-1.default.svc.cluster.local:10000",
+  "replication_server": "memgraph-data-1.default.svc.cluster.local:20000"
+};
+
 SET INSTANCE instance_1 TO MAIN;
 ```
 
-Note that the only part which you need to change from the above template is the
-Bolt server address. The value of the Bolt server address depends on the type of
-the external network you are using for accessing instances from outside.
+Note that the only the `bolt_server` values need to be changed. The correct
+value depends on the type of external access you configured (LoadBalancer IP,
+Ingress host/port, NodePort, etc.).
 
-For more details, see our documentation on the Memgraph HA 
-[User API](/clustering/high-availability#user-api), including how to add 
-coordinators and register data instances.
-
-#### Using Memgraph HA chart with `IngressNginx` resource
-
-The most cost-friendly way to manage a Memgraph HA cluster in K8s is using a `IngressNginx` controller. This controller is capable of routing TCP messages on Bolt level protocol 
-to the K8s Memgraph services. To achieve this, it uses only a single `LoadBalancer` which means there is only a single external IP for connecting to the cluster. Users can connect 
-to any coordinator or data instance by distinguishing Bolt ports. The only step required is to install Memgraph HA chart:
-
-```
-helm install mem-ha-test ./charts/memgraph-high-availability --set \
-env.MEMGRAPH_ENTERPRISE_LICENSE=<licence>,\
-env.MEMGRAPH_ORGANIZATION_NAME=<organization>,affinity.nodeSelection=true,\
-externalAccessConfig.dataInstance.serviceType=IngressNginx,externalAccessConfig.coordinator.serviceType=IngressNginx
-```
-
-The chart will also install `IngressNginx` automatically with all required configuration.
-
-### Probes
-
-Memgraph HA chart uses startup, readiness and liveness probes. The startup probe
-is used to determine when a container application has started. The liveness
-probe is used to determine when a container should be restarted. The readiness
-probe is used to determine when a container is ready to start accepting traffic.
-The startup probe will succeed only after the recovery of the Memgraph has
-finished. Liveness and readiness probes will start after the startup probe
-succeeds. By default, the startup probe on data instances has to succeed within 2 hours. If the
-recovery from backup takes longer than that, update the configuration to the
-value that is high enough. The liveness and readiness probe have to succeed at
-least once in 5 minutes for a pod to be considered ready on data instances.
-Coordinators have their own probe configuration and receive pings on the NuRaft
-server, whereas data instances receive pings on the Bolt server.
+Refer to the Memgraph HA [User API docs](/clustering/high-availability#user-api)
+for the full set of commands and usage patterns.
 
 
-### Monitoring
+### Use Memgraph HA chart with IngressNginx
 
-Memgraph supports cluster monitoring with the help of [kube-prometheus-stack chart](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) and 
-[Memgraph's Prometheus exporter](https://github.com/memgraph/prometheus-exporter).
-The chart `kube-prometheus-stack` should be installed independently from HA chart with the following command:
+One of the most cost-efficient ways to expose a Memgraph HA cluster is by using
+**IngressNginx**. The controller supports TCP routing (including the Bolt
+protocol), allowing all Memgraph instances to share:
+
+* a **single LoadBalancer**, and
+* a **single external IP address**.
+
+Clients connect to any coordinator or data instance by using **different Bolt
+ports**.
+
+To install Memgraph HA with IngressNginx enabled:
 
 ```bash
-helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack -f kube_prometheus_stack_values.yaml --namespace monitoring --create-namespace
+helm install mem-ha-test ./charts/memgraph-high-availability --set \
+  env.MEMGRAPH_ENTERPRISE_LICENSE=<license>,\
+  env.MEMGRAPH_ORGANIZATION_NAME=<organization>,\
+  affinity.nodeSelection=true,\
+  externalAccessConfig.dataInstance.serviceType=IngressNginx,\
+  externalAccessConfig.coordinator.serviceType=IngressNginx
 ```
 
-The file `kube_prometheus_stack_values.yaml` can but doesn't need to be included. The template of the file can be found [here](https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml).
-If you are installing `kube-prometheus-stack` chart in a namespace different than the `default`, make sure to allow cross-namespace metric scraping. You can allow this 
-by adding the following configuration to your `kube_prometheus_stack_values.yaml` file:
+When using these settings, the chart will automatically install and configure
+**IngressNginx**, including all required TCP routing setup for Memgraph.
 
+
+## Probes
+
+Memgraph HA uses standard Kubernetes **startup**, **readiness**, and
+**liveness** probes to ensure correct container operation.
+
+- **Startup probe**
+  Determines when Memgraph has fully started.
+  It succeeds **only after database recovery completes**.
+  Liveness and readiness probes do not run until startup succeeds.
+
+- **Readiness probe**
+  Indicates when the instance is ready to accept client traffic.
+
+- **Liveness probe**
+  Determines when the container should be restarted if it becomes unresponsive.
+
+---
+
+**Default timing**
+
+- On **data instances**, the startup probe must succeed within **2 hours**.
+  If recovery (e.g., from backup) may take longer, increase the timeout.
+
+- Liveness and readiness probes must succeed **at least once every 5 minutes**
+  for the pod to be considered healthy.
+
+---
+
+**Probe endpoints**
+
+- **Coordinators**: probed on the **NuRaft server**
+- **Data instances**: probed on the **Bolt server**
+
+
+## Monitoring
+
+Memgraph HA integrates with Kubernetes monitoring tools through:
+
+- The [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart
+- [Memgraph’s Prometheus exporter](https://github.com/memgraph/prometheus-exporter)
+
+The chart `kube-prometheus-stack` should be installed independently from HA
+chart with the following command:
+
+```bash
+helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  -f kube_prometheus_stack_values.yaml \
+  --namespace monitoring \
+  --create-namespace
 ```
+
+`kube_prometheus_stack_values.yaml` is optional. A template is available in the
+upstream [chart’s
+repository]((https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml)).
+
+If you install the `kube-prometheus-stack` in a **non-default namespace**, allow
+cross-namespace scraping. You can allow this by adding the following
+configuration to your `kube_prometheus_stack_values.yaml` file:
+
+```yaml
 prometheus:
   prometheusSpec:
     serviceMonitorSelectorNilUsesHelmValues: false
 ```
 
-To enable monitoring when installing Memgraph's HA chart, there are several options you can use listed here:
+### Enable monitoring in the Memgraph HA chart
 
-```
+To enable the Memgraph Prometheus exporter and ServiceMonitor:
+
+```yaml
 prometheus:
   enabled: true
   namespace: monitoring
@@ -344,19 +510,23 @@ prometheus:
     interval: 15s
 ```
 
-By setting `prometheus.enabled` false, all resources from `charts/memgraph-high-availability/templates/mg-exporter.yaml` will get installed in the namespace `monitoring`.
-Check the table below to find the explanation for each of the configuration parameters.
+If you set `prometheus.enabled` to `false`, resources from
+`charts/memgraph-high-availability/templates/mg-exporter.yaml` will still be
+installed into the `monitoring` namespace.
 
+Refer to the configuration table later in the document for details on all
+parameters.
 
-To uninstall the `kube-prometheus-stack` use:
+### Uninstall kube-prometheus-stack
 
-```
+```bash
 helm uninstall kube-prometheus-stack --namespace monitoring
 ```
 
-CRDs aren't removed by default and they should be manually cleaned up:
+**Note:**
+The stack’s CRDs are **not** deleted automatically and must be removed manually:
 
-```
+```bash
 kubectl delete crd alertmanagerconfigs.monitoring.coreos.com
 kubectl delete crd alertmanagers.monitoring.coreos.com
 kubectl delete crd podmonitors.monitoring.coreos.com
@@ -370,10 +540,10 @@ kubectl delete crd thanosrulers.monitoring.coreos.com
 ```
 
 
+## Configuration options
 
-### Configuration options
-
-The following table lists the configurable parameters of the Memgraph HA chart and their default values.
+The following table lists the configurable parameters of the Memgraph HA chart
+and their default values.
 
 
 | Parameter                                                  | Description                                                                                                  | Default                        |
@@ -459,7 +629,8 @@ The following table lists the configurable parameters of the Memgraph HA chart a
 | `initContainers.coordinators`                              | Init containers that users can define that will be applied to coordinators.                                  | `[]`                           | 
 
 
-For the `data` and `coordinators` sections, each item in the list has the following parameters:
+For the `data` and `coordinators` sections, each item in the list has the
+following parameters:
 
 | Parameter                                   | Description                                                                                         | Default                                 |
 |---------------------------------------------|-----------------------------------------------------------------------------------------------------|-----------------------------------------|
@@ -707,3 +878,5 @@ Otherwise, it won't be able to restore `StatefulSet's` attached
 PersistentVolumeClaim from the `VolumeSnapshot`.
 
 </Callout>
+
+<CommunityLinks/>
