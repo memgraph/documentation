@@ -8,17 +8,19 @@ import {CommunityLinks} from '/components/social-card/CommunityLinks'
 
 # High availability reference queries
 
-This page provides a comprehensive reference for all commands available in Memgraph's high availability cluster management.
+This guide provides a complete reference for all commands used to manage a
+Memgraph High Availability (HA) cluster.
 
 ## Cluster registration commands
 
-<Callout>
-**All cluster registration commands (registering coordinators and data instances) should be run on the same coordinator.**
-You can pick any coordinator for registering your cluster, which will become the leader coordinator. After cluster has
-been set up, the choosing of coordinator does not matter.
+<Callout type="warning">
+**Important:** **All registration commands (adding coordinators and registering
+data instances) must be executed on the *same* coordinator.** You may choose any
+coordinator for the initial setup; it automatically becomes the leader. After
+setup, the choice no longer matters.
 </Callout>
 
-### ADD COORDINATOR
+### `ADD COORDINATOR`
 
 Adds a coordinator to the cluster.
 
@@ -30,57 +32,66 @@ ADD COORDINATOR coordinatorId WITH CONFIG {
 }; 
 ```
 
-**Parameters:**
-- `coordinatorId` (int) - unique integer for each coordinator. You can set a different incrementing integer for each coordinator as you
-  register them.
-- `boltServer` (string) - Network address in format `"IP_ADDRESS|DNS_NAME:PORT_NUMBER"`, used for querying the coordinator. Port is usually set to 7687 as
-  that is representative for Bolt protocol. If IPs are ephemeral, it's best to use the DNS name/FQDN. The server IP needs
-  to be exposed to the external network, if there are any external applications connected to it.
-- `coordinatorServer` (string) - Network address in format `"COORDINATOR_HOSTNAME|COORDINATOR_PORT"`. Coordinator hostname and port
-  are set on the command line flags for each coordinator. Ensure coordinator hostname is a DNS name/FQDN if IP addresses are ephemeral.
-- `managementServer` (string) - Network address in format `"COORDINATOR_HOSTNAME|MANAGEMENT_PORT"`. Coordinator hostname and management port
-  are set on the command line flags for each coordinator. Ensure coordinator hostname is a DNS name/FQDN if IP addresses are ephemeral.
+{<h4 className="custom-header"> Parameters </h4>}
 
+- **`coordinatorId` (int)** Unique ID for each coordinator. Typically
+  incremented sequentially.
+- **`boltServer` (string)** External Bolt endpoint: `"IP_OR_DNS:PORT"`. Usually
+  port **7687**. Must be reachable by external applications.
+- **`coordinatorServer` (string)** Internal raft endpoint:
+  `"HOSTNAME_OR_DNS:COORDINATOR_PORT"`.
+- **`managementServer` (string)** Coordinator management endpoint:
+  `"HOSTNAME_OR_DNS:MANAGEMENT_PORT"`.
 
-**Implications:**
-- The user can choose any coordinator instance to run cluster setup queries. This can be done before or after registering data instances,
-the order isn't important.
-- `ADD COORDINATOR` query needs to be run for all coordinators in the cluster.
-- Bolt server IP needs to be available outside the cluster and not ephemeral.
-- Coordinator server and management server IP can be an internal IP/DNS name/FQDN, as the cluster uses it for internal communication.
+DNS/FQDN is recommended when IPs are ephemeral (e.g., Kubernetes).
 
-**Example:**
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- Can be run before or after registering data instances.
+- Must be executed once for each coordinator.
+- External Bolt server must be reachable; Raft and management endpoints may be
+  internal.
+- Writes cluster configuration to Raft log.
+
+{<h4 className="custom-header"> Example </h4>}
+
 ```cypher
 ADD COORDINATOR 1 WITH CONFIG {
-  "bolt_server": "my_outside_coordinator_1_IP:7687", 
-  "coordinator_server": "memgraph-coordinator-1.default.svc.cluster.local:12000", 
+  "bolt_server": "my_outside_coordinator_1_IP:7687",
+  "coordinator_server": "memgraph-coordinator-1.default.svc.cluster.local:12000",
   "management_server": "memgraph-coordinator-1.default.svc.cluster.local:10000"
 };
 ```
 
-### REMOVE COORDINATOR
 
-If during cluster setup or at some later stage of cluster life, the user decides to remove some coordinator instance, 
-`REMOVE COORDINATOR` query can be used. This query can only be executed on the leader coordinator to remove follower coordinators.
-Current cluster's leader cannot be removed since this is prohibited by NuRaft. In order to remove the current leader,
-you first need to trigger leadership change.
+### `REMOVE COORDINATOR`
+
+Removes a follower coordinator from the cluster.
 
 ```cypher
 REMOVE COORDINATOR coordinatorId;
 ```
 
-**Parameters:**
-- `coordinatorId` (integer) - unique integer ID of the coordinator used during the registration
+{<h4 className="custom-header"> Parameters </h4>}
 
-**Example:**
+- **`coordinatorId` (int)** — previously registered coordinator ID.
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- Must be executed on the **leader** coordinator.
+- Leader coordinator **cannot** remove itself. To remove the leader, first
+  trigger a leadership change.
+
+{<h4 className="custom-header"> Example </h4>}
+
 ```cypher
 REMOVE COORDINATOR 2;
 ```
 
-### REGISTER INSTANCE
 
-Registers a data instance to the cluster.
+### `REGISTER INSTANCE`
 
+Registers a data instance in the cluster.
 
 ```cypher
 REGISTER INSTANCE instanceName ( AS ASYNC | AS STRICT_SYNC ) ? WITH CONFIG {
@@ -90,206 +101,205 @@ REGISTER INSTANCE instanceName ( AS ASYNC | AS STRICT_SYNC ) ? WITH CONFIG {
 };
 ```
 
-**Parameters:**
-- `instanceName` (symbolic name) - unique name of the data instance
-- `AS ASYNC` (optional parameter) - register the instance in `ASYNC` replication mode
-- `AS STRICT_SYNC` (optional parameter) - register the instance in `STRICT_SYNC` replication mode
-- `boltServer` (string) - Server endpoint used for executing queries against the instance. The endpoint needs to be
-  in format `"IP_ADDRESS|DNS_NAME:PORT_NUMBER"`. Port is usually set to 7687 as that is representative for Bolt protocol.
-  If IPs are ephemeral, it's best to use the DNS name/FQDN. The server IP needs to be exposed to the external network,
-  if there are any external applications connected to it.
-- `managementServer` (string) - Server endpoint used for communication between coordinator and data instance. The endpoint
-  needs to be in format `"IP_ADDRESS|DNS_NAME:PORT_NUMBER"`. The management port needs to be the same, as provided in the command line
-  arguments for that data instance.
-- `replicationServer` (string) - Server endpoint used for replicating data between data instances. The endpoint needs to be in
-  format `"IP_ADDRESS|DNS_NAME:PORT_NUMBER"`. Usual port that is assigned for replication server is 20000.
+{<h4 className="custom-header"> Parameters </h4>}
 
-**Behaviour:**
-- The coordinator instance will connect to the data instance on the `management_server` network address.
-- The coordinator instance will start pinging the data instance every `--instance-health-check-frequency-sec` seconds to check its status.
-- Data instance will be demoted from main to replica.
-- Data instance will start the replication server on `replication_server`.
-- This operation will result in writing to the Raft log.
+- **`instanceName`** Unique symbolic name of the data instance.
+- **`AS ASYNC` / `AS STRICT_SYNC` (optional)** Selects replication mode.
+  Default: **SYNC**.
+- **`boltServer`** External Bolt endpoint: `"IP_OR_DNS:PORT"`.
+- **`managementServer`** Coordinator → data instance health check endpoint.
+- **`replicationServer`** Replication endpoint, typically using port **20000**.
 
-**Implications:**
-In case the main instance already exists in the cluster, a replica instance will be automatically connected to the main.
-If a replication mode is not specified, REPLICA will be registered in `SYNC` replication mode.
-Constructs `( AS ASYNC | AS STRICT_SYNC )` serve to specify a different replication mode other than `SYNC`.
+{<h4 className="custom-header"> Behavior </h4>}
 
-You can only have `STRICT_SYNC` and `ASYNC` or `SYNC` and `ASYNC` replicas together in the cluster. Combining `STRICT_SYNC`
-and `SYNC` replicas together doesn't have proper semantic meaning so it is forbidden.
+- Coordinator connects via `management_server` to verify liveness.
+- Coordinator begins periodic health checks.
+- Instance is automatically demoted to REPLICA.
+- Replication server is started on the data instance.
+- Operation is persisted in Raft.
 
-For local development, hostname of the data instance for management server and replication server is `localhost`. For Helm charts,
-check the name of the service (e.g. `memgraph-coordinator-1.default.svc.cluster.local`).
+{<h4 className="custom-header"> Replication mode rules </h4>}
 
-**Example:**
+- Allowed combinations:
+
+  - `STRICT_SYNC` + `ASYNC`
+  - `SYNC` + `ASYNC`
+- Forbidden combination:
+
+  - `STRICT_SYNC` + `SYNC`
+
+{<h4 className="custom-header"> Notes </h4>}
+
+- In Kubernetes, use service DNS names (e.g.
+  `memgraph-data-1.default.svc.cluster.local`).
+- Local development uses `localhost`.
+
+{<h4 className="custom-header">Example </h4>}
+
 ```cypher
 REGISTER INSTANCE instance1 WITH CONFIG {
-  "bolt_server": "my_outside_instance1_IP:7687", 
-  "management_server": "memgraph-data-1.default.svc.cluster.local:10000", 
+  "bolt_server": "my_outside_instance1_IP:7687",
+  "management_server": "memgraph-data-1.default.svc.cluster.local:10000",
   "replication_server": "memgraph-data-1.default.svc.cluster.local:20000"
 };
 ```
 
-### UNREGISTER INSTANCE
+### `UNREGISTER INSTANCE`
 
-There are various reasons which could lead to the decision that an instance needs to be removed from the cluster.
-The hardware can be broken, network communication could be set up incorrectly, etc. The user can remove the instance
-from the cluster using the following query:
+Removes a data instance from the cluster.
 
 ```cypher
 UNREGISTER INSTANCE instanceName;
 ```
+{<h4 className="custom-header"> Parameters </h4>}
 
-**Parameters:**
-- `instanceName` (symbolic name) - respective name of the data instance
+- **`instanceName`** — name of the data instance.
 
-**Implications:**
-When unregistering an instance, ensure that the instance being unregistered is
-**not** the MAIN instance. Unregistering MAIN can lead to an inconsistent
-cluster state. Additionally, the cluster must have an **alive** MAIN instance
-during the unregistration process. If no MAIN instance is available, the
-operation cannot be guaranteed to succeed.
+{<h4 className="custom-header"> Implications </h4>}
 
-The instance requested to be unregistered will also be unregistered from the current MAIN's replica set.
+- Do **not** unregister the MAIN instance; this may corrupt cluster state.
+- A healthy MAIN must exist during the operation.
+- The instance is also removed from MAIN’s replica set.
 
-**Example:**
+{<h4 className="custom-header"> Example </h4>}
+
 ```cypher
 UNREGISTER INSTANCE instance_1;
 ```
 
-## Replication role management queries
 
-### SET INSTANCE TO MAIN
+## Replication role management
 
-Once all data instances are registered, one data instance should be promoted to main.
-This can be achieved by using the following query:
+### `SET INSTANCE ... TO MAIN`
+
+Promotes a replica to MAIN.
 
 ```cypher
 SET INSTANCE instanceName TO MAIN;
 ```
 
-**Parameters:**
-- `instanceName` (symbolic name) - name of the data instance that is going to be promoted to main
+{<h4 className="custom-header"> Behavior </h4>}
 
-**Behaviour:**
-This query will register all other instances as replicas to the new main. 
-This operation will result in writing to the Raft log.
+- All other registered instances become replicas of the new MAIN.
+- Written to Raft log.
 
-**Implications:
-If one of the instances is unavailable, setting the instance to MAIN will not succeed.
-If there is already a MAIN instance in the cluster, this query will fail.
+{<h4 className="custom-header"> Implications </h4>}
 
-**Example:**
+- Fails if a MAIN already exists.
+- Fails if any instance is unavailable.
+
+{<h4 className="custom-header"> Example </h4>}
+
 ```cypher
 SET INSTANCE instance_0 TO MAIN;
 ```
 
-### DEMOTE INSTANCE
 
-Demote instance query can be used by an admin to demote the current MAIN to REPLICA.
+### `DEMOTE INSTANCE`
+
+Demotes the current MAIN to a REPLICA.
 
 ```cypher
 DEMOTE INSTANCE instanceName;
 ```
 
-**Behaviour:**
-- MAIN is demoted to REPLICA
-- This operation will result in writing to the Raft log.
+{<h4 className="custom-header"> Behavior </h4>}
 
-**Implications:**
-- In this case, the leader coordinator won't perform a failover, but as a user, you should choose promote one of
-the data instances to main using the `SET INSTANCE `instance` TO main` query.
+- MAIN becomes REPLICA.
+- Written to Raft log.
 
-<Callout type="info">
-By combining the functionalities of queries `DEMOTE INSTANCE instanceName` and `SET INSTANCE instanceName TO main` you get the manual failover capability. This can be useful
-e.g during a maintenance work on the instance where the current main is deployed.
-</Callout>
+{<h4 className="custom-header"> Implications </h4>}
 
-**Example:**
+- Failover is **not automatic** after demotion. You must manually promote
+  another instance using `SET INSTANCE ... TO MAIN`.
+
+> **Tip:** Combine `DEMOTE INSTANCE` + `SET INSTANCE ... TO MAIN` for **manual
+> failover**, useful during maintenance.
+
+{<h4 className="custom-header"> Example </h4>}
+
 ```cypher
 DEMOTE INSTANCE instance1;
 ```
 
-## Monitoring commands
 
-### SHOW INSTANCES
+## Monitoring Commands
 
-You can check the state of the whole cluster using the `SHOW INSTANCES` query.
+### `SHOW INSTANCES`
+
+Displays the state of all servers in the cluster.
 
 ```cypher
 SHOW INSTANCES;
 ```
 
-**Behaviour:**
-The query will display all the Memgraph servers visible in the cluster. With
-each server you can see the following information:
- 1. Network endpoints they are using for managing cluster state
- 2. Health state of server
- 3. Role - main, replica, LEADER, FOLLOWER or unknown if not alive
- 4. The time passed since the last response time to the leader's health ping 
+{<h4 className="custom-header"> Output includes </h4>}
 
-**Implications:**
-This query can be run on either the leader or followers. Since only the leader knows the exact status of the health state
-and last response time,  followers will execute actions in this exact order:
-  1. Try contacting the leader to get the health state of the cluster, since the leader has all the information. 
-  If the leader responds, the follower will return the result as if the `SHOW INSTANCES` query was run on the leader.
-  2. When the leader doesn't respond or currently there is no leader, the follower will return all the Memgraph servers
-   with the health state set to "down".
+1. Network endpoints (bolt, coordinator, management)
+2. Health state
+3. Role: MAIN, REPLICA, LEADER, FOLLOWER, or UNKNOWN
+4. Time since last health ping
+
+{<h4 className="custom-header"> Behavior on followers </h4>}
+
+1. Follower attempts to query the leader for accurate state.
+2. If leader unavailable, follower reports all servers as `"down"`.
 
 
-### SHOW INSTANCE
+### `SHOW INSTANCE`
 
-You can check the state of the current coordinator to which you are connected by running the following query:
+Displays information about the coordinator you're connected to.
 
 ```cypher
 SHOW INSTANCE;
 ```
 
-**Behaviour:**
-This query will return the information about:
-1. instance name 
-2. external bolt server to which you can connect using Memgraph clients 
-3. coordinator server over which Raft communication is done 
-4. management server which is also used for inter-coordinators communication and 
-5. cluster role: whether the coordinator is currently a leader of the follower.
+{<h4 className="custom-header"> Output includes </h4>}
 
-**Implications:**
-If the query `ADD COORDINATOR` wasn't run for the current instance, the value of the bolt server will be "".
+1. Instance name
+2. External Bolt server
+3. Coordinator (Raft) endpoint
+4. Management server endpoint
+5. Cluster role (LEADER/FOLLOWER)
 
-### SHOW REPLICATION LAG
+> If `ADD COORDINATOR` has not been run, `bolt_server` will be empty.
 
-The user can find the current replication lag on each instance by running `SHOW REPLICATION LAG` on the cluster's leader.
-The replication lag is expressed with the number of committed transactions.
+
+### `SHOW REPLICATION LAG`
+
+Shows replication lag (in committed transactions) for all instances. Must be run
+on the **leader**.
 
 ```cypher
 SHOW REPLICATION LAG;
 ```
 
-**Implications:**
-- Such an info is made durable through snapshots and WALs so restarts won't cause the information loss.
-- The information about the replication lag can be useful when manually performing a failover to check whether there is a
-risk of a data loss.
+{<h4 className="custom-header"> Implications </h4>}
+
+- Lag values survive restarts (stored in snapshots + WAL).
+- Useful during manual failover to evaluate risk of data loss.
+
 
 ## Troubleshooting commands
 
-### FORCE RESET CLUSTER STATE
+### `FORCE RESET CLUSTER STATE`
 
-In case the cluster can't get into a healthy state, or any unexpected event occurs, there is an option to do the force
-reset of the cluster.
+Resets cluster state when the cluster cannot reach a healthy configuration.
 
 ```cypher
 FORCE RESET CLUSTER STATE;
 ```
 
-**Behaviour:**
-1. The coordinator instance will demote each alive instance to replica.
-2. From the alive instance it will choose a new main instance.
-3. Instances that are down will be demoted to replicas once they come back up.
+{<h4 className="custom-header"> Behavior </h4>}
 
-This operation will result in writing to the Raft log.
+1. All alive instances are demoted to REPLICA.
+2. A new MAIN is selected from alive instances.
+3. Down instances are demoted after they come back online.
+4. Writes changes to Raft.
 
-**Implications:**
-You need to execute a command on the leader coordinator.
+{<h4 className="custom-header"> Implications </h4>}
+
+- Must be executed on the **leader** coordinator.
+
 
 <CommunityLinks/>
