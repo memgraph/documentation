@@ -7,107 +7,146 @@ import { CommunityLinks } from '/components/social-card/CommunityLinks'
 
 # Reference architectures
 
-This page presents different deployment scenarios for Memgraph HA clusters, covering various aspects such
-as the number of data centers, geographic distribution, performance scaling, consistency requirements,
-and fault tolerance considerations.
+This page presents different deployment scenarios for Memgraph HA clusters,
+covering various aspects such as the number of data centers, geographic
+distribution, performance scaling, consistency requirements, and fault tolerance
+considerations.
 
 ## Basic architectures
 
 ### Typical HA cluster
 
-A typical Memgraph HA cluster consists of **three data instances and three coordinator instances**.
-Data instances store the graph data and require hardware focused on providing sufficient RAM to handle
-your workload. Coordinator instances, which manage cluster state, can run on **smaller servers (4GB or
-8GB of RAM is sufficient)**.
+A typical HA deployment consists of:
 
+- **Three data instances** (1 MAIN + 2 REPLICAs)
+- **Three coordinators** (1 Leader + 2 Followers)
+
+Data instances require hardware sized for memory-intensive workloads.
+Coordinators, responsible for cluster state and failover logic, are lightweight
+and typically run comfortably on **4-8 GB RAM servers**.
 
 ![](/pages/clustering/high-availability/typical-ha-cluster-no-caption.png)
 
 
 ### Minimal HA cluster
 
-For a minimal HA setup, you can deploy **two data instances (one MAIN and one REPLICA) along with
-three coordinator instances**. This requires a **minimum of five instances** to run a high availability
-cluster with Memgraph.
+The smallest valid HA configuration consists of:
+
+- **Two data instances** (1 MAIN + 1 REPLICA)
+- **Three coordinators**
+
+This results in a **minimum of five total instances**.
 
 ![](/pages/clustering/high-availability/minimal-ha-cluster-no-caption.png)
 
+
 ## Architectures for scaling performance
 
-Memgraph is an in-memory graph database that delivers high throughput for both writes and reads on
-a standalone instance. While deploying in-memory databases across multiple servers requires more
-resources, this trade-off enables the highest performance for real-time use cases.
+Memgraph is an in-memory graph database designed for extremely high read and
+write throughput on a single machine. Distributing this architecture across
+multiple servers increases resource requirements but enables scaling for
+demanding real-time analytics and transactional workloads.
 
-**Before scaling horizontally or vertically, ensure you have optimized your standalone instance
-performance to its limits.**
+> Before scaling horizontally or vertically, first ensure your standalone
+> instance has been fully optimized.
 
-### Scaling reads in an HA cluster
 
-Scale read queries **horizontally by adding REPLICA instances**. REPLICA instances handle
-**read-only queries**, making them ideal for OLAP workloads and other read operations. The
-architecture below shows how to increase read capacity by adding additional replica instances.
+### Scaling reads
+
+To increase read capacity, **add additional REPLICA instances**. Replicas can
+serve **read-only workloads**, making them ideal for analytics, reporting, and
+latency-sensitive queries.
 
 ![](/pages/clustering/high-availability/scaling-reads-with-ha-no-caption.png)
 
-### Scaling writes in an HA cluster
+### Scaling writes
 
-Scale write queries **vertically**. Since **only the MAIN instance accepts writes**, scale it by adding
-CPU resources to the server. This approach aligns with how graph databases scale effectively vertically.
+Write scalability is achieved by **scaling the MAIN vertically** (more CPU,
+memory). Only the MAIN accepts writes, which aligns with the design of graph
+workloads, especially multi-hop traversals, which do not benefit from horizontal
+write sharding.
 
-While some non-graph databases offer horizontal write scalability, **these solutions are not suitable
-for graph traversals, as multi-hop queries would traverse the network and deliver poor performance.**
-Some distributed graph solutions offer horizontal sharding, but this comes at the cost of **losing
-database or ACID guarantees**—trade-offs that most enterprises cannot accept when consistency is critical.
+Why vertical scaling works well in Memgraph:
 
-Memgraph's architecture includes **fine-grained locking, lock-free skiplists** for node and relationship
-storage, and **MVCC (Multi-Version Concurrency Control)** for data isolation. These features ensure that
-**writers don't block readers and vice versa**, meaning vertical scaling delivers the expected performance
-gains.
-
-The architecture below shows how to scale data instance servers vertically to achieve the desired write
-performance.
+- **Fine-grained locking**
+- **Lock-free skiplists** for node/relationship storage
+- **MVCC (Multi-Version Concurrency Control)** ensuring writers do not block
+  readers
+- Predictable scaling under higher CPU core counts
 
 ![](/pages/clustering/high-availability/scaling-writes-with-ha-no-caption.png)
 
-## Architectures for robust fault-tolerance
+Horizontal write scaling, often available in non-graph databases, is not
+suitable for graph workloads because multi-hop queries would require cross-shard
+traversal, significantly degrading performance and consistency guarantees.
 
-### Cross data center cluster
 
-Deploying a cluster across multiple data centers enables **tolerance of entire data center failures**.
-The architecture below shows the following topology:
-- **Data Center 1**: MAIN instance and one coordinator
-- **Data Center 2**: REPLICA instance and one coordinator
-- **Data Center 3**: One coordinator
+## Architectures for robust fault tolerance
 
-**Failure scenarios:**
+### Cross-data center deployment
 
-- **Data Center 1 fails**: Coordinators maintain quorum (**RAFT tolerates one coordinator failure out
-  of three**). **Automatic failover** promotes the REPLICA to MAIN, transferring both write and read load
-  to the new MAIN.
-- **Data Center 2 fails**: Coordinators maintain quorum with two remaining coordinators. No failover
-  occurs since the MAIN is still alive. The REPLICA will **recover automatically** once the data center
-  and deployment are restored.
-- **Data Center 3 fails**: Coordinators maintain quorum between the remaining two coordinators.
+For disaster recovery and data center-level fault tolerance, Memgraph HA can be
+deployed across **three separate data centers**, for example:
+
+- **Data Center 1:** MAIN + 1 Coordinator  
+- **Data Center 2:** REPLICA + 1 Coordinator  
+- **Data Center 3:** Coordinator  
+
+**Failure behavior:**
+
+- **Data Center 1 failure**  
+  - RAFT retains quorum  
+  - REPLICA is automatically promoted to MAIN  
+  - Cluster continues serving reads and writes
+
+- **Data Center 2 failure**  
+  - MAIN remains available  
+  - Coordinators maintain quorum  
+  - REPLICA recovers automatically when restored
+
+- **Data Center 3 failure**  
+  - Quorum maintained with the remaining two coordinators  
+  - No failover needed
 
 ![](/pages/clustering/high-availability/cross-data-center-no-caption.png)
 
 ## Other architectures
 
-### Centralized graph with remote REPLICAs
+### Centralized MAIN with remote REPLICAs
 
-In some scenarios, you may need local copies of data to meet performance SLAs that require minimal
-latency. To achieve this, deploy REPLICAs in local data centers.
+Some organizations need **low-latency local reads** across multiple regions
+while keeping writes centralized for consistency.
 
-The architecture below shows a setup with `ASYNC` replicas in remote locations. Set the
-`sync_failover_only` flag to `true` since writes only go to the centralized graph to consolidate
-information (**failover cannot occur to the local replica**).
+Deploy remote REPLICAs using **ASYNC** replication in regional data centers:
+
+- Local reads are extremely fast  
+- MAIN remains authoritative  
+- Writes remain centralized  
+
+Set the coordinator setting:
+```
+sync_failover_only = true
+```
+
+This ensures failover **never promotes a remote ASYNC replica**.
 
 ![](/pages/clustering/high-availability/centralised-main-with-remote-instances-no-caption.png)
 
-The next architecture makes this topology more robust by adding a `SYNC` or `STRICT_SYNC` replica at
-the central location. This ensures failover capability if the MAIN fails, as **failover can only
-happen between sync instances**.
+
+### Centralized MAIN with regional REPLICAs + failover protection
+
+To add failover capability to the centralized architecture, add a `SYNC` or
+`STRICT_SYNC` REPLICA in the same region as the MAIN.
+
+This creates:
+
+- **Local failover** between MAIN and the nearby SYNC replica  
+- **Remote read replicas** in other regions for latency-sensitive workloads  
+
+Only SYNC or STRICT_SYNC replicas are eligible for failover.
 
 ![](/pages/clustering/high-availability/centralised-main-with-remote-instances-with-failover-no-caption.png)
+
+---
 
 <CommunityLinks />
