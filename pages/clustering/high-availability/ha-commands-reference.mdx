@@ -1,0 +1,305 @@
+---
+title: High availability reference queries
+description: Complete reference guide for all high availability commands in Memgraph, including cluster management, instance operations, and monitoring queries.
+---
+
+import { Callout } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# High availability reference queries
+
+This guide provides a complete reference for all commands used to manage a
+Memgraph High Availability (HA) cluster.
+
+## Cluster registration commands
+
+<Callout type="warning">
+**Important:** **All registration commands (adding coordinators and registering
+data instances) must be executed on the *same* coordinator.** You may choose any
+coordinator for the initial setup; it automatically becomes the leader. After
+setup, the choice no longer matters.
+</Callout>
+
+### `ADD COORDINATOR`
+
+Adds a coordinator to the cluster.
+
+```cypher
+ADD COORDINATOR coordinatorId WITH CONFIG {
+  "bolt_server": boltServer, 
+  "coordinator_server": coordinatorServer, 
+  "management_server": managementServer
+}; 
+```
+
+{<h4 className="custom-header"> Parameters </h4>}
+
+- **`coordinatorId` (int)** Unique ID for each coordinator. Typically
+  incremented sequentially.
+- **`boltServer` (string)** External Bolt endpoint: `"IP_OR_DNS:PORT"`. Usually
+  port **7687**. Must be reachable by external applications.
+- **`coordinatorServer` (string)** Internal raft endpoint:
+  `"HOSTNAME_OR_DNS:COORDINATOR_PORT"`.
+- **`managementServer` (string)** Coordinator management endpoint:
+  `"HOSTNAME_OR_DNS:MANAGEMENT_PORT"`.
+
+DNS/FQDN is recommended when IPs are ephemeral (e.g., Kubernetes).
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- Can be run before or after registering data instances.
+- Must be executed once for each coordinator.
+- External Bolt server must be reachable; Raft and management endpoints may be
+  internal.
+- Writes cluster configuration to Raft log.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+ADD COORDINATOR 1 WITH CONFIG {
+  "bolt_server": "my_outside_coordinator_1_IP:7687",
+  "coordinator_server": "memgraph-coordinator-1.default.svc.cluster.local:12000",
+  "management_server": "memgraph-coordinator-1.default.svc.cluster.local:10000"
+};
+```
+
+
+### `REMOVE COORDINATOR`
+
+Removes a follower coordinator from the cluster.
+
+```cypher
+REMOVE COORDINATOR coordinatorId;
+```
+
+{<h4 className="custom-header"> Parameters </h4>}
+
+- **`coordinatorId` (int)** — previously registered coordinator ID.
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- Must be executed on the **leader** coordinator.
+- Leader coordinator **cannot** remove itself. To remove the leader, first
+  trigger a leadership change.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+REMOVE COORDINATOR 2;
+```
+
+
+### `REGISTER INSTANCE`
+
+Registers a data instance in the cluster.
+
+```cypher
+REGISTER INSTANCE instanceName ( AS ASYNC | AS STRICT_SYNC ) ? WITH CONFIG {
+  "bolt_server": boltServer, 
+  "management_server": managementServer, 
+  "replication_server": replicationServer
+};
+```
+
+{<h4 className="custom-header"> Parameters </h4>}
+
+- **`instanceName`** Unique symbolic name of the data instance.
+- **`AS ASYNC` / `AS STRICT_SYNC` (optional)** Selects replication mode.
+  Default: **SYNC**.
+- **`boltServer`** External Bolt endpoint: `"IP_OR_DNS:PORT"`.
+- **`managementServer`** Coordinator → data instance health check endpoint.
+- **`replicationServer`** Replication endpoint, typically using port **20000**.
+
+{<h4 className="custom-header"> Behavior </h4>}
+
+- Coordinator connects via `management_server` to verify liveness.
+- Coordinator begins periodic health checks.
+- Instance is automatically demoted to REPLICA.
+- Replication server is started on the data instance.
+- Operation is persisted in Raft.
+
+{<h4 className="custom-header"> Replication mode rules </h4>}
+
+- Allowed combinations:
+
+  - `STRICT_SYNC` + `ASYNC`
+  - `SYNC` + `ASYNC`
+- Forbidden combination:
+
+  - `STRICT_SYNC` + `SYNC`
+
+{<h4 className="custom-header"> Notes </h4>}
+
+- In Kubernetes, use service DNS names (e.g.
+  `memgraph-data-1.default.svc.cluster.local`).
+- Local development uses `localhost`.
+
+{<h4 className="custom-header">Example </h4>}
+
+```cypher
+REGISTER INSTANCE instance1 WITH CONFIG {
+  "bolt_server": "my_outside_instance1_IP:7687",
+  "management_server": "memgraph-data-1.default.svc.cluster.local:10000",
+  "replication_server": "memgraph-data-1.default.svc.cluster.local:20000"
+};
+```
+
+### `UNREGISTER INSTANCE`
+
+Removes a data instance from the cluster.
+
+```cypher
+UNREGISTER INSTANCE instanceName;
+```
+{<h4 className="custom-header"> Parameters </h4>}
+
+- **`instanceName`** — name of the data instance.
+
+{<h4 className="custom-header"> Implications </h4>}
+
+- Do **not** unregister the MAIN instance; this may corrupt cluster state.
+- A healthy MAIN must exist during the operation.
+- The instance is also removed from MAIN’s replica set.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+UNREGISTER INSTANCE instance_1;
+```
+
+
+## Replication role management
+
+### `SET INSTANCE ... TO MAIN`
+
+Promotes a replica to MAIN.
+
+```cypher
+SET INSTANCE instanceName TO MAIN;
+```
+
+{<h4 className="custom-header"> Behavior </h4>}
+
+- All other registered instances become replicas of the new MAIN.
+- Written to Raft log.
+
+{<h4 className="custom-header"> Implications </h4>}
+
+- Fails if a MAIN already exists.
+- Fails if any instance is unavailable.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+SET INSTANCE instance_0 TO MAIN;
+```
+
+
+### `DEMOTE INSTANCE`
+
+Demotes the current MAIN to a REPLICA.
+
+```cypher
+DEMOTE INSTANCE instanceName;
+```
+
+{<h4 className="custom-header"> Behavior </h4>}
+
+- MAIN becomes REPLICA.
+- Written to Raft log.
+
+{<h4 className="custom-header"> Implications </h4>}
+
+- Failover is **not automatic** after demotion. You must manually promote
+  another instance using `SET INSTANCE ... TO MAIN`.
+
+> **Tip:** Combine `DEMOTE INSTANCE` + `SET INSTANCE ... TO MAIN` for **manual
+> failover**, useful during maintenance.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+DEMOTE INSTANCE instance1;
+```
+
+
+## Monitoring Commands
+
+### `SHOW INSTANCES`
+
+Displays the state of all servers in the cluster.
+
+```cypher
+SHOW INSTANCES;
+```
+
+{<h4 className="custom-header"> Output includes </h4>}
+
+1. Network endpoints (bolt, coordinator, management)
+2. Health state
+3. Role: MAIN, REPLICA, LEADER, FOLLOWER, or UNKNOWN
+4. Time since last health ping
+
+{<h4 className="custom-header"> Behavior on followers </h4>}
+
+1. Follower attempts to query the leader for accurate state.
+2. If leader unavailable, follower reports all servers as `"down"`.
+
+
+### `SHOW INSTANCE`
+
+Displays information about the coordinator you're connected to.
+
+```cypher
+SHOW INSTANCE;
+```
+
+{<h4 className="custom-header"> Output includes </h4>}
+
+1. Instance name
+2. External Bolt server
+3. Coordinator (Raft) endpoint
+4. Management server endpoint
+5. Cluster role (LEADER/FOLLOWER)
+
+> If `ADD COORDINATOR` has not been run, `bolt_server` will be empty.
+
+
+### `SHOW REPLICATION LAG`
+
+Shows replication lag (in committed transactions) for all instances. Must be run
+on the **leader**.
+
+```cypher
+SHOW REPLICATION LAG;
+```
+
+{<h4 className="custom-header"> Implications </h4>}
+
+- Lag values survive restarts (stored in snapshots + WAL).
+- Useful during manual failover to evaluate risk of data loss.
+
+
+## Troubleshooting commands
+
+### `FORCE RESET CLUSTER STATE`
+
+Resets cluster state when the cluster cannot reach a healthy configuration.
+
+```cypher
+FORCE RESET CLUSTER STATE;
+```
+
+{<h4 className="custom-header"> Behavior </h4>}
+
+1. All alive instances are demoted to REPLICA.
+2. A new MAIN is selected from alive instances.
+3. Down instances are demoted after they come back online.
+4. Writes changes to Raft.
+
+{<h4 className="custom-header"> Implications </h4>}
+
+- Must be executed on the **leader** coordinator.
+
+
+<CommunityLinks/>
