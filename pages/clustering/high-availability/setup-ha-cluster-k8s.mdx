@@ -48,9 +48,9 @@ the license and organization name during the installation.
 helm install <release-name> memgraph/memgraph-high-availability --set env.MEMGRAPH_ENTERPRISE_LICENSE=<your-license>,env.MEMGRAPH_ORGANIZATION_NAME=<your-organization-name>
 ```
 
-Replace `<release-name>` with a name of your choice for the release and set the
-Enterprise license.
-
+Replace `<release-name>` with a name of your choice for the release and provide your Enterprise license.
+The cluster will be fully connected once installation completes. Note that the install command may take a moment while instances establish connections.
+If clients connect from outside the cluster, update the Bolt server address on each instance to use its external IP as explained in the section on setting up the cluster.
 
 <Callout type="info"> **Tip:** Always install a specific chart version. Using
 the `latest` tag can lead to unexpected behavior if pods restart and pull newer,
@@ -333,66 +333,31 @@ Memgraph's environment variables.
 
 ## Setting up the cluster
 
-Although many configuration options exist, especially for networking, the overall
-workflow for creating a Memgraph HA cluster is always the same:
+Although many configuration options exist, especially for networking, the workflow for creating a Memgraph HA cluster follows these steps:
 
-1. **Provision the Kubernetes cluster.** Ensure your nodes, storage, and
-   networking are ready.
+1. Provision the Kubernetes cluster. Ensure your nodes, storage, and networking are ready.
+2. Label nodes according to your chosen affinity strategy (optional). For example, when using `nodeSelection`, label nodes as `data-node` or `coordinator-node`.
+3. Install the Memgraph HA Helm chart using `helm install`. This creates a fully connected cluster.
+4. Install auxiliary components for external access, such as `ingress-nginx` (optional).
+5. Update Bolt server addresses if clients will connect from outside the cluster (optional).
 
-2. **Label nodes (optional)** according to your chosen affinity strategy. For
-   example, when using `nodeSelection`, label nodes as `data-node` or
-   `coordinator-node`.
+### Update bolt server
 
-3. **Install the Memgraph HA Helm chart** using `helm install`.
+This step is required only when:
+  - Clients access the database from outside the cluster, and
+  - You're using bolt+routing for client-side routing
 
-4. **Install auxiliary components** (if needed), such as `ingress-nginx` for
-   external access.
-
-5. **Connect the Memgraph instances** to form the HA cluster.
-
-### Connect instances
-
-The final step, connecting instances, is **manual**. Each instance must be
-informed about the **external addresses** through which it is reachable. Without
-this, client-side routing cannot work.
-
-Run the following Cypher queries on **any coordinator**:
+Each instance must know its external address for routing to work correctly. Run the following queries on the leader coordinator:
 
 ```cypher
-ADD COORDINATOR 1 WITH CONFIG {
-  "bolt_server": "<bolt-server-coord1>",
-  "management_server": "memgraph-coordinator-1.default.svc.cluster.local:10000",
-  "coordinator_server": "memgraph-coordinator-1.default.svc.cluster.local:12000"
-};
-
-ADD COORDINATOR 2 WITH CONFIG {
-  "bolt_server": "<bolt-server-coord2>",
-  "management_server": "memgraph-coordinator-2.default.svc.cluster.local:10000",
-  "coordinator_server": "memgraph-coordinator-2.default.svc.cluster.local:12000"
-};
-
-ADD COORDINATOR 3 WITH CONFIG {
-  "bolt_server": "<bolt-server-coord3>",
-  "management_server": "memgraph-coordinator-3.default.svc.cluster.local:10000",
-  "coordinator_server": "memgraph-coordinator-3.default.svc.cluster.local:12000"
-};
-
-REGISTER INSTANCE instance_0 WITH CONFIG {
-  "bolt_server": "<bolt-server-instance0>",
-  "management_server": "memgraph-data-0.default.svc.cluster.local:10000",
-  "replication_server": "memgraph-data-0.default.svc.cluster.local:20000"
-};
-
-REGISTER INSTANCE instance_1 WITH CONFIG {
-  "bolt_server": "<bolt-server-instance1>",
-  "management_server": "memgraph-data-1.default.svc.cluster.local:10000",
-  "replication_server": "memgraph-data-1.default.svc.cluster.local:20000"
-};
-
-SET INSTANCE instance_1 TO MAIN;
+UPDATE CONFIG FOR COORDINATOR 1 WITH CONFIG {"bolt_server": "<bolt-server-coord1>"};
+UPDATE CONFIG FOR COORDINATOR 2 WITH CONFIG {"bolt_server": "<bolt-server-coord2>"};
+UPDATE CONFIG FOR COORDINATOR 3 WITH CONFIG {"bolt_server": "<bolt-server-coord3>"};
+UPDATE CONFIG FOR INSTANCE instance_0 WITH CONFIG {"bolt_server": "<bolt-server-instance0>"};
+UPDATE CONFIG FOR INSTANCE instance_1 WITH CONFIG {"bolt_server": "<bolt-server-instance1>"};
 ```
 
-Note that the only the `bolt_server` values need to be changed. The correct
+Note that the only the `bolt_server` values are provided. The correct
 value depends on the type of external access you configured (LoadBalancer IP,
 Ingress host/port, NodePort, etc.).
 
