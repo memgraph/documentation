@@ -1,0 +1,150 @@
+---
+title: Packaging Memgraph
+description: This guide will show you how to package Memgraph for a Linux distribution.
+---
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+
+# Packaging Memgraph
+
+This guide will show you how to package Memgraph for one of the Linux distributions supported by 
+Memgraph. There are two main ways to package Memgraph:
+
+- Using the `mgbuild.sh` script, which builds Memgraph in a Docker container. (Recommended)
+- Manually, using CMake (Advanced)
+
+<Callout>
+    The distributions of Linux currently supported by Memgraph are and their associated `OS` environment variable:
+    - CentOS 9: `centos-9`
+    - CentOS 10: `centos-10`
+    - Debian 12: `debian-12`
+    - Debian 13: `debian-13`
+    - Fedora 42: `fedora-42`
+    - Rocky 10: `rocky-10`
+    - Ubuntu 22.04: `ubuntu-22.04`
+    - Ubuntu 24.04: `ubuntu-24.04`    
+</Callout>
+
+## Using the `mgbuild.sh` script
+
+The `mgbuild.sh` script is a convenience script that builds Memgraph in a Docker container. Prior to
+packaging Memgraph, [you need to build it first](/getting-started/build-memgraph-from-source#use-docker).
+
+Using the same export environment variables as in the 
+[build-memgraph-from-source](/getting-started/build-memgraph-from-source#use-docker) guide, run the 
+`mgbuild.sh` script by running the following command to build a distro-specific package:
+
+```bash
+./release/package/mgbuild.sh \
+    --toolchain $TOOLCHAIN \
+    --os "$OS" \
+    --arch $ARCH \
+    --build-type $BUILD_TYPE \
+    package-memgraph
+```
+
+Then it can be copied out of the container:
+
+```bash
+./release/package/mgbuild.sh \
+    --toolchain $TOOLCHAIN \
+    --os "$OS" \
+    --arch $ARCH \
+    copy \
+    --package \
+    --dest-dir output
+```
+
+Stop the container:
+
+```bash
+./release/package/mgbuild.sh \
+    --toolchain $TOOLCHAIN \
+    --os "$OS" \
+    --arch $ARCH \
+    stop --remove
+```
+
+Now, the package can be found in the `output` directory and it can be installed using `apt` or 
+`dnf`, depending on the distribution. For example, for Ubuntu 24.04:
+
+```bash
+sudo apt install ./output/memgraph_<version>_<arch>.deb
+```
+
+<Callout>
+    For Ubuntu 24.04, the package can also be used to create a Docker image. To do this, we must first
+    build a custom OpenSSL package:
+
+    ```bash
+    ./release/package/mgbuild.sh \
+        --toolchain $TOOLCHAIN \
+        --os "$OS" \
+        --arch $ARCH \
+        build-ssl \
+        --version "3.5.4"
+    ```
+
+    The following command will then create an Ubuntu-based Docker image:
+
+    ```bash
+    ./release/package/mgbuild.sh \
+        --toolchain $TOOLCHAIN \
+        --os "$OS" \
+        --arch $ARCH \
+        --build-type $BUILD_TYPE \
+        package-docker \
+        --src-dir output \
+        --dest-dir docker-output
+    ```
+
+    resulting in a Docker image tarball in the `docker-output` directory. This can then be loaded 
+    into Docker using the `docker load` command.
+
+    ```bash
+    docker load -i docker-output/memgraph-<version>-docker.tar.gz
+    ```
+
+    The image can then be run using the `docker run` command.
+
+    ```bash
+    docker run -p 7687:7687 -p 7444:7444 --name memgraph memgraph/memgraph:<version>
+    ```
+</Callout>
+
+
+## Using CMake
+
+After following the build instructions using 
+[`build.sh`](/getting-started/build-memgraph-from-source#use-build.sh-script), or 
+[`conan` and `cmake`](/getting-started/build-memgraph-from-source#use-conan-and-cmake), one can use 
+CMake to build a Memgraph package for a Linux distribution.
+
+Prior to packaging, create the output directory:
+
+```bash
+mkdir -p build/output && cd build/output
+```
+
+Activate the toolchain:
+
+```bash
+source /opt/toolchain-v7/activate
+```
+
+Then run the following commands to build the package, depending upon the distibution:
+
+- For RPM-based distributions:
+
+```bash
+cpack -G RPM --config ../CPackConfig.cmake
+```
+
+- For DEB-based distributions:
+
+```bash
+cpack -G DEB --config ../CPackConfig.cmake
+```
+
+Once built, the packages can be installed using `apt` or `dnf`.
