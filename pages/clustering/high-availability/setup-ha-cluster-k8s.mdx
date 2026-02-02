@@ -246,7 +246,7 @@ ports:
 
 Memgraph HA uses **client-side routing**, so DNS resolution happens internal Cluster IP network. Because of that, we need
 one more type of network which will be used for clients accessing instances
-inside the cluster. 
+from outside the cluster. Our HA supports out of the box following K8s resources used to setup external access:
 
 - **IngressNginx** - one LoadBalancer for all instances.
 - **NodePort** - exposes ports on each node (requires public node IPs).
@@ -260,8 +260,12 @@ since usually you don't need to distinguish specific coordinators while using
 Memgraph capabilities. The default Bolt port is opened on 7687 but you can
 change it by setting `ports.boltPort`.
 
-For more detailed IngressNginx setup, see [Using Memgraph HA chart with
+For more detailed IngressNginx setup, see [Use Memgraph HA chart with
 IngressNginx](#use-memgraph-ha-chart-with-ingressnginx).
+
+Note however that Ingress Nginx is getting retired and one of alternatives is using resources like [TCPRoute/TLSRoute](https://doc.traefik.io/traefik/reference/routing-configuration/kubernetes/gateway-api/#tcp) with K8s
+controllers like Envoy Gateway, Istio, Cilium, Traefik, Kong... For the detailed example on how to set-up 
+Envoy Gateway controller with Memgraph HA cluster, see [Use Memgraph HA chart with Envoy Gateway](#use-memgraph-ha-chart-with-envoy-gateway).
 
 By default, the chart does **not** expose any external network services.
 
@@ -399,6 +403,160 @@ Ingress host/port, NodePort, etc.).
 Refer to the Memgraph HA [User API docs](/clustering/high-availability#user-api)
 for the full set of commands and usage patterns.
 
+
+### Use Memgraph HA chart with Envoy Gateway
+
+Before configuring routes, a Gateway API controller must be installed. This guide demonstrates using Envoy Gateway.
+
+```bash
+helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.4 -n envoy-gateway-system --create-namespace
+```
+Next, we will create a `GatewayClass`.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+```
+
+For this example we chose to create one `Gateway` for data instances and one for coordinator instances but you can choose
+a different approach and use a single `Gateway` for both types of instances.
+
+Data instances' gateway:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: memgraph-data-gateway
+  namespace: default
+spec:
+  gatewayClassName: eg
+  listeners:
+    - name: data-0
+      protocol: TCP
+      port: 9000
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: data-1
+      protocol: TCP
+      port: 9001
+      allowedRoutes:
+        namespaces:
+          from: Same
+
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: data-0-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: memgraph-data-gateway
+      sectionName: data-0
+  rules:
+    - backendRefs:
+        - name: memgraph-data-0
+          port: 7687
+
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: data-1-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: memgraph-data-gateway
+      sectionName: data-1
+  rules:
+    - backendRefs:
+        - name: memgraph-data-1
+          port: 7687
+```
+
+Coordinator instances' gateway:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: memgraph-coordinators-gateway
+  namespace: default
+spec:
+  gatewayClassName: eg
+  listeners:
+    - name: coordinator-1
+      protocol: TCP
+      port: 9011
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: coordinator-2
+      protocol: TCP
+      port: 9012
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: coordinator-3
+      protocol: TCP
+      port: 9013
+      allowedRoutes:
+        namespaces:
+          from: Same
+
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: coordinator-1-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: memgraph-coordinators-gateway
+      sectionName: coordinator-1
+  rules:
+    - backendRefs:
+        - name: memgraph-coordinator-1
+          port: 7687
+
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: coordinator-2-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: memgraph-coordinators-gateway
+      sectionName: coordinator-2
+  rules:
+    - backendRefs:
+        - name: memgraph-coordinator-2
+          port: 7687
+
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: coordinator-3-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: memgraph-coordinators-gateway
+      sectionName: coordinator-3
+  rules:
+    - backendRefs:
+        - name: memgraph-coordinator-3
+          port: 7687
+```
+
+In the similar way you could configure `TLSRoute` instead of a `TCPRoute`.
 
 ### Use Memgraph HA chart with IngressNginx
 
