@@ -71,29 +71,53 @@ Follow these steps to create database backup:
 
 ## Restore data
 
-To restore a snapshot in Memgraph, run the following command from an already running instance:
+Restore a snapshot to a running Memgraph instance using the RECOVER SNAPSHOT command:
+
+```
+RECOVER SNAPSHOT path=literal ( WITH CONFIG configsMap=configMap ) ? ( FORCE )? ;
+```
+
+Before modifying the local data directory, Memgraph will move all existing WALs and snapshots to a hidden
+`.old` directory. This directory is reused for subsequent recovery operations, meaning **only a single backup
+is maintained at any time**. Files already present in the `.old` directory will be deleted before moving
+the current files, ensuring only the most recent backup is preserved. By default, snapshots are stored in the local directory `/var/lib/memgraph/snapshots/`.
+
+Snapshots can be recovered from:
+- Local filesystem - absolute or relative paths
+- S3-compatible storage - s3://bucket/path/to/snapshot
+- Remote servers - http://, https://, or ftp:// URLs
+
+### Local filesystem
 
 ```
 RECOVER SNAPSHOT "/path/to/snapshot";
 ```
 
-By default, snapshots are stored in the local directory:  
-`/var/lib/memgraph/snapshots/`
+Use absolute paths when possible. Relative paths are resolved from the Memgraph execution directory.
+Memgraph copies the snapshot to its local snapshot directory, so ensure the file has appropriate read permissions.
 
-If your snapshot is stored elsewhere, Memgraph will attempt to copy it to the local snapshot directory. 
-Ensure the file has the necessary permissions to be moved. If not, you might encounter the following error:
+If not, you might encounter the following error:
 
 ```output
 Failed to copy snapshot over to local snapshots directory.
 ```
 
-Use an absolute path when specifying the snapshot location. If you provide a relative path, it must be relative 
-to the Memgraph execution path.
+### S3-compatible storage
 
-Before modifying the local data directory, Memgraph will move all existing WALs and snapshots to a hidden 
-`.old` directory. This directory is reused for subsequent recovery operations, meaning **only a single backup 
-is maintained at any time**. Files already present in the `.old` directory will be deleted before moving 
-the current files, ensuring only the most recent backup is preserved.
+Provide AWS credentials using one of these methods (in order of precedence):
+
+| Method                | Example                                                                            |
+|-----------------------|----------------------------------------------------------------------------------- |
+| Query config          | `WITH CONFIG {aws_region: ..., aws_access_key: ..., aws_secret_key: ...}`          |
+| Environment variables | `AWS_REGION`, `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`, `AWS_ENDPOINT_URL`               |
+| Runtime settings      | `aws.region`, `aws.access_key`, `aws.secret_key`, `aws.endpoint_url`               |
+
+Example:
+```cypher
+RECOVER SNAPSHOT "s3://my-bucket/snapshots/backup.snapshot" WITH CONFIG {'aws_region': 'eu-west-1', 'aws_access_key': '...', 'aws_secret_key': 'secret'};
+```
+
+### The FORCE flag
 
 If the instance is not freshly started, add the `FORCE` flag to your command:
 
