@@ -25,7 +25,7 @@ persisted on the disk, so no information is lost on database reruns.
 To create a new trigger, use a query of the following format:
 
 ```plaintext
-CREATE TRIGGER trigger_name [ ON [ () | --> ] CREATE | UPDATE | DELETE ]
+CREATE TRIGGER trigger_name [ SECURITY ( DEFINER | INVOKER ) ] [ ON [ () | --> ] CREATE | UPDATE | DELETE ]
 [ BEFORE | AFTER ] COMMIT
 EXECUTE openCypherStatements
 ```
@@ -36,6 +36,16 @@ statements. The event type can be the creation, updated or deletion of nodes ( `
 or relationships ( `-->` ) before or after the commitment of that transaction.
 
 Let's break down each element of the query.
+
+### Trigger privilege context
+
+The `SECURITY` clause determines which user's permissions are used when executing the trigger's Cypher statements. This is also known as the **trigger privilege context**.
+
+- **`SECURITY DEFINER`** (default): The trigger executes with the permissions of the user who created the trigger (the definer). This means any user can invoke the trigger, but it will run with the definer's privileges. This is useful when you want to ensure consistent behavior regardless of who triggers the execution.
+
+- **`SECURITY INVOKER`**: The trigger executes with the permissions of the user who invoked the trigger (the invoker). This means the trigger will only succeed if the invoking user has the necessary privileges. This provides more granular control over who can successfully execute trigger operations.
+
+If the `SECURITY` clause is not specified, the default behavior is `SECURITY DEFINER`.
 
 ### Trigger name
 
@@ -366,7 +376,9 @@ SET newNodes.created = timestamp();
 
 When a new node is created and the transaction is committed, the `exampleTrigger1`
 will take the list of newly created nodes and for each new node set the property
-`created` to a timestamp value indicating the time of its creation. 
+`created` to a timestamp value indicating the time of its creation. Since no `SECURITY`
+clause is specified, it defaults to `SECURITY DEFINER`, meaning it executes with the
+permissions of the user who created the trigger.
 
 A more complex example would be:
 
@@ -452,21 +464,19 @@ A trigger can be deleted by running the following query:
 DROP TRIGGER trigger_name;
 ```
 
-## Trigger owner
+## Trigger owner and privilege context
 
-The user who executes the `CREATE TRIGGER` query is the owner of the trigger.
+The user who executes the `CREATE TRIGGER` query is the owner (definer) of the trigger.
 Authentication and authorization are not supported in Memgraph Community, thus
 the owner is always `Null`, and the privileges are not checked.
 
-In Memgraph Enterprise, the privileges of the
-[owner](/configuration/security#owners) are used when executing Cypher
-statements, in other words, the execution of the statements will fail if the
-owner doesn't have the required
-[privileges](/configuration/security#role-based-access-control-enterprise).
+In Memgraph Enterprise, the trigger's privilege context determines which user's permissions are used when executing the trigger's Cypher statements:
 
-Triggers created by users logged in via
-[SSO](/database-management/authentication-and-authorization/auth-system-integrations)
-cannot be used beyond the session they were created in.
+- **`SECURITY DEFINER`** (default): The trigger executes with the privileges of the owner (definer). The execution of the statements will fail if the owner doesn't have the required [privileges](/configuration/security#role-based-access-control-enterprise). Any user can invoke the trigger, but it will run with the definer's permissions.
+
+- **`SECURITY INVOKER`**: The trigger executes with the privileges of the user who invokes the trigger. The execution of the statements will fail if the invoking user doesn't have the required [privileges](/configuration/security#role-based-access-control-enterprise).
+
+The privilege context affects both standard privileges and fine-grained privileges (label-based and edge-type-based permissions). For `SECURITY DEFINER` triggers, the definer must have all necessary privileges at the time of trigger creation, and these privileges are checked during trigger execution.
 
 ## Trigger info
 
@@ -484,6 +494,6 @@ SHOW TRIGGER INFO;
 
 Information:
 
-| trigger name | statement                       | event type                                        | phase                         | owner                          |
-|--------------|-------------------------------- | --------------------------------------------------| ------------------------------|--------------------------------|
-| Trigger name | Statement the trigger executes. | Event type that triggers the statement execution. | When is the trigger executed. | The trigger owner or `Null`.   |
+| trigger name | statement                       | privilege context                | event type                                        | phase                         | owner                          |
+|--------------|-------------------------------- | ---------------------------------| --------------------------------------------------| ------------------------------|--------------------------------|
+| Trigger name | Statement the trigger executes. | Which user's permissions are used | Event type that triggers the statement execution. | When is the trigger executed. | The trigger owner or `Null`.   |
