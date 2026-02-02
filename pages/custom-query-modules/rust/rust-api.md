@@ -9,7 +9,7 @@ This is the API documentation for the Rust binding of Memgraph's C API, which co
 functions for implementing query module procedures and functions.
 The source files can be found in the Memgraph MAGE file structure (in the `memgraph-mage-dev` Docker images, 
 they can be found under `/mage/rust`). On Github, it can be found 
-under the [rust file structure](https://github.com/memgraph/mage/tree/main/rust).  
+under the [rust file structure](https://github.com/memgraph/memgraph/tree/master/mage/rust).  
 
 To see how to implement query modules in C++, take a look at
 [the example we provided](/custom-query-modules/rust/rust-example).
