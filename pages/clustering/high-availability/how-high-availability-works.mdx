@@ -1,0 +1,662 @@
+---
+title: How high availability works
+description: Learn about the underlying implementation and theoretical concepts behind Memgraph's high availability.
+---
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+
+# How high availability works in Memgraph
+
+<Callout type="info">
+
+This guide builds on the concepts introduced in [how replication
+works](/clustering/replication/how-replication-works). We recommend reading that
+page before continuing.
+
+</Callout>
+
+High availability (HA) in Memgraph ensures that **the cluster can always serve
+queries**, even when nodes fail. It is built on two foundations:
+1. **Replication** - multiple data instances hold copies of the data.
+2. **Automatic failover** - the system transparently promotes a new Main
+instance when needed.
+
+A Memgraph HA cluster contains three types of instances:
+- The MAIN instance on which the user can execute **read** and **write**
+  queries.
+- REPLICA instances that can only respond to **read** queries.
+- COORDINATOR instances that **manage the cluster state**.
+
+In HA documentation, MAIN and REPLICATE together are often referred to as **data
+instances**, because either one may become the Main during the cluster lifetime.
+
+Coordinator instances do not store graph data and are therefore much lighter.
+
+
+## How Memgraph achieves High Availability
+
+A typical highly available Memgraph cluster includes:
+- 3 data instances (1 Main + 2 Replicas)
+- 3 coordinators (1 Leader + 2 Followers)
+
+![](/pages/clustering/high-availability/typical_ha_cluster.png)
+
+The constraint for number coordinators is only that it needs to be an **odd
+number of them, greater than 1** (3, 5, 7, ...). Users can create more than 3
+coordinators, but the replication factor (RF) of 3 is a de facto standard in
+distributed databases.
+
+The minimum valid data-instance setup is:
+- 1 Main
+- 1 Replica
+
+If the Main fails, a Replica is **automatically promoted**.
+
+![](/pages/clustering/high-availability/minimal_ha_cluster.png)
+
+
+For achieving high availability, Memgraph uses the **Raft consensus protocol for
+cluster coordination**. Raft is easier to reason about than Paxos and widely
+adopted across distributed systems. **As a design decision, Memgraph uses an
+industry-proven library [NuRaft](https://github.com/eBay/NuRaft) for the
+implementation of the Raft protocol.**
+
+Raft provides:
+- **Leader election** among coordinator instances
+- A **replicated, durable cluster-management log**
+- **Fault-tolerant decision-making via majority quorum**
+
+<Callout type="info"> 
+Raft is *not* a Byzantine fault-tolerant protocol. Using
+**an odd number of coordinators** ensures majority-based correctness. 
+</Callout>
+
+The coordinator leader ensures:
+- Exactly **one Main** exists
+- Replicas are correctly registered
+- Failover is triggered when needed
+
+Coordinators themselves are redundant, making cluster orchestration highly
+available.
+
+
+### Data instance implementation
+
+The data instance is your usual Memgraph standalone instance, with one key flag
+added:
+- `--management-port` - used to get the **health state** of the data instance
+  from the leader coordinator
+
+### Coordinator instance implementation
+
+The coordinator is a small orchestration instance which is shipped in the same
+Memgraph binary as the data instance itself. For the system to be aware that its
+role is COORDINATOR, the user needs to specify four flags:
+- `--coordinator-id` - serves as a **unique identifier** of the coordinator
+- `--coordinator-port` - used for **synchronization and log replication**
+  between coordinators
+- `--coordinator-hostname` - used on followers to ping the leader on the correct
+  IP address (or FQDN/DNS name)
+- `--management-port` - used to get the **health state** of the respective
+  coordinator instance from the leader coordinator
+
+<Callout> 
+The COORDINATOR instance is a **very restricted instance**, and it will
+not respond to any queries that are not related to management of the cluster.
+That means, you can not run any data queries on the coordinator directly (we
+will talk more about routing data queries in the next sections). 
+</Callout>
+
+
+When deploying coordinators to servers, you can use the instance of almost any
+size. Instances of 4GiB or 8GiB will suffice since coordinators' job mainly
+involves network communication and storing Raft metadata. Coordinators and data
+instances can in theory be deployed on same servers (pairwise) but from the
+availability perspective, it is better to separate them physically. 
+
+### RPC communication in the cluster
+
+RPC (Remote Procedure Call) is a protocol for executing functions on a remote
+system. RPC enables direct communication in distributed systems and is crucial
+for replication and high availability tasks. 
+
+RPC (Remote Procedure Calls) are used for:
+- Replication
+- Cluster orchestration
+- Health monitoring
+- Failover triggers
+
+Below is a cleaned-up categorization.
+
+#### Coordinator → Coordinator RPCs
+
+| RPC                  | Purpose                                     | Description                                                                                                          |
+| -------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `ShowInstancesRpc` | Follower requests cluster state from leader | Sent by a follower coordinator to the leader coordinator when a user executes `SHOW INSTANCES` through the follower. |
+
+
+#### Coordinator → Data Instance RPCs
+
+All of the following messages were sent by the leader coordinator.
+
+| RPC                          | Purpose                                             | Description                                                                                                                                                |
+| ---------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PromoteToMainRpc`         | Promote a Replica to Main                           | Sent to a REPLICA in order to promote it to Main.                                                                                |
+| `DemoteMainToReplicaRpc`   | Demote a Main after failover                        | Sent to the old MAIN in order to demote it to REPLICA.                                                                           |
+| `RegisterReplicaOnMainRpc` | Instruct Main to accept replication from a Replica  | Sent to the MAIN to register a REPLICA on the MAIN.                                                                              |
+| `UnregisterReplicaRpc`     | Remove Replica from Main                            | Sent to the MAIN to unregister a REPLICA from the MAIN.                                                                          |
+| `EnableWritingOnMainRpc`   | Re-enable writes after Main restarts                | Sent to the MAIN to enable writing on that MAIN.                                                                                 |
+| `GetDatabaseHistoriesRpc`  | Gather committed transaction counts during failover | Sent to all REPLICA instances in order to select a new MAIN during the failover process.                                         |
+| `StateCheckRpc`            | Health check ping (liveness)                        | Sent to all data instances for a liveness check.                                                                                 |
+| `SwapMainUUIDRpc`          | Ensure Replica tracks the correct Main              | Sent to REPLICA instances to set the UUID of the MAIN they should listen to.                                                     |
+
+#### Main → Replica RPCs
+
+All of the following messages were sent by the Main instance.
+
+| RPC                      | Purpose                             | Description                                                                                                                                                                            |
+| ------------------------ | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FrequentHeartbeatRpc` | Liveness check                      | Sent to a REPLICA for liveness checks.                                                                                                                                     |
+| `HeartbeatRpc`         | Replication metadata sync           | Sent to a REPLICA for transmitting timestamp, epoch, transaction, and commit information.                                                                                  |
+| `PrepareCommitRpc`     | Send deltas; phase 1 of STRICT_SYNC | Sent  REPLICA instances either as the first phase in `STRICT_SYNC` mode or as the only phase in other replication modes. It sends the delta stream during a write query. |
+| `FinalizeCommitRpc`    | Commit confirmation in STRICT_SYNC  | Sent REPLICA instances in `STRICT_SYNC` mode when all Replicas have acknowledged they are ready to commit.                                                              |
+| `SnapshotRpc`          | Snapshot recovery                   | Sent a REPLICA for snapshot recovery so the REPLICA can catch up with the MAIN.                                                                                         |
+| `WalFilesRpc`          | WAL segment recovery                | Sent a REPLICA for WAL recovery so the REPLICA can catch up with the MAIN.                                                                                              |
+| `CurrentWalRpc`        | Latest WAL file recovery            | Sent a REPLICA for current/latest/unfinished WAL file recovery.                                                                                                         |
+| `SystemRecoveryRpc`    | Replicate system metadata           | Sent a REPLICA for replicating system-level metadata (auth, multi-tenancy, etc.) and other non-graph information.                                                       |
+
+
+#### RPC timeouts
+
+{<h5 className="custom-header"> Default RPC timeouts </h5>}
+
+For the majority of RPC messages, Memgraph uses a default timeout of 10s. This
+is to ensure that when sending a RPC request, the client will not block
+indefinitely before receiving a response if the communication between the client
+and the server is broken. The list of RPC messages for which the timeout is used
+is the following: 
+
+{<h5 className="custom-header"> RPC timeout during replication of data </h5>}
+
+For RPC messages which are sending the variable number of storage deltas —
+`PrepareCommitRpc`, `CurrentWalRpc`, and `WalFilesRpc` — it is not practical to
+set a strict execution timeout, as the processing time on the replica side is
+directly proportional to the number of deltas being transferred. To handle this,
+the replica sends periodic progress updates to the main instance after
+processing every 100,000 deltas. Since processing 100,000 deltas is expected to
+take a relatively consistent amount of time, we can enforce a timeout based on
+this interval. The default timeout for these RPC messages is 30 seconds, though
+in practice, processing 100,000 deltas typically takes less than 3 seconds.
+
+{<h5 className="custom-header"> RPC timeout during replica recovery </h5>}
+
+`SnapshotRpc` is also a replication-related RPC message, but its execution time
+is tracked a bit differently from RPC messages shipping deltas. The replica
+sends an update to the main instance after completing 1,000,000 units of work.
+The work units are assigned as follows:
+
+- Processing nodes, edges, or indexed entities (label index, label-property
+  index, edge type index, edge type property index) = 1 unit
+- Processing a node inside a point or text index = 10 units
+- Processing a node inside a vector index (most computationally expensive) =
+  1,000 units
+
+With this unit-based tracking system, the REPLICA is expected to report progress
+approximately every 2–3 seconds. Given this, a timeout of 60 seconds is set to
+avoid unnecessary network instability while ensuring responsiveness. On every
+report of the progress by the REPLICA, the timeout of 60 seconds will be
+restarted, as the state of recovery is considered to be stable.
+
+Except for timeouts on read and write operations, Memgraph also has a timeout of
+5s for sockets when establishing a connection. Such a timeout helps in having a
+low p99 latencies when using the RPC stack, which manifests for users as smooth
+and predictable network communication between instances.
+
+In the table below, we have the full outline of the RPC messages that are sent
+in the cluster to ensure high availability, with timeouts. 
+
+| RPC message request      | source      | target         | timeout          |
+|--------------------------|-------------|----------------| -----------------|
+| `ShowInstancesReq`         | Coordinator | Coordinator    |                  |
+| `DemoteMainToReplicaReq`   | Coordinator | Data instance  |                  |
+| `PromoteToMainReq`         | Coordinator | Data instance  |                  |
+| `RegisterReplicaOnMainReq` | Coordinator | Data instance  |                  |
+| `UnregisterReplicaReq`     | Coordinator | Data instance  |                  | 
+| `EnableWritingOnMainReq`   | Coordinator | Data instance  |                  |
+| `GetDatabaseHistoriesReq`  | Coordinator | Data instance  |                  |
+| `StateCheckReq`            | Coordinator | Data instance  | 5s               |
+| `SwapMainUUIDReq`          | Coordinator | Data instance  |                  |
+| `FrequentHeartbeatReq`     | Main        | Replica        | 5s               |
+| `HeartbeatReq`             | Main        | Replica        |                  |
+| `SystemRecoveryReq`        | Main        | Replica        | 5s               |
+| `PrepareCommitRpc`         | Main        | Replica        | proportional     |
+| `FinalizeCommitReq`        | Main        | Replica        | 10s              |
+| `SnapshotRpc`              | Main        | Replica        | proportional     |
+| `WalFilesRpc`              | Main        | Replica        | proportional     |
+| `CurrentWalRpc`            | Main        | Replica        | proportional     |
+
+## Automatic failover
+
+Automatic failover is driven by periodic health checks performed by the leader
+coordinator on all data instances. An instance is considered **alive** if it
+responds to these checks; if it does not, it is marked as down.
+
+**When a Replica goes down**
+
+If a **REPLICA** instance goes down, it will always rejoin the cluster as a
+REPLICA once it becomes healthy again. No failover action is required.
+
+**When the Main goes down**
+
+If the **MAIN** instance is detected as down, the coordinator may initiate a
+failover to select a new MAIN from the set of alive REPLICAs.
+
+The failover process works as follows:
+1. The coordinator selects one of the alive replicas as the new MAIN candidate.
+2. It records this decision in the Raft log.
+3. On the next heartbeat to the selected replica, the coordinator sends an RPC
+request (`PromoteToMainReq`) instructing it to promote itself from REPLICA to
+MAIN and providing information about the other replicas it should replicate to.
+4. Once the promotion succeeds, the new MAIN begins replicating data to the
+other instances and starts accepting write queries.
+
+
+### Instance health checks
+
+The coordinator performs health checks on each instance at a fixed interval,
+configured with `--instance-health-check-frequency-sec`. An instance is not
+considered down until it has failed to respond for the full duration specified
+by `--instance-down-timeout-sec`.
+
+**Example**
+
+If you set:
+- `--instance-health-check-frequency-sec=1`
+- `--instance-down-timeout-sec=5`
+
+…the coordinator will send a health check RPC (`StateCheckRpc`) every second. An
+instance is marked as down only after **five consecutive missed responses** (5
+seconds ÷ 1 second).
+
+Usually, the health check reports instantly, and only in severe cases of network
+failure, it will timeout in 30 seconds.
+
+---
+
+Depending on the data instance role, we have 2 scenarios:
+1. **Replica instance fails to respond**
+
+If a **REPLICA** fails to respond:
+- The leader coordinator simply retries on the next scheduled health check.
+- Once the instance becomes reachable again, it **always rejoins the cluster as
+  a REPLICA**.
+
+![](/pages/clustering/high-availability/replica-rejoining-cluster.png)
+
+2. **Main instance fails to respond**
+
+If the **MAIN** instance fails to respond, two cases apply:
+- **Down for less than** `--instance-down-timeout-sec` The instance is still
+considered alive and will rejoin as MAIN when it responds again.
+- **Down for longer than** `--instance-down-timeout-sec` The coordinator
+initiates the failover procedure. What the old MAIN becomes afterward depends on
+the outcome:
+  - **Failover succeeds**: the old MAIN rejoins as a **REPLICA**.
+  - **Failover fails**: the old MAIN retains authority and rejoins as **MAIN**
+    when it becomes reachable.
+
+
+![](/pages/clustering/high-availability/main-rejoining-cluster.png)
+
+<Callout type="info"> 
+For guidance on configuring health checks, see the [Best
+practices.](/clustering/high-availability/best-practices) 
+</Callout>
+
+### Choosing the new MAIN 
+
+During failover, the coordinator must select a new main instance from available
+replicas, as some may be offline. The leader coordinator queries each live
+replica to retrieve the committed transaction count for every database.
+
+<Callout> 
+**Note:** *For every database* in this terminologyrefers to environments using
+[multi-tenancy](/database-management/multi-tenancy), where multiple isolated
+databases/graphs exist within a single instance. If multi-tenancy is not used,
+the coordinator retrieves the committed transaction count only for the default
+**memgraph** database. 
+</Callout>
+
+The **selection algorithm** prioritizes data recency using a two-phase approach:
+
+1. **Database majority rule**: The coordinator identifies which replica has the
+highest committed transaction count for each database. The replica that leads in
+the most databases becomes the preferred candidate.
+2. **Total transaction tiebreaker**: If multiple replicas tie for leading the
+most databases, the coordinator sums each replica's committed transactions
+across all databases. The replica with the highest total becomes the new main.
+
+This approach ensures the new main instance has the most up-to-date data across
+the cluster while maintaining consistency guarantees.
+
+### Old MAIN rejoining
+
+When the old MAIN instance comes back online, it cannot resume as MAIN
+automatically. The coordinator keeps track of which instance most recently
+served as MAIN and ensures a controlled transition.
+
+To demote the old MAIN to a REPLICA, the leader coordinator sends two RPC
+requests **in order**:
+
+1. **`DemoteMainToReplicaReq`** - instructs the old MAIN to demote itself to a
+   REPLICA.
+2. **Store current MAIN UUID** - updates the old instance (now a REPLICA) with
+   the machine UUID of the current MAIN so it can correctly begin replication.
+
+After these steps, the old MAIN fully reenters the cluster as a REPLICA.
+
+
+### Ensuring replicas follow the correct MAIN
+
+Each REPLICA stores the UUID of the MAIN instance it should follow. In certain
+failure scenarios, such as a network partition, the MAIN may still be able to
+communicate with a REPLICA even though the coordinator cannot reach the MAIN.
+From the coordinator’s perspective, the MAIN appears down, while from the
+REPLICA’s perspective, it appears alive.
+
+This situation can lead to *split-brain* behavior, where failover procedure is
+triggered and multiple MAINs briefly exist, with replicas potentially following
+different leaders.
+
+To prevent this, the coordinator manages MAIN UUIDs carefully:
+
+- When a new MAIN is selected, the coordinator generates a **new, unique MAIN
+  UUID** that no existing MAIN has.
+- The new MAIN adopts this UUID when promoted, ensuring replicas can reliably
+  distinguish which MAIN is authoritative.
+
+
+If a REPLICA goes down and later rejoins, the MAIN may have changed during its
+absence. To ensure the REPLICA follows the correct MAIN, the coordinator sends a
+`SwapMainUUIDRpc` request, updating the REPLICA with the UUID of the current
+MAIN.
+
+This guarantees all REPLICAs consistently replicate from the correct leader and
+prevents divergence across the cluster.
+
+
+### Replication scenarios
+
+**Force sync of data**
+
+Earlier, we explained how Memgraph [selects the most up-to-date alive
+instance](/clustering/high-availability/how-high-availability-works#choosing-the-new-main)
+during failover.
+
+However, a replica that was **down** at the time of failover might actually hold
+**more recent data** than any of the replicas that were online. When this
+happens, Memgraph performs a **force sync** of that REPLICA.
+
+A force sync occurs when a previously unreachable instance had a more up-to-date
+state than the replica promoted to MAIN. Once that instance rejoins the cluster,
+it undergoes a controlled recovery process:
+
+- The REPLICA **resets its storage**.
+- It receives **all committed transactions** from the current MAIN to rebuild an
+  accurate and consistent state.
+- Its original durability files are preserved in `.old` directories inside
+  `data_directory/snapshots` and `data_directory/wal`. These allow
+  administrators to attempt manual recovery if necessary. The `.old` directory
+  is reused on subsequent recoveries, meaning **only one backup copy is kept at
+  a time**.
+
+Use the `--storage-enable-backup-dir` flag to control this behavior:
+- `true` (default) - Old durability files are moved to `.old` directories
+- `false` - Old durability files are deleted immediately
+
+---
+
+The possibility of data loss during failover depends on the configured
+replication mode:
+
+{<h4 className="custom-header"> SYNC (default) </h4>}
+
+- Provides strong availability guarantees but allows a **non-zero RPO** (loss of
+  committed data).
+- This can occur because the replica promoted to MAIN may not have received the
+  latest commits from the old MAIN before failure.
+- The design prioritizes keeping the MAIN writable for as long as possible.
+
+{<h4 className="custom-header"> ASYNC </h4>}
+
+- Similar to `SYNC`, but with an even higher chance of data loss because the
+  MAIN continues committing freely regardless of replica status.
+
+{<h4 className="custom-header"> STRICT_SYNC </h4>}
+
+- Ensures **zero data loss** under all failover scenarios.
+- Achieves this by using a two-phase commit protocol, at the cost of reduced
+  throughput.
+
+<Callout>  
+Learn more about the implications of different [replication
+modes](/clustering/replication/how-replication-works#replication-modes).  
+</Callout>
+
+
+## Actions on follower coordinators
+
+Follower coordinators operate in a restricted mode.
+They can **only execute** the `SHOW INSTANCES` command.
+
+All state-changing operations are disabled on followers, including:
+
+- Registering data instances
+- Unregistering data instances
+- Demoting an instance
+- Promoting an instance to MAIN
+- Forcing a cluster state reset
+
+These operations are permitted **only on the leader coordinator**.
+
+## Instance restarts
+
+### Restarting data instances
+
+Both MAIN and REPLICA instances may fail and later restart.
+
+- When a **REPLICA** instance comes back online, it uses the MAIN UUID provided
+  by the coordinator (via the `SwapMainUUIDReq` message) to determine which MAIN
+  to follow. This synchronization happens automatically once the coordinator’s
+  health check (“ping”) succeeds.
+
+- When the **MAIN** instance restarts, it is initially prevented from accepting
+  write operations. Writes become allowed only after the coordinator confirms
+  the instance’s state and sends an `EnableWritingOnMainRpc` message.
+
+This ensures that instances safely rejoin the cluster without causing
+inconsistencies.
+
+
+### Restarting coordinator instances
+
+If a coordinator instance crashes and is restarted, it does **not** lose any
+state. All coordinator metadata, RAFT logs and RAFT snapshots, is persisted on
+durable storage, ensuring full recovery on restart.
+
+More details are available in the section on [RAFT
+implementation](#raft-implementation).
+
+
+## RAFT implementation
+
+NuRaft persists all critical RAFT state to durable storage by default. This
+includes:
+
+- RAFT logs
+- RAFT snapshots
+- Cluster connectivity metadata
+
+Persisting connectivity information is essential. Without it, a coordinator
+could not safely rejoin the cluster after a restart.
+
+---
+
+Information about logs and snapshots is stored under one RocksDB instance in the
+`high_availability/raft_data/logs` directory stored under the top-level
+`--data-directory` folder. All the data stored there is recovered in case the
+coordinator restarts.
+
+Data about other coordinators is recovered from the
+`high_availability/raft_data/network` directory stored under the top-level
+`--data-directory` folder. When the coordinator rejoins, it will reestablish the
+communication with other coordinators and receive updates from the current
+leader.
+
+### First start
+
+When coordinators start for the first time, each initializes its `logs` and
+`network` durability stores. From that moment on:
+
+- Every RAFT log entry sent to a coordinator is also written to disk.
+- The server configuration is updated whenever a new coordinator joins.
+- Logs are generated for all user actions and failover-related operations.
+- RAFT snapshots are created every *N* log entries (currently **every 5 logs**).
+
+This design ensures that the coordinator can reliably recover its full RAFT
+state at any time, preserving both consistency and cluster membership
+information.
+
+
+### Restart of coordinator 
+
+In case of the coordinator's failure, on the restart, it will read information
+about other coordinators stored under `high_availability/raft_data/network`
+directory. 
+
+From the `network` directory we will recover the server state before the
+coordinator stopped, including the current term, for whom the coordinator voted,
+and whether election timer is allowed.
+
+It will also recover the following server config information: 
+- other servers, including their endpoints, id, and auxiliary data
+- ID of the previous log 
+- ID of the current log 
+- additional data needed by nuRaft
+
+The following information will be recovered from a common RocksDB `logs`
+instance: 
+- current version of `logs` durability store 
+- snapshots found with `snapshot_id_` prefix in database:
+  - coordinator cluster state - all data instances with their role (main or
+    replica), all coordinator instances and UUID of main instance which replica
+    is listening to 
+  - last log idx
+  - last log term
+  - last cluster config
+- logs found in the interval between the start index and the last log index 
+  - data - each log holds data on what has changed since the last state
+  - term - nuRAFT term 
+  - log type - nuRAFT log type
+
+
+### Handling durability errors 
+
+If snapshots are not correctly stored, the exception is thrown and left for the
+nuRAFT library to handle the issue. Logs can be missed and not stored since they
+are compacted and deleted every two snapshots and will be removed relatively
+fast.
+
+Memgraph throws an error when failing to store cluster config, which is updated
+in the `high_availability/raft_data/network` folder. If this happens, it will
+happen only on the first cluster start when coordinators are connecting since
+coordinators are configured only once at the start of the whole cluster. This is
+a non-recoverable error since in case the coordinator rejoins the cluster and
+has the wrong state of other clusters, it can become a leader without being
+connected to other coordinators. 
+
+
+## Recovering from errors
+
+Distributed systems can fail in many different ways. Memgraph is designed to be
+resilient to **network failures**, **omission faults**, and **independent
+machine failures**. However, like most systems based on Raft, it does **not**
+tolerate Byzantine failures.
+
+To understand how Memgraph behaves under failure, it is useful to consider the
+**Recovery Time Objective (RTO)** - the maximum acceptable duration for which an
+instance or cluster can be unavailable.
+
+Memgraph clusters contain two categories of instances - **coordinators** and
+**data instances** and their failure scenarios must be examined separately.
+
+### Coordinator failures
+
+Raft requires a **majority of coordinators** to remain alive to continue
+operating.
+
+- With **one coordinator down** in a 3-node Raft cluster (RF = 3), the cluster
+  still has quorum, so **RTO = 0** - the system remains fully available.
+- With **two or more coordinators down**, quorum is lost. In this case, RTO
+  depends solely on how long it takes for enough coordinators to come back
+  online.
+
+### Replica failures
+
+A replica’s failure has different consequences depending on its replication
+mode:
+
+1. **STRICT_SYNC replica fails**
+
+  - Writes on the MAIN are **blocked** until the replica becomes available
+    again.
+  - Reads remain allowed on MAIN and other replicas.
+
+2. **SYNC or ASYNC replica fails**
+
+  - The MAIN continues accepting writes.
+  - Reads remain available everywhere.
+
+Thus, only STRICT_SYNC replicas can directly impact write availability.
+
+### Main instance failure
+
+When the MAIN instance becomes unavailable, the failure is handled by the leader
+coordinator using two user-configured parameters:
+
+- `--instance-health-check-frequency-sec`: how often health checks are sent
+- `--instance-down-timeout-sec`: how long an instance must remain unresponsive
+  before it is considered down
+
+Once the coordinator gathers enough evidence that the MAIN is down, it begins a
+failover procedure using a small number of RPC messages. The exact time required
+depends on network latency and instance proximity.
+
+If the selected replica (promoted to MAIN) has the most recent committed data,
+failover completes **with zero data loss**.
+
+
+## Raft configuration parameters
+
+Several RAFT-related settings play a key role in maintaining stable cluster
+behavior.
+
+The **leader coordinator** sends heartbeat messages to all follower coordinators
+**once per second**. These heartbeats allow followers to confirm that the leader
+is healthy.
+
+This timing interacts closely with the **leader election timeout**, which is a
+**randomized interval between 2000 ms and 4000 ms**. A follower starts a new
+election only if it does **not** receive a heartbeat within this timeout window.
+
+Additionally, the **leadership expiration** is fixed at **2000 ms**, ensuring
+that the cluster cannot enter a state where multiple leaders coexist.
+
+These values are chosen to allow the cluster to tolerate minor and temporary
+network delays **without** triggering unnecessary leadership changes, improving
+overall stability.
+
+<CommunityLinks/>
