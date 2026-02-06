@@ -11,6 +11,7 @@ export default {
   "vector-search": "Vector search",
   "time-to-live": "Time to live",
   "query-plan": "Query plan",
+  "parallel-execution": "Parallel execution",
   "exploring-datasets": "Exploring datasets"
 }
 

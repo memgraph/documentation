@@ -18,6 +18,7 @@ export default {
   "set": "SET",
   "union": "UNION",
   "unwind": "UNWIND",
+  "using-parallel-execution": "USING PARALLEL EXECUTION",
   "where": "WHERE",
   "with": "WITH"
 }
