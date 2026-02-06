@@ -1,9 +1,352 @@
 ---
-title: Import data from JSON files
-description: Integrate JSON effortlessly with Memgraph. Detailed documentation guiding you every step of the way towards graph use cases. 
+title: Import data from JSON(L) files
+description: Integrate JSON(L) effortlessly with Memgraph. Detailed documentation guiding you every step of the way towards graph use cases. 
 ---
 
 import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+
+# Import data from JSONL files
+
+A JSONL file is a file in which every line is a separate JSON document. Each line is parsed as node
+or edge and each key in the JSON document is used as a node's or edge's property. The data from JSONL files
+can be imported using `LOAD JSONL` clause.
+
+## `LOAD JSONL` Cypher clause
+
+The `LOAD JSONL` clause uses [simdjson library](https://github.com/simdjson/simdjson) to parse JSON documents as
+fast as possible. It can be used to load JSONL documents from the local disk, http, https, ftp and S3 servers. 
+
+
+### `LOAD JSONL` clause syntax
+
+The syntax of the `LOAD JSONL` clause is:
+
+```cypher
+LOAD JSONL FROM <jsonl-location> ( WITH CONFIG configsMap=configMap ) ? AS <variable-name>
+```
+
+- `<jsonl-location>` is a string representing the path from which JSONL file should be loaded. There are no restrictions on where in
+  your file system the file can be located, as long as the path is valid (i.e.,
+  the file exists). Files can be imported directly from the public URL and S3.
+  If you are using Docker to run Memgraph, you will need to
+  [copy the files from your local directory into
+  Docker](/getting-started/first-steps-with-docker#copy-files-from-and-to-a-docker-container)
+  container where Memgraph can access them. <br/>
+- `<configs>` Represents an optional configuration map through which you can
+  specify configuration options: `aws_region`, `aws_access_key`,
+  `aws_secret_key` and `aws_endpoint_url`.
+  - `<aws_region>`: The region in which your S3 service is being located
+  - `<aws_access_key>`: Access key used to connect to S3 service
+  - `<aws_secret_key>`: Secret key used to connect S3 service
+  - `<aws_endpoint_url`>: Optional configuration parameter. Can be used to set
+    the URL of the S3 compatible storage.
+- `<variable-name>` is a symbolic name representing the variable to which the
+  contents of the parsed row will be bound to, enabling access to the row
+  contents later in the query. The variable doesn't have to be used in any
+  subsequent clause.
+
+### `LOAD JSONL` clause specificities
+
+When using the `LOAD JSONL` clause please keep in mind:
+
+- The JSONL parser parses the values in their appropriate type so you should get the same property type in Memgraph as in JSONL file. Memgraph supports the following
+JSON types:
+ - `string`: The property in Memgraph will be of type string.
+ - `uint64_t`: The property in Memgraph will be cast to int64_t because Cypher standard doesn't support uint64_t. 
+ - `int64_t`: The property in Memgraph will be saved as int64_t.
+ - `double`: The property in Memgraph will be used as floating point number.
+ - `boolean`: The property in Memgraph will be saved as bool.
+ - `array`: The property in Memgraph will be saved as list.
+ - `object`: The property in Memgraph will be saved as map.
+
+- **The `LOAD JSONL` clause is not a standalone clause**, meaning a valid query must contain at least one more clause, for example:
+
+```cypher
+LOAD JSONL FROM "./people.jsonl" AS row CREATE (p:Person) SET p += row; 
+```
+
+In this regard, the following query will throw an exception: 
+
+```cypher
+LOAD JSONL FROM "./file.jsonl" AS row;
+```
+
+**Adding a `MATCH` or `MERGE` clause before LOAD JSONL** allows you to match certain entities in the graph before running `LOAD JSONL`, optimizing the process as
+matched entities do not need to be searched for every row in the JSONL file.  
+
+But, the `MATCH` or `MERGE` clause can be used prior the `LOAD JSONL` clause only
+if the clause returns only one row. Returning multiple rows before calling the
+`LOAD JSONL` clause will cause a Memgraph runtime error.
+
+- **The `LOAD JSONL` clause can be used at most once per query**, so queries like
+the one below will throw an exception:
+
+```cypher
+LOAD JSONL FROM "/x.jsonl" AS x
+LOAD JSONL FROM "/y.jsonl" AS y
+CREATE (n:A {p1 : x, p2 : y});
+```
+
+### Load from remote sources
+
+  The `LOAD JSONL` clause supports loading files from HTTP/HTTPS/FTP URLs and S3 buckets.
+
+{<h4 className="custom-header">Load from HTTP/HTTPS/FTP</h4>}
+
+When loading from HTTP, HTTPS, or FTP URLs, the file will be downloaded to the `/tmp` directory before being imported:
+
+```cypher
+LOAD JSONL FROM "https://download.memgraph.com/asset/docs/people_nodes.jsonl" AS row
+CREATE (n:Person {id: row.id, name: row.name, age: row.age, city: row.city});
+```
+
+You can also use FTP URLs:
+
+```cypher
+LOAD JSONL FROM "ftp://example.com/data/nodes.jsonl" AS row
+CREATE (n:Node) SET n += row;
+```
+
+{<h4 className="custom-header">Load from S3</h4>}
+
+To load files from S3, you can provide AWS credentials in three ways:
+
+**1. Using WITH CONFIG clause (Recommended for query-specific credentials)**
+
+```cypher
+LOAD JSONL FROM "s3://my-bucket/path/to/file.jsonl"
+WITH CONFIG {
+  aws_region: "us-east-1",
+  aws_access_key: "YOUR_ACCESS_KEY",
+  aws_secret_key: "YOUR_SECRET_KEY"
+}
+AS row
+CREATE (n:Node) SET n += row;
+```
+
+For S3-compatible services (like MinIO), you can also specify the endpoint URL:
+
+```cypher
+LOAD JSONL FROM "s3://my-bucket/data/nodes.jsonl"
+WITH CONFIG {
+  aws_region: "us-east-1",
+  aws_access_key: "YOUR_ACCESS_KEY",
+  aws_secret_key: "YOUR_SECRET_KEY",
+  aws_endpoint_url: "https://s3-compatible-service.example.com"
+}
+AS row
+CREATE (n:Node) SET n += row;
+```
+
+**2. Using environment variables**
+
+Set environment variables before starting Memgraph:
+
+```
+export AWS_REGION="us-east-1"
+export AWS_ACCESS_KEY="YOUR_ACCESS_KEY"
+export AWS_SECRET_KEY="YOUR_SECRET_KEY"
+export AWS_ENDPOINT_URL="https://s3-compatible-service.example.com"  # Optional
+```
+
+Then you can load files without specifying credentials in the query:
+
+```cypher
+LOAD JSONL FROM "s3://my-bucket/path/to/file.jsonl" AS row
+CREATE (n:Node) SET n += row;
+```
+
+**3. Using database settings**
+
+Set database-level AWS credentials:
+
+```cypher
+SET DATABASE SETTING 'aws.region' TO 'us-east-1';
+SET DATABASE SETTING 'aws.access_key' TO 'YOUR_ACCESS_KEY';
+SET DATABASE SETTING 'aws.secret_key' TO 'YOUR_SECRET_KEY';
+SET DATABASE SETTING 'aws.endpoint_url' TO 'https://s3-compatible-service.example.com';  -- Optional
+```
+
+Then load files without credentials in the query:
+
+```cypher
+LOAD JSONL FROM "s3://my-bucket/path/to/file.jsonl" AS row
+CREATE (n:Node) SET n += row;
+```
+
+Credential precedence: If credentials are provided in multiple ways, the order of precedence is:
+1. WITH CONFIG clause in the query (highest priority)
+2. Environment variables
+3. Database settings (lowest priority)
+
+
+When loading files from remote locations (HTTP, FTP, or S3), the file is first downloaded to /tmp before being loaded into memory. Ensure you have sufficient disk space for large files. 
+The download can be interrupted using `TERMINATE TRANSACTIONS <tx_id>`.
+
+| Option           | Required | Description                                                        |
+|------------------|----------|--------------------------------------------------------------------|
+| aws_region       | Yes      | The AWS region where your S3 bucket is located (e.g., "us-east-1") |
+| aws_access_key   | Yes      | Your AWS access key ID                                             |
+| aws_secret_key   | Yes      | Your AWS secret access key                                         |
+| aws_endpoint_url | No       | Custom endpoint URL for S3-compatible services                     |
+
+
+### Increase import speed
+
+
+The `LOAD JSONL` clause will create relationships much faster and consequently
+speed up data import if you [create indexes](/fundamentals/indexes) on nodes or
+node properties once you import them:
+
+```cypher
+  CREATE INDEX ON :Node(id);
+```
+
+If the `LOAD JSONL` clause is merging data instead of creating it, create indexes
+before running the `LOAD JSONL` clause.
+
+The construct `USING PERIODIC COMMIT <BATCH_SIZE>` also improves the import speed because
+it optimizes memory allocation patterns. In our benchmarks, periodic commit
+speeds up the execution from 25% to 35%.
+
+```cypher
+  USING PERIODIC COMMMIT 1024 LOAD CLAUSE FROM "/x.jsonl" AS x
+  CREATE (n:A {p1 : x, p2 : y});
+```
+
+
+You can also speed up the import if you switch Memgraph to [**analytical storage
+mode**](/fundamentals/storage-memory-usage#storage-modes). In the analytical
+storage mode there are no ACID guarantees besides manually created snapshots.
+After import you can switch the storage mode back to
+transactional and enable ACID guarantees.
+
+You can switch between modes within the session using the following query:
+
+```cypher
+STORAGE MODE IN_MEMORY_{TRANSACTIONAL|ANALYTICAL};
+```
+
+If you use `IN_MEMORY_ANALYTICAL` mode and have nodes and relationships stored in
+ separate JSONL files, you can run multiple concurrent `LOAD JSONL` queries to import data even faster.
+In order to achieve the best import performance, split your nodes and relationships
+files into smaller files and run multiple `LOAD JSONL` queries in parallel. 
+The key is to run all `LOAD JSONL` queries which create nodes first. After that, run 
+all `LOAD JSONL` queries that create relationships. 
+
+
+### Import multiple JSONL files with distinct graph objects
+
+In this example, the data is split across four files, each file contains nodes
+of a single label or relationships of a single type. Files are downloaded from public URLs.
+The same approach works for S3 files when proper credentials are provided.
+
+
+<Steps>
+
+  {<h3 className="custom-header">JSONL files</h3>}
+
+  - [`people_nodes.jsonl`](https://download.memgraph.com/asset/docs/people_nodes.jsonl) is used to create nodes labeled `:Person`.<br/> The file contains the following data:
+    ```jsonl
+    {"id": 100, "name": "Daniel", "age": 30, "city": "London"}
+    {"id": 101, "name": "Alex", "age": 15, "city": "Paris"}
+    {"id": 102, "name": "Sarah", "age": 17, "city": "London"}
+    {"id": 103, "name": "Mia", "age": 25, "city": "Zagreb"}
+    {"id": 104, "name": "Lucy", "age": 21, "city": "Paris"}
+    ```
+- [`restaurants_nodes.jsonl`](https://download.memgraph.com/asset/docs/restaurants_nodes.jsonl) is used to create nodes labeled `:Restaurants`.<br/> The file contains the following data:
+    ```jsonl
+    {"id": 200, "name": "Mc Donalds", "menu": "Fries;BigMac;McChicken;Apple Pie"}
+    {"id": 201, "name": "KFC", "menu": "Fried Chicken;Fries;Chicken Bucket"}
+    {"id": 202, "name": "Subway", "menu": "Ham Sandwich;Turkey Sandwich;Foot-long"}
+    {"id": 203, "name": "Dominos", "menu": "Pepperoni Pizza;Double Dish Pizza;Cheese filled Crust"}
+    ```
+
+- [`people_relationships.jsonl`](https://download.memgraph.com/asset/docs/people_relationships.jsonl) is used to connect people with the `:IS_FRIENDS_WITH` relationship.<br/> The file contains the following data:
+    ```jsonl
+    {"first_person": 100, "second_person": 102, "met_in": 2014}
+    {"first_person": 103, "second_person": 101, "met_in": 2021}
+    {"first_person": 102, "second_person": 103, "met_in": 2005}
+    {"first_person": 101, "second_person": 104, "met_in": 2005}
+    {"first_person": 104, "second_person": 100, "met_in": 2018}
+    {"first_person": 101, "second_person": 102, "met_in": 2017}
+    {"first_person": 100, "second_person": 103, "met_in": 2001}
+    ```
+-  [`restaurants_relationships.jsonl`](https://download.memgraph.com/asset/docs/restaurants_relationships.jsonl) is used to connect people with restaurants using the `:ATE_AT` relationship.<br/> The file contains the following data:
+    ```jsonl
+    {"PERSON_ID": 100, "REST_ID": 200, "liked": true}
+    {"PERSON_ID": 103, "REST_ID": 201, "liked": false}
+    {"PERSON_ID": 104, "REST_ID": 200, "liked": true}
+    {"PERSON_ID": 101, "REST_ID": 202, "liked": false}
+    {"PERSON_ID": 101, "REST_ID": 203, "liked": false}
+    {"PERSON_ID": 101, "REST_ID": 200, "liked": true}
+    {"PERSON_ID": 102, "REST_ID": 201, "liked": true}
+    ```
+
+  {<h3 className="custom-header">Import nodes</h3>}
+
+  Each row will be parsed as a map, and the
+  fields can be accessed using the property lookup syntax (e.g. `id: row.id`). Files should be downloaded and then accessed from the local disk.
+
+  The following query will load row by row from the file, and create a new node
+  for each row with properties based on the parsed row values:
+
+      ```cypher
+      LOAD JSONL FROM "https://download.memgraph.com/asset/docs/people_nodes.jsonl" 
+      AS row
+      CREATE (n:Person {id: row.id, name: row.name, age: row.age, city: row.city});
+      ```
+
+  In the same manner, the following query will create a new node for each restaurant:
+
+      ```cypher
+      LOAD JSONL FROM "https://download.memgraph.com/asset/docs/restaurants_nodes.jsonl" AS row
+      CREATE (n:Restaurant {id: row.id, name: row.name, menu: row.menu});
+      ```
+
+  {<h3 className="custom-header">Create indexes</h3>}
+
+  Creating an [index](/fundamentals/indexes) on a property used to connect nodes
+  with relationships, in this case, the `id` property of the `:Person` nodes,
+  will speed up the import of relationships, especially with large datasets:
+
+      ```cypher
+      CREATE INDEX ON :Person(id);
+      ```
+
+  {<h3 className="custom-header">Import relationships</h3>}
+  The following query will create relationships between the people nodes:
+
+  ```cypher
+  LOAD JSONL FROM "https://download.memgraph.com/asset/docs/people_relationships.jsonl" AS row
+  MATCH (p1:Person {id: row.first_person})
+  MATCH (p2:Person {id: row.second_person})
+  CREATE (p1)-[f:IS_FRIENDS_WITH]->(p2)
+  SET f.met_in = row.met_in;
+  ```
+
+  The following query will create relationships between people and restaurants where they ate:
+
+  ```cypher
+  LOAD JSONL FROM "https://download.memgraph.com/asset/docs/restaurants_relationships.jsonl" AS row
+  MATCH (p1:Person {id: row.PERSON_ID})
+  MATCH (re:Restaurant {id: row.REST_ID})
+  CREATE (p1)-[ate:ATE_AT]->(re)
+  SET ate.liked = ToBoolean(row.liked);
+  ```
+
+  {<h3 className="custom-header">Final result</h3>}
+  Run the following query to see how the imported data looks as a graph:
+
+  ```
+  MATCH p=()-[]-() RETURN p;
+  ```
+
+  ![](/pages/data-migration/csv/load_csv_restaurants_relationships.png)
+
+</Steps>
+
 
 # Import data from JSON files
 

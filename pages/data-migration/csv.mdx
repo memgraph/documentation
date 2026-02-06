@@ -59,17 +59,29 @@ LOAD CSV FROM "https://example.com/path/to/your-data.csv" WITH HEADER AS row
 The syntax of the `LOAD CSV` clause is:
 
 ```cypher
-LOAD CSV FROM <csv-location> ( WITH | NO ) HEADER [IGNORE BAD] [DELIMITER <delimiter-string>] [QUOTE <quote-string>] [NULLIF <nullif-string>] AS <variable-name>
+LOAD CSV FROM <csv-location> ( WITH CONFIG configsMap=configMap ) ? ( WITH | NO ) HEADER [IGNORE BAD] [DELIMITER <delimiter-string>] [QUOTE <quote-string>] [NULLIF <nullif-string>] AS <variable-name>
 ```
 
 - `<csv-location>` is a string of the location of the CSV file.<br/> Without a
   URL protocol, it refers to a file path. There are no restrictions on where in
   your file system the file can be located, as long as the path is valid (i.e.,
-  the file exists). If you are using Docker to run Memgraph, you will need to
+  the file exists). CSV files can also be imported from the S3. In that case you need
+  to set AWS authentication config options.
+  
+  If you are using Docker to run Memgraph, you will need to
   [copy the files from your local directory into
   Docker](/getting-started/first-steps-with-docker#copy-files-from-and-to-a-docker-container)
   container where Memgraph can access them. <br/> If using `http://`,
   `https://`, or `ftp://` the CSV file will be fetched over the network.
+
+- `<configs>` Represents an optional configuration map through which you can
+  specify configuration options: `aws_region`, `aws_access_key`,
+  `aws_secret_key` and `aws_endpoint_url`.
+  - `<aws_region>`: The region in which your S3 service is being located
+  - `<aws_access_key>`: Access key used to connect to S3 service
+  - `<aws_secret_key>`: Secret key used to connect S3 service
+  - `<aws_endpoint_url`>: Optional configuration parameter. Can be used to set
+    the URL of the S3 compatible storage.
 
 - `( WITH | NO ) HEADER` flag specifies whether the CSV file has a header, in
   which case it will be parsed as a map, or it doesn't have a header, in which
@@ -159,6 +171,112 @@ When using the `LOAD CSV` clause please keep in mind:
   LOAD CSV FROM "/y.csv" WITH HEADER as y
   CREATE (n:A {p1 : x, p2 : y});
   ```
+
+### Load from remote sources
+
+The `LOAD CSV` clause supports loading files from HTTP/HTTPS/FTP URLs and S3 buckets.
+
+{<h4 className="custom-header">Load from HTTP/HTTPS/FTP</h4>}
+
+When loading from HTTP, HTTPS, or FTP URLs, the file will be downloaded to the `/tmp` directory before being imported:
+
+```cypher
+LOAD CSV FROM "https://public-assets.memgraph.com/import-data/load-csv-cypher/one-type-nodes/people_nodes_wh.csv" WITH HEADER AS row
+CREATE (n:Person {id: row.id, name: row.name});
+```
+
+You can also use FTP URLs:
+
+```cypher
+LOAD CSV FROM "ftp://example.com/data/nodes.csv" WITH HEADER AS row
+CREATE (n:Node) SET n += row;
+```
+
+{<h4 className="custom-header">Load from S3</h4>}
+
+To load files from S3, you can provide AWS credentials in three ways:
+
+**1. Using WITH CONFIG clause (Recommended for query-specific credentials)**
+
+```cypher
+LOAD CSV FROM "s3://my-bucket/path/to/file.csv"
+WITH CONFIG {
+  aws_region: "us-east-1",
+  aws_access_key: "YOUR_ACCESS_KEY",
+  aws_secret_key: "YOUR_SECRET_KEY"
+}
+WITH HEADER AS row
+CREATE (n:Node) SET n += row;
+```
+
+For S3-compatible services (like MinIO), you can also specify the endpoint URL:
+
+```cypher
+LOAD CSV FROM "s3://my-bucket/data/nodes.csv"
+WITH CONFIG {
+  aws_region: "us-east-1",
+  aws_access_key: "YOUR_ACCESS_KEY",
+  aws_secret_key: "YOUR_SECRET_KEY",
+  aws_endpoint_url: "https://s3-compatible-service.example.com"
+}
+WITH HEADER AS row
+CREATE (n:Node) SET n += row;
+```
+
+**2. Using environment variables**
+
+Set environment variables before starting Memgraph:
+
+```
+export AWS_REGION="us-east-1"
+export AWS_ACCESS_KEY="YOUR_ACCESS_KEY"
+export AWS_SECRET_KEY="YOUR_SECRET_KEY"
+export AWS_ENDPOINT_URL="https://s3-compatible-service.example.com"  # Optional
+```
+
+Then you can load files without specifying credentials in the query:
+
+```cypher
+LOAD CSV FROM "s3://my-bucket/path/to/file.csv" WITH HEADER AS row
+CREATE (n:Node) SET n += row;
+```
+
+**3. Using database settings**
+
+Set database-level AWS credentials:
+
+```cypher
+SET DATABASE SETTING 'aws.region' TO 'us-east-1';
+SET DATABASE SETTING 'aws.access_key' TO 'YOUR_ACCESS_KEY';
+SET DATABASE SETTING 'aws.secret_key' TO 'YOUR_SECRET_KEY';
+SET DATABASE SETTING 'aws.endpoint_url' TO 'https://s3-compatible-service.example.com';  -- Optional
+```
+
+Then load files without credentials in the query:
+
+```cypher
+LOAD CSV FROM "s3://my-bucket/path/to/file.csv" WITH HEADER AS row
+CREATE (n:Node) SET n += row;
+```
+
+Credential precedence: If credentials are provided in multiple ways, the order of precedence is:
+1. WITH CONFIG clause in the query (highest priority)
+2. Environment variables
+3. Database settings (lowest priority)
+
+
+When loading files from remote locations (HTTP, FTP, or S3), the file is first downloaded to `/tmp` before being loaded into memory. Ensure you have sufficient disk space for large files. 
+The download can be interrupted using `TERMINATE TRANSACTIONS <tx_id>` without waiting for the full download to complete.
+
+Use `file.download_conn_timeout_sec` run-time configuration to specify the connection timeout when establishing a connection to the remote server.
+
+| Option           | Required | Description                                                        |
+|------------------|----------|--------------------------------------------------------------------|
+| aws_region       | Yes      | The AWS region where your S3 bucket is located (e.g., "us-east-1") |
+| aws_access_key   | Yes      | Your AWS access key ID                                             |
+| aws_secret_key   | Yes      | Your AWS secret access key                                         |
+| aws_endpoint_url | No       | Custom endpoint URL for S3-compatible services                     |
+
 
 ### Increase import speed
 
