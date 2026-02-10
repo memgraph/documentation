@@ -1,0 +1,1009 @@
+---
+title: Setup high availability cluster with Kubernetes
+description: See how one can setup a high availability cluster with Kubernetes.
+---
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# Set up HA cluster with K8s <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+<Callout>
+Users are advised to first read the guide on [how replication
+works](/clustering/replication/how-replication-works), followed by the guide on
+[how high availability
+works](/clustering/high-availability/how-high-availability-works), and how to [query
+the cluster](/clustering/high-availability/querying-the-cluster-in-high-availability).
+</Callout>
+
+## Install Memgraph HA on Kubernetes
+
+To deploy a Memgraph High Availability (HA) cluster on Kubernetes, you must
+first [add the Memgraph Helm repository](#add-the-helm-repository) and then
+[install the HA Helm chart](#install-memgraph-ha).
+
+### Add the Helm repository
+
+Add the Memgraph Helm chart repository to your local Helm setup by running the
+following command:
+
+```
+helm repo add memgraph https://memgraph.github.io/helm-charts
+```
+
+Make sure to update the repository to fetch the latest Helm charts available:
+
+```
+helm repo update
+```
+
+### Install Memgraph HA
+
+Since Memgraph HA requires an [Enterprise
+license](/database-management/enabling-memgraph-enterprise), you need to provide
+the license and organization name during the installation.
+
+```
+helm install <release-name> memgraph/memgraph-high-availability --set env.MEMGRAPH_ENTERPRISE_LICENSE=<your-license>,env.MEMGRAPH_ORGANIZATION_NAME=<your-organization-name>
+```
+
+Replace `<release-name>` with a name of your choice for the release and provide your Enterprise license.
+The cluster will be fully connected once installation completes. Note that the install command may take a moment while instances establish connections.
+If clients connect from outside the cluster, update the Bolt server address on each instance to use its external IP as explained in the section on setting up the cluster.
+If for your installation, you are using a namespace different from the default one, make sure to change `--coordinator-hostname` flag in your `values.yaml` file where
+coordinators flags are specified.
+
+<Callout type="info"> **Tip:** Always install a specific chart version. Using
+the `latest` tag can lead to unexpected behavior if pods restart and pull newer,
+incompatible images. </Callout>
+
+### Install Memgraph HA with `minikube`
+
+If you are installing Memgraph HA chart locally with `minikube`, we are strongly
+recommending to enable `csi-hostpath-driver` and use its storage class.
+Otherwise,
+you could have problems with attaching PVCs to pods.
+
+<Steps>
+
+{<h4 className="custom-header"> Enable csi-hostpath-driver </h4>}
+
+```
+minikube addons disable storage-provisioner
+minikube addons disable default-storageclass
+minikube addons enable volumesnapshots
+minikube addons enable csi-hostpath-driver
+```
+
+{<h4 className="custom-header">Create a StorageClass (save as sc.yaml) </h4>}
+
+```
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: csi-hostpath-delayed
+provisioner: hostpath.csi.k8s.io
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+```
+
+{<h4 className="custom-header"> Apply the StorageClass </h4>}
+
+```kubectl apply -f sc.yaml```
+
+{<h4 className="custom-header"> Configure the Helm chart </h4>}
+
+In your `values.yaml`, set:
+
+```yaml
+storage:
+  libStorageClassName: csi-hostpath-delayed
+```
+
+</Steps>
+
+
+## Configure the Helm chart
+
+### Override default chart values
+
+You can customize the Memgraph HA Helm chart either inline with `--set` flags or
+by using a `values.yaml` file.
+
+**Option 1: Override values inline**
+
+```bash
+helm install <release-name> memgraph/memgraph-high-availability \
+  --set <flag1>=<value1>,<flag2>=<value2>,...
+```
+
+**Option 2: Use a values file**
+
+```bash
+helm install <release-name> memgraph/memgraph-high-availability \
+  -f values.yaml
+```
+
+You can also combine both approaches. Values specified with `--set` override
+those in `values.yaml`.
+
+
+### Upgrade Helm chart
+
+To upgrade the helm chart you can use:
+```
+helm upgrade <release-name> memgraph/memgraph-high-availability --set <flag1>=<value1>,<flag2>=<value2>
+```
+
+Again it is possible use both `--set` and values.yaml to set configuration
+options.
+
+If you're using `IngressNginx` and performing an upgrade, the attached public IP
+should remain the same. It will only change if the release includes specific
+updates that modify it—and such changes will be documented.
+
+
+### Uninstall Helm chart
+
+Uninstallation is done with:
+
+```
+helm uninstall <release-name>
+```
+
+Uninstalling the chart does **not** delete PersistentVolumeClaims (PVCs). Even
+if the default StorageClass reclaim policy is `Delete`, data on the underlying
+PersistentVolumes (PVs) will not be removed automatically when uninstalling the
+chart.
+
+However, we still recommend configuring the reclaim policy to `Retain`, as
+described in the [High availability storage](#high-availability-storage)
+section.
+
+
+## Runtime environment & security
+
+### Security context
+
+All Memgraph HA instances run as Kubernetes `StatefulSet` workloads, each with a
+single pod. Depending on configuration, the pod contains two or three
+containers:
+- **memgraph-coordinator** - runs the Memgraph binary.
+- **Optional init container** - enabled when `sysctlInitContainer.enabled` is set.
+
+Memgraph processes run as the non-root **memgraph** user with **no Linux capabilities
+and no privilege escalation**.
+
+
+### High availability storage
+
+Memgraph HA always uses PersistentVolumeClaims (PVCs) to store database files
+and logs.
+
+- Default storage size: **1Gi** (you will likely need to increase this).
+- Default access mode: `ReadWriteOnce` (can be set to `ReadOnlyMany`,
+  `ReadWriteMany`, or `ReadWriteOncePod`).
+- PVCs use the cluster’s **default StorageClass**, unless overridden.
+
+You can explicitly set storage classes using:
+
+- `storage.libStorageClassName` - for data volumes
+- `storage.logStorageClassName` - for log volumes
+
+Most default StorageClasses use a `Delete` reclaim policy, meaning deleting the
+PVC deletes the underlying PersistentVolume (PV). We recommend switching to
+`Retain`.
+
+---
+
+After your cluster is running, you can patch all PVs:
+
+```bash
+#!/bin/bash
+PVS=$(kubectl get pv --no-headers -o custom-columns=":metadata.name")
+
+for pv in $PVS; do
+  echo "Patching PV: $pv"
+  kubectl patch pv $pv -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+done
+
+echo "All PVs have been patched."
+```
+
+<Callout type="info">
+Kubernetes uses **Storage Object in Use Protection**, preventing deletion of
+PVCs while still attached to pods.  
+Similarly, PVs will remain until their PVCs are fully removed.
+
+If a PVC is stuck terminating, you can remove its finalizers:
+
+```bash
+kubectl patch pvc PVC_NAME -p '{"metadata":{"finalizers": []}}' --type=merge
+```
+
+</Callout>
+
+### Network configuration
+
+All Memgraph HA components communicate internally using ClusterIP network for
+communicating between themselves.
+
+**Default ports:**
+
+- Management: **10000**
+- Replication (data instances): **20000**
+- Coordinator communication: **12000**
+
+You can change this configuration by specifying:
+
+```yaml
+ports:
+  managementPort: <value>
+  replicationPort: <value>
+  coordinatorPort: <value>
+```
+
+{<h4 className="custom-header"> External network configuration </h4>}
+
+Memgraph HA uses **client-side routing**, so DNS resolution happens internal Cluster IP network. Because of that, we need
+one more type of network which will be used for clients accessing instances
+from outside the cluster. Our HA supports out of the box following K8s resources used to setup external access:
+
+- **IngressNginx** - one LoadBalancer for all instances.
+- **NodePort** - exposes ports on each node (requires public node IPs).
+- **LoadBalancer** - one LoadBalancer per instance (highest cost).
+- **CommonLoadBalancer (coordinators only)** - single LB for all coordinators.
+
+For coordinators, there is an additional option of using `CommonLoadBalancer`.
+In this scenario, there is one load balancer sitting in front of coordinators.
+You can save the cost of two load balancers compared to `LoadBalancer` option
+since usually you don't need to distinguish specific coordinators while using
+Memgraph capabilities. Note that if you will be connecting to the coordinator directly for some reason (e.g to run `show instances` query),
+you can run `show instance` query to see which coordinator you got routed to.
+The default Bolt port is opened on 7687 but you can change it by setting `ports.boltPort`.
+
+For more detailed IngressNginx setup, see [Use Memgraph HA chart with
+IngressNginx](#use-memgraph-ha-chart-with-ingressnginx).
+
+Note however that Ingress Nginx is getting retired and one of alternatives is using resources like [TCPRoute/TLSRoute](https://doc.traefik.io/traefik/reference/routing-configuration/kubernetes/gateway-api/#tcp) with K8s
+controllers like Envoy Gateway, Istio, Cilium, Traefik, Kong... For the detailed example on how to set-up 
+Envoy Gateway controller with Memgraph HA cluster, see [Use Memgraph HA chart with Envoy Gateway](#use-memgraph-ha-chart-with-envoy-gateway).
+
+By default, the chart does **not** expose any external network services.
+
+### Node affinity
+
+Memgraph HA deploys multiple pods, and you can control pod placement with
+affinity settings.
+
+Supported strategies:
+
+- **default** Attempts to to schedule the data pods and coordinator pods on the
+ nodes where there is no other pod with the same role. If there is no such node,
+ the pods will still be scheduled on the same node, and deployment will not
+ fail. 
+
+- **unique** (`affinity.unique = true`)
+  Each coordinator and data pod must be placed on separate nodes. If not enough
+  nodes exist, deployment fails. Coordinators get scheduled first. After that,
+  data pods are looking for the nodes with coordinators. 
+
+- **parity** (`affinity.parity = true`)
+  Schedules at most **one coordinator + one data pod per node**.
+  Coordinators schedule first; data pods follow.
+
+- **nodeSelection** (`affinity.nodeSelection = true`)
+  Pods are scheduled onto explicitly labeled nodes using
+  `affinity.dataNodeLabelValue` and `affinity.coordinatorNodeLabelValue`. If all
+ the nodes with labels are occupied by the pods with the same role, the
+ deployment will fail. 
+
+<Callout type="info">
+When using `nodeSelection`, ensure that nodes are labeled correctly.  
+Default role label key: `role`  
+Default values: `data-node`, `coordinator-node`
+
+Example:
+
+```bash
+kubectl label nodes <node-name> role=data-node
+```
+
+A full AKS example is available in the [chart
+repository]((https://github.com/memgraph/helm-charts/tree/main/charts/memgraph-high-availability/aks)). 
+</Callout>
+
+### Sysctl options
+
+Use the `sysctlInitContainer` to configure kernel parameters required for
+high-memory workloads, such as increasing:
+
+- [`vm.max_map_count`](/database-management/system-configuration#increasing-memory-map-areas)
+
+
+### Authentication
+
+By default, Memgraph HA starts **without authentication** enabled.
+
+To configure credentials, create a Kubernetes `secret`:
+
+```bash
+kubectl create secret generic memgraph-secrets \
+  --from-literal=USER=memgraph \
+  --from-literal=PASSWORD=memgraph
+```
+
+The same user will then be created on all coordinator and data instances through
+Memgraph's environment variables.
+
+
+## Setting up the cluster
+
+Although many configuration options exist, especially for networking, the workflow for creating a Memgraph HA cluster follows these steps:
+
+1. Provision the Kubernetes cluster. Ensure your nodes, storage, and networking are ready.
+2. Label nodes according to your chosen affinity strategy (optional). For example, when using `nodeSelection`, label nodes as `data-node` or `coordinator-node`.
+3. Install the Memgraph HA Helm chart using `helm install`. This creates a fully connected cluster.
+4. Install auxiliary components for external access, such as `ingress-nginx` (optional).
+5. Update Bolt server addresses if clients will connect from outside the cluster (optional).
+
+### Update bolt server
+
+This step is required only when:
+  - Clients access the database from outside the cluster, and
+  - You're using bolt+routing for client-side routing
+
+Each instance must know its external address for routing to work correctly. Run the following queries on the leader coordinator:
+
+```cypher
+UPDATE CONFIG FOR COORDINATOR 1 WITH CONFIG {"bolt_server": "<bolt-server-coord1>"};
+UPDATE CONFIG FOR COORDINATOR 2 WITH CONFIG {"bolt_server": "<bolt-server-coord2>"};
+UPDATE CONFIG FOR COORDINATOR 3 WITH CONFIG {"bolt_server": "<bolt-server-coord3>"};
+UPDATE CONFIG FOR INSTANCE instance_0 WITH CONFIG {"bolt_server": "<bolt-server-instance0>"};
+UPDATE CONFIG FOR INSTANCE instance_1 WITH CONFIG {"bolt_server": "<bolt-server-instance1>"};
+```
+
+Note that the only the `bolt_server` values are provided. The correct
+value depends on the type of external access you configured (LoadBalancer IP,
+Ingress host/port, NodePort, etc.).
+
+Refer to the Memgraph HA [User API docs](/clustering/high-availability#user-api)
+for the full set of commands and usage patterns.
+
+
+### Use Memgraph HA chart with Envoy Gateway
+
+Before configuring routes, a Gateway API controller must be installed. This guide demonstrates using Envoy Gateway.
+
+```bash
+helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.4 -n envoy-gateway-system --create-namespace
+```
+Next, we will create a `GatewayClass`.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+```
+
+For this example we chose to create one `Gateway` for data instances and one for coordinator instances but you can choose
+a different approach and use a single `Gateway` for both types of instances.
+
+Data instances' gateway:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: memgraph-data-gateway
+  namespace: default
+spec:
+  gatewayClassName: eg
+  listeners:
+    - name: data-0
+      protocol: TCP
+      port: 9000
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: data-1
+      protocol: TCP
+      port: 9001
+      allowedRoutes:
+        namespaces:
+          from: Same
+
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: data-0-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: memgraph-data-gateway
+      sectionName: data-0
+  rules:
+    - backendRefs:
+        - name: memgraph-data-0
+          port: 7687
+
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: data-1-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: memgraph-data-gateway
+      sectionName: data-1
+  rules:
+    - backendRefs:
+        - name: memgraph-data-1
+          port: 7687
+```
+
+Coordinator instances' gateway:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: memgraph-coordinators-gateway
+  namespace: default
+spec:
+  gatewayClassName: eg
+  listeners:
+    - name: coordinator-1
+      protocol: TCP
+      port: 9011
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: coordinator-2
+      protocol: TCP
+      port: 9012
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: coordinator-3
+      protocol: TCP
+      port: 9013
+      allowedRoutes:
+        namespaces:
+          from: Same
+
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: coordinator-1-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: memgraph-coordinators-gateway
+      sectionName: coordinator-1
+  rules:
+    - backendRefs:
+        - name: memgraph-coordinator-1
+          port: 7687
+
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: coordinator-2-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: memgraph-coordinators-gateway
+      sectionName: coordinator-2
+  rules:
+    - backendRefs:
+        - name: memgraph-coordinator-2
+          port: 7687
+
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: coordinator-3-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: memgraph-coordinators-gateway
+      sectionName: coordinator-3
+  rules:
+    - backendRefs:
+        - name: memgraph-coordinator-3
+          port: 7687
+```
+
+In the similar way you could configure `TLSRoute` instead of a `TCPRoute`.
+
+### Use Memgraph HA chart with IngressNginx
+
+One of the most cost-efficient ways to expose a Memgraph HA cluster is by using
+**IngressNginx**. The controller supports TCP routing (including the Bolt
+protocol), allowing all Memgraph instances to share:
+
+* a **single LoadBalancer**, and
+* a **single external IP address**.
+
+Clients connect to any coordinator or data instance by using **different Bolt
+ports**.
+
+To install Memgraph HA with IngressNginx enabled:
+
+```bash
+helm install mem-ha-test ./charts/memgraph-high-availability --set \
+  env.MEMGRAPH_ENTERPRISE_LICENSE=<license>,\
+  env.MEMGRAPH_ORGANIZATION_NAME=<organization>,\
+  affinity.nodeSelection=true,\
+  externalAccessConfig.dataInstance.serviceType=IngressNginx,\
+  externalAccessConfig.coordinator.serviceType=IngressNginx
+```
+
+When using these settings, the chart will automatically install and configure
+**IngressNginx**, including all required TCP routing setup for Memgraph.
+
+
+## Probes
+
+Memgraph HA uses standard Kubernetes **startup**, **readiness**, and
+**liveness** probes to ensure correct container operation.
+
+- **Startup probe**
+  Determines when Memgraph has fully started.
+  It succeeds **only after database recovery completes**.
+  Liveness and readiness probes do not run until startup succeeds.
+
+- **Readiness probe**
+  Indicates when the instance is ready to accept client traffic.
+
+- **Liveness probe**
+  Determines when the container should be restarted if it becomes unresponsive.
+
+---
+
+**Default timing**
+
+- On **data instances**, the startup probe must succeed within **2 hours**.
+  If recovery (e.g., from backup) may take longer, increase the timeout.
+
+- Liveness and readiness probes must succeed **at least once every 5 minutes**
+  for the pod to be considered healthy.
+
+---
+
+**Probe endpoints**
+
+- **Coordinators**: probed on the **NuRaft server**
+- **Data instances**: probed on the **Bolt server**
+
+
+## Monitoring
+
+Memgraph HA integrates with Kubernetes monitoring tools through:
+
+- The [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart
+- [Memgraph’s Prometheus exporter](https://github.com/memgraph/prometheus-exporter)
+
+The chart `kube-prometheus-stack` should be installed independently from HA
+chart with the following command:
+
+```bash
+helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  -f kube_prometheus_stack_values.yaml \
+  --namespace monitoring \
+  --create-namespace
+```
+
+`kube_prometheus_stack_values.yaml` is optional. A template is available in the
+upstream [chart’s
+repository]((https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml)).
+
+If you install the `kube-prometheus-stack` in a **non-default namespace**, allow
+cross-namespace scraping. You can allow this by adding the following
+configuration to your `kube_prometheus_stack_values.yaml` file:
+
+```yaml
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false
+```
+
+### Enable monitoring in the Memgraph HA chart
+
+To enable the Memgraph Prometheus exporter and ServiceMonitor:
+
+```yaml
+prometheus:
+  enabled: true
+  namespace: monitoring
+  memgraphExporter:
+    port: 9115
+    pullFrequencySeconds: 5
+    repository: memgraph/mg-exporter
+    tag: 0.2.1
+  serviceMonitor:
+    kubePrometheusStackReleaseName: kube-prometheus-stack
+    interval: 15s
+```
+
+If you set `prometheus.enabled` to `false`, resources from
+`charts/memgraph-high-availability/templates/mg-exporter.yaml` will still be
+installed into the `monitoring` namespace.
+
+Refer to the configuration table later in the document for details on all
+parameters.
+
+### Uninstall kube-prometheus-stack
+
+```bash
+helm uninstall kube-prometheus-stack --namespace monitoring
+```
+
+**Note:**
+The stack’s CRDs are **not** deleted automatically and must be removed manually:
+
+```bash
+kubectl delete crd alertmanagerconfigs.monitoring.coreos.com
+kubectl delete crd alertmanagers.monitoring.coreos.com
+kubectl delete crd podmonitors.monitoring.coreos.com
+kubectl delete crd probes.monitoring.coreos.com
+kubectl delete crd prometheusagents.monitoring.coreos.com
+kubectl delete crd prometheuses.monitoring.coreos.com
+kubectl delete crd prometheusrules.monitoring.coreos.com
+kubectl delete crd scrapeconfigs.monitoring.coreos.com
+kubectl delete crd servicemonitors.monitoring.coreos.com
+kubectl delete crd thanosrulers.monitoring.coreos.com
+```
+
+
+## Configuration options
+
+The following table lists the configurable parameters of the Memgraph HA chart
+and their default values.
+
+
+| Parameter                                                  | Description                                                                                                  | Default                        |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| `image.repository`                                         | Memgraph Docker image repository                                                                             | `memgraph/memgraph`            |
+| `image.tag`                                                | Specific tag for the Memgraph Docker image. Overrides the image tag whose default is chart version.          | `3.1.0`                        |
+| `image.pullPolicy`                                         | Image pull policy                                                                                            | `IfNotPresent`                 |
+| `env.MEMGRAPH_ENTERPRISE_LICENSE`                          | Memgraph enterprise license                                                                                  | `<your-license>`               |
+| `env.MEMGRAPH_ORGANIZATION_NAME`                           | Organization name                                                                                            | `<your-organization-name>`     |
+| `memgraphUserId`                                           | The user id that is hardcoded in Memgraph and Mage images                                                    | `101`                          |
+| `memgraphGroupId`                                          | The group id that is hardcoded in Memgraph and Mage images                                                   | `103`                          |
+| `storage.libPVCSize`                                       | Size of the storage PVC                                                                                      | `1Gi`                          |
+| `storage.libStorageClassName`                              | The name of the storage class used for storing data.                                                         | `""`                           |
+| `storage.libStorageAccessMode`                             | Access mode used for lib storage.                                                                            | `ReadWriteOnce`                |
+| `storage.logPVCSize`                                       | Size of the log PVC                                                                                          | `1Gi`                          |
+| `storage.logStorageClassName`                              | The name of the storage class used for storing logs.                                                         | `""`                           |
+| `storage.logStorageAccessMode`                             | Access mode used for log storage.                                                                            | `ReadWriteOnce`                |
+| `externalAccess.coordinator.serviceType`                   | IngressNginx, NodePort, CommonLoadBalancer or LoadBalancer. By default, no external service will be created. | `""`                           |
+| `externalAccess.coordinator.annotations`                   | Annotations for external services attached to coordinators.                                                  | `{}`                           |
+| `externalAccess.dataInstance.serviceType`                  | IngressNginx, NodePort or LoadBalancer. By default, no external service will be created.                     | `""`                           |
+| `externalAccess.dataInstance.annotations`                  | Annotations for external services attached to data instances.                                                | `{}`                           |
+| `headlessService.enabled`                                  | Specifies whether headless services will be used inside K8s network on all instances.                        | `false`                        |
+| `ports.boltPort`                                           | Bolt port used on coordinator and data instances.                                                            | `7687`                         |
+| `ports.managementPort`                                     | Management port used on coordinator and data instances.                                                      | `10000`                        |
+| `ports.replicationPort`                                    | Replication port used on data instances.                                                                     | `20000`                        |
+| `ports.coordinatorPort`                                    | Coordinator port used on coordinators.                                                                       | `12000`                        |
+| `ports.metricsPort`                                        | Metrics port for coordinators and data instances. Opened only if `prometheus.enabled` is set to `true`.      | `9091`                         |
+| `affinity.unique`                                          | Schedule pods on different nodes in the cluster                                                              | `false`                        |
+| `affinity.parity`                                          | Schedule pods on the same node with maximum one coordinator and one data node                                | `false`                        |
+| `affinity.nodeSelection`                                   | Schedule pods on nodes with specific labels                                                                  | `false`                        |
+| `affinity.roleLabelKey`                                    | Label key for node selection                                                                                 | `role`                         |
+| `affinity.dataNodeLabelValue`                              | Label value for data nodes                                                                                   | `data-node`                    |
+| `affinity.coordinatorNodeLabelValue`                       | Label value for coordinator nodes                                                                            | `coordinator-node`             |
+| `container.data.livenessProbe.tcpSocket.port`              | Port used for TCP connection. Should be the same as bolt port.                                               | `7687`                         |
+| `container.data.livenessProbe.failureThreshold`            | Failure threshold for liveness probe                                                                         | `20`                           |
+| `container.data.livenessProbe.timeoutSeconds`              | Timeout for liveness probe                                                                                   | `10`                           |
+| `container.data.livenessProbe.periodSeconds`               | Period seconds for readiness probe                                                                           | `5`                            |
+| `container.data.readinessProbe.tcpSocket.port`             | Port used for TCP connection. Should be the same as bolt port.                                               | `7687`                         |
+| `container.data.readinessProbe.failureThreshold`           | Failure threshold for readiness probe                                                                        | `20`                           |
+| `container.data.readinessProbe.timeoutSeconds`             | Timeout for readiness probe                                                                                  | `10`                           |
+| `container.data.readinessProbe.periodSeconds`              | Period seconds for readiness probe                                                                           | `5`                            |
+| `container.data.startupProbe.tcpSocket.port`               | Port used for TCP connection. Should be the same as bolt port.                                               | `7687`                         |
+| `container.data.startupProbe.failureThreshold`             | Failure threshold for startup probe                                                                          | `1440`                         |
+| `container.data.startupProbe.timeoutSeconds`               | Timeout for probe                                                                                            | `10`                           |
+| `container.data.startupProbe.periodSeconds`                | Period seconds for startup probe                                                                             | `10`                           |
+| `container.coordinators.livenessProbe.tcpSocket.port`      | Port used for TCP connection. Should be the same as bolt port.                                               | `12000`                        |
+| `container.coordinators.livenessProbe.failureThreshold`    | Failure threshold for liveness probe                                                                         | `20`                           |
+| `container.coordinators.livenessProbe.timeoutSeconds`      | Timeout for liveness probe                                                                                   | `10`                           |
+| `container.coordinators.livenessProbe.periodSeconds`       | Period seconds for readiness probe                                                                           | `5`                            |
+| `container.coordinators.readinessProbe.tcpSocket.port`     | Port used for TCP connection. Should be the same as bolt port.                                               | `12000`                        |
+| `container.coordinators.readinessProbe.failureThreshold`   | Failure threshold for readiness probe                                                                        | `20`                           |
+| `container.coordinators.readinessProbe.timeoutSeconds`     | Timeout for readiness probe                                                                                  | `10`                           |
+| `container.coordinators.readinessProbe.periodSeconds`      | Period seconds for readiness probe                                                                           | `5`                            |
+| `container.coordinators.startupProbe.tcpSocket.port`       | Port used for TCP connection. Should be the same as bolt port.                                               | `12000`                        |
+| `container.coordinators.startupProbe.failureThreshold`     | Failure threshold for startup probe                                                                          | `1440`                         |
+| `container.coordinators.startupProbe.timeoutSeconds`       | Timeout for probe                                                                                            | `10`                           |
+| `container.coordinators.startupProbe.periodSeconds`        | Period seconds for startup probe                                                                             | `10`                           |
+| `data`                                                     | Configuration for data instances                                                                             | See `data` section             |
+| `coordinators`                                             | Configuration for coordinator instances                                                                      | See `coordinators` section     |
+| `sysctlInitContainer.enabled`                              | Enable the init container to set sysctl parameters                                                           | `true`                         |
+| `sysctlInitContainer.maxMapCount`                          | Value for `vm.max_map_count` to be set by the init container                                                 | `262144`                       |
+| `secrets.enabled`                                          | Enable the use of Kubernetes secrets for Memgraph credentials                                                | `false`                        |
+| `secrets.name`                                             | The name of the Kubernetes secret containing Memgraph credentials                                            | `memgraph-secrets`             |
+| `secrets.userKey`                                          | The key in the Kubernetes secret for the Memgraph user, the value is passed to the `MEMGRAPH_USER` env.      | `USER`                         |
+| `secrets.passwordKey`                                      | The key in the Kubernetes secret for the Memgraph password, the value is passed to the `MEMGRAPH_PASSWORD`.  | `PASSWORD`                     |
+| `resources.coordinators`                                   | CPU/Memory resource requests/limits. Left empty by default.                                                  | `{}`                           |
+| `resources.data`                                           | CPU/Memory resource requests/limits. Left empty by default.                                                  | `{}`                           |
+| `prometheus.enabled`                                       | If set to `true`, K8s resources representing Memgraph's Prometheus exporter will be deployed.                | `false`                        |
+| `prometheus.namespace`                                     | The namespace in which `kube-prometheus-stack` and Memgraph's Prometheus exporter are installed.             | `monitoring`                   |
+| `prometheus.memgraphExporter.port`                         | The port on which Memgraph's Prometheus exporter is available.                                               | `9115`                         |
+| `prometheus.memgraphExporter.pullFrequencySeconds`         | How often will Memgraph's Prometheus exporter pull data from Memgraph instances.                             | `5`                            |
+| `prometheus.memgraphExporter.repository`                   | The repository where Memgraph's Prometheus exporter image is available.                                      | `memgraph/prometheus-exporter` |                      
+| `prometheus.memgraphExporter.tag`                          | The tag of Memgraph's Prometheus exporter image.                                                             | `0.2.1`                        |                      
+| `prometheus.serviceMonitor.enabled`                        | If enabled, a `ServiceMonitor` object will be deployed.                                             | `true`                         |
+| `prometheus.serviceMonitor.kubePrometheusStackReleaseName` | The release name under which `kube-prometheus-stack` chart is installed.                                     | `kube-prometheus-stack`        |
+| `prometheus.serviceMonitor.interval`                       | How often will Prometheus pull data from Memgraph's Prometheus exporter.                                     | `15s`                          |
+| `labels.coordinators.podLabels`                            | Enables you to set labels on a pod level.                                                                    | `{}`                           |
+| `labels.coordinators.statefulSetLabels`                    | Enables you to set labels on a stateful set level.                                                           | `{}`                           |
+| `labels.coordinators.serviceLabels`                        | Enables you to set labels on a service level.                                                                | `{}`                           |
+| `updateStrategy.type`                                      | Update strategy for StatefulSets. Possible values are `RollingUpdate` and `OnDelete`                         | `RollingUpdate`                | 
+| `extraEnv.data`                                            | Env variables that users can define and are applied to data instances                                        | `[]`                           |
+| `extraEnv.coordinators`                                    | Env variables that users can define and are applied to coordinators                                          | `[]`                           |
+| `initContainers.data`                                      | Init containers that users can define that will be applied to data instances.                                | `[]`                           | 
+| `initContainers.coordinators`                              | Init containers that users can define that will be applied to coordinators.                                  | `[]`                           | 
+
+
+For the `data` and `coordinators` sections, each item in the list has the
+following parameters:
+
+| Parameter                                   | Description                                                                                         | Default                                 |
+|---------------------------------------------|-----------------------------------------------------------------------------------------------------|-----------------------------------------|
+| `id`                                        | ID of the instance                                                                                  | `0` for data, `1` for coordinators      |
+| `args`                                      | List of arguments for the instance                                                                  | See `args` section                      |
+
+The `args` section contains a list of arguments for the instance.
+
+For all available database settings, refer to the [configuration settings
+docs](/database-management/configuration).
+
+
+## In-Service Software Upgrade (ISSU)
+
+Memgraph’s **High Availability** supports in-service software upgrades (ISSU).
+This guide explains the process when using [HA Helm
+charts]((/getting-started/install-memgraph/kubernetes#memgraph-high-availability-helm-chart)).
+The procedure is very similar for native deployments.
+
+<Callout type="warning">
+
+**Important**: Although the upgrade process is designed to complete
+successfully, unexpected issues may occur. We strongly recommend doing a backup
+of your `lib` directory on all of your `StatefulSets` or native instances
+depending on the deployment type.
+
+
+</Callout>
+
+
+{<h3 className="custom-header"> Prerequisites </h3>} 
+
+If you are using **HA Helm charts**, set the following configuration before
+doing any upgrade. 
+
+  ```yaml
+  updateStrategy.type: OnDelete
+  ```
+
+  Depending on the infrastructure on which you have your Memgraph cluster, the
+details will differ a bit, but the backbone is the same.
+
+Prepare a backup of all data from all instances. This ensures you can safely
+downgrade cluster to the last stable version you had.
+
+  - For **native deployments**, tools like `cp` or `rsync` are sufficient.
+  - For **Kubernetes**, create a `VolumeSnapshotClass`with the yaml file fimilar
+    to this:
+
+    ```yaml
+    apiVersion: snapshot.storage.k8s.io/v1
+    kind: VolumeSnapshotClass
+    metadata:
+      name: csi-azure-disk-snapclass
+    driver: disk.csi.azure.com
+    deletionPolicy: Delete
+    ```
+
+    Apply it:
+
+    ```bash
+    kubectl apply -f azure_class.yaml
+    ```
+
+    - On **Google Kubernetes Engine**, the default CSI driver is
+      `pd.csi.storage.gke.io` so make sure to change the field `driver`.
+    - On **AWS EKS**, refer to the [AWS snapshot controller
+      docs](https://docs.aws.amazon.com/eks/latest/userguide/csi-snapshot-controller.html).
+
+
+{<h3 className="custom-header"> Create snapshots </h3>} 
+
+Now you can create a `VolumeSnapshot` of the lib directory using the yaml file:
+
+```yaml
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: coord-3-snap # Use a unique name for each instance
+  namespace: default
+spec:
+  volumeSnapshotClassName: csi-azure-disk-snapclass
+  source:
+    persistentVolumeClaimName: memgraph-coordinator-3-lib-storage-memgraph-coordinator-3-0
+```
+
+Apply it:
+
+```bash
+kubectl apply -f azure_snapshot.yaml
+```
+
+Repeat for every instance in the cluster.
+
+
+{<h3 className="custom-header"> Update configuration </h3>} 
+
+Next you should update `image.tag` field in the `values.yaml` configuration file
+to the version to which you want to upgrade your cluster.
+
+1. In your `values.yaml`, update the image version:
+
+   ```yaml
+   image:
+     tag: <new_version>
+   ```
+2. Apply the upgrade:
+
+   ```bash
+   helm upgrade <release> <chart> -f <path_to_values.yaml>
+   ```
+
+  Since we are using `updateStrategy.type=OnDelete`, this step will not restart
+  any pod, rather it will just prepare pods for running the new version.
+  - For **native deployments**, ensure the new binary is available.
+
+
+{<h3 className="custom-header"> Upgrade procedure (zero downtime) </h3>} 
+
+Our procedure for achieving zero-downtime upgrades consists of restarting one
+instance at a time. Memgraph uses **primary–secondary replication**. To avoid
+downtime:
+
+1. Upgrade **replicas** first.
+2. Upgrade the **main** instance.
+3. Upgrade **coordinator followers**, then the **leader**.
+
+In order to find out on which pod/server the current main and the current
+cluster leader sits, run:
+
+```cypher
+SHOW INSTANCES;
+```
+
+<Steps>
+{<h4 className="custom-header"> Upgrade replicas </h4>} 
+
+If you are using K8s, the upgrade can be performed by deleting the pod. Start by
+deleting the replica pod (in this example replica is running on the pod
+`memgraph-data-1-0`):
+
+```bash
+kubectl delete pod memgraph-data-1-0
+```
+
+**Native deployment:** stop the old binary and start the new one.
+
+Before starting the upgrade of the next pod, it is important to wait until all
+pods are ready. Otherwise, you may end up with a data loss. On K8s you can
+easily achieve that by running:
+
+```bash
+kubectl wait --for=condition=ready pod --all
+```
+
+For the native deployment, check if all your instances are alived manually.
+
+This step should be repeated for all of your replicas in the cluster.
+
+
+{<h4 className="custom-header"> Upgrade the main </h4>} 
+
+Before deleting the main pod, check replication lag to see whether replicas are
+behind MAIN:
+
+```cypher
+SHOW REPLICATION LAG;
+```
+
+If replicas are behind, your upgrade will be prone to a data loss. In order to
+achieve zero-downtime upgrade without any data loss, either:
+
+  - Use `STRICT_SYNC` mode (writes will be blocked during upgrade), or
+  - Wait until replicas are fully caught up, then pause writes. This way, you
+can use any replication mode. Read queries should however work without any
+issues independently from the replica type you are using.
+
+Upgrade the main pod:
+
+```bash
+kubectl delete pod memgraph-data-0-0
+kubectl wait --for=condition=ready pod --all
+```
+
+
+{<h4 className="custom-header"> Upgrade coordinators </h4>} 
+
+The upgrade of coordinators is done in exactly the same way. Start by upgrading
+followers and finish with deleting the leader pod:
+
+```bash
+kubectl delete pod memgraph-coordinator-3-0
+kubectl wait --for=condition=ready pod --all
+
+kubectl delete pod memgraph-coordinator-2-0
+kubectl wait --for=condition=ready pod --all
+
+kubectl delete pod memgraph-coordinator-1-0
+kubectl wait --for=condition=ready pod --all
+```
+</Steps>
+
+
+{<h3 className="custom-header"> Verify upgrade </h3>} 
+
+Your upgrade should be finished now, to check that everything works, run:
+
+```cypher
+SHOW VERSION;
+```
+
+It should show you the new Memgraph version.
+
+
+{<h3 className="custom-header"> Rollback </h3>} 
+
+If during the upgrade, you figured out that an error happened or even after
+upgrading all of your pods something doesn't work (e.g. write queries don't
+pass), you can safely downgrade your cluster to the previous version using
+`VolumeSnapshots` you took on K8s or file backups for native deployments.
+
+- **Kubernetes:**
+
+  ```bash
+  helm uninstall <release>
+  ```
+
+  In `values.yaml`, for all instances set:
+
+  ```yaml
+  restoreDataFromSnapshot: true
+  ```
+
+  Make sure to set correct name of the snapshot you will use to recover your
+instances.
+
+- **Native deployments:** restore from your file backups.
+
+
+<Callout type="info">
+
+If you're doing an upgrade on `minikube`, it is important to make sure that the
+snapshot resides on the same node on which the `StatefulSet` is installed.
+Otherwise, it won't be able to restore `StatefulSet's` attached
+PersistentVolumeClaim from the `VolumeSnapshot`.
+
+</Callout>
+
+<CommunityLinks/>
