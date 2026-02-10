@@ -159,10 +159,15 @@ used freely for debugging purposes (along with `stderr`).
 
 Each request and response is a **single-line JSON object** terminated by `\n`.
 
+<Callout type="warning">
+**As of Memgraph v3.8**, each request includes a unique **message ID** (`memgraph_call_id`). The auth module **must** read this value and **copy it into the response** unchanged. Memgraph uses it to match responses to requests and ignore stale data if the pipe is left in an unknown state (e.g. after a read/write failure). Custom auth modules must be updated for this protocol; otherwise authentication will fail.
+</Callout>
+
 **Auth request structure**
 
 | Field      | Description                                                   |
 | ---------- | ------------------------------------------------------------- |
+| `memgraph_call_id` | Unique message ID. The module **must** copy this value into the response. |
 | `username` | User’s username (for `basic` scheme)                          |
 | `password` | User’s password (for `basic` scheme)                          |
 | `scheme`   | Authentication method (for SSO schemes, e.g. `oidc-entra-id`) |
@@ -173,6 +178,7 @@ Each request and response is a **single-line JSON object** terminated by `\n`.
 
 | Field           | Type                | Description                                |
 | --------------- | ------------------- | ------------------------------------------ |
+| `memgraph_call_id` | (same as request)   | **Required.** Copy the `memgraph_call_id` from the request so Memgraph can match the response to the request. |
 | `authenticated` | `bool`              | Whether the user is allowed to connect     |
 | `role`          | `string`            | Single role (backward compatibility)       |
 | `roles`         | `array[string]`     | One or more roles (preferred format)       |
@@ -222,6 +228,8 @@ def authenticate(username, password):
     }
 ```
 
+**Note:** As of v3.8, every response must also include the `memgraph_call_id` from the request (see [Communication protocol](#communication-protocol) above). The snippets above show only the role-related fields.
+
 Memgraph processes roles as follows:
 1. Use `roles` if present.
 2. If `roles` is a list, all listed roles are applied.
@@ -249,16 +257,20 @@ import json
 import io
 
 
-def authenticate(username, password):
+def authenticate(memgraph_call_id, username, password):
+    # Always copy the message id from the request into the response (required as of v3.8)
+    def response(authenticated, **kwargs):
+        return {"memgraph_call_id": memgraph_call_id, "authenticated": authenticated, **kwargs}
+
     # Example with multiple roles
     if username == "admin_user" and password == "password":
-        return {"authenticated": True, "roles": ["admin", "user"]}
-    
+        return response(True, roles=["admin", "user"])
+
     # Example with single role (backward compatible)
     if username == "moderator_user" and password == "password":
-        return {"authenticated": True, "role": "moderator"}
-    
-    return {"authenticated": False, "errors": "Invalid credentials"}
+        return response(True, role="moderator")
+
+    return response(False, errors="Invalid credentials")
 
 
 if __name__ == "__main__":
@@ -339,7 +351,7 @@ roles](/database-management/authentication-and-authorization/multiple-roles).
 
 
 Different services use different parameters for defining roles. Use
-`MEMGRAPH_SSO_{provider}_{protocol}_ROLE_FILED` to specify the token parameter
+`MEMGRAPH_SSO_{provider}_{protocol}_ROLE_FIELD` to specify the token parameter
 that specifies the assigned roles.
 
 <Callout type="info">
