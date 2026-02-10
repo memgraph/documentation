@@ -1,0 +1,391 @@
+---
+title: Reference commands
+description: Complete reference for all multi-tenancy Cypher commands in Memgraph.
+---
+
+import { Callout } from 'nextra/components'
+
+# Multi-tenancy reference queries
+
+<Callout>
+This reference guide is tightly tied with
+**[authentication and authorization guide with multi-tenancy](/database-management/authentication-and-authorization/multiple-roles)**.
+Please make sure to read this guide as well.
+</Callout>
+
+## Multi-database queries
+
+### CREATE DATABASE
+
+Command used for creating a new database.
+
+```cypher
+CREATE DATABASE databaseName;
+```
+
+**Parameters:**
+- `databaseName` (symbolic name) - name of the database to be created
+
+**Behaviour:**
+- A new isolated storage will be created. This enables logical separation between graphs.
+- Database will be associated with its own database UUID which can be seen with `SHOW STORAGE INFO;`
+
+**Implications:**
+- You can't name your database `memgraph`, or with any other name that's already existing.
+
+**Privileges required:**
+- `MULTI_DATABASE_EDIT` privilege
+- Access to the `memgraph` database
+- `TRANSACTION_MANAGEMENT` privilege (if you're using `FORCE`, to terminate active transactions)
+
+**Example:**
+```cypher
+CREATE DATABASE my_database;
+```
+
+### DROP DATABASE
+
+Command used for dropping an existing database.
+
+```cypher
+DROP DATABASE databaseName [FORCE];
+```
+
+**Parameters:**
+- `databaseName` (symbolic name) - name of the database to be dropped
+- `FORCE` (optional parameter) - parameter to delete a database even when it has active
+  connections or transactions.
+
+**Behaviour:**
+- **Without `FORCE`**: The command will fail if the database is currently in use
+  by any active connections or transactions.
+- **With `FORCE`**: The database will be immediately hidden from new connections,
+  but actual deletion is deferred until it's safe to proceed. All active
+  transactions using the database will be terminated.
+
+**Implications:**
+Use cases for `FORCE` dropping the database:
+- **Emergency cleanup**: Remove a database stuck in an inconsistent or long-running state.
+- **Administrative maintenance**: Perform system maintenance requiring immediate database removal.
+- **Development environments**: Quickly reset test environments that might still have active connections.
+Additional implications with `FORCE`:
+- All active transactions on the target database will be forcibly terminated.
+- The database becomes immediately unavailable to new connections.
+- Actual deletion may be deferred until existing connections are properly closed.
+- **This operation cannot be undone.**
+
+**Privileges required:**
+- `MULTI_DATABASE_EDIT` privilege
+- Access to the `memgraph` database
+- `TRANSACTION_MANAGEMENT` privilege (if you're using `FORCE`, to terminate active transactions)
+
+**Example:**
+```cypher
+DROP DATABASE my_database;
+```
+
+### RENAME DATABASE
+
+The `RENAME DATABASE` command allows you to rename an existing database to a new
+name. This simplifies administrative workflows by eliminating the need to create
+a new database, recover from a snapshot, and drop the old database.
+
+```cypher
+RENAME DATABASE old_name TO new_name;
+```
+
+**Parameters:**
+- `old_name` (symbolic name) - name of the database to be rename
+- `new_name` (symbolic name) - new name of the database that will be used
+
+**Behaviour:**
+- The database is **renamed immediately** without requiring unique access.
+- If you are currently using the database being renamed, the current database
+  context is automatically updated to the new name.
+- All existing data, indexes, constraints, and other database objects are
+  preserved.
+
+<Callout type="info"> 
+Current implementation of `RENAME` does not update auth data. User/role database
+access and database-specific roles information is not updated. This can lead to
+unindented access to databases. 
+</Callout>
+
+**Implications:**
+- The `RENAME DATABASE` command requires the `MULTI_DATABASE_EDIT` privilege and
+  access to the `memgraph` database.
+- The new database name must not already exist.
+- The old database name must exist.
+- This operation cannot be undone once completed.
+- All active connections to the database will continue to work seamlessly with
+  the new name.
+
+  **Privileges required:**
+- `MULTI_DATABASE_EDIT` privilege
+- Access to the `memgraph` database
+- `TRANSACTION_MANAGEMENT` privilege (if you're using `FORCE`, to terminate active transactions)
+
+**Example:**
+```cypher
+RENAME DATABASE my_database TO my_new_database;
+```
+
+### SHOW DATABASE
+
+Command used for showing the current database the user is in.
+
+```cypher
+SHOW DATABASE;
+```
+
+or
+
+```cypher
+SHOW CURRENT DATABASE;
+```
+
+**Privileges required:**
+- `MULTI_DATABASE_USE` privilege
+- Access to the `memgraph` database
+- `TRANSACTION_MANAGEMENT` privilege (if you're using `FORCE`, to terminate active transactions)
+
+### SHOW DATABASES
+
+Command used for showing the existing set of multitenant databases.
+
+```cypher
+SHOW DATABASES;
+```
+
+**Privileges required:**
+- `MULTI_DATABASE_USE` privilege
+- Access to the `memgraph` database
+- `TRANSACTION_MANAGEMENT` privilege (if you're using `FORCE`, to terminate active transactions)
+
+### USE DATABASE
+
+Used for positioning the user from one database into another.
+
+```cypher
+USE DATABASE databaseName;
+```
+
+**Parameters:**
+- `databaseName` (symbolic name) - name of the database the user wants to use
+
+**Behaviour:**
+- Command will exit the current database/tenant and position itself looking into the tenant from the query
+
+**Implications:**
+- If the database doesn't exist, the command will result in an exception.
+- If the user has not been granted with the database, this command will result in an exception.
+
+**Privileges required:**
+- `MULTI_DATABASE_USE` privilege
+- Access to the `memgraph` database
+- `TRANSACTION_MANAGEMENT` privilege (if you're using `FORCE`, to terminate active transactions)
+
+**Example:**
+```cypher
+USE DATABASE my_database;
+```
+
+## Working with databases and user permissions
+
+### GRANT DATABASE TO USER
+
+Grants a user access to a specified database.
+
+```cypher
+GRANT DATABASE databaseName TO user_or_role;
+```
+
+**Parameters:**
+- `databaseName` (symbolic name) - name of the database the user will be granted access with (or `*` for granting all databases)
+- `user_or_role` (symbolic name) - name of the user or role which will receive the grant
+
+**Behaviour:**
+- After the command has been executed, the user or role will be granted access to the database.
+
+**Example:**
+```cypher
+-- Granting a specific database to the user
+GRANT DATABASE my_database TO marko;
+
+-- Granting every database to the user
+GRANT DATABASE * TO josip;
+```
+
+
+### DENY DATABASE FROM USER
+
+Denies a user's access to a specified database.
+
+```cypher
+DENY DATABASE databaseName FROM user_or_role;
+```
+
+**Parameters:**
+- `databaseName` (symbolic name) - name of the database to deny the access to the user
+- `user_or_role` (symbolic name) - name of the user or role which will be denied the access
+
+**Behaviour:**
+- After the command has been executed, the user or role will be denied access to the database.
+
+**Example:**
+```cypher
+DENY DATABASE my_database FROM marko;
+```
+
+### REVOKE DATABASE FROM USER
+
+Removes database from user's authentication context.
+
+```cypher
+REVOKE DATABASE databaseName FROM user_or_role;
+```
+
+**Parameters:**
+- `databaseName` (symbolic name) - name of the database to revoke from user's authentication context
+- `user_or_role` (symbolic name) - name of the user or role to revoke the context from
+
+**Behaviour:**
+- After the command has been executed, the user's authentication context will have no information about
+  whether he is granted or denied the access to the database.
+- This scenario is identical to the initial empty authentication state when you haven't configured any
+  access to the users. You can proceed with the `GRANT` or `DENY` commands to manipulate the user's privileges.
+
+**Example:**
+```cypher
+REVOKE DATABASE my_database FROM marko;
+```
+
+### SET MAIN DATABASE FOR USER
+
+Sets a user's default (landing) database when connecting to a database session.
+
+```cypher
+SET MAIN DATABASE databaseName FOR user_or_role;
+```
+
+**Parameters:**
+- `databaseName` (symbolic name) - name of the database which will become the default for the user
+- `user_or_role` (symbolic name) - name of the user or role to set the default database to
+
+**Behaviour:**
+- After the command has been executed, the user will on log in be placed in that main database.
+
+**Implications:**
+- Database needs to be granted to the user in order to successfully set it as main.
+- If the command is not executed, by default everyone will land into the system's default `memgraph` database.
+
+**Example:**
+```cypher
+SET MAIN DATABASE databaseName FOR marko;
+```
+
+<Callout>
+At the moment, Memgraph doesn't have a command for showing the users main database. If the command
+for setting the main database executed successfully, it will become the users main database.
+</Callout>
+
+## Display of privileges for users and roles
+
+### SHOW DATABASE PRIVILEGES FOR USER
+
+Lists a user's database access rights (granted and denied).
+
+```cypher
+SHOW DATABASE PRIVILEGES FOR user_or_role;
+```
+
+**Parameters:**
+- `user_or_role` (symbolic name) - name of the user or role to check the database privileges
+
+**Behaviour:**
+- The command will show 2 columns: `grants` and `denies` with the list of databases in each one.
+
+**Implications:**
+- A user has access to the database if he has an explicit grant and no denies to the database.
+- If the user has `*` in the grants, it is granted every database (if there are no explicit denies).
+- The first user ever created in Memgraph gets all the privileges, and therefore gets the grant of every database in Memgraph
+- All subsequent users get no privileges, but have access to the default Memgraph database.
+- For the user, an aggregate view for database privileges is shown for his direct database privileges + privileges granted from
+  its respective roles
+
+**Example:**
+```cypher
+-- Example output for the admin user which has access to all the databases
+SHOW DATABASE PRIVILEGES FOR admin;
++--------+--------+
+| grants | denies |
++--------+--------+
+| "*"    | []     |
++--------+--------+
+
+-- Example output for the non admin user which by default gets granted only the memgraph database to connect
+SHOW DATABASE PRIVILEGES FOR marko;
++--------------+--------+
+| grants       | denies |
++--------------+--------+
+| ["memgraph"] | []     |
++--------------+--------+
+```
+
+### SHOW ROLE FOR USER
+
+The command will output roles for the user across all databases.
+
+**Implications:**
+- If database is not specified, it will show the aggregate roles for the user.
+- If database is specified, it will show the roles for the respective databases.
+
+**Example:**
+```cypher
+SHOW ROLE FOR marko;
+```
+
+**Example:**
+```cypher
+-- on the user's main database
+SHOW ROLE FOR user_or_role ON MAIN;
+
+-- on the user's database inside the session
+SHOW ROLE FOR user_or_role ON CURRENT;
+
+-- on an arbitrary database
+SHOW ROLE FOR user_or_role ON DATABASE my_database;
+```
+
+### SHOW PRIVILEGES FOR USER_OR_ROLE ON DATABASE
+
+Shows user or role privileges on a desired database. 
+
+**Implications:**
+- In a multi-tenant environment, the database needs to be specified.
+- Database specified is either: `MAIN`, `CURRENT` or any other valid database name.
+- In case of the user, an aggregated view for both user's specific privileges, and all
+  his role privileges on the database is shown.
+
+**Example:**
+```cypher
+-- on the user's main database
+SHOW PRIVILEGES FOR marko ON MAIN;
+
+-- on the user's database inside the session
+SHOW PRIVILEGES FOR marko ON CURRENT;
+
+-- on an arbitrary database
+SHOW PRIVILEGES FOR marko ON DATABASE my_database;
+```
+
+<Callout>
+A given set of privileges is available to all the granted databases for a user or role.
+</Callout>
+
+## Multi-tenant privileges
+
+Administrators manage multi-tenant privileges with:
+
+- `MULTI_DATABASE_USE`: Enables database switching and listing.
+- `MULTI_DATABASE_EDIT`: Permits database creation and deletion.

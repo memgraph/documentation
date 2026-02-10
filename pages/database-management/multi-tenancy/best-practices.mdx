@@ -1,0 +1,58 @@
+---
+title: Best practices
+description: Learn best practices for multi-tenancy in Memgraph, including default database recommendations, user privileges, and audit logs.
+---
+
+import { Callout } from 'nextra/components'
+
+# Best practices
+
+## Default database best practices
+
+In multi-tenant environments, we recommend treating the default `memgraph`
+database as an administrative/system database rather than storing application
+data in it. This approach provides better security and isolation, especially
+given the access requirements for system operations (see [How multi-tenancy works](/database-management/multi-tenancy/how-multi-tenancy-works#access-requirements-and-privileges)).
+
+## Which command line flags should I set?
+
+#### data recovery on startup
+
+The flag `--data-recovery-on-startup=true` is enforced by default. It ensures every database is recovered
+from durability files during startup.
+
+## Connecting to a database
+
+The user can interact with multi-tenant databases in two ways:
+
+1. Through Cypher queries (e.g. `USE DATABASE my_database` when you're already in a session).
+2. When using Neo4j drivers, by defining the `database` field. 
+   The `USE DATABASE` query is disabled when the database field is defined. 
+   All queries run against the specified database only.
+
+When connecting to Memgraph without defining a particular landing database, 
+you will be connected to the default database set for the user. In case the user
+does not have a default (main) database, a database-less connection will be 
+established. During this connection, the user can execute queries that do not 
+manipulate any data. User can still use multi-tenant queries and define a 
+database to use via the appropriate Cypher query.
+
+Example using Neo4j Python driver:
+
+```python
+import neo4j
+
+driver = neo4j.GraphDatabase.driver("bolt://localhost:7687", auth=("user", "pass"))
+
+# Immediately run against database db2
+with driver.session(database="db2") as session:
+    session.run(...)  # Executes on db2
+    session.run("USE DATABASE db1")  # Error: database switching disabled
+
+# Position into the default memgraph database, then switch inside the session
+with driver.session() as session:
+    session.run(...)  # Executes on the default database
+    session.run("USE DATABASE db1")
+    session.run(...)  # Executes on db1
+
+```

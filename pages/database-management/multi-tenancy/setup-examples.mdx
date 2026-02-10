@@ -1,0 +1,114 @@
+---
+title: Setup examples
+description: Learn how to set up multi-tenancy in Memgraph, using different example scenarios.
+---
+
+import { Callout } from 'nextra/components'
+
+## Setup examples
+
+### Basic user with multi-database privileges
+
+Here, we will see a basic scenario where a user can run multi-database queries with minimal privileges.
+To enable the user with such capabilities, we need to ensure the following rules apply:
+- user is granted the default `memgraph` database, as all system queries are executed against it
+- user has the appropriate set of privileges to execute the commands
+  (`MULTI_DATABASE_USE` and `MULTI_DATABASE_EDIT`)
+
+```cypher
+-- Create role with multi-database privileges
+CREATE ROLE multi_db_role;
+GRANT MULTI_DATABASE_USE, MULTI_DATABASE_EDIT TO multi_db_role;
+GRANT DATABASE memgraph TO multi_db_role;
+
+-- Create user with multi-database admin role
+CREATE USER db_user IDENTIFIED BY 'test';
+SET ROLE FOR db_user TO multi_db_role;
+```
+
+In this setup, `db_user` can:
+- Execute all multi-database queries (`SHOW DATABASES`, `CREATE DATABASE`, `DROP
+  DATABASE`, `RENAME DATABASE`, etc.)
+- Access the `memgraph` database for administrative operations
+- Manage the multi-tenant database configuration
+
+### Configuring admin and non-admin users
+
+We suggest using these advices when configuring admin and non-admin users in a multi-tenant
+environment:
+
+1. **Restrict memgraph database access**: Only grant access to the `memgraph`
+   database to privileged users who need to perform system administration tasks.
+2. **Use tenant-specific databases**: Store all application data in dedicated
+   tenant databases.
+3. **Separate concerns**: Keep user management, role management, system
+   administration, replication management, and multi-database management
+   separate from application data.
+
+The following is an example scenario with a multi-tenant environment, using admin and
+non-admin users which facilitates these rules.
+
+In this configuration:
+- `system_admin_user` can perform all authentication/authorization, replication,
+  and multi-database operations and has access to the "memgraph" database.
+- because `system-admin_user` is the first user being created, it implicitly gets all the privileges
+  for creating graph objects. We will here though showcase only granting system based privileges (for
+  execution of system queries).
+- Tenant users can only access their respective tenant databases. 
+- Application data is completely isolated in tenant-specific databases
+- The `memgraph` database serves purely as an administrative database
+
+```cypher
+-- Create admin role with full system privileges
+CREATE ROLE system_admin_role;
+GRANT ALL PRIVILEGES TO system_admin_role;
+GRANT DATABASE memgraph TO system_admin_role;
+
+-- Create tenant-specific roles (no access to memgraph database)
+CREATE ROLE tenant1_admin;
+CREATE ROLE tenant1_non_admin;
+CREATE ROLE tenant2_admin;
+CREATE ROLE tenant2_non_admin;
+
+-- Grant appropriate permissions to tenant roles
+GRANT MATCH, CREATE, MERGE, SET, DELETE, INDEX TO tenant1_admin;
+GRANT CREATE, READ, UPDATE, DELETE ON NODES CONTAINING LABELS * TO tenant1_admin;
+GRANT CREATE, READ, UPDATE, DELETE ON EDGES OF TYPE * TO tenant1_admin;
+
+GRANT MATCH, CREATE, MERGE, SET, DELETE TO tenant1_non_admin;
+GRANT CREATE, READ, UPDATE, DELETE ON NODES CONTAINING LABELS * TO tenant1_non_admin;
+GRANT CREATE, READ, UPDATE, DELETE ON EDGES OF TYPE * TO tenant1_non_admin;
+
+GRANT MATCH, CREATE, MERGE, SET, DELETE, INDEX TO tenant2_admin;
+GRANT CREATE, READ, UPDATE, DELETE ON NODES CONTAINING LABELS * TO tenant2_admin;
+GRANT CREATE, READ, UPDATE, DELETE ON EDGES OF TYPE * TO tenant2_admin;
+
+GRANT MATCH, CREATE, MERGE, SET, DELETE TO tenant2_non_admin;
+GRANT CREATE, READ, UPDATE, DELETE ON NODES CONTAINING LABELS * TO tenant2_non_admin;
+GRANT CREATE, READ, UPDATE, DELETE ON EDGES OF TYPE * TO tenant2_non_admin;
+
+-- Grant access only to tenant databases
+GRANT DATABASE tenant1_db TO tenant1_admin, tenant1_non_admin;
+GRANT DATABASE tenant2_db TO tenant2_admin, tenant2_non_admin;
+
+-- Create users
+-- This is the first user being created, so he will implicitly get all the privileges
+-- This is a design decision
+CREATE USER system_admin_user IDENTIFIED BY 'test';
+
+-- These users don't have any privileges so we need to grant them roles
+CREATE USER tenant1_admin_user IDENTIFIED BY 'test';
+CREATE USER tenant1_non_admin_user IDENTIFIED BY 'test';
+CREATE USER tenant2_admin_user IDENTIFIED BY 'test';
+CREATE USER tenant2_non_admin_user IDENTIFIED BY 'test';
+
+-- Assign roles
+-- User already has all the permissions, but for staying consistent we will grant the role nevertheless
+SET ROLE FOR system_admin_user TO system_admin;
+
+-- Set the roles for other users, so they can get privileges
+SET ROLE FOR tenant1_admin_user TO tenant1_admin;
+SET ROLE FOR tenant1_non_admin_user TO tenant1_non_admin;
+SET ROLE FOR tenant2_admin_user TO tenant2_admin;
+SET ROLE FOR tenant2_non_admin_user TO tenant2_non_admin;
+```
