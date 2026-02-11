@@ -35,6 +35,7 @@ export default {
   "kmeans_clustering": "kmeans_clustering",
   "label": "label", 
   "leiden_community_detection": "leiden_community_detection",
+  "llm": "llm",
   "llm_util": "llm_util",
   "map": "map",
   "math": "math",

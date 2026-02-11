@@ -1,0 +1,114 @@
+---
+title: Parallel execution (Enterprise)
+description: Learn how to execute queries in parallel to speed up processing.
+---
+
+# Parallel execution <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+Memgraph Enterprise allows you to execute Cypher queries in parallel, utilizing
+multiple worker threads to speed up data retrieval and processing. This feature
+is particularly useful for analytical queries that involve scanning large
+amounts of data, aggregations, or complex filtering.
+
+## Overview
+
+Parallel execution splits the query work into chunks and distributes them
+across available worker threads. This applies to several phases of query
+execution:
+
+- **Scans**: Reading nodes and relationships from storage.
+- **Aggregations**: Computing groupings and aggregate functions (e.g., `COUNT`, `SUM`, `AVG`).
+- **Ordering**: Sorting results.
+- **Distinct**: Removing duplicates.
+
+To use parallel execution, your query must explicitly opt-in using the
+[`USING PARALLEL EXECUTION`](/querying/clauses/using-parallel-execution) clause.
+
+## Requirements
+
+### Privileges
+
+Users must have the `PARALLEL_EXECUTION` privilege to run queries with parallel
+execution.
+
+```cypher
+GRANT PARALLEL_EXECUTION TO user_name;
+```
+
+### Scheduler
+
+Parallel execution requires the Bolt scheduler to be set to `priority_queue`.
+You can check the current scheduler configuration in `memgraph.conf` or by
+inspecting the `--scheduler` flag.
+
+If the scheduler is set to `asio`, parallel execution will not be applied, and
+the query will fall back to single-threaded execution with a notification.
+
+## Execution model
+
+The planner analyzes the query and determines if it can be parallelized. If
+eligible, the planner rewrites the query plan to use parallel operators (e.g.,
+`ScanParallel`, `AggregateParallel`).
+
+### Parallelism degree
+
+You can specify the number of threads to use for a specific query:
+
+```cypher
+USING PARALLEL EXECUTION 4
+MATCH (n:Person)
+RETURN count(n);
+```
+
+If no thread count is specified, Memgraph will choose a default parallelism
+level based on available resources.
+
+### Fallback mechanism
+
+If a query cannot be parallelized (e.g., due to unsupported clauses or operators
+in a specific context), Memgraph will fall back to single-threaded execution
+and emit a notification `PARALLEL_EXECUTION_FALLBACK`.
+
+## Performance
+
+As of Memgraph v3.8, parallel execution is designed for **aggregation queries**
+whose work can be split into independent chunks across workers. Queries like the
+following are a good fit:
+
+```cypher
+USING PARALLEL EXECUTION
+MATCH (n)--()
+WHERE n.p > 100
+RETURN count(*);
+```
+
+Operators that require **cross-thread or cross-worker synchronization** can
+reduce or eliminate the benefit of parallelism. These include:
+
+- **`DISTINCT`** - deduplication across workers
+- **`SKIP`** and **`LIMIT`** and **`HOPS LIMIT`** - global ordering/counting to apply offsets
+
+Depending on the query, performance with such operators can range from close to
+the parallelized case (when coordination is minimal) to **similar to
+single-threaded execution** (when synchronization dominates). For best
+throughput, prefer aggregation-only queries that do not rely on these operators.
+
+## Limitations and behavior
+
+- **Supported Queries**: Parallel execution currently works only for queries involving **aggregations** or **`ORDER BY`** clauses.
+- **Scan Requirement**: These aggregations or `ORDER BY` operations must rely on data produced by **scan operators**.
+- **Scope of Parallelism**: Only the segment of the query plan between the scan operator and the aggregation or `ORDER BY` operator is executed in parallel.
+- **Thread Limit**: The number of threads used is capped by the configured number of Bolt workers (`--bolt-num-workers`). Even if a higher number is specified in the clause, it cannot exceed this system limit.
+- **Caching**: Queries that specify a specific thread count are **not** cached in the query plan cache.
+- **Write Operations**: Parallel execution is primarily designed for read-only parts of the query.
+- **Memory Usage**: Running queries in parallel increases memory concurrency. Memgraph tracks memory usage across threads to ensure stability.
+
+## Example
+
+Count all `Person` nodes using 8 threads:
+
+```cypher
+USING PARALLEL EXECUTION 8
+MATCH (n:Person)
+RETURN count(n);
+```
