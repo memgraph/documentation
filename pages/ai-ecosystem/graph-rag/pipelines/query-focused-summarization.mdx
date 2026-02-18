@@ -1,0 +1,26 @@
+---
+title: Query-Focused Summarization
+description: Learn how to generate targeted summaries from graph-based retrieval to maximize answer relevance in GraphRAG pipelines.
+---
+
+# Query-focused Summarization
+
+Typical query to perform query-focused summarization follows:
+```Cypher
+WITH "... the question ..." AS USER_QUESTION
+// 1. Identify relevant communities (thresholding)
+MATCH (c:Community) WHERE c.nodes_count > 5  // only use significant communities
+// 2. Map: Generate a partial answer for EACH community
+WITH USER_QUESTION, c,
+     llm.complete("How does the following community summary: " + c.summary +
+                  " relate to: " + USER_QUESTION) AS partial_answer
+  WHERE partial_answer IS NOT NULL AND partial_answer <> ""
+WITH USER_QUESTION, collect(partial_answer) AS map_results
+// 3. Reduce: Synthesize the final consolidated answer
+WITH "The following are partial answers from different thematic clusters of " +
+     " a dataset. Synthesize them into a single, cohesive response to the " +
+     "original query: " + USER_QUESTION +
+      "\n\nPartial Answers:\n" +
+      reduce(s = "", res IN map_results | s + "- " + res + "\n") AS reduce_prompt
+RETURN llm.complete(reduce_prompt) AS final_answer;
+```

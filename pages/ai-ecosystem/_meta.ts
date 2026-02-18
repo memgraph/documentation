@@ -1,6 +1,6 @@
 export default {
     "graph-rag": "GraphRAG",
-    "atomic-graphrag": "Atomic GraphRAG",
+    "skills": "Skills",
     "integrations": "Integrations",
     "machine-learning": "Machine learning",
     "agents": "Agents",
