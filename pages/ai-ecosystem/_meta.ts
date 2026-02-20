@@ -1,8 +1,8 @@
 export default {
     "graph-rag": "GraphRAG",
+    "mcp": "MCP",
     "skills": "Skills",
-    "integrations": "Integrations",
-    "machine-learning": "Machine learning",
     "agents": "Agents",
-    "unstructured2graph": "Unstructured2Graph"
+    "machine-learning": "Machine learning",
+    "integrations": "Integrations"
 }

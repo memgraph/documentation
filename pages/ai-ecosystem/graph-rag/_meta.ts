@@ -1,7 +1,7 @@
 export default {
     "prerequisites": "Prerequisites",
     "knowledge-graph-creation": "Knowledge graph creation",
-    "pipelines": "Pipelines",
-    "atomic-graphrag": "Atomic GraphRAG",
+    "atomic-pipelines": "Atomic Pipelines",
+    "agentic-graphrag": "Agentic GraphRAG",
     "examples-and-demos": "Examples & demos"
 }

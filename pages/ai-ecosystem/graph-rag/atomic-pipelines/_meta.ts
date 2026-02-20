@@ -1,5 +1,5 @@
 export default {
     "text2cypher": "Text2Cypher",
-    "search": "GraphRAG Search",
+    "local-graph-search": "Local Graph Search",
     "query-focused-summarization": "Query-focused summarization",
 }
