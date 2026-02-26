@@ -612,6 +612,132 @@ If you have k8s cluster under any major cloud provider + you want to store the
 dumps under S3, probably the best repo to check out is the
 [core-dump-handler](https://github.com/IBM/core-dump-handler).
 
+## Profiling Memgraph in Kubernetes
+
+Profile a Memgraph process running inside a Kubernetes pod using `perf` and generate flame graphs.
+
+### Prerequisites
+
+- `kubectl` configured with access to your cluster
+- A running Memgraph deployment (standalone or HA)
+
+### Step 1: Identify the target pod
+
+```bash
+kubectl get pods -o wide
+```
+
+| NAME | READY | STATUS | RESTARTS | AGE | IP | NODE |
+|---|---|---|---|---|---|---|
+| memgraph-coordinator-1-0 | 1/1 | Running | 0 | 23h | 10.244.3.227 | aks-nodepool1-...000002 |
+| memgraph-coordinator-2-0 | 1/1 | Running | 0 | 23h | 10.244.0.173 | aks-nodepool1-...000000 |
+| memgraph-coordinator-3-0 | 1/1 | Running | 0 | 23h | 10.244.4.250 | aks-nodepool1-...000003 |
+| memgraph-data-0-0 | 1/1 | Running | 1 (22h ago) | 23h | 10.244.2.152 | aks-nodepool1-...000001 |
+| memgraph-data-1-0 | 1/1 | Running | 0 | 22m | 10.244.1.199 | aks-nodepool1-...000004 |
+
+In this example, we want to profile `memgraph-data-1-0`, which is currently the MAIN instance. Note the **NODE** it is running on — the debug pod must be scheduled on the same node.
+
+### Step 2: Deploy the debug pod
+
+Edit `perf_pod.yaml` and set `nodeName` to match the target pod's node:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug
+spec:
+  containers:
+  - args:
+    - "3600"
+    command:
+    - sleep
+    image: ubuntu:22.04
+    name: debug
+    imagePullPolicy: Always
+    securityContext:
+      privileged: true
+  hostPID: true
+  nodeName: aks-nodepool1-38123842-vmss000004  # <-- must match target pod's node
+  restartPolicy: Never
+```
+
+```bash
+kubectl apply -f scripts/perf_pod.yaml
+```
+
+The debug pod needs `privileged: true` and `hostPID: true` so it can see host processes and access `/proc/<pid>/cgroup` to match processes to pods.
+
+### Step 3: Find the Memgraph PID
+
+Since multiple Memgraph processes may be visible from the host PID namespace (due to Kubernetes multi-tenancy), we need to match the correct one to our target pod. The [`find-memgraph-pid.sh`](find-memgraph-pid.sh) script does this automatically — it resolves the pod's UID, lists all `memgraph` processes inside the debug pod, and matches via `/proc/<pid>/cgroup`:
+
+```bash
+./scripts/find-memgraph-pid.sh memgraph-data-1-0
+```
+
+Output:
+```
+Pod:          memgraph-data-1-0
+UID:          c8707c88-631b-467c-af9f-26e9dac8e780
+UID fragment: 26e9dac8e780
+Debug pod:    debug
+
+Found memgraph PIDs: 1335771 1396816
+cgroup match: /proc/1396816/cgroup:0::/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod...26e9dac8e780...
+
+Matched memgraph PID: 1396816
+```
+
+Use `-d` to specify a different debug pod name, or `-n` for a non-default namespace:
+```bash
+./scripts/find-memgraph-pid.sh memgraph-data-1-0 -d my-debug-pod -n memgraph. # Default is debug for pod name and default for namespace
+```
+
+### Step 4: Install perf in the debug pod
+
+```bash
+kubectl exec -it debug -- bash
+```
+
+Inside the debug pod:
+```bash
+apt-get update && apt-get install -y linux-tools-common linux-tools-generic
+```
+
+> **Note (AKS / cloud kernels):** `apt-get install linux-tools-$(uname -r)` will fail if the host kernel is a cloud-specific variant (e.g., `5.15.0-1102-azure`) because the matching package isn't in standard Ubuntu repos. Use `linux-tools-generic` instead — the generic `perf` binary works in most cases. If it complains about a version mismatch, invoke it directly:
+> ```bash
+> /usr/lib/linux-tools/*/perf record ...
+> ```
+
+### Step 5: Record a perf profile
+
+```bash
+perf record -p <PID> --call-graph dwarf sleep 30
+```
+
+Replace `<PID>` with the PID from Step 3. Adjust the duration (`sleep 30`) as needed — run your workload during this window.
+
+### Step 6: Generate a flame graph
+
+```bash
+apt-get install -y git
+git clone https://github.com/brendangregg/FlameGraph
+perf script | ./FlameGraph/stackcollapse-perf.pl > out.perf-folded
+./FlameGraph/flamegraph.pl out.perf-folded > perf.svg
+```
+
+### Step 7: Copy results and clean up
+
+From your local machine:
+```bash
+kubectl cp debug:perf.svg perf.svg
+kubectl cp debug:perf.data perf.data    # optional: raw perf data for later analysis
+kubectl delete pod debug
+```
+
+Open `perf.svg` in a browser to explore the interactive flame graph.
+
 ### Specific cloud provider instructions
 
 * [AWS](https://github.com/memgraph/helm-charts/tree/main/charts/memgraph-high-availability/aws)
