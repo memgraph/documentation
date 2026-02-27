@@ -78,7 +78,14 @@ Output columns:
 - `value`: stored value (JSON-encoded string form)
 - `scope`: `database` or `global`
 
-## Use in queries with `$`
+## Privileges
+
+Server-side parameter queries require the `SERVER_SIDE_PARAMETERS` privilege.
+See the [Query privileges reference](/database-management/authentication-and-authorization/query-privileges).
+
+## Use cases
+
+### Use in queries with `$`
 
 Once set, server-side parameters are available as `$name` in queries:
 
@@ -98,7 +105,38 @@ CREATE (:Node {property: $x});
 If the query is run with user parameter `x = 'client_value'`, the node property
 will be `'client_value'`.
 
-## Privileges
+### Reusing connection config in data migrations
 
-Server-side parameter queries require the `SERVER_SIDE_PARAMETERS` privilege.
-See the [Query privileges reference](/database-management/authentication-and-authorization/query-privileges).
+The [`migrate` module](/advanced-algorithms/available-algorithms/migrate) procedures accept a `config` map with
+connection parameters like `host`, `port`, `user`, and `password`. When running multiple migration queries
+against the same source, repeating this map in every call is verbose and error-prone.
+
+Store the config once as a server-side parameter and reference it with `$config` across all your migration queries:
+
+```opencypher
+SET GLOBAL PARAMETER mysql_config = {
+  user: 'memgraph',
+  password: 'password',
+  host: 'localhost',
+  database: 'demo_db'
+};
+```
+
+Then use `$mysql_config` in every migration call instead of repeating the full map:
+
+```opencypher
+CALL migrate.mysql('users', $mysql_config)
+YIELD row
+CREATE (u:User {id: row.id, name: row.name});
+
+CALL migrate.mysql('orders', $mysql_config)
+YIELD row
+CREATE (o:Order {id: row.id, total: row.total});
+
+CALL migrate.mysql('SELECT user_id, order_id FROM user_orders', $mysql_config)
+YIELD row
+MATCH (u:User {id: row.user_id}), (o:Order {id: row.order_id})
+CREATE (u)-[:PLACED]->(o);
+```
+
+This works for all `migrate` procedures — `migrate.postgresql()`, `migrate.mysql()`, `migrate.neo4j()`, `migrate.sql_server()`, and others.
