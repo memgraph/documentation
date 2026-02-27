@@ -470,100 +470,124 @@ kubectl get pvc -l app=<statefulset-name> # Get the PersistentVolumeClaims for t
 
 ### Debugging Memgraph pods
 
-To use `gdb` inside a Kubernetes pod, the container must run in **privileged
-mode**. To run any given container in the privileged mode, the k8s cluster
-itself needs to have an appropriate configuration.
+You can attach GDB to a running Memgraph pod using [ephemeral debug
+containers](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/#ephemeral-container).
+This approach injects a debug container into an existing pod — no need to
+redeploy or create a separate privileged pod.
 
-Below is an example on how to start the privileged `kind` cluster. 
+**Requirements:** kubectl 1.32+, Kubernetes 1.25+ (ephemeral containers must be
+enabled).
 
 <Steps>
-{<h4 className="custom-header">Create a privileged kind cluster</h4>}
+{<h4 className="custom-header">Attach GDB using the debug script</h4>}
 
-First, create new config `debug-cluster.yaml` file with allow-privileged
-enabled.
+The
+[`debug-memgraph.sh`](https://github.com/memgraph/helm-charts/tree/main/scripts/debug-memgraph.sh)
+script automates the entire workflow: it creates an ephemeral container with
+root privileges and `SYS_PTRACE`, installs GDB, finds the Memgraph process, and
+attaches to it.
 
-```yaml
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-  - role: control-plane
-    image: kindest/node:v1.31.0
-    extraPortMappings:
-      - containerPort: 80
-        hostPort: 8080
-        protocol: TCP
-    kubeadmConfigPatches:
-      - |
-        kind: ClusterConfiguration
-        kubeletConfiguration:
-          extraArgs:
-            allow-privileged: "true"
-# To inspect the cluster run `kubectl get pods -n kube-system`.
-# If some of the pods is in the CrashLoopBackOff status, try running `kubectl
-# logs <pod-name> -n kube-system` to get the error message.
+```bash
+./scripts/debug-memgraph.sh memgraph-data-0-0
 ```
 
-To start the cluster, execute the following command:
-```
-kind create cluster --name <cluster-name> --config debug-cluster.yaml
+The script auto-detects the target container name from the pod name (`data` →
+`memgraph-data`, `coordinator` → `memgraph-coordinator`). You can override this
+and other options:
+
+```bash
+# Specify container, namespace, or image explicitly
+./scripts/debug-memgraph.sh memgraph-data-0-0 -c memgraph-data -n my-namespace
+
+# Use a custom debug image
+DEBUG_IMAGE=ubuntu:24.04 ./scripts/debug-memgraph.sh memgraph-data-0-0
 ```
 
-{<h4 className="custom-header">Deploy a debug pod</h4>}
+Once attached, GDB will continue the process and stop on any crash or signal.
+Use `bt` (backtrace) to inspect the call stack when it stops.
 
-Once cluster is up and running, create a new `debug-pod.yaml` file with the
-following content:
+{<h4 className="custom-header">Manual approach (alternative)</h4>}
+
+If you can't use ephemeral containers (older Kubernetes versions, or cluster
+policies that block `kubectl debug`), you can deploy a privileged debug pod on
+the same node and attach GDB from there.
+
+First, identify which node your target pod is running on:
+
+```bash
+kubectl get pods -o wide
+```
+
+Edit
+[`perf_pod.yaml`](https://github.com/memgraph/helm-charts/tree/main/scripts/perf_pod.yaml)
+and set `nodeName` to match the target pod's node:
 
 ```yaml
 apiVersion: v1
 kind: Pod
 metadata:
-  name: debug-pod
+  name: debug
 spec:
   containers:
-  - name: my-container
-    image: memgraph/memgraph:3.2.0-relwithdebinfo # Use the latest, but make sure it's the relwithdebinfo one!
+  - args:
+    - "3600"
+    command:
+    - sleep
+    image: ubuntu:22.04
+    name: debug
+    imagePullPolicy: Always
     securityContext:
-      runAsUser: 0  # Runs the container as root.
       privileged: true
-      capabilities:
-        add: ["SYS_PTRACE"]
-      allowPrivilegeEscalation: true
-    command: ["sleep"]
-    args: ["infinity"]
-    stdin: true
-    tty: true
+  hostPID: true
+  nodeName: <node-where-your-pod-is-running>  # must match target pod's node
+  restartPolicy: Never
 ```
 
-To get the pod up and running and open a shell inside it run:
-```
-kubectl apply -f debug-pod.yaml
-kubectl exec -it debug-pod -- bash
+```bash
+kubectl apply -f scripts/perf_pod.yaml
 ```
 
-Once you are in the pod execute:
-```
-apt-get update && apt-get install -y gdb
-su memgraph
-gdb --args ./memgraph <memgraph-flags>
-run
+The `hostPID: true` setting gives the debug pod visibility into all processes on
+the node. Since multiple Memgraph processes may be running on the same node, use
+[`find-memgraph-pid.sh`](https://github.com/memgraph/helm-charts/tree/main/scripts/find-memgraph-pid.sh)
+to find the correct PID by matching the pod UID against `/proc/<pid>/cgroup`:
+
+```bash
+./scripts/find-memgraph-pid.sh memgraph-data-0-0
 ```
 
-Once you have memgraph up and running under `gdb`, run your workload (insert
-data, write or queries…). When you manage to recreate the issue, use the [gdb
-commands](/database-management/debugging#list-of-useful-commands-when-in-gdb)
-to pin point the exact issue.
+Then exec into the debug pod, install GDB, and attach to the Memgraph process:
 
-{<h4 className="custom-header">Delete the debug pod</h4>}
+```bash
+kubectl exec -it debug -- bash
+apt-get update && apt-get install -y gdb procps
+gdb -p <PID>
+```
 
-To delete the debug pod run:
+Once GDB stops on a crash or signal, use the [GDB
+commands](/database-management/debugging#list-of-useful-commands-when-in-gdb) to
+investigate. Clean up when done:
+
+```bash
+kubectl delete pod debug
 ```
-kubectl delete pod debug-pod
-```
+
+{<h4 className="custom-header">How the debug script works</h4>}
+
+Memgraph Helm charts run pods as non-root (uid 101, gid 103) with a restrictive
+security context. The `debug-memgraph.sh` script works around this by:
+
+1. Using `kubectl debug` with `--profile=sysadmin` to grant `SYS_PTRACE`
+2. Applying a custom security profile that overrides `runAsUser` to 0 (root) for
+    the ephemeral container only — the Memgraph container is unaffected
+3. Targeting the Memgraph container with `--target` to share its process
+    namespace, making the Memgraph PID visible inside the debug container
+
 </Steps>
 
-k8s official documentation on how to [debug running
+Kubernetes official documentation on how to [debug running
 pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/)
-is quite detailed.
+covers additional techniques including node-level debugging.
 
 ### Handling core dumps
 
