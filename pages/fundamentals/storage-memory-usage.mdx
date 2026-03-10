@@ -565,7 +565,7 @@ $\texttt{propertySize} = \texttt{basicMetadata} + \texttt{propertyID} + [\texttt
 |`NULL`                       | 0B                             | 0B                   | Memgraph treats null values same as if they're not present. Therefore, `NULL` values are not stored in the property store.                                                                       |
 |`BOOL`                       | 1B + 1B                        | 2B                   | The value is written in the first byte of the basic metadata.                                                                                                                                    |
 |`INT`                        | 1B + 1B + 1B, 2B, 4B or 8B     | 3B - 10B             | Basic metadata, property ID and the value depending on the size of the integer.                                                                                                                  |
-|`DOUBLE`                     | 1B + 1B + 8B                   | 10B                  | Basic metadata, property ID and the value                                                                                                                                                        |
+|`DOUBLE`                     | 1B + 1B + 2B, 4B or 8B         | 4B, 6B or 10B        | Basic metadata, property ID and the value. Value size depends on `--storage-floating-point-resolution-bits`: 16-bit (half), 32-bit (float), 64-bit (double). |
 |`STRING`                     | 1B + 1B + 1B + min 1B          | at least 4B          | Basic metadata, property ID, additional metadata and lastly the value depending on the size of the string, where 1 ASCII character in the string takes up 1B.                                    |
 |`LIST`                       | 1B + 1B + 1B + min 1B          | at least 4B (empty)  | Basic metadata, property ID, additional metadata and the total size depends on the number and size of the values in the list.                                                                    |
 |`MAP`                        | 1B + 1B + 1B + min 1B          | at least 4B (empty)  | Basic metadata, property ID, additional metadata and the total size depends on the number and size of the values in the map.                                                                     |
@@ -813,6 +813,31 @@ higher compression levels can reduce performance.  Therefore, users focused on m
 <Callout>
 
 Keep in mind that even though it can reduce memory usage, compression can impact query performance.
+
+</Callout>
+
+#### Floating-point resolution
+
+For workloads with many `DOUBLE` properties, you can reduce their storage size by lowering the floating-point precision via the `--storage-floating-point-resolution-bits` flag. The allowed values are `64` (default), `32`, and `16`, corresponding to double, float, and half precision respectively.
+
+| Value | Precision | Bytes per value | Savings vs default |
+|-------|-----------|-----------------|--------------------|
+| `64`  | double (full) | 8B          | —                  |
+| `32`  | float         | 4B          | 4B per double      |
+| `16`  | half          | 2B          | 6B per double      |
+
+For a dataset with 1 million vertices each carrying one `DOUBLE` property, switching from 64-bit to 32-bit saves ~4 MB, and switching to 16-bit saves ~6 MB.
+
+<Callout type="warning">
+
+WAL files and snapshots always serialize `DOUBLE` values as full 64-bit IEEE 754, so the durability format itself is resolution-independent.
+
+However, precision is baked in at write time: WAL and snapshot entries store the value that `GetProperty()` returns, which is already truncated to the active resolution. This has two consequences when the flag changes across a restart:
+
+- **Lowering the resolution** (e.g. 64 → 32): doubles recovered from WAL/snapshot are re-encoded into PropertyStore at the new lower precision, causing additional truncation.
+- **Raising the resolution** (e.g. 32 → 64): no further truncation occurs, but precision already lost in previous sessions cannot be recovered from WAL/snapshot alone.
+
+If exact round-trip fidelity is required, set the resolution before loading data and do not change it afterwards.
 
 </Callout>
 
