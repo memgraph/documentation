@@ -49,22 +49,25 @@ The result will contain the following fields:
 
 ## License information
 
-Running the following query will return certain information about the Memgraph 
-Enterprise License that was injected into the system.
+Running the following query will return information about the active Memgraph
+Enterprise license (the winning license selected from all configured sources).
 
 ```cypher
 SHOW LICENSE INFO;
 ```
 
-| Field             | Description                                         |
-|-------------------|-----------------------------------------------------|
-| organization_name | Organization name for the enterprise license.       |
-| license_key       | Encoded license key.                                |
-| is_valid          | Brief flag whether the license is currently valid.  |
-| license_type      | Enterprise / OEM                                    |
-| valid_until       | Date when the license expires.                      |
-| memory_limit      | Memory limit (in GiB).                              |
-| status            | Descriptive status of the license validity.         |
+| Field             | Description                                                                                          |
+|-------------------|------------------------------------------------------------------------------------------------------|
+| organization_name | Organization name for the enterprise license.                                                        |
+| license_key       | Encoded license key.                                                                                 |
+| is_valid          | Whether the license is currently valid. Uses the same validation logic as enterprise feature checks. |
+| license_type      | Enterprise / OEM                                                                                     |
+| valid_until       | Date when the license expires, or `FOREVER` for non-expiring licenses.                               |
+| memory_limit      | Memory limit (in GiB).                                                                               |
+| status            | Descriptive status of the license validity.                                                          |
+
+If no license has been provided, `is_valid` is `false` and `status` reads
+`"You have not provided any license!"`.
 
 
 
