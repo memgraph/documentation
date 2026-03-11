@@ -24,8 +24,31 @@ Whether you bought Memgraph Enterprise or requested a trial, you will receive a
 file with the values you need to set the `organization.name` and the
 `enterprise.license` configuration values to.
 
+## License sources and selection
+
+Memgraph accepts a license key from three sources and automatically selects the
+best one on startup or whenever the license settings change:
+
+| Source | How to provide | Priority |
+|--------|---------------|---------|
+| **CLI flags** | `--license-key` and `--organization-name` at startup | Highest (3) |
+| **Environment variables** | `MEMGRAPH_ENTERPRISE_LICENSE` and `MEMGRAPH_ORGANIZATION_NAME` | Medium (2) |
+| **Database settings** | `SET DATABASE SETTING` queries (persisted to disk) | Lowest (1) |
+
+**Winner selection:** Among all sources that provide a valid, non-expired key
+with a matching organization name, Memgraph picks the license with the furthest
+expiry date. A license with no expiry date (`valid_until = 0`, "forever") always
+beats any finite expiry. If two candidates expire at the same time, the
+higher-priority source wins.
+
+**Persistence:** The winning license is automatically written back to persistent
+storage so it remains active across restarts even if the CLI flags or environment
+variables are no longer passed.
+
+## Providing the license
+
 If you want to enable the Enterprise Edition on startup, [set the configuration
-flags](/configuration/configuration-settings#changing-configuration)  or
+flags](/configuration/configuration-settings#changing-configuration) or
 [environment
 variables](/database-management/configuration#environment-variables) to the
 correct values.
@@ -35,10 +58,17 @@ can also be adjusted [during
 runtime](/configuration/configuration-settings#during-runtime), or you can run
 the following queries to set the values:
 
-```
+```cypher
 SET DATABASE SETTING 'organization.name' TO 'Organization';
 SET DATABASE SETTING 'enterprise.license' TO 'License';
 ```
+
+Setting a license key via `SET DATABASE SETTING` is validated immediately:
+- A **malformed or undecodable** key is rejected with an error — the write does not go through.
+- An **already-expired** key is rejected with an error — the write does not go through.
+- An **organization name mismatch** is not checked at write time; it is caught
+  during the next revalidation and Memgraph will log a warning and fall back to
+  community mode if no other valid source is available.
 
 To check the set values run:
 
@@ -69,7 +99,10 @@ That means it is possible to analyze the existing data but new data can no
 longer be added until you upgrade or free storage by deleting some of the data.
 
 Upon upgrading the license by entering a new license key the `write` queries
-will be enabled.
+will be enabled. When multiple valid license keys are present (for example a CLI
+key and a key set via `SET DATABASE SETTING`), Memgraph automatically picks the
+one with the furthest expiry, so providing a longer-lived key from any source
+takes effect immediately.
 
 To check the used storage, run `SHOW STORAGE INFO;`.
 
