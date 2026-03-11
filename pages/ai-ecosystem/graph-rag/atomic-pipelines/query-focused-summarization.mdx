@@ -1,0 +1,74 @@
+---
+title: Query-Focused Summarization
+description: Learn how to generate targeted summaries from graph-based retrieval to maximize answer relevance in GraphRAG pipelines.
+---
+
+# Query-focused Summarization
+
+Query-focused summarization (QFS) is a text analysis process that generates a
+concise summary of documents specifically tailored to address a user's query or
+topic of interest. Unlike generic summarization that covers the overall main
+points, QFS filters, prioritizes, and compresses information relevant to the
+user's specific information needs.
+
+## Prerequisites
+
+- homogeneous graph
+- each node having the `text` property
+
+## How to do QFS?
+
+When working with a knowledge graph, you can create summaries based on its
+underlying communities. Keep in mind: community detection works best on
+homogeneous graphs, that is, graphs where nodes of the same type (with the same
+label) are connected by edges. This structure ensures that the detected
+communities are meaningful. Once your graph is structured this way, you can
+detect and assign communities using queries such as the following ([multiple
+community detection algorithms are
+possible](/advanced-algorithms/available-algorithms)):
+```Cypher
+CALL community_detection.get() YIELD node, community_id
+SET node.community_id = community_id;
+```
+
+After assigning community IDs, you can generate summaries for each community and
+create corresponding `Community` nodes.  These nodes are then connected to their
+community members using the Cypher query below:
+```Cypher
+WITH "You are summarizing a community (cluster)." +
+     " Write a concise summary in 2–4 paragraphs that:" +
+     " - Captures the main themes and recurring topics."
+     " - Describes the kind of work or concerns this cluster represents." +
+     " - Does not list individual entities; synthesize into a coherent narrative."
+     AS SUMMARY_TEMPLATE
+MATCH (n) WHERE n.community_id IS NOT NULL
+WITH n.community_id AS c_id, count(n) AS c_count, collect(n) AS c_members,
+     llm.complete(reduce(s=SUMMARY_TEMPLATE, m IN collect(n) | s + m.text "; ")) AS c_summary
+MERGE (community:Community {id: c_id, nodes_count: c_count})
+SET community.summary = c_summary
+WITH community, c_members
+UNWIND c_members AS c_member
+MERGE (c_member)-[:BELONGS_TO]->(community)
+RETURN community.id AS community_id, community.summary AS community_summary;
+```
+
+Once all the preprocessing is done, a typical query to perform query-focused
+summarization follows:
+```Cypher
+WITH "... the question ..." AS USER_QUESTION
+// 1. Identify relevant communities (thresholding)
+MATCH (c:Community) WHERE c.nodes_count > 5  // only use significant communities
+// 2. Map: Generate a partial answer for EACH community
+WITH USER_QUESTION, c,
+     llm.complete("How does the following community summary: " + c.summary +
+                  " relate to: " + USER_QUESTION) AS partial_answer
+  WHERE partial_answer IS NOT NULL AND partial_answer <> ""
+WITH USER_QUESTION, collect(partial_answer) AS map_results
+// 3. Reduce: Synthesize the final consolidated answer
+WITH "The following are partial answers from different thematic clusters of " +
+     " a dataset. Synthesize them into a single, cohesive response to the " +
+     "original query: " + USER_QUESTION +
+      "\n\nPartial Answers:\n" +
+      reduce(s = "", res IN map_results | s + "- " + res + "\n") AS reduce_prompt
+RETURN llm.complete(reduce_prompt) AS final_answer;
+```
