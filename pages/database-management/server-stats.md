@@ -40,6 +40,8 @@ The result will contain the following fields:
 | unreleased_delta_objects     | The current number of still allocated objects with the information about the changes that write transactions have made, called Delta objects. Refer to allocation and deallocation of Delta objects [on this page](/fundamentals/storage-memory-usage#in-memory-transactional-storage-mode-default).                        |
 | disk_usage                   | The amount of disk space used by the data directory (in B, KiB, MiB, GiB or TiB).                                                                                                             |
 | memory_tracked               | The amount of RAM allocated in the system and tracked by Memgraph (in B, KiB, MiB, GiB or TiB).<br/>For more info, check out [memory control](/fundamentals/storage-memory-usage).        |
+| graph_memory_tracked         | The portion of `memory_tracked` used by graph structures (vertices, edges, properties). |
+| vector_index_memory_tracked  | The portion of `memory_tracked` used by vector index embeddings. |
 | allocation_limit             | The current allocation limit set for this instance (in B, KiB, MiB, GiB or TiB).<br/>For more info, check out the [memory control](/fundamentals/storage-memory-usage#control-memory-usage).                       |
 | global_isolation_level       | The current `global` isolation level.<br/>For more info, check out [isolation levels](/fundamentals/transactions#isolation-levels).                                                       |
 | session_isolation_level      | The current `session` isolation level.                                                                                                                                                        |
