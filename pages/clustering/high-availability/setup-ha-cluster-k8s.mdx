@@ -586,6 +586,41 @@ Memgraph HA uses standard Kubernetes **startup**, **readiness**, and
 - **Coordinators**: probed on the **NuRaft server**
 - **Data instances**: probed on the **Bolt server**
 
+## Debugging
+
+There are different ways in which you can debug Memgraph's HA cluster in production. One way is to send us logs from all instances if you notice some issue. That's why we
+advise users to set the log level to `TRACE` if possible. Note however that running `TRACE` log level has some performance costs, especially when logging to stderr additionally
+to files. If the performance is your concern, first try to set `--also-log-to-stderr=false` since logging to files is cheaper. If you're still unhappy with the performance overhead
+of logging, use `--log-level=DEBUG` (higher log level will also be fine like `INFO`, `CRITICAL`...) and `--also-log-to-stderr=true`.
+
+If you notice your application is crashing, you will be able to collect core dumps by setting `storage.data.createCoreDumpsClaim` and `storage.coordinators.createCoreDumpsClaim`
+to `true`. That will trigger the creation of init container which will be run in privileged mode as root user to set-up all the necessary things on your nodes to be able to
+collect core dumps. You can then create the debug pod and attach PVC containing core dumps to that pod to be able to extract core dumps outside of the K8s nodes. The example
+of such a debug pod is the following YAML file:
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-coredump
+spec:
+  containers:
+  - name: debug
+    image: ubuntu:22.04
+    command: ["sleep", "infinity"]
+    volumeMounts:
+    - name: coredumps
+      mountPath: /var/core/memgraph
+  volumes:
+  - name: coredumps
+    persistentVolumeClaim:
+      claimName: memgraph-data-0-core-dumps-storage-memgraph-data-0-0
+  restartPolicy: Never
+```
+There is also a possibility of automatically uploading core dumps to S3. To do that, set `coreDumpUploader.enabled` to `true` and configure the S3 bucket,
+AWS region, and credentials secret in the `coreDumpUploader` section. Note that the `createCoreDumpsClaim` flag for the relevant role (data/coordinators)
+must also be set to `true`, as the uploader sidecar mounts the same PVC used for core dump storage. Core dumps are uploaded to
+`s3://<s3BucketName>/<s3Prefix>/<pod-hostname>/<core-dump-filename>`.
+
 
 ## Monitoring
 
@@ -598,8 +633,9 @@ The chart `kube-prometheus-stack` should be installed independently from HA
 chart with the following command:
 
 ```bash
-helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+helm install kube-prometheus-stack oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack \
   -f kube_prometheus_stack_values.yaml \
+  -f kube_prometheus_stack_memgraph_dashboard.yaml \
   --namespace monitoring \
   --create-namespace
 ```
@@ -607,6 +643,10 @@ helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
 `kube_prometheus_stack_values.yaml` is optional. A template is available in the
 upstream [chart’s
 repository]((https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml)).
+
+`kube_prometheus_stack_memgraph_dashboard.yaml` is also optional - it provides a generic dashboard which shows the metrics
+that Memgraph exports for both standalone and HA deployments. This dashboard file can be downloaded from 
+[here](https://github.com/memgraph/prometheus-exporter/blob/main/kube_prometheus_stack_memgraph_dashboard.yaml).
 
 If you install the `kube-prometheus-stack` in a **non-default namespace**, allow
 cross-namespace scraping. You can allow this by adding the following
@@ -778,13 +818,23 @@ and their default values.
 | `updateStrategy.type`                                      | Update strategy for StatefulSets. Possible values are `RollingUpdate` and `OnDelete`                         | `RollingUpdate`                |
 | `extraEnv.data`                                            | Env variables that users can define and are applied to data instances                                        | `[]`                           |
 | `extraEnv.coordinators`                                    | Env variables that users can define and are applied to coordinators                                          | `[]`                           |
-| `initContainers.data`                                      | Init containers that users can define that will be applied to data instances.                                | `[]`                           |
-| `initContainers.coordinators`                              | Init containers that users can define that will be applied to coordinators.                                  | `[]`                           |
 | `userContainers.data`                                      | Additional sidecar containers for data instance pods                                                         | `[]`                           |
 | `userContainers.coordinators`                              | Additional sidecar containers for coordinator pods                                                           | `[]`                           |
 | `tolerations.data`                                         | Tolerations for data instance pods                                                                           | `[]`                           |
 | `tolerations.coordinators`                                 | Tolerations for coordinator pods                                                                             | `[]`                           |
-
+| `initContainers.data`                                      | Init containers that users can define that will be applied to data instances.                                | `[]`                           | 
+| `initContainers.coordinators`                              | Init containers that users can define that will be applied to coordinators.                                  | `[]`                           | 
+| `coreDumpUploader.enabled`                                 | Enable the core dump S3 uploader sidecar. Requires `storage.<role>.createCoreDumpsClaim` to be `true`.       | `false`                        |
+| `coreDumpUploader.image.repository`                        | Docker image repository for the uploader sidecar                                                             | `amazon/aws-cli`               |
+| `coreDumpUploader.image.tag`                               | Docker image tag for the uploader sidecar                                                                    | `2.33.28`                      |
+| `coreDumpUploader.image.pullPolicy`                        | Image pull policy for the uploader sidecar                                                                   | `IfNotPresent`                 |
+| `coreDumpUploader.s3BucketName`                            | S3 bucket name where core dumps will be uploaded                                                             | `""`                           |
+| `coreDumpUploader.s3Prefix`                                | S3 key prefix (folder) for uploaded core dumps                                                               | `core-dumps`                   |
+| `coreDumpUploader.awsRegion`                               | AWS region of the S3 bucket                                                                                  | `us-east-1`                    |
+| `coreDumpUploader.pollIntervalSeconds`                     | How often (in seconds) the sidecar checks for new core dump files                                            | `30`                           |
+| `coreDumpUploader.secretName`                              | Name of the K8s Secret containing AWS credentials                                                            | `aws-s3-credentials`           |
+| `coreDumpUploader.accessKeySecretKey`                      | Key in the K8s Secret for `AWS_ACCESS_KEY_ID`                                                                | `AWS_ACCESS_KEY_ID`            |
+| `coreDumpUploader.secretAccessKeySecretKey`                | Key in the K8s Secret for `AWS_SECRET_ACCESS_KEY`                                                            | `AWS_SECRET_ACCESS_KEY`        |
 
 For the `data` and `coordinators` sections, each item in the list has the
 following parameters:
