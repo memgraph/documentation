@@ -1,0 +1,395 @@
+---
+title: Common query patterns
+description: A practical guide to common Cypher query patterns for Memgraph users, covering filtering, paths, aggregations, pattern matching, bulk operations and collections.
+---
+
+import { Callout } from 'nextra/components'
+import { Cards } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# Common query patterns
+
+This guide covers practical Cypher query patterns you'll use regularly when
+working with Memgraph. Each pattern is self-contained with a working example,
+so you can copy and adapt it to fit your own graph model.
+
+The examples below use a social-network graph with `Person` nodes,
+`FRIENDS_WITH` relationships, and additional node/relationship types introduced
+where needed. You can load sample data with:
+
+```cypher
+CREATE
+  (alice:Person {name: 'Alice', age: 30, city: 'London'}),
+  (bob:Person   {name: 'Bob',   age: 25, city: 'Paris'}),
+  (carol:Person {name: 'Carol', age: 35, city: 'London'}),
+  (dave:Person  {name: 'Dave',  age: 28, city: 'Berlin'}),
+  (eve:Person   {name: 'Eve',   age: 22, city: 'Paris'}),
+  (alice)-[:FRIENDS_WITH {since: 2020}]->(bob),
+  (alice)-[:FRIENDS_WITH {since: 2019}]->(carol),
+  (bob)-[:FRIENDS_WITH   {since: 2021}]->(dave),
+  (carol)-[:FRIENDS_WITH {since: 2022}]->(dave),
+  (dave)-[:FRIENDS_WITH  {since: 2023}]->(eve);
+```
+
+---
+
+## Finding and filtering data
+
+### Find nodes by multiple properties
+
+Use `WHERE` to combine multiple property conditions when a single inline filter
+isn't enough.
+
+```cypher
+MATCH (p:Person)
+WHERE p.age > 25 AND p.city = 'London'
+RETURN p.name, p.age, p.city;
+```
+
+This query returns every `Person` older than 25 who lives in London.
+
+<Callout type="info">
+Prefer label-qualified `MATCH` patterns (`MATCH (p:Person)`) over bare
+`MATCH (p)`. Labels let the query planner use index scans instead of full
+graph scans, which is significantly faster on large datasets.
+</Callout>
+
+### Find nodes by a list of values
+
+Use the `IN` operator when you need to match one of several possible values.
+
+```cypher
+MATCH (p:Person)
+WHERE p.city IN ['London', 'Paris']
+RETURN p.name, p.city;
+```
+
+This returns all people who live in either London or Paris.
+
+### Filter by relationship properties
+
+Move relationship property filters into `WHERE` for clarity when the condition
+is non-trivial.
+
+```cypher
+MATCH (a:Person)-[r:FRIENDS_WITH]->(b:Person)
+WHERE r.since < 2021
+RETURN a.name AS person, b.name AS friend, r.since AS friendsSince;
+```
+
+This returns friendship pairs that were established before 2021.
+
+### Find nodes that do NOT have a certain relationship
+
+Use `NOT EXISTS` (or the older `NOT (pattern)` form) to detect the absence of a
+relationship.
+
+```cypher
+MATCH (p:Person)
+WHERE NOT EXISTS { (p)-[:FRIENDS_WITH]->() }
+RETURN p.name AS isolatedPerson;
+```
+
+This returns people who have no outgoing `FRIENDS_WITH` relationships.
+
+<Callout type="info">
+The `EXISTS { … }` subquery form is the preferred syntax in Memgraph. It is
+more readable and composes cleanly with other `WHERE` conditions. See
+[expressions](/querying/expressions) for details.
+</Callout>
+
+---
+
+## Working with paths
+
+### Find the shortest path between two nodes
+
+`shortestPath()` returns the first path found between two nodes.
+
+```cypher
+MATCH (start:Person {name: 'Alice'}),
+      (end:Person   {name: 'Eve'})
+MATCH path = shortestPath((start)-[:FRIENDS_WITH*]-(end))
+RETURN path, length(path) AS hops;
+```
+
+This finds the shortest chain of `FRIENDS_WITH` relationships that connects
+Alice to Eve, regardless of direction.
+
+<Callout type="info">
+`shortestPath()` uses a BFS algorithm and stops at the first path it finds.
+For weighted shortest paths, use the
+[Dijkstra or Bellman-Ford procedures](/advanced-algorithms/available-algorithms/weighted_shortest_path)
+from the MAGE library.
+</Callout>
+
+### Find all shortest paths between two nodes
+
+`allShortestPaths()` returns every path that shares the minimum length.
+
+```cypher
+MATCH (start:Person {name: 'Alice'}),
+      (end:Person   {name: 'Dave'})
+MATCH path = allShortestPaths((start)-[:FRIENDS_WITH*]-(end))
+RETURN path, length(path) AS hops;
+```
+
+### Traverse a variable-length path
+
+Use `[r*min..max]` syntax to walk a path whose length falls within a range.
+
+```cypher
+MATCH (p:Person {name: 'Alice'})-[r:FRIENDS_WITH*1..3]->(friend:Person)
+RETURN DISTINCT friend.name AS reachableFriend, length(r) AS distance;
+```
+
+This returns people reachable from Alice within at most three hops.
+
+<Callout type="warning">
+Omitting the upper bound (`[r*]`) on large graphs can cause very long query
+times. Always set a reasonable maximum depth for variable-length traversals.
+</Callout>
+
+### Collect all nodes along a path
+
+Use `nodes()` and `relationships()` to decompose a path variable.
+
+```cypher
+MATCH path = (a:Person {name: 'Alice'})-[:FRIENDS_WITH*]->(b:Person {name: 'Eve'})
+RETURN [n IN nodes(path) | n.name] AS pathNames,
+       length(path) AS hops;
+```
+
+---
+
+## Aggregation patterns
+
+### Count the number of relationships per node
+
+```cypher
+MATCH (p:Person)
+RETURN p.name,
+       count { (p)-[:FRIENDS_WITH]->() } AS outgoing,
+       count { (p)<-[:FRIENDS_WITH]-() } AS incoming;
+```
+
+This reports how many friends each person has added (`outgoing`) and how many
+friends they have been added by (`incoming`).
+
+### Find the top N most-connected nodes
+
+```cypher
+MATCH (p:Person)
+RETURN p.name,
+       count { (p)--() } AS totalConnections
+ORDER BY totalConnections DESC
+LIMIT 10;
+```
+
+<Callout type="info">
+Adding a label (`MATCH (p:Person)`) restricts the scan to a specific node type.
+Without a label the planner must examine every node in the graph.
+</Callout>
+
+### Group and aggregate by a property
+
+```cypher
+MATCH (p:Person)
+RETURN p.city        AS city,
+       count(p)      AS residents,
+       avg(p.age)    AS averageAge,
+       min(p.age)    AS youngest,
+       max(p.age)    AS oldest
+ORDER BY residents DESC;
+```
+
+This produces a summary row for each city, showing the number of residents and
+age statistics.
+
+### Count distinct values
+
+```cypher
+MATCH (p:Person)-[:FRIENDS_WITH]->(friend:Person)
+RETURN p.name AS person,
+       count(DISTINCT friend.city) AS citiesRepresented;
+```
+
+This shows how many distinct cities each person's direct friends live in.
+
+---
+
+## Pattern matching
+
+### Detect triangles (mutual friend groups)
+
+A triangle exists when three nodes are each directly connected to the other two.
+
+```cypher
+MATCH (a:Person)-[:FRIENDS_WITH]->(b:Person)-[:FRIENDS_WITH]->(c:Person),
+      (c)-[:FRIENDS_WITH]->(a)
+WHERE a.name < b.name AND b.name < c.name
+RETURN a.name AS personA, b.name AS personB, c.name AS personC;
+```
+
+The `WHERE` clause with string comparisons prevents each triangle from being
+returned multiple times (one for each of the three possible starting nodes).
+
+### Find mutual connections
+
+Identify nodes that two given nodes both have relationships to.
+
+```cypher
+MATCH (alice:Person {name: 'Alice'})-[:FRIENDS_WITH]->(mutual:Person)
+      <-[:FRIENDS_WITH]-(bob:Person {name: 'Bob'})
+RETURN mutual.name AS mutualFriend;
+```
+
+### Friends-of-friends recommendation
+
+Suggest people that a user is not yet connected to but shares friends with.
+
+```cypher
+MATCH (me:Person {name: 'Alice'})-[:FRIENDS_WITH]->(friend:Person)
+      -[:FRIENDS_WITH]->(candidate:Person)
+WHERE NOT (me)-[:FRIENDS_WITH]->(candidate)
+  AND candidate <> me
+RETURN DISTINCT candidate.name AS suggestedFriend,
+                count(friend)  AS commonFriends
+ORDER BY commonFriends DESC;
+```
+
+This query:
+- Follows Alice's friends two hops out
+- Excludes people Alice already follows
+- Ranks suggestions by the number of common friends
+
+### Find nodes with no connections
+
+```cypher
+MATCH (p:Person)
+WHERE NOT (p)--()
+RETURN p.name AS isolatedNode;
+```
+
+---
+
+## Bulk operations
+
+### Update a property on multiple nodes
+
+```cypher
+MATCH (p:Person)
+WHERE p.city = 'London'
+SET p.timezone = 'Europe/London'
+RETURN p.name, p.timezone;
+```
+
+### Copy a property from a related node
+
+```cypher
+MATCH (p:Person)-[:FRIENDS_WITH]->(friend:Person)
+WHERE friend.city IS NOT NULL AND p.city IS NULL
+SET p.city = friend.city
+RETURN p.name AS updated, p.city AS inheritedCity;
+```
+
+<Callout type="warning">
+Bulk `SET` operations update every matched node in a single transaction. On
+very large result sets, consider using `CALL { … } IN TRANSACTIONS` to batch
+the work and avoid memory pressure.
+</Callout>
+
+### Delete nodes matching a pattern
+
+```cypher
+MATCH (p:Person)
+WHERE p.age < 18
+DETACH DELETE p;
+```
+
+`DETACH DELETE` removes the node and all its relationships. Use plain `DELETE`
+only when you are certain the node has no relationships.
+
+### Remove a property from multiple nodes
+
+```cypher
+MATCH (p:Person)
+WHERE p.city IS NOT NULL
+REMOVE p.city
+RETURN p.name;
+```
+
+---
+
+## Working with collections
+
+### Collect related nodes into a list
+
+```cypher
+MATCH (p:Person)-[:FRIENDS_WITH]->(friend:Person)
+RETURN p.name AS person,
+       collect(friend.name) AS friends;
+```
+
+`collect()` aggregates the values into a list, giving one result row per
+person.
+
+### Unwind a list to process each element
+
+```cypher
+WITH ['Alice', 'Bob', 'Carol'] AS names
+UNWIND names AS name
+MATCH (p:Person {name: name})
+RETURN p.name, p.age;
+```
+
+`UNWIND` turns the list into individual rows, making it easy to look up or
+create multiple nodes in a single query.
+
+<Callout type="info">
+`UNWIND` is especially useful for importing data from application code. Pass a
+list parameter and unwind it rather than issuing one query per item.
+</Callout>
+
+### Filter a collected list
+
+Use a list comprehension to transform or filter the items after collecting them.
+
+```cypher
+MATCH (p:Person)-[:FRIENDS_WITH]->(friend:Person)
+WITH p, collect(friend) AS allFriends
+RETURN p.name AS person,
+       [f IN allFriends WHERE f.age > 25 | f.name] AS olderFriends;
+```
+
+### Flatten nested lists
+
+```cypher
+WITH [[1, 2], [3, 4], [5]] AS nested
+RETURN reduce(flat = [], sublist IN nested | flat + sublist) AS flatList;
+```
+
+---
+
+## Next steps
+
+<Cards>
+  <Cards.Card
+    title="Read and modify data"
+    href="/querying/read-and-modify-data"
+  />
+  <Cards.Card
+    title="Querying best practices"
+    href="/querying/best-practices"
+  />
+  <Cards.Card
+    title="Clauses reference"
+    href="/querying/clauses"
+  />
+  <Cards.Card
+    title="Advanced algorithms (MAGE)"
+    href="/advanced-algorithms"
+  />
+</Cards>
+
+<CommunityLinks/>

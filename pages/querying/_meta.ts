@@ -3,6 +3,7 @@ export default {
   "differences-in-cypher-implementations": "Differences in Cypher implementations",
   "create-graph-objects": "Create graph objects",
   "read-and-modify-data": "Read and modify data",
+  "common-query-patterns": "Common query patterns",
   "clauses": "Clauses",
   "functions": "Functions",
   "expressions": "Expressions",
