@@ -35,7 +35,10 @@ Run this check before every release to find memgraph PRs that are missing from t
 3. **Changelog check**
    - Open `pages/release-notes.mdx` and locate the section for the new release (e.g. `### Memgraph v3.9.0`).
    - For each PR in **Release Notes Required**, confirm it appears in that section (e.g. as `[#NNNN](https://github.com/memgraph/memgraph/pull/NNNN)` or equivalent).
-   - List any **missing from changelog**: PRs in Release Notes Required with no link in the release section.
+   - Optionally cross-check the memgraph milestone: merged PRs with user-visible work (e.g. **Docs needed**, **Docs - changelog only**) that are absent from that release section should also be treated as **missing from changelog**, even if they were never added to **Release Notes Required** on the docs PR.
+   - List any **missing from changelog** with PR numbers (and titles if known).
+
+   **If anything is missing from the changelog:** follow **`skills/write-changelog-item/SKILL.md`** end-to-end for each gap. That skill defines how to write the item (benefit-focused bullet, markdown, PR link, breaking vs non-breaking) and requires updating `pages/release-notes.mdx` plus keeping the open documentation release PR description aligned (**Release Notes Required**, and **Memgraph PRs Docs Needed** when a doc PR exists). Do not use a different format or skip the release PR body update.
 
 4. **Docs page check**
    - For each memgraph PR listed under **Memgraph PRs Docs Needed**, confirm the description links to a documentation PR (e.g. `→ #1555`).
@@ -68,7 +71,7 @@ Run this check before every release to find memgraph PRs that are missing from t
    - After user approval, apply the edits directly.
 
 7. **Report**
-   - **Not in changelog:** list of memgraph PR numbers (and titles if helpful) that are in Release Notes Required but not in `release-notes.mdx` for this release.
+   - **Not in changelog:** list memgraph PR numbers (and titles if helpful). For each, state that remediation is **`write_changelog_item`** per `skills/write-changelog-item/SKILL.md` (unless the user asked for report-only). Include PRs found only via milestone cross-check, not only those on **Release Notes Required**.
    - **Docs page missing:** list of memgraph PR/issue numbers with "Docs needed" and no doc PR linked in the release docs PR; briefly note what's missing (e.g. "TLS .pem-only behavior").
    - **Spelling/grammar fixes:** list each fix with file name and a short before → after summary.
    - **Cross-link improvements:** list each proposed (or applied) edit with file, location, what was added, and why.
@@ -76,6 +79,7 @@ Run this check before every release to find memgraph PRs that are missing from t
 
 ## References
 
+- **Missing changelog items:** `skills/write-changelog-item/SKILL.md` — authoritative procedure to add entries and sync the docs release PR.
 - Memgraph commits (since last release): `https://github.com/memgraph/memgraph/commits/master/`
 - Memgraph milestone (e.g. 3.9): `https://github.com/memgraph/memgraph/milestone/43?closed=1`
 - Release notes file: `pages/release-notes.mdx`
@@ -84,5 +88,5 @@ Run this check before every release to find memgraph PRs that are missing from t
 ## Notes
 
 - PRs labeled **"Docs unnecessary"** (e.g. CI, tests, internal tooling) are excluded; no changelog or docs page required.
-- If a memgraph PR was closed and its work continued in another PR (e.g. #3788 → #3795), treat the one that actually merged; if the closed PR had "Docs needed" and the follow-up is "Docs unnecessary", still report the gap if the behavior is not documented.
+- If work landed in a different PR than originally planned, the changelog should reference the **merged** PR that shipped the behavior; if user-visible behavior still has no line in `release-notes.mdx`, treat it as a gap and use **write_changelog_item**.
 - The grammar check scope is the diff against `main` (or the base branch). Existing text that was not touched in this release is out of scope.
