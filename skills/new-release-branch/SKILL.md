@@ -146,7 +146,20 @@ Milestones
 Replace `<milestone_url>` with the actual URL provided by the user.
 Keep the `{{...}}` placeholders as-is — they are filled in manually later.
 
-## Step 6 — Report back
+## Step 6 — Update the milestone description
+
+Add a `DOCS ->` link back to the documentation PR in the GitHub milestone
+description. Extract the milestone number from the milestone URL
+(e.g. `49` from `https://github.com/memgraph/memgraph/milestone/49`) and the
+PR number from the PR URL created in Step 5.
+
+```bash
+gh api repos/memgraph/memgraph/milestones/<milestone_number> \
+  --method PATCH \
+  -f description='DOCS -> https://github.com/memgraph/documentation/pull/<pr_number>'
+```
+
+## Step 7 — Report back
 
 Print the PR URL and remind the user to:
 - Fill in the PR/author placeholders in the PR description.
