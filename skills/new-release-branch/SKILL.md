@@ -109,7 +109,7 @@ git push -u origin <branch-name>
 Use `gh pr create`. The title should be:
 
 ```
-Release notes for Memgraph <new_version>
+Memgraph <new_version>
 ```
 
 Use this exact body template (fill in the placeholders):
@@ -119,25 +119,28 @@ Make sure to do:
 * [ ] update sitemap
 * [ ] update direct download links
 
-### Memgraph PRs Docs Needed <milestone_url>
+Milestones
+* Memgraph -> <milestone_url>
+
+### Memgraph PRs Docs Needed
 
 #### memgraph
 
-- [x] {{memgraph_pr_link}} -> {{documentation_pr_link}} {{@author}}
+- [ ] {{memgraph_pr_link}} -> {{documentation_pr_link}} {{@author}}
 
 #### helm-charts
 
-- [x] {{helm-charts_pr_link}} -> {{documentation_pr_link}} {{@author}}
+- [ ] {{helm-charts_pr_link}} -> {{documentation_pr_link}} {{@author}}
 
 #### prometheus-exporter
 
-- [x] {{prometheus-exporter_pr_link}} -> {{documentation_pr_link}} {{@author}}
+- [ ] {{prometheus-exporter_pr_link}} -> {{documentation_pr_link}} {{@author}}
 
 ### Release Notes Required
 
-#### memgraph <milestone_url>
+#### memgraph
 
-- [x] {{memgraph_pr_link}} {{@author}}
+- [ ] {{memgraph_pr_link}} {{@author}}
 ~~~
 
 Replace `<milestone_url>` with the actual URL provided by the user.
