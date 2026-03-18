@@ -38,11 +38,25 @@ To ensure compatibility and stability, we urge you to **recompile your modules
 with each Memgraph update**. While an old build might still work, skipping
 recompilation could lead to unexpected crashes — better to be safe than
 troubleshoot in production.
+
+For step-by-step instructions on upgrading standalone instances or
+high-availability clusters, see the [Upgrades](/database-management/upgrades)
+guide.
 </Callout>
 
 ## 🚀 Latest release
 
 ### Memgraph v3.9.0
+
+{<h4 className="custom-header">⚠️ Breaking changes</h4>}
+
+- HA coordinator data directories from previous versions contain corrupted
+  cluster configuration log entries that cannot be recovered. When upgrading to
+  3.9, all coordinator data directories must be cleaned and coordinators
+  restarted fresh; run setup queries again on the new coordinator leader. Data
+  instances are not affected. See the [migration
+  guide](/clustering/high-availability/migrating-to-v3-9-ha).
+  [#3900](https://github.com/memgraph/memgraph/pull/3900)
 
 {<h4 className="custom-header">✨ New features</h4>}
 
@@ -223,6 +237,50 @@ troubleshoot in production.
   use schema assertions and schema-based workflows (such as backup and restore)
   on graphs that store temporal data with time zones.
   [#3874](https://github.com/memgraph/memgraph/pull/3874)
+- Fixed a bug where HA coordinator Raft cluster configuration log entries were
+  not persisted correctly, causing coordinators to crash-loop on restart if
+  uncompacted configuration entries existed on disk — most commonly triggered
+  when a newly added coordinator restarts before a Raft snapshot compacts those
+  entries. Users running HA clusters who experience a coordinator crash-loop
+  after adding a new coordinator should upgrade to this version; all
+  coordinator data directories should be wiped before restarting and setup
+  queries should be run again on the new coordinator leader.
+  [#3900](https://github.com/memgraph/memgraph/pull/3900)
+- Fixed a crash in the `embeddings` query module when multiple Bolt sessions
+  called `embeddings.text()` or `embeddings.node_sentence()` in parallel. Model
+  initialization is now thread-safe with a global cache using double-checked
+  locking, preventing race conditions and eliminating redundant model
+  instantiation per request.
+  [#3914](https://github.com/memgraph/memgraph/pull/3914)
+- Python module cleanup during shutdown no longer crashes the process;
+  previously, filesystem operations that failed while removing `__pycache__`
+  directories would throw exceptions inside a destructor, triggering
+  `std::terminate` and an abrupt abort — now those operations use non-throwing
+  error-code overloads and log warnings instead, so shutdown completes
+  gracefully even when cached files have already been removed.
+  [#3908](https://github.com/memgraph/memgraph/pull/3908)
+- Fixed a crash that could occur when a coordinator's internal Raft consensus
+  thread encountered an error during startup or operation — the process would
+  terminate with a segmentation fault instead of exiting cleanly. This affected
+  HA deployments where a coordinator node hit an unexpected state in its
+  background commit path. No user action is required; the fix ensures the
+  coordinator process exits immediately and cleanly without triggering a
+  cascading failure in global cleanup.
+  [#3904](https://github.com/memgraph/memgraph/pull/3904)
+- Fixed a race condition during graceful shutdown (SIGTERM) of
+  high-availability data instances where the internal management RPC server
+  could process incoming coordinator health-check requests after the
+  replication state had already been destroyed, resulting in a crash. The
+  shutdown sequence now correctly stops the management server before tearing
+  down replication state, so users running HA clusters should no longer observe
+  unexpected crashes or error logs when stopping data instances with SIGTERM.
+  No configuration changes or user action is required.
+  [#3903](https://github.com/memgraph/memgraph/pull/3903)
+- Fixed a bug in vector index garbage collection where the `equal_range`
+  iterator incorrectly yielded tombstone (deleted) entries as live matches,
+  causing double-frees that corrupted size accounting and led to crashes. Users
+  running workloads with frequent deletions on vector indexes were at risk of
+  hitting this crash. [#3899](https://github.com/memgraph/memgraph/pull/3899)
 
 ### Lab v3.9.0
 
