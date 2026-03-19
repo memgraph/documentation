@@ -53,6 +53,8 @@ Run this check before every release to find memgraph PRs that are missing from t
      - **Missing articles** ("creation of init container" → "creation of **an** init container").
      - **Wrong word forms** ("set-up" used as a verb → "set up"; "additionally to" → "in addition to").
      - **Stray punctuation** (accidental periods, double spaces in non-trailing positions).
+     - **Capitalization** - if the text is dealing with high availability and mentioning MAIN and REPLICA instances, use capital letters. When using in plural, write MAINs and REPLICAs.
+     
    - Do **not** rewrite for style or restructure paragraphs. Only fix clear errors: misspellings, missing/wrong articles, broken grammar, and wrong word forms.
    - Apply fixes directly, then list what was changed in the report.
 
