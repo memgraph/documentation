@@ -139,11 +139,16 @@ REGISTER INSTANCE instanceName ( AS ASYNC | AS STRICT_SYNC ) ? WITH CONFIG {
 
 {<h4 className="custom-header"> Behavior </h4>}
 
+- The operation is first committed to the Raft log and acknowledged by a
+  majority of coordinators.
 - Coordinator connects via `management_server` to verify liveness.
 - Coordinator begins periodic health checks.
 - Instance is automatically demoted to REPLICA.
 - Replication server is started on the data instance.
-- Operation is persisted in Raft.
+- If RPCs to the data instance fail (e.g., due to a transient network issue),
+  the registration still succeeds. The [reconciliation
+  loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works)
+  automatically retries the RPCs.
 
 {<h4 className="custom-header"> Replication mode rules </h4>}
 
@@ -186,7 +191,10 @@ UNREGISTER INSTANCE instanceName;
 
 - Do **not** unregister the MAIN instance; this may corrupt cluster state.
 - A healthy MAIN must exist during the operation.
-- The instance is also removed from MAIN’s replica set.
+- The instance is removed from the Raft state first. If the RPC to unregister
+  the replica from MAIN fails, the [reconciliation
+  loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works)
+  automatically retries the operation.
 
 {<h4 className="custom-header"> Example </h4>}
 
@@ -207,13 +215,17 @@ SET INSTANCE instanceName TO MAIN;
 
 {<h4 className="custom-header"> Behavior </h4>}
 
+- The promotion is first committed to the Raft log and acknowledged by a
+  majority of coordinators.
 - All other registered instances become replicas of the new MAIN.
-- Written to Raft log.
+- RPCs (`PromoteToMainRpc`, `SwapAndUpdateUUID`) are sent to data instances on
+  a best-effort basis. If they fail, the [reconciliation
+  loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works)
+  automatically retries them.
 
 {<h4 className="custom-header"> Implications </h4>}
 
 - Fails if a MAIN already exists.
-- Fails if any instance is unavailable.
 
 {<h4 className="custom-header"> Example </h4>}
 
@@ -232,8 +244,14 @@ DEMOTE INSTANCE instanceName;
 
 {<h4 className="custom-header"> Behavior </h4>}
 
+- The role change is first committed to the Raft log and acknowledged by a
+  majority of coordinators.
 - MAIN becomes REPLICA.
-- Written to Raft log.
+- The `DemoteMainToReplicaRpc` is sent on a best-effort basis. If it fails, the
+  [reconciliation
+  loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works)
+  automatically retries it.
+- Returns an error if the instance is already a REPLICA.
 
 {<h4 className="custom-header"> Implications </h4>}
 
@@ -305,6 +323,14 @@ SHOW REPLICATION LAG;
 
 - Lag values survive restarts (stored in snapshots + WAL).
 - Useful during manual failover to evaluate risk of data loss.
+
+
+## Error handling
+
+If a Raft log commit fails for any cluster operation (register, unregister,
+promote, demote, add coordinator), the error message will indicate:
+
+> Writing to Raft log failed. Please retry the operation.
 
 
 ## Troubleshooting commands
