@@ -21,6 +21,7 @@ export default {
   "elasticsearch_synchronization": "elasticsearch_synchronization",
   "embeddings": "embeddings",
   "export_util": "export_util",
+  "gnn": "gnn",
   "gnn_link_prediction": "gnn_link_prediction",
   "gnn_node_classification": "gnn_node_classification",
   "graph_analyzer": "graph_analyzer",
