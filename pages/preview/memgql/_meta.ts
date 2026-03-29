@@ -3,5 +3,6 @@ export default {
   "features": "Features",
   "connect": "Connect",
   "config": "Configuration",
+  "changelog": "Changelog",
   "licensing": "Licensing",
 }
