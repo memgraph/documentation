@@ -254,6 +254,7 @@ from outside the cluster. Our HA supports out of the box following K8s resources
 - **NodePort** - exposes ports on each node (requires public node IPs).
 - **LoadBalancer** - one LoadBalancer per instance (highest cost).
 - **CommonLoadBalancer (coordinators only)** - single LB for all coordinators.
+- **Gateway API** - uses Kubernetes Gateway API resources (Gateway + TCPRoute). Configured under `externalAccessConfig.gateway`.
 
 For coordinators, there is an additional option of using `CommonLoadBalancer`.
 In this scenario, there is one load balancer sitting in front of coordinators.
@@ -266,9 +267,8 @@ The default Bolt port is opened on 7687 but you can change it by setting `ports.
 For more detailed IngressNginx setup, see [Use Memgraph HA chart with
 IngressNginx](#use-memgraph-ha-chart-with-ingressnginx).
 
-Note however that Ingress Nginx is getting retired and one of alternatives is using resources like [TCPRoute/TLSRoute](https://doc.traefik.io/traefik/reference/routing-configuration/kubernetes/gateway-api/#tcp) with K8s
-controllers like Envoy Gateway, Istio, Cilium, Traefik, Kong... For the detailed example on how to set-up 
-Envoy Gateway controller with Memgraph HA cluster, see [Use Memgraph HA chart with Envoy Gateway](#use-memgraph-ha-chart-with-envoy-gateway).
+Note however that Ingress Nginx is getting retired and one of the alternatives is using the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) with
+controllers like Envoy Gateway, Istio, Cilium, Traefik, or Kong. The HA chart has native Gateway API support — see [Use Memgraph HA chart with Gateway API](#use-memgraph-ha-chart-with-gateway-api).
 
 By default, the chart does **not** expose any external network services.
 
@@ -372,159 +372,136 @@ Refer to the Memgraph HA [User API docs](/clustering/high-availability#user-api)
 for the full set of commands and usage patterns.
 
 
-### Use Memgraph HA chart with Envoy Gateway
+### Use Memgraph HA chart with Gateway API
 
-Before configuring routes, a Gateway API controller must be installed. This guide demonstrates using Envoy Gateway.
+The Memgraph HA Helm chart has native support for the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/). When enabled, the chart automatically creates TCPRoute resources for each data and coordinator instance. You can either let the chart create its own Gateway or attach routes to a pre-existing one.
+
+<Callout type="info">
+Gateway API is orthogonal to the `serviceType` external access options (IngressNginx, NodePort, LoadBalancer). The routes point at internal ClusterIP services that always exist, so you can use Gateway API alongside or instead of other external access methods.
+</Callout>
+
+#### Prerequisites
+
+Before enabling Gateway API in the chart, you need:
+
+1. **A Gateway API controller** installed in your cluster. Examples include [Envoy Gateway](https://gateway.envoyproxy.io/), [Istio](https://istio.io/), [Cilium](https://cilium.io/), [Traefik](https://traefik.io/), and [Kong](https://konghq.com/). This guide uses Envoy Gateway as an example:
+
+   ```bash
+   helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.4 -n envoy-gateway-system --create-namespace
+   ```
+
+2. **A GatewayClass resource** that references your controller. A GatewayClass is a cluster-scoped resource that defines which controller manages Gateways — each Gateway references a GatewayClass by name. The Helm chart does **not** create a GatewayClass; you must create one yourself or use one provided by your controller installation. For Envoy Gateway:
+
+   ```yaml
+   apiVersion: gateway.networking.k8s.io/v1
+   kind: GatewayClass
+   metadata:
+     name: eg
+   spec:
+     controllerName: gateway.envoyproxy.io/gatewayclass-controller
+   ```
+
+<Callout type="warning">
+You must ensure the GatewayClass exists before enabling the gateway feature in the chart. If you create your own Gateway (Option 1 below), the chart requires `gatewayClassName` to reference an existing GatewayClass, and will fail with an error if it is not set.
+</Callout>
+
+#### Option 1: Chart-managed Gateway
+
+When you want the chart to create its own Gateway along with TCPRoute resources, set `externalAccessConfig.gateway.enabled` to `true` and provide the `gatewayClassName`:
+
+```yaml
+externalAccessConfig:
+  gateway:
+    enabled: true
+    gatewayClassName: "eg"
+```
+
+The chart will create:
+- A **Gateway** (`gateway.networking.k8s.io/v1`) with TCP listeners auto-generated for each data and coordinator instance.
+- A **TCPRoute** (`gateway.networking.k8s.io/v1alpha2`) per instance, routing traffic from the Gateway listener to the instance's Bolt port.
+
+Data instance ports are assigned as `dataPortBase + array index` (default: 9000, 9001, ...) and coordinator ports as `coordinatorPortBase + coordinator id` (default: 9011, 9012, 9013). You can customize the base ports:
+
+```yaml
+externalAccessConfig:
+  gateway:
+    enabled: true
+    gatewayClassName: "eg"
+    dataPortBase: 9000
+    coordinatorPortBase: 9010
+```
+
+You can also set annotations and labels on the Gateway resource:
+
+```yaml
+externalAccessConfig:
+  gateway:
+    enabled: true
+    gatewayClassName: "eg"
+    annotations:
+      example.io/owner: "memgraph"
+    labels:
+      app: memgraph-ha
+```
+
+To install with a chart-managed Gateway:
 
 ```bash
-helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.4 -n envoy-gateway-system --create-namespace
+helm install memgraph-ha memgraph/memgraph-high-availability \
+  --set env.MEMGRAPH_ENTERPRISE_LICENSE=<license> \
+  --set env.MEMGRAPH_ORGANIZATION_NAME=<organization> \
+  --set externalAccessConfig.gateway.enabled=true \
+  --set externalAccessConfig.gateway.gatewayClassName=eg
 ```
-Next, we will create a `GatewayClass`.
+
+#### Option 2: Existing (external) Gateway
+
+When you already have a Gateway resource in your cluster (for example, a shared Gateway serving multiple services including Memgraph Lab), you can have the chart create only TCPRoute resources that attach to it:
 
 ```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: GatewayClass
-metadata:
-  name: eg
-spec:
-  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+externalAccessConfig:
+  gateway:
+    enabled: true
+    existingGatewayName: "memgraph-gateway"
 ```
 
-For this example we chose to create one `Gateway` for data instances and one for coordinator instances but you can choose
-a different approach and use a single `Gateway` for both types of instances.
+In this mode, the chart skips Gateway creation and only creates TCPRoute resources. The `gatewayClassName` is not required.
 
-Data instances' gateway:
+If the existing Gateway is in a different namespace, specify it:
 
 ```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: memgraph-data-gateway
-  namespace: default
-spec:
-  gatewayClassName: eg
-  listeners:
-    - name: data-0
-      protocol: TCP
-      port: 9000
-      allowedRoutes:
-        namespaces:
-          from: Same
-    - name: data-1
-      protocol: TCP
-      port: 9001
-      allowedRoutes:
-        namespaces:
-          from: Same
-
----
-apiVersion: gateway.networking.k8s.io/v1alpha2
-kind: TCPRoute
-metadata:
-  name: data-0-route
-  namespace: default
-spec:
-  parentRefs:
-    - name: memgraph-data-gateway
-      sectionName: data-0
-  rules:
-    - backendRefs:
-        - name: memgraph-data-0
-          port: 7687
-
----
-apiVersion: gateway.networking.k8s.io/v1alpha2
-kind: TCPRoute
-metadata:
-  name: data-1-route
-  namespace: default
-spec:
-  parentRefs:
-    - name: memgraph-data-gateway
-      sectionName: data-1
-  rules:
-    - backendRefs:
-        - name: memgraph-data-1
-          port: 7687
+externalAccessConfig:
+  gateway:
+    enabled: true
+    existingGatewayName: "memgraph-gateway"
+    existingGatewayNamespace: "gateway-system"
 ```
 
-Coordinator instances' gateway:
+To install with an existing Gateway:
 
-```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: memgraph-coordinators-gateway
-  namespace: default
-spec:
-  gatewayClassName: eg
-  listeners:
-    - name: coordinator-1
-      protocol: TCP
-      port: 9011
-      allowedRoutes:
-        namespaces:
-          from: Same
-    - name: coordinator-2
-      protocol: TCP
-      port: 9012
-      allowedRoutes:
-        namespaces:
-          from: Same
-    - name: coordinator-3
-      protocol: TCP
-      port: 9013
-      allowedRoutes:
-        namespaces:
-          from: Same
-
----
-apiVersion: gateway.networking.k8s.io/v1alpha2
-kind: TCPRoute
-metadata:
-  name: coordinator-1-route
-  namespace: default
-spec:
-  parentRefs:
-    - name: memgraph-coordinators-gateway
-      sectionName: coordinator-1
-  rules:
-    - backendRefs:
-        - name: memgraph-coordinator-1
-          port: 7687
-
----
-apiVersion: gateway.networking.k8s.io/v1alpha2
-kind: TCPRoute
-metadata:
-  name: coordinator-2-route
-  namespace: default
-spec:
-  parentRefs:
-    - name: memgraph-coordinators-gateway
-      sectionName: coordinator-2
-  rules:
-    - backendRefs:
-        - name: memgraph-coordinator-2
-          port: 7687
-
----
-apiVersion: gateway.networking.k8s.io/v1alpha2
-kind: TCPRoute
-metadata:
-  name: coordinator-3-route
-  namespace: default
-spec:
-  parentRefs:
-    - name: memgraph-coordinators-gateway
-      sectionName: coordinator-3
-  rules:
-    - backendRefs:
-        - name: memgraph-coordinator-3
-          port: 7687
+```bash
+helm install memgraph-ha memgraph/memgraph-high-availability \
+  --set env.MEMGRAPH_ENTERPRISE_LICENSE=<license> \
+  --set env.MEMGRAPH_ORGANIZATION_NAME=<organization> \
+  --set externalAccessConfig.gateway.enabled=true \
+  --set externalAccessConfig.gateway.existingGatewayName=memgraph-gateway
 ```
 
-In the similar way you could configure `TLSRoute` instead of a `TCPRoute`.
+<Callout type="warning">
+When using an existing Gateway, ensure it has listeners configured with the correct names and ports that match the TCPRoute `sectionName` references. The chart expects listener names in the format `data-{id}-bolt` for data instances and `coordinator-{id}-bolt` for coordinators. For example, the default HA setup (2 data instances, 3 coordinators) needs these listeners:
+
+- `data-0-bolt` on port 9000
+- `data-1-bolt` on port 9001
+- `coordinator-1-bolt` on port 9011
+- `coordinator-2-bolt` on port 9012
+- `coordinator-3-bolt` on port 9013
+
+A standalone Gateway manifest with these pre-configured listeners is available in the [Helm charts repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/gateway.yaml).
+</Callout>
+
+<Callout type="info">
+**TCPRoute API version**: TCPRoute uses `v1alpha2`, which is the latest available API version. It is supported by Envoy Gateway and other major implementations but is not yet GA. Gateway and HTTPRoute are both GA (`v1`).
+</Callout>
 
 ### Use Memgraph HA chart with IngressNginx
 
@@ -869,6 +846,14 @@ and their default values.
 | `externalAccessConfig.coordinator.annotations`             | Annotations for external services attached to coordinators.                                                  | `{}`                           |
 | `externalAccessConfig.dataInstance.serviceType`            | IngressNginx, NodePort or LoadBalancer. By default, no external service will be created.                     | `""`                           |
 | `externalAccessConfig.dataInstance.annotations`            | Annotations for external services attached to data instances.                                                | `{}`                           |
+| `externalAccessConfig.gateway.enabled`                     | Enable Gateway API external access.                                                                          | `false`                        |
+| `externalAccessConfig.gateway.gatewayClassName`            | Name of a pre-existing GatewayClass. Required when creating a new Gateway.                                   | `""`                           |
+| `externalAccessConfig.gateway.existingGatewayName`         | Name of an existing Gateway to attach routes to. Skips Gateway creation.                                     | `""`                           |
+| `externalAccessConfig.gateway.existingGatewayNamespace`    | Namespace of the existing Gateway. Defaults to release namespace.                                            | `""`                           |
+| `externalAccessConfig.gateway.annotations`                 | Annotations for the Gateway resource.                                                                        | `{}`                           |
+| `externalAccessConfig.gateway.labels`                      | Labels for the Gateway resource.                                                                             | `{}`                           |
+| `externalAccessConfig.gateway.dataPortBase`                | Base port for data instance Gateway listeners (`dataPortBase + index`).                                      | `9000`                         |
+| `externalAccessConfig.gateway.coordinatorPortBase`         | Base port for coordinator Gateway listeners (`coordinatorPortBase + id`).                                    | `9010`                         |
 | `headlessService.enabled`                                  | Specifies whether headless services will be used inside K8s network on all instances.                        | `false`                        |
 | `ports.boltPort`                                           | Bolt port used on coordinator and data instances.                                                            | `7687`                         |
 | `ports.managementPort`                                     | Management port used on coordinator and data instances.                                                      | `10000`                        |

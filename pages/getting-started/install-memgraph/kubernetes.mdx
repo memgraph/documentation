@@ -445,6 +445,14 @@ The following table lists the configurable parameters of the Memgraph chart and 
 | `externalAccess.coordinator.annotations`                   | Annotations for external services attached to coordinators.                                                  | `{}`                           |
 | `externalAccess.dataInstance.serviceType`                  | IngressNginx, NodePort or LoadBalancer. By default, no external service will be created.                     | `""`                           |
 | `externalAccess.dataInstance.annotations`                  | Annotations for external services attached to data instances.                                                | `{}`                           |
+| `externalAccessConfig.gateway.enabled`                     | Enable Gateway API external access.                                                                          | `false`                        |
+| `externalAccessConfig.gateway.gatewayClassName`            | Name of a pre-existing GatewayClass. Required when creating a new Gateway.                                   | `""`                           |
+| `externalAccessConfig.gateway.existingGatewayName`         | Name of an existing Gateway to attach routes to. Skips Gateway creation.                                     | `""`                           |
+| `externalAccessConfig.gateway.existingGatewayNamespace`    | Namespace of the existing Gateway. Defaults to release namespace.                                            | `""`                           |
+| `externalAccessConfig.gateway.annotations`                 | Annotations for the Gateway resource.                                                                        | `{}`                           |
+| `externalAccessConfig.gateway.labels`                      | Labels for the Gateway resource.                                                                             | `{}`                           |
+| `externalAccessConfig.gateway.dataPortBase`                | Base port for data instance Gateway listeners (`dataPortBase + index`).                                      | `9000`                         |
+| `externalAccessConfig.gateway.coordinatorPortBase`         | Base port for coordinator Gateway listeners (`coordinatorPortBase + id`).                                    | `9010`                         |
 | `headlessService.enabled`                                  | Specifies whether headless services will be used inside K8s network on all instances.                        | `false`                        |
 | `service.loadBalancer.enabled`                             | Defines if a Service intended for cluster-external access should be created.                                 | `false`                        |
 | `service.loadBalancer.type`                                | Kubernetes service type for the external access service.                                                     | `LoadBalancer`                 |
@@ -558,6 +566,81 @@ Or you can modify a `values.yaml` file and override the desired values:
 helm install <resource-name> memgraph/memgraph-lab -f values.yaml
 ```
 
+#### Gateway API support
+
+The Memgraph Lab Helm chart supports the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) for external access. When enabled, the chart creates an HTTPRoute resource to route HTTP(S) traffic to Memgraph Lab. You can either let the chart create its own Gateway or attach the route to a pre-existing one.
+
+<Callout type="info">
+Before enabling Gateway API, you must have a Gateway API controller (e.g., Envoy Gateway, Istio, Cilium) installed in your cluster, and a **GatewayClass** resource must exist. The chart does not create a GatewayClass — you must create it yourself or use one provided by your controller installation. See the [HA chart Gateway API prerequisites](/clustering/high-availability/setup-ha-cluster-k8s#prerequisites-1) for detailed setup instructions.
+</Callout>
+
+**Chart-managed Gateway**
+
+To let the chart create a Gateway with an HTTPRoute:
+
+```yaml
+gateway:
+  enabled: true
+  gatewayClassName: "eg"
+  listeners:
+    - name: lab-http
+      port: 80
+      protocol: HTTP
+```
+
+For HTTPS with TLS termination:
+
+```yaml
+gateway:
+  enabled: true
+  gatewayClassName: "eg"
+  listeners:
+    - name: lab-https
+      port: 443
+      protocol: HTTPS
+      tls:
+        certificateRefs:
+          - name: lab-tls-secret
+```
+
+**Existing (external) Gateway**
+
+To attach an HTTPRoute to a pre-existing Gateway (for example, a shared Gateway that also serves the HA chart):
+
+```yaml
+gateway:
+  enabled: true
+  existingGatewayName: "memgraph-gateway"
+```
+
+When the existing Gateway uses different listener names than the chart defaults, use `httpRoute.sectionNames` to specify which listener names the route should attach to:
+
+```yaml
+gateway:
+  enabled: true
+  existingGatewayName: "memgraph-gateway"
+  httpRoute:
+    sectionNames:
+      - lab-http
+```
+
+You can also configure host-based routing with `httpRoute.hostnames`:
+
+```yaml
+gateway:
+  enabled: true
+  existingGatewayName: "memgraph-gateway"
+  httpRoute:
+    sectionNames:
+      - lab-http
+    hostnames:
+      - lab.example.com
+```
+
+<Callout type="info">
+A standalone Gateway manifest with pre-configured listeners for both Lab and HA is available in the [Helm charts repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/gateway.yaml). Deploy it with `kubectl apply -f gateway.yaml` before installing the charts with `existingGatewayName`.
+</Callout>
+
 #### Configuration options
 
 The following table lists the configurable parameters of the Memgraph Lab chart
@@ -582,6 +665,16 @@ and their default values.
 | `secrets.enabled`            | Enable the use of Kubernetes secrets. Will be injected as env variables.                                | `false`                                |
 | `secrets.name`               | The name of the Kubernetes secret that will be used.                                                    | `memgraph-secrets`                     |
 | `secrets.keys`               | Keys from the `secrets.name` that will be stored as env variables inside the pod.                       | `[]`                                   |
+| `gateway.enabled`            | Enable Gateway API external access.                                                                     | `false`                                |
+| `gateway.gatewayClassName`   | Name of a pre-existing GatewayClass. Required when creating a new Gateway.                              | `""`                                   |
+| `gateway.existingGatewayName`| Name of an existing Gateway to attach routes to. Skips Gateway creation.                                | `""`                                   |
+| `gateway.existingGatewayNamespace` | Namespace of the existing Gateway. Defaults to release namespace.                                 | `""`                                   |
+| `gateway.annotations`        | Annotations for the Gateway resource.                                                                   | `{}`                                   |
+| `gateway.labels`             | Labels for the Gateway resource.                                                                        | `{}`                                   |
+| `gateway.listeners`          | List of Gateway listeners with `name`, `port`, `protocol`, and optional `tls` configuration.            | `[{name: lab-http, port: 80, protocol: HTTP}]` |
+| `gateway.httpRoute.sectionNames` | Listener names to attach to on the Gateway. If empty, derived from `listeners[].name`.              | `[]`                                   |
+| `gateway.httpRoute.hostnames`| Hostnames for the HTTPRoute.                                                                            | `[]`                                   |
+| `gateway.httpRoute.matches`  | HTTPRoute match rules.                                                                                  | `[{path: {type: PathPrefix, value: /}}]` |
 
 Memgraph Lab can be further configured with environment variables in your
 `values.yaml` file.
