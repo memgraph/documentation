@@ -339,6 +339,18 @@ Inserts a value of given type under field `field_name`.
 ```
 
 ```cpp
+  void Insert(const char *field_name, const Point2d &value)
+```
+
+```cpp
+  void Insert(const char *field_name, const Point3d &value)
+```
+
+```cpp
+  void Insert(const char *field_name, const Enum &value)
+```
+
+```cpp
   void Insert(const char *field_name, const Value &value)
 ```
 
@@ -429,6 +441,18 @@ Sets a return value of given type.
 
 ```cpp
   void SetValue(const Duration &value)
+```
+
+```cpp
+  void SetValue(const Point2d &value)
+```
+
+```cpp
+  void SetValue(const Point3d &value)
+```
+
+```cpp
+  void SetValue(const Enum &value)
 ```
 
 ##### SetErrorMessage
@@ -1875,6 +1899,7 @@ std::string ToString() const
 | Name         | Description          |
 | ------------ | -------------------- |
 | `operator==` | comparison operator  |
+| `operator!=` | comparison operator  |
 
 Object is hashable using
 
@@ -1965,6 +1990,7 @@ std::string ToString() const
 | Name         | Description          |
 | ------------ | -------------------- |
 | `operator==` | comparison operator  |
+| `operator!=` | comparison operator  |
 
 Object is hashable using
 
@@ -2555,6 +2581,22 @@ explicit Value(const ZonedDateTime &value)
 explicit Value(ZonedDateTime &&value)
 explicit Value(const Duration &value)
 explicit Value(Duration &&value)
+```
+
+Spatial type constructors:
+
+```cpp
+explicit Value(const Point2d &value)
+explicit Value(Point2d &&value)
+explicit Value(const Point3d &value)
+explicit Value(Point3d &&value)
+```
+
+Enum type constructors:
+
+```cpp
+explicit Value(const Enum &value)
+explicit Value(Enum &&value)
 ```
 
 Copy and move constructors:
