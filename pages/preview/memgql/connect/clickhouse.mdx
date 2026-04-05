@@ -1,0 +1,96 @@
+---
+title: ClickHouse
+description: Connect MemGQL to ClickHouse.
+---
+
+# ClickHouse
+
+The ClickHouse connector (`CONNECTOR_TYPE=clickhouse`) translates GQL queries
+into ClickHouse-dialect SQL and executes them via the ClickHouse HTTP interface.
+It requires a [mapping file](../quick-start.mdx#mapping-file) that maps graph
+patterns to ClickHouse tables.
+
+## 1. Start ClickHouse
+
+```bash
+docker network create memgql-net
+
+docker run -d --rm \
+    --name clickhouse-dev \
+    --network memgql-net \
+    -p 9000:9000 \
+    -p 8123:8123 \
+    --ulimit nofile=262144:262144 \
+    clickhouse/clickhouse-server:latest
+```
+
+## 2. Seed data
+
+```bash
+docker exec -i clickhouse-dev clickhouse-client << 'SQL'
+CREATE TABLE IF NOT EXISTS persons (
+    id UInt32,
+    name String,
+    age UInt32
+) ENGINE = MergeTree() ORDER BY id;
+
+CREATE TABLE IF NOT EXISTS companies (
+    id UInt32,
+    name String
+) ENGINE = MergeTree() ORDER BY id;
+
+CREATE TABLE IF NOT EXISTS knows (
+    from_id UInt32,
+    to_id UInt32
+) ENGINE = MergeTree() ORDER BY (from_id, to_id);
+
+CREATE TABLE IF NOT EXISTS works_at (
+    person_id UInt32,
+    company_id UInt32
+) ENGINE = MergeTree() ORDER BY (person_id, company_id);
+
+INSERT INTO persons VALUES (1, 'Alice', 30), (2, 'Bob', 25);
+INSERT INTO companies VALUES (1, 'Acme Corp');
+INSERT INTO knows VALUES (1, 2);
+INSERT INTO works_at VALUES (1, 1);
+SQL
+```
+
+## 3. Start MemGQL
+
+```bash
+docker run --rm \
+    --name memgql \
+    --network memgql-net \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTOR_TYPE=clickhouse \
+    --env CLICKHOUSE_URL=http://clickhouse-dev:8123 \
+    --env CLICKHOUSE_DB=default \
+    --env MAPPING_FILE=/data/mapping.json \
+    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    -v ./mapping.json:/data/mapping.json \
+    memgraph/memgql:latest
+```
+
+## 4. Connect
+
+```bash
+mgconsole --port 7688
+```
+
+## 5. Query
+
+```gql
+MATCH (p:Person) RETURN p.name, p.age;
+```
+
+```gql
+MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
+```
+
+```gql
+MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
+```
+
+For environment variables, see [Configuration](../config.mdx#clickhouse-clickhouse).
