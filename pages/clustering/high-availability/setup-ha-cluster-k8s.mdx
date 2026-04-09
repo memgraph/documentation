@@ -692,6 +692,75 @@ installed into the `monitoring` namespace.
 Refer to the configuration table later in the document for details on all
 parameters.
 
+### Remote metrics and logs
+
+The HA chart supports optional remote observability:
+
+- `vmagentRemote` for shipping metrics with Prometheus `remote_write`
+- `vectorRemote` sidecars for shipping Memgraph logs to Loki-compatible endpoints
+
+Prerequisites:
+
+- keep `prometheus.enabled: true` so `mg-exporter` is deployed
+- if you only need remote shipping and not local scraping, set `prometheus.serviceMonitor.enabled: false` to avoid duplicate scraping
+- configure `vectorRemote.data` and/or `vectorRemote.coordinators` depending on which pod roles should ship logs
+
+Example `values.yaml`:
+
+```yaml
+prometheus:
+  enabled: true
+  namespace: monitoring
+  serviceMonitor:
+    enabled: false
+
+vmagentRemote:
+  enabled: true
+  namespace: monitoring
+  remoteWrite:
+    url: "https://<prom-remote-write>/api/v1/write"
+    # Optional: only set basicAuth when your remote_write endpoint requires basic auth.
+    basicAuth:
+      secretName: monitoring-basic-auth
+      usernameKey: username
+      passwordKey: password
+  externalLabels:
+    cluster_id: "memgraph-testing-cluster-53"
+    service_name: "memgraph-ha"
+    cluster_env: "self-hosted-large-01"
+
+vectorRemote:
+  enabled: true
+  data: true
+  coordinators: true
+  logsEndpoint: "https://<loki-endpoint>"
+  # Optional: only set auth when your endpoint requires basic auth.
+  auth:
+    secretName: monitoring-basic-auth
+    usernameKey: username
+    passwordKey: password
+  extraLabels:
+    cluster_id: "memgraph-testing-cluster-53"
+    service_name: "memgraph-ha"
+    cluster_env: "self-hosted-large-01"
+```
+
+Create credentials secret in the namespace where vmagent runs (usually `monitoring`):
+
+```bash
+kubectl create secret generic monitoring-basic-auth -n monitoring \
+  --from-literal=username='<username>' \
+  --from-literal=password='<password>'
+```
+
+For HA Vector sidecars, create the same secret in the Memgraph release namespace as well:
+
+```bash
+kubectl create secret generic monitoring-basic-auth -n <memgraph-namespace> \
+  --from-literal=username='<username>' \
+  --from-literal=password='<password>'
+```
+
 ### Uninstall kube-prometheus-stack
 
 ```bash
