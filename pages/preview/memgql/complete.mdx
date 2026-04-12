@@ -1,0 +1,266 @@
+---
+title: Docker Compose - Complete Setup
+description: Run the full MemGQL stack with Docker Compose.
+---
+
+# Docker Compose - Complete Setup
+
+This guide runs the full MemGQL stack using Docker Compose: Memgraph as the
+graph backend, MemGQL as the federated query engine, Memgraph Lab for visual
+exploration, PostgreSQL as a relational backend, the MCP server for AI agent
+integration, and structured2graph to create the mappings.
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-started/get-docker/) with Docker Compose
+- [mgconsole](https://github.com/memgraph/mgconsole) (Memgraph Bolt CLI client)
+
+## Architecture
+
+```
+                       ┌──────────────┐
+                       │  Memgraph Lab│ :3000
+                       └──────┬───────┘
+                              │
+┌──────────┐           ┌──────┴───────┐          ┌───────────┐
+│ MCP      │──bolt────▶│   MemGQL     │──bolt───▶│ Memgraph  │ :7687
+│ Server   │ :8000     │   :7688      │          └───────────┘
+└──────────┘           └──────┬───────┘
+                              │
+                       ┌──────┴───────┐
+                       │  PostgreSQL  │ :5432
+                       └──────────────┘
+```
+
+Clients (mgconsole, Bolt drivers, Lab) connect to MemGQL on port **7688**.
+MemGQL translates GQL and routes queries to the configured backends.
+
+## 1. Create the Docker network
+
+All services communicate over a shared Docker network:
+
+```bash
+docker network create memgql-net
+```
+
+## 2. Docker Compose file
+
+Save the following as `docker-compose.yml`:
+
+```yaml
+services:
+  memgql:
+    image: memgraph/memgql:0.2.0
+    container_name: memgql
+    ports:
+      - "7688:7688"
+    environment:
+      CONNECTOR_TYPE: ${CONNECTOR_TYPE:-multi}
+      MEMGRAPH_URI: memgraph:7687
+      BOLT_LISTEN_ADDR: 0.0.0.0:7688
+      # To enable enterprise features, set these in a .env file or via CLI:
+      #   MEMGQL_ENTERPRISE_LICENSE=mglk-...
+      #   MEMGQL_ORGANIZATION_NAME=your-org
+    volumes:
+      - memgql-mappings:/mappings
+    depends_on:
+      memgraph:
+        condition: service_healthy
+    networks:
+      - memgql-net
+
+  memgraph:
+    image: memgraph/memgraph-mage:3.9.0
+    container_name: memgraph
+    ports:
+      - "7687:7687"
+    command: --log-level=TRACE --also-log-to-stderr
+    environment:
+      MEMGRAPH_ENTERPRISE_LICENSE: ${MEMGRAPH_ENTERPRISE_LICENSE:-}
+      MEMGRAPH_ORGANIZATION_NAME: ${MEMGRAPH_ORGANIZATION_NAME:-}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/7687'"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 3s
+    networks:
+      - memgql-net
+
+  lab:
+    image: memgraph/lab:3.9.0
+    container_name: lab
+    ports:
+      - "3000:3000"
+    environment:
+      QUICK_CONNECT_MG_HOST: memgql
+      QUICK_CONNECT_MG_PORT: 7688
+    depends_on:
+      - memgql
+    networks:
+      - memgql-net
+
+  postgres:
+    image: postgres:18
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 3s
+    networks:
+      - memgql-net
+
+  memgql-mcp:
+    image: memgraph/memgql-mcp:0.2.0
+    container_name: memgql-mcp
+    ports:
+      - "8000:8000"
+    environment:
+      MCP_TRANSPORT: streamable-http
+      MEMGQL_URL: bolt://memgql:7688
+    depends_on:
+      - memgql
+    networks:
+      - memgql-net
+
+  structured2graph:
+    image: memgraph/structured2graph:0.2.2
+    container_name: structured2graph
+    entrypoint: ["sleep", "infinity"]
+    volumes:
+      - memgql-mappings:/mappings
+    depends_on:
+      memgraph:
+        condition: service_healthy
+    networks:
+      - memgql-net
+
+volumes:
+  memgql-mappings:
+    name: memgql-mappings
+
+networks:
+  memgql-net:
+    name: memgql-net
+    external: true
+```
+
+## 3. Start all services
+
+```bash
+docker compose up -d
+```
+
+Wait for all containers to become healthy:
+
+```bash
+docker compose ps
+```
+
+You should see all six services running: `memgraph`, `memgql`, `lab`,
+`postgres`, `memgql-mcp`, and `structured2graph`.
+
+## 4. Connect with mgconsole
+
+```bash
+mgconsole --port 7688
+```
+
+MemGQL starts in multi-connection mode, so you first need to register
+Memgraph as a connector and establish a connection:
+
+```gql
+ADD CONNECTOR mg TYPE memgraph URI 'memgraph:7687' GRAPH memgraph;
+CONNECT mg AS mg_conn;
+SET DEFAULT CONNECTION mg_conn;
+```
+
+Now seed some data and run a GQL query:
+
+```gql
+INSERT
+  (lana:Developer {name: "Lana", level: "senior", yoe: 12}),
+  (marco:Developer {name: "Marco", level: "mid", yoe: 5}),
+  (lana)-[:MENTORS]->(marco);
+```
+
+```gql
+MATCH (d:Developer) RETURN d.name, d.level;
+```
+
+## 5. Open Memgraph Lab
+
+Open [http://localhost:3000](http://localhost:3000) in a browser.
+Lab is pre-configured to connect to MemGQL on port 7688 — click
+**Quick Connect** and start exploring visually.
+
+## 6. Create mappings with structured2graph
+
+The `structured2graph` container generates JSON mapping files that tell MemGQL
+how to translate graph patterns into relational queries. It runs with
+`sleep infinity` so you can exec into it on demand.
+
+Shell into the container:
+
+```bash
+docker exec -it structured2graph bash
+```
+
+Inside the container, configure and run:
+
+```bash
+# Copy the example config and edit it with your connection details
+cp .env.example .env
+
+# Generate the mapping file (written to the shared /mappings volume)
+structured2graph --mapping /mappings/social.json
+```
+
+Once the mapping is generated, it's available to MemGQL via the shared
+`memgql-mappings` volume at `/mappings/social.json`. You can now load it
+from a MemGQL session (see the next step).
+
+## 7. Connect PostgreSQL as a relational backend
+
+With MemGQL running in multi-connection mode, you can add PostgreSQL at runtime:
+
+```gql
+ADD MAPPING social FROM '/mappings/social.json';
+ADD CONNECTOR pg TYPE postgres USER 'postgres' PASSWORD 'postgres' DATABASE 'postgres' MAPPING social;
+CONNECT pg AS pg_conn;
+USE CONNECTION pg_conn MATCH (n:Person) RETURN n.name LIMIT 5;
+```
+
+## 8. MCP server for AI agents
+
+The MCP server exposes MemGQL over the Model Context Protocol on
+`http://localhost:8000`. AI agents and tools that support MCP can connect
+to run GQL queries against any backend wired into MemGQL.
+
+## Port summary
+
+| Service          | Port | Protocol          |
+|------------------|------|-------------------|
+| Memgraph         | 7687 | Bolt              |
+| MemGQL           | 7688 | Bolt              |
+| Memgraph Lab     | 3000 | HTTP              |
+| PostgreSQL       | 5432 | PostgreSQL wire   |
+| MemGQL MCP       | 8000 | HTTP (streamable) |
+
+## Stopping everything
+
+```bash
+docker compose down
+```
+
+To also remove the shared volume:
+
+```bash
+docker compose down -v
+```

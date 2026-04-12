@@ -1,4 +1,5 @@
 export default {
+  "clickhouse": "to Clickhouse",
   "duckdb": "to DuckDB",
   "iceberg": "to Iceberg",
   "memgraph": "to Memgraph",
