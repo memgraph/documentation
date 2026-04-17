@@ -18,18 +18,20 @@ integration, and structured2graph to create the mappings.
 ## Architecture
 
 ```
-                       ┌──────────────┐
-                       │  Memgraph Lab│ :3000
-                       └──────┬───────┘
-                              │
-┌──────────┐           ┌──────┴───────┐          ┌───────────┐
-│ MCP      │──bolt────▶│   MemGQL     │──bolt───▶│ Memgraph  │ :7687
-│ Server   │ :8000     │   :7688      │          └───────────┘
-└──────────┘           └──────┬───────┘
-                              │
-                       ┌──────┴───────┐
-                       │  PostgreSQL  │ :5432
-                       └──────────────┘
+                                                ┌──────────────┐
+┌──────────────┐          ┌──────────────┐ bolt │              │
+│  mgconsole   │──bolt───▶│              │─────▶│  Memgraph    │
+└──────────────┘          │              │      │         :7687│
+                          │              │      └──────────────┘
+┌──────────────┐          │    MemGQL    │
+│ Memgraph Lab │──bolt───▶│              │
+│         :3000│          │        :7688 │      ┌──────────────┐
+└──────────────┘          │              │ sql  │              │
+                          │              │─────▶│  PostgreSQL  │
+┌──────────────┐          │              │      │         :5432│
+│  MCP Server  │──bolt───▶│              │      └──────────────┘
+│         :8000│          └──────────────┘
+└──────────────┘
 ```
 
 Clients (mgconsole, Bolt drivers, Lab) connect to MemGQL on port **7688**.
@@ -43,14 +45,63 @@ All services communicate over a shared Docker network:
 docker network create memgql-net
 ```
 
-## 2. Docker Compose file
+## 2. Create the PostgreSQL init files
+
+MemGQL needs a schema mapping to translate graph patterns into SQL. Create
+these two files next to your `docker-compose.yml`:
+
+**`pg_init.sql`** — creates the relational tables:
+
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT
+);
+
+CREATE TABLE friend_of (
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    friend_id INTEGER NOT NULL REFERENCES users(id),
+    PRIMARY KEY (user_id, friend_id)
+);
+```
+
+**`pg_mapping.json`** — tells MemGQL how tables map to graph labels:
+
+```json
+{
+  "nodes": [
+    {
+      "label": "User",
+      "table": "users",
+      "id_column": "id",
+      "properties": {
+        "name": "name",
+        "email": "email"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "rel_type": "FRIEND_OF",
+      "table": "friend_of",
+      "source_column": "user_id",
+      "target_column": "friend_id",
+      "source_label": "User",
+      "target_label": "User"
+    }
+  ]
+}
+```
+
+## 3. Docker Compose file
 
 Save the following as `docker-compose.yml`:
 
 ```yaml
 services:
   memgql:
-    image: memgraph/memgql:0.2.0
+    image: memgraph/memgql:0.2.1
     container_name: memgql
     ports:
       - "7688:7688"
@@ -63,11 +114,40 @@ services:
       #   MEMGQL_ORGANIZATION_NAME=your-org
     volumes:
       - memgql-mappings:/mappings
+      - ./pg_mapping.json:/mappings/pg_mapping.json
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/7688'"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 3s
     depends_on:
       memgraph:
         condition: service_healthy
     networks:
       - memgql-net
+
+  memgql-init:
+    image: memgraph/mgconsole:1.5.1
+    container_name: memgql-init
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo "ADD CONNECTOR mg TYPE memgraph URI 'memgraph:7687' GRAPH memgraph;" | mgconsole --host memgql --port 7688 &&
+        echo "CONNECT mg AS mg_conn;" | mgconsole --host memgql --port 7688 &&
+        echo "ADD MAPPING pg_social FROM '/mappings/pg_mapping.json';" | mgconsole --host memgql --port 7688 &&
+        echo "ADD CONNECTOR pg TYPE postgres URI 'host=postgres user=postgres password=postgres dbname=postgres' MAPPING pg_social;" | mgconsole --host memgql --port 7688 &&
+        echo "CONNECT pg AS pg_conn;" | mgconsole --host memgql --port 7688 &&
+        echo "MemGQL bootstrap complete."
+    depends_on:
+      memgql:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - memgql-net
+    restart: "no"
 
   memgraph:
     image: memgraph/memgraph-mage:3.9.0
@@ -107,6 +187,8 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./pg_init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 2s
@@ -151,7 +233,7 @@ networks:
     external: true
 ```
 
-## 3. Start all services
+## 4. Start all services
 
 ```bash
 docker compose up -d
@@ -163,44 +245,103 @@ Wait for all containers to become healthy:
 docker compose ps
 ```
 
-You should see all six services running: `memgraph`, `memgql`, `lab`,
-`postgres`, `memgql-mcp`, and `structured2graph`.
+You should see all eight services running: `memgraph`, `memgql`, `memgql-init`,
+`lab`, `postgres`, `memgql-mcp`, and `structured2graph`. The `memgql-init`
+container registers both connectors and exits — this is expected.
 
-## 4. Connect with mgconsole
+## 5. Connect with mgconsole
 
 ```bash
 mgconsole --port 7688
 ```
 
-MemGQL starts in multi-connection mode, so you first need to register
-Memgraph as a connector and establish a connection:
+Both the Memgraph and PostgreSQL connectors are already registered and
+connected by the `memgql-init` service. You can start querying right away.
+
+### Seed Memgraph with developers
 
 ```gql
-ADD CONNECTOR mg TYPE memgraph URI 'memgraph:7687' GRAPH memgraph;
-CONNECT mg AS mg_conn;
 SET DEFAULT CONNECTION mg_conn;
 ```
-
-Now seed some data and run a GQL query:
 
 ```gql
 INSERT
   (lana:Developer {name: "Lana", level: "senior", yoe: 12}),
   (marco:Developer {name: "Marco", level: "mid", yoe: 5}),
-  (lana)-[:MENTORS]->(marco);
+  (priya:Developer {name: "Priya", level: "senior", yoe: 9}),
+  (tom:Developer {name: "Tom", level: "junior", yoe: 1}),
+  (sara:Developer {name: "Sara", level: "mid", yoe: 4}),
+  (lana)-[:FOLLOWS]->(priya),
+  (marco)-[:FOLLOWS]->(sara),
+  (sara)-[:FOLLOWS]->(lana),
+  (tom)-[:FOLLOWS]->(marco),
+  (priya)-[:FOLLOWS]->(lana);
 ```
 
 ```gql
-MATCH (d:Developer) RETURN d.name, d.level;
+MATCH (d:Developer) RETURN d.name, d.level, d.yoe;
 ```
 
-## 5. Open Memgraph Lab
+```gql
+MATCH (a:Developer)-[:FOLLOWS]->(b:Developer) RETURN a.name, b.name;
+```
+
+### Seed PostgreSQL with users
+
+Switch to the PostgreSQL connection and insert users:
+
+```gql
+SET DEFAULT CONNECTION pg_conn;
+```
+
+```gql
+INSERT (alice:User {name: "Alice", email: "alice@example.com"});
+INSERT (bob:User {name: "Bob", email: "bob@example.com"});
+INSERT (charlie:User {name: "Charlie", email: "charlie@example.com"});
+INSERT (diana:User {name: "Diana", email: "diana@example.com"});
+```
+
+Add friendships:
+
+```gql
+MATCH (a:User {name: "Alice"}), (b:User {name: "Bob"}) INSERT (a)-[:FRIEND_OF]->(b);
+MATCH (a:User {name: "Alice"}), (b:User {name: "Charlie"}) INSERT (a)-[:FRIEND_OF]->(b);
+MATCH (a:User {name: "Bob"}), (b:User {name: "Diana"}) INSERT (a)-[:FRIEND_OF]->(b);
+MATCH (a:User {name: "Charlie"}), (b:User {name: "Diana"}) INSERT (a)-[:FRIEND_OF]->(b);
+```
+
+```gql
+MATCH (u:User) RETURN u.name, u.email;
+```
+
+```gql
+MATCH (u:User)-[:FRIEND_OF]->(f:User) RETURN u.name, f.name;
+```
+
+### Query across both backends
+
+Each connection is queried independently — MemGQL routes the query to
+the right backend based on the `USE CONNECTION` clause:
+
+```gql
+USE CONNECTION mg_conn
+  MATCH (d:Developer)-[:FOLLOWS]->(f:Developer)
+  RETURN d.name AS source, "FOLLOWS" AS rel, f.name AS target;
+```
+
+```gql
+USE CONNECTION pg_conn
+  MATCH (u:User)-[:FRIEND_OF]->(f:User)
+  RETURN u.name AS source, "FRIEND_OF" AS rel, f.name AS target;
+```
+
+## 6. Open Memgraph Lab
 
 Open [http://localhost:3000](http://localhost:3000) in a browser.
 Lab is pre-configured to connect to MemGQL on port 7688 — click
 **Quick Connect** and start exploring visually.
 
-## 6. Create mappings with structured2graph
+## 7. Create mappings with structured2graph
 
 The `structured2graph` container generates JSON mapping files that tell MemGQL
 how to translate graph patterns into relational queries. It runs with
@@ -218,24 +359,15 @@ Inside the container, configure and run:
 # Copy the example config and edit it with your connection details
 cp .env.example .env
 
+# TODO: Adjust the .env file with the right values.
+
 # Generate the mapping file (written to the shared /mappings volume)
 structured2graph --mapping /mappings/social.json
 ```
 
 Once the mapping is generated, it's available to MemGQL via the shared
 `memgql-mappings` volume at `/mappings/social.json`. You can now load it
-from a MemGQL session (see the next step).
-
-## 7. Connect PostgreSQL as a relational backend
-
-With MemGQL running in multi-connection mode, you can add PostgreSQL at runtime:
-
-```gql
-ADD MAPPING social FROM '/mappings/social.json';
-ADD CONNECTOR pg TYPE postgres USER 'postgres' PASSWORD 'postgres' DATABASE 'postgres' MAPPING social;
-CONNECT pg AS pg_conn;
-USE CONNECTION pg_conn MATCH (n:Person) RETURN n.name LIMIT 5;
-```
+from a MemGQL session.
 
 ## 8. MCP server for AI agents
 
