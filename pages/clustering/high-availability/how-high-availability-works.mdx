@@ -148,7 +148,7 @@ All of the following messages were sent by the leader coordinator.
 | `DemoteMainToReplicaRpc`   | Demote a Main after failover                        | Sent to the old MAIN in order to demote it to REPLICA.                                                                           |
 | `RegisterReplicaOnMainRpc` | Instruct Main to accept replication from a Replica  | Sent to the MAIN to register a REPLICA on the MAIN.                                                                              |
 | `UnregisterReplicaRpc`     | Remove Replica from Main                            | Sent to the MAIN to unregister a REPLICA from the MAIN.                                                                          |
-| `EnableWritingOnMainRpc`   | Re-enable writes after Main restarts                | Sent to the MAIN to enable writing on that MAIN.                                                                                 |
+| `EnableWritingOnMainRpc`   | Re-enable writes after Main restarts (deprecated)   | Kept for backward compatibility (ISSU). No longer sent by coordinators — writing is implicitly enabled on promotion.             |
 | `GetDatabaseHistoriesRpc`  | Gather committed transaction counts during failover | Sent to all REPLICA instances in order to select a new MAIN during the failover process.                                         |
 | `StateCheckRpc`            | Health check ping (liveness)                        | Sent to all data instances for a liveness check.                                                                                 |
 | `SwapMainUUIDRpc`          | Ensure Replica tracks the correct Main              | Sent to REPLICA instances to set the UUID of the MAIN they should listen to.                                                     |
@@ -225,7 +225,7 @@ in the cluster to ensure high availability, with timeouts.
 | `PromoteToMainReq`         | Coordinator | Data instance  |                  |
 | `RegisterReplicaOnMainReq` | Coordinator | Data instance  |                  |
 | `UnregisterReplicaReq`     | Coordinator | Data instance  |                  | 
-| `EnableWritingOnMainReq`   | Coordinator | Data instance  |                  |
+| `EnableWritingOnMainReq`   | Coordinator | Data instance  |    deprecated    |
 | `GetDatabaseHistoriesReq`  | Coordinator | Data instance  |                  |
 | `StateCheckReq`            | Coordinator | Data instance  | 5s               |
 | `SwapMainUUIDReq`          | Coordinator | Data instance  |                  |
@@ -464,6 +464,36 @@ All state-changing operations are disabled on followers, including:
 
 These operations are permitted **only on the leader coordinator**.
 
+## Raft-first operations and the reconciliation loop
+
+The coordinator follows a **Raft-first** pattern for all cluster operations
+(registering, unregistering, promoting, demoting instances). This means every
+state change is first committed to the Raft log and acknowledged by a majority
+of coordinators **before** the operation returns success to the user.
+
+After the Raft commit, the coordinator sends RPCs to data instances (e.g.,
+`PromoteToMainRpc`, `DemoteMainToReplicaRpc`, `RegisterReplicaOnMainRpc`,
+`UnregisterReplicaRpc`) on a **best-effort** basis. If an RPC fails due to a
+transient network issue, the operation still succeeds from the user's
+perspective because the Raft log is the single source of truth.
+
+### How the reconciliation loop works
+
+The coordinator leader runs a periodic **reconciliation loop** that
+automatically detects and corrects discrepancies between the desired state (Raft
+log) and the actual state of data instances. Specifically:
+
+- **Missing replicas on main**: If a replica exists in the Raft state but is not
+  registered on the current main instance, the reconciliation loop sends a
+  `RegisterReplicaOnMainRpc` to the main.
+- **Stale replicas on main**: If the main instance reports a replica that no
+  longer exists in the Raft state, the reconciliation loop sends an
+  `UnregisterReplicaRpc` to remove it.
+
+This self-healing behavior means the cluster automatically recovers from
+transient RPC failures without user intervention. Users only need to retry an
+operation if the Raft commit itself fails.
+
 ## Instance restarts
 
 ### Restarting data instances
@@ -475,9 +505,9 @@ Both MAIN and REPLICA instances may fail and later restart.
   to follow. This synchronization happens automatically once the coordinator’s
   health check (“ping”) succeeds.
 
-- When the **MAIN** instance restarts, it is initially prevented from accepting
-  write operations. Writes become allowed only after the coordinator confirms
-  the instance’s state and sends an `EnableWritingOnMainRpc` message.
+- When the **MAIN** instance restarts, the coordinator confirms the instance’s
+  state through health checks. Writing is enabled once the
+  coordinator verifies the instance is healthy and its role is confirmed by sending PromoteToMainRpc to the data instance.
 
 This ensures that instances safely rejoin the cluster without causing
 inconsistencies.
