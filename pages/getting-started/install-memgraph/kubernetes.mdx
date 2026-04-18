@@ -265,14 +265,86 @@ kubectl delete crd servicemonitors.monitoring.coreos.com
 kubectl delete crd thanosrulers.monitoring.coreos.com
 ```
 
+### Node affinity
+
+The chart exposes the full Kubernetes `nodeAffinity` spec via the `nodeAffinity`
+parameter. This allows you to constrain which nodes Memgraph Pods can be
+scheduled on based on node labels, using both `requiredDuringSchedulingIgnoredDuringExecution`
+and `preferredDuringSchedulingIgnoredDuringExecution` rules.
+
+<Callout type="warning">
+**Breaking change in chart version 0.2.17**: The `affinity.nodeKey` and `affinity.nodeValue` parameters have been
+replaced by `nodeAffinity`. If you were using the old parameters, update your `values.yaml`
+to use the new `nodeAffinity` configuration.
+</Callout>
+
+Example `values.yaml` configuration:
+
+```yaml
+nodeAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+      - matchExpressions:
+          - key: topology.kubernetes.io/zone
+            operator: In
+            values:
+              - antarctica-east1
+              - antarctica-west1
+  preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 1
+      preference:
+        matchExpressions:
+          - key: my-organization/node-performance
+            operator: In
+            values:
+              - best
+```
+
+For more information, see the [Kubernetes documentation on node affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/).
+
+### External access with LoadBalancer
+
+By default, the standalone Helm chart creates a `ClusterIP` service, which is
+only accessible from within the Kubernetes cluster. If you need to access
+Memgraph from outside the cluster (e.g., from a local developer machine), you
+can enable an additional `LoadBalancer` service.
+
+To enable the LoadBalancer service, set `service.loadBalancer.enabled` to `true`
+in your `values.yaml` file:
+
+```yaml
+service:
+  loadBalancer:
+    enabled: true
+    type: LoadBalancer
+    enableBolt: true
+```
+
+The LoadBalancer service uses the same ports as the main service (Bolt,
+WebSocket monitoring, HTTP monitoring) but exposes them externally. You can
+restrict access using `loadBalancerSourceRanges`:
+
+```yaml
+service:
+  loadBalancer:
+    enabled: true
+    loadBalancerSourceRanges:
+      - 1.2.3.4/32
+      - 10.0.0.0/8
+```
+
+Additional options like `externalTrafficPolicy`, `ipFamilyPolicy`, and
+`ipFamilies` are available for fine-grained network configuration. See the
+[configuration table](#configuration-options) for all parameters.
+
 ### Configuration options
 
-The following table lists the configurable parameters of the Memgraph HA chart and their default values.
+The following table lists the configurable parameters of the Memgraph chart and their default values.
 
 
 | Parameter                                                  | Description                                                                                                  | Default                        |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------ |
-| `image.repository`                                         | Memgraph Docker image repository                                                                             | `memgraph/memgraph`            |
+| `image.repository`                                         | Memgraph Docker image repository                                                                             | `docker.io/memgraph/memgraph`  |
 | `image.tag`                                                | Specific tag for the Memgraph Docker image. Overrides the image tag whose default is chart version.          | `3.1.0`                        |
 | `image.pullPolicy`                                         | Image pull policy                                                                                            | `IfNotPresent`                 |
 | `env.MEMGRAPH_ENTERPRISE_LICENSE`                          | Memgraph enterprise license                                                                                  | `<your-license>`               |
@@ -290,16 +362,23 @@ The following table lists the configurable parameters of the Memgraph HA chart a
 | `externalAccess.dataInstance.serviceType`                  | IngressNginx, NodePort or LoadBalancer. By default, no external service will be created.                     | `""`                           |
 | `externalAccess.dataInstance.annotations`                  | Annotations for external services attached to data instances.                                                | `{}`                           |
 | `headlessService.enabled`                                  | Specifies whether headless services will be used inside K8s network on all instances.                        | `false`                        |
+| `service.loadBalancer.enabled`                             | Defines if a Service intended for cluster-external access should be created.                                 | `false`                        |
+| `service.loadBalancer.type`                                | Kubernetes service type for the external access service.                                                     | `LoadBalancer`                 |
+| `service.loadBalancer.enableBolt`                          | Enable Bolt protocol on the LoadBalancer service.                                                            | `true`                         |
+| `service.loadBalancer.enableWebsocketMonitoring`           | Enable WebSocket monitoring on the LoadBalancer service.                                                     | `false`                        |
+| `service.loadBalancer.enableHttpMonitoring`                | Enable HTTP monitoring on the LoadBalancer service.                                                          | `false`                        |
+| `service.loadBalancer.annotations`                         | Annotations to add to the LoadBalancer service.                                                              | `{}`                           |
+| `service.loadBalancer.labels`                              | Labels to add to the LoadBalancer service.                                                                   | `{}`                           |
+| `service.loadBalancer.externalTrafficPolicy`               | Denotes if this Service desires to route external traffic to node-local or cluster-wide endpoints.           | `null`                         |
+| `service.loadBalancer.ipFamilyPolicy`                      | Represents the dual-stack-ness requested or required by this Service.                                        | `null`                         |
+| `service.loadBalancer.ipFamilies`                          | List of IP families (e.g. IPv4, IPv6) assigned to this service.                                              | `null`                         |
+| `service.loadBalancer.loadBalancerSourceRanges`            | Restricts traffic through the cloud-provider load-balancer to the specified client IPs.                      | `null`                         |
 | `ports.boltPort`                                           | Bolt port used on coordinator and data instances.                                                            | `7687`                         |
 | `ports.managementPort`                                     | Management port used on coordinator and data instances.                                                      | `10000`                        |
 | `ports.replicationPort`                                    | Replication port used on data instances.                                                                     | `20000`                        |
 | `ports.coordinatorPort`                                    | Coordinator port used on coordinators.                                                                       | `12000`                        |
-| `affinity.unique`                                          | Schedule pods on different nodes in the cluster                                                              | `false`                        |
-| `affinity.parity`                                          | Schedule pods on the same node with maximum one coordinator and one data node                                | `false`                        |
-| `affinity.nodeSelection`                                   | Schedule pods on nodes with specific labels                                                                  | `false`                        |
-| `affinity.roleLabelKey`                                    | Label key for node selection                                                                                 | `role`                         |
-| `affinity.dataNodeLabelValue`                              | Label value for data nodes                                                                                   | `data-node`                    |
-| `affinity.coordinatorNodeLabelValue`                       | Label value for coordinator nodes                                                                            | `coordinator-node`             |
+| `nodeAffinity`                                             | Allows constraining on which nodes Pods can be scheduled on based on node labels                             | `{}`                           |
+| `priorityClassName`                                        | Defines which [priority class](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/) should be assigned to the Memgraph pods | `null`                         |
 | `container.data.livenessProbe.tcpSocket.port`              | Port used for TCP connection. Should be the same as bolt port.                                               | `7687`                         |
 | `container.data.livenessProbe.failureThreshold`            | Failure threshold for liveness probe                                                                         | `20`                           |
 | `container.data.livenessProbe.timeoutSeconds`              | Timeout for liveness probe                                                                                   | `10`                           |
@@ -340,7 +419,7 @@ The following table lists the configurable parameters of the Memgraph HA chart a
 | `prometheus.namespace`                                     | The namespace in which `kube-prometheus-stack` and Memgraph's Prometheus exporter are installed.             | `monitoring`                   |
 | `prometheus.memgraphExporter.port`                         | The port on which Memgraph's Prometheus exporter is available.                                               | `9115`                         |
 | `prometheus.memgraphExporter.pullFrequencySeconds`         | How often will Memgraph's Prometheus exporter pull data from Memgraph instances.                             | `5`                            |
-| `prometheus.memgraphExporter.repository`                   | The repository where Memgraph's Prometheus exporter image is available.                                      | `memgraph/prometheus-exporter` |                      
+| `prometheus.memgraphExporter.repository`                   | The repository where Memgraph's Prometheus exporter image is available.                                      | `docker.io/memgraph/prometheus-exporter` |                      
 | `prometheus.memgraphExporter.tag`                          | The tag of Memgraph's Prometheus exporter image.                                                             | `0.2.1`                        |                      
 | `prometheus.serviceMonitor.enabled`                        | If enabled, a `ServiceMonitor` object will be deployed.                                                      | `true`                         |
 | `prometheus.serviceMonitor.kubePrometheusStackReleaseName` | The release name under which `kube-prometheus-stack` chart is installed.                                     | `kube-prometheus-stack`        |
@@ -402,7 +481,7 @@ and their default values.
 
 | Parameter                    | Description                                                                                             | Default                                |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `image.repository`           | Memgraph Lab Docker image repository                                                                    | `memgraph/memgraph-lab`                |
+| `image.repository`           | Memgraph Lab Docker image repository                                                                    | `docker.io/memgraph/lab`               |
 | `image.tag`                  | Specific tag for the Memgraph Lab Docker image. Overrides the image tag whose default is chart version. | `""` (Defaults to chart's app version) |
 | `image.pullPolicy`           | Image pull policy                                                                                       | `IfNotPresent`                         |
 | `replicaCount`               | Number of Memgraph Lab instances to run.                                                                | `1`                                    |
