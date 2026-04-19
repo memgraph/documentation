@@ -83,25 +83,96 @@ constraints upon the execution of the final query in the transaction.
 Memgraph can return information about running transactions and allow you to
 terminate them.
 
-### Show running transactions
+### Show transactions
 
-To get information about running transaction execute the following query:
+To get information about all active transactions execute:
 
 ```cypher
 SHOW TRANSACTIONS;
 ```
-```copy=false
 
+Each row in the result represents one transaction (or one in-progress snapshot
+creation) and contains five columns:
+
+| Column | Type | Description |
+|---|---|---|
+| `username` | `String` | The user who started the transaction, or `""` if authentication is disabled. |
+| `transaction_id` | `String` | Unique numeric identifier of the transaction. Use this value with `TERMINATE TRANSACTIONS`. |
+| `query` | `List[String]` | Queries executed within the transaction so far. |
+| `status` | `String` | Lifecycle phase of the transaction: `running`, `committing`, or `aborting`. Snapshot rows always show `running`. |
+| `metadata` | `Map` | Metadata supplied by the client when the transaction was opened. For in-progress snapshots this contains progress details (see below). |
+
+```copy=false
 memgraph> SHOW TRANSACTIONS;
-+---------------+-----------------------------+-------------------------------------------+----------------+
-| username      | transaction_id              | query                                     | metadata       |
-+---------------+-----------------------------+-------------------------------------------+----------------+
-| ""            | "9223372036854794885"       | ["CALL infinite.get() YIELD * RETURN *;"] | {}             |
-| ""            | "9223372036854794896"       | ["SHOW TRANSACTIONS"]                     | {}             |
-+---------------+-----------------------------+-------------------------------------------+----------------+
++----------+------------------------+-----------------------------------------------+--------------+----------+
+| username | transaction_id         | query                                         | status       | metadata |
++----------+------------------------+-----------------------------------------------+--------------+----------+
+| ""       | "9223372036854794885"  | ["UNWIND range(1,100) AS i CREATE(:L{p:i});"] | "committing" | {}       |
+| ""       | "9223372036854794896"  | ["SHOW TRANSACTIONS"]                         | "running"    | {}       |
++----------+------------------------+-----------------------------------------------+--------------+----------+
 ```
 
-By default, the users can see and terminate only the transactions they have
+#### Filter by status
+
+You can limit the output to transactions in a specific lifecycle phase by
+naming one or more statuses before the `TRANSACTIONS` keyword:
+
+```cypher
+SHOW RUNNING TRANSACTIONS;
+SHOW COMMITTING TRANSACTIONS;
+SHOW ABORTING TRANSACTIONS;
+SHOW RUNNING, COMMITTING TRANSACTIONS;
+```
+
+When multiple statuses are listed (comma-separated) the result is their union —
+rows matching any of the requested statuses are returned.
+Omitting the status list is equivalent to requesting all three statuses.
+
+#### Snapshot progress rows
+
+While a snapshot is being created (triggered periodically, on exit, or
+manually with `CREATE SNAPSHOT`), a synthetic row is included in the result
+with `transaction_id` set to `"snapshot"`. The `metadata` map for these
+rows contains:
+
+| Key | Description |
+|---|---|
+| `phase` | Current phase of snapshot creation: `EDGES`, `VERTICES`, `INDICES`, `CONSTRAINTS`, or `FINALIZING`. |
+| `items_done` | Number of objects serialized in the current phase so far. |
+| `items_total` | Total number of objects expected in the current phase. |
+| `elapsed_ms` | Milliseconds elapsed since the snapshot started. |
+| `db_name` | Name of the database whose snapshot is being created. |
+
+```copy=false
+memgraph> SHOW TRANSACTIONS;
++----------+----------------+-----------------------------+-----------+------------------------------------------------------------------+
+| username | transaction_id | query                       | status    | metadata                                                         |
++----------+----------------+-----------------------------+-----------+------------------------------------------------------------------+
+| ""       | "snapshot"     | ["CREATE SNAPSHOT"]         | "running" | {phase: "VERTICES", items_done: 142000, items_total: 500000, ... |
++----------+----------------+-----------------------------+-----------+------------------------------------------------------------------+
+```
+
+<Callout type="info">
+Snapshot progress values are read from independent atomic counters and are not
+captured as a single consistent snapshot. `items_done`, `items_total`, and
+`phase` may reflect slightly different points in time, so treat them as
+best-effort estimates rather than exact figures. In particular, `items_done`
+may briefly read as `0` when the phase transitions, and `elapsed_ms` may be
+absent if the snapshot started between the phase check and the time read.
+</Callout>
+
+<Callout type="warning">
+Snapshot rows cannot be terminated. Passing `"snapshot"` to `TERMINATE
+TRANSACTIONS` will have no effect — background snapshot creation runs outside
+the normal transaction lifecycle and cannot be interrupted via Cypher.
+</Callout>
+
+Because snapshot rows always have `status` `"running"`, they are suppressed
+when you use `SHOW COMMITTING TRANSACTIONS` or `SHOW ABORTING TRANSACTIONS`.
+
+#### Permissions
+
+By default, users can see and terminate only the transactions they have
 started. For all other transactions, the user must have the
 [**TRANSACTION_MANAGEMENT** privilege](/database-management/authentication-and-authorization/role-based-access-control) which the admin
 assigns with the following query:
@@ -117,11 +188,11 @@ using the following query:
 REVOKE TRANSACTION_MANAGEMENT FROM user;
 ```
 
-<Callout type="info"> 
+<Callout type="info">
 When Memgraph is first started there is only one explicit
 super-admin user that has all the privileges, including the
 **TRANSACTION_MANAGEMENT** privilege. The super-admin user is able to see all
-transactions. 
+transactions.
 </Callout>
 
 If you are connecting to Memgraph using a client, you can pass additional
@@ -213,18 +284,17 @@ Managing transactions is done by establishing a new connection to the database.
 
 **Show and terminate transactions**
 
-The output of the `SHOW TRANSACTIONS` command shows that a  query is
+The output of the `SHOW TRANSACTIONS` command shows that a query is
 currently being run as part of the transaction ID "9223372036854794885".
 
 ```copy=false
-
 memgraph> SHOW TRANSACTIONS;
-+---------------+-----------------------------+-------------------------------------------+----------------+
-| username      | transaction_id              | query                                     | metadata       |
-+---------------+-----------------------------+-------------------------------------------+----------------+
-| ""            | "9223372036854794885"       | ["CALL infinite.get() YIELD * RETURN *;"] | {}             |
-| ""            | "9223372036854794896"       | ["SHOW TRANSACTIONS"]                     | {}             |
-+---------------+-----------------------------+-------------------------------------------+----------------+
++----------+------------------------+-------------------------------------------+-----------+----------+
+| username | transaction_id         | query                                     | status    | metadata |
++----------+------------------------+-------------------------------------------+-----------+----------+
+| ""       | "9223372036854794885"  | ["CALL infinite.get() YIELD * RETURN *;"] | "running" | {}       |
+| ""       | "9223372036854794896"  | ["SHOW TRANSACTIONS"]                     | "running" | {}       |
++----------+------------------------+-------------------------------------------+-----------+----------+
 ```
 
 To terminate the transaction, run the following query:

@@ -133,9 +133,19 @@ Below is a cleaned-up categorization.
 
 #### Coordinator → Coordinator RPCs
 
-| RPC                  | Purpose                                     | Description                                                                                                          |
-| -------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `ShowInstancesRpc` | Follower requests cluster state from leader | Sent by a follower coordinator to the leader coordinator when a user executes `SHOW INSTANCES` through the follower. |
+| RPC                      | Purpose                                      | Description                                                                                                                |
+| ------------------------ | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `ShowInstancesRpc`       | Follower requests cluster state from leader. | Sent by a follower coordinator to the leader coordinator when a user executes `SHOW INSTANCES` through the follower.       |
+| `AddCoordinatorRpc`      | Follower requests adding coordinator.        | Sent by a follower coordinator to the leader coordinator when a user executes `ADD COORDINATOR` through the follower.      |
+| `RemoveCoordinatorRpc`   | Follower requests removing coordinator.      | Sent by a follower coordinator to the leader coordinator when a user executes `REMOVE COORDINATOR` through the follower.   |
+| `RegisterInstanceRpc`    | Follower requests registering an instance.   | Sent by a follower coordinator to the leader coordinator when a user executes `REGISTER INSTANCE` through the follower.    |
+| `UnregisterInstanceRpc`  | Follower requests unregistering an instance. | Sent by a follower coordinator to the leader coordinator when a user executes `UNREGISTER INSTANCE` through the follower.  |
+| `SetInstanceToMainRpc`   | Follower requests updating MAIN instance.    | Sent by a follower coordinator to the leader coordinator when a user executes `SET INSTANCE TO MAIN` through the follower. |
+| `DemoteInstanceRpc`      | Follower requests demoting an instance.      | Sent by a follower coordinator to the leader coordinator when a user executes `DEMOTE INSTANCE` through the follower.      |
+| `UpdateConfigRpc`        | Follower requests updating config.           | Sent by a follower coordinator to the leader coordinator when a user executes `UPDATE CONFIG` through the follower.        |
+| `ForceResetRpc`          | Follower requests resetting cluster state.   | Sent by a follower coordinator to the leader coordinator when a user executes `FORCE RESET` through the follower.          |
+| `GetRoutingTableRpc`     | Follower requests a routing table.           | Sent by a follower coordinator to the leader coordinator when a user connects using `bolt+routing` through the follower.   |
+| `CoordReplicationLagRpc` | Follower requests replication lag info.      | Sent by a follower coordinator to the leader coordinator when a user executes `SHOW REPLICATION LAG` through the follower. |
 
 
 #### Coordinator → Data Instance RPCs
@@ -148,7 +158,7 @@ All of the following messages were sent by the leader coordinator.
 | `DemoteMainToReplicaRpc`   | Demote a Main after failover                        | Sent to the old MAIN in order to demote it to REPLICA.                                                                           |
 | `RegisterReplicaOnMainRpc` | Instruct Main to accept replication from a Replica  | Sent to the MAIN to register a REPLICA on the MAIN.                                                                              |
 | `UnregisterReplicaRpc`     | Remove Replica from Main                            | Sent to the MAIN to unregister a REPLICA from the MAIN.                                                                          |
-| `EnableWritingOnMainRpc`   | Re-enable writes after Main restarts                | Sent to the MAIN to enable writing on that MAIN.                                                                                 |
+| `EnableWritingOnMainRpc`   | Re-enable writes after Main restarts (deprecated)   | Kept for backward compatibility (ISSU). No longer sent by coordinators — writing is implicitly enabled on promotion.             |
 | `GetDatabaseHistoriesRpc`  | Gather committed transaction counts during failover | Sent to all REPLICA instances in order to select a new MAIN during the failover process.                                         |
 | `StateCheckRpc`            | Health check ping (liveness)                        | Sent to all data instances for a liveness check.                                                                                 |
 | `SwapMainUUIDRpc`          | Ensure Replica tracks the correct Main              | Sent to REPLICA instances to set the UUID of the MAIN they should listen to.                                                     |
@@ -225,7 +235,7 @@ in the cluster to ensure high availability, with timeouts.
 | `PromoteToMainReq`         | Coordinator | Data instance  |                  |
 | `RegisterReplicaOnMainReq` | Coordinator | Data instance  |                  |
 | `UnregisterReplicaReq`     | Coordinator | Data instance  |                  | 
-| `EnableWritingOnMainReq`   | Coordinator | Data instance  |                  |
+| `EnableWritingOnMainReq`   | Coordinator | Data instance  |    deprecated    |
 | `GetDatabaseHistoriesReq`  | Coordinator | Data instance  |                  |
 | `StateCheckReq`            | Coordinator | Data instance  | 5s               |
 | `SwapMainUUIDReq`          | Coordinator | Data instance  |                  |
@@ -267,15 +277,17 @@ other instances and starts accepting write queries.
 ### Instance health checks
 
 The coordinator performs health checks on each instance at a fixed interval,
-configured with `--instance-health-check-frequency-sec`. An instance is not
-considered down until it has failed to respond for the full duration specified
-by `--instance-down-timeout-sec`.
+configured with the `instance_health_check_frequency_sec` coordinator setting.
+An instance is not considered down until it has failed to respond for the full
+duration specified by the `instance_down_timeout_sec` coordinator setting. Both
+settings can be changed at runtime using
+[`SET COORDINATOR SETTING`](/clustering/high-availability/best-practices#coordinator-runtime-settings).
 
 **Example**
 
-If you set:
-- `--instance-health-check-frequency-sec=1`
-- `--instance-down-timeout-sec=5`
+With the default settings:
+- `instance_health_check_frequency_sec=1`
+- `instance_down_timeout_sec=5`
 
 …the coordinator will send a health check RPC (`StateCheckRpc`) every second. An
 instance is marked as down only after **five consecutive missed responses** (5
@@ -299,9 +311,9 @@ If a **REPLICA** fails to respond:
 2. **Main instance fails to respond**
 
 If the **MAIN** instance fails to respond, two cases apply:
-- **Down for less than** `--instance-down-timeout-sec` The instance is still
+- **Down for less than** `instance_down_timeout_sec` The instance is still
 considered alive and will rejoin as MAIN when it responds again.
-- **Down for longer than** `--instance-down-timeout-sec` The coordinator
+- **Down for longer than** `instance_down_timeout_sec` The coordinator
 initiates the failover procedure. What the old MAIN becomes afterward depends on
 the outcome:
   - **Failover succeeds**: the old MAIN rejoins as a **REPLICA**.
@@ -462,6 +474,36 @@ All state-changing operations are disabled on followers, including:
 
 These operations are permitted **only on the leader coordinator**.
 
+## Raft-first operations and the reconciliation loop
+
+The coordinator follows a **Raft-first** pattern for all cluster operations
+(registering, unregistering, promoting, demoting instances). This means every
+state change is first committed to the Raft log and acknowledged by a majority
+of coordinators **before** the operation returns success to the user.
+
+After the Raft commit, the coordinator sends RPCs to data instances (e.g.,
+`PromoteToMainRpc`, `DemoteMainToReplicaRpc`, `RegisterReplicaOnMainRpc`,
+`UnregisterReplicaRpc`) on a **best-effort** basis. If an RPC fails due to a
+transient network issue, the operation still succeeds from the user's
+perspective because the Raft log is the single source of truth.
+
+### How the reconciliation loop works
+
+The coordinator leader runs a periodic **reconciliation loop** that
+automatically detects and corrects discrepancies between the desired state (Raft
+log) and the actual state of data instances. Specifically:
+
+- **Missing replicas on main**: If a replica exists in the Raft state but is not
+  registered on the current main instance, the reconciliation loop sends a
+  `RegisterReplicaOnMainRpc` to the main.
+- **Stale replicas on main**: If the main instance reports a replica that no
+  longer exists in the Raft state, the reconciliation loop sends an
+  `UnregisterReplicaRpc` to remove it.
+
+This self-healing behavior means the cluster automatically recovers from
+transient RPC failures without user intervention. Users only need to retry an
+operation if the Raft commit itself fails.
+
 ## Instance restarts
 
 ### Restarting data instances
@@ -473,9 +515,9 @@ Both MAIN and REPLICA instances may fail and later restart.
   to follow. This synchronization happens automatically once the coordinator’s
   health check (“ping”) succeeds.
 
-- When the **MAIN** instance restarts, it is initially prevented from accepting
-  write operations. Writes become allowed only after the coordinator confirms
-  the instance’s state and sends an `EnableWritingOnMainRpc` message.
+- When the **MAIN** instance restarts, the coordinator confirms the instance’s
+  state through health checks. Writing is enabled once the
+  coordinator verifies the instance is healthy and its role is confirmed by sending PromoteToMainRpc to the data instance.
 
 This ensures that instances safely rejoin the cluster without causing
 inconsistencies.
@@ -627,9 +669,9 @@ Thus, only STRICT_SYNC replicas can directly impact write availability.
 When the MAIN instance becomes unavailable, the failure is handled by the leader
 coordinator using two user-configured parameters:
 
-- `--instance-health-check-frequency-sec`: how often health checks are sent
-- `--instance-down-timeout-sec`: how long an instance must remain unresponsive
-  before it is considered down
+- `instance_health_check_frequency_sec`: how often health checks are sent (configurable via [`SET COORDINATOR SETTING`](/clustering/high-availability/best-practices#coordinator-runtime-settings))
+- `instance_down_timeout_sec`: how long an instance must remain unresponsive
+  before it is considered down (configurable via [`SET COORDINATOR SETTING`](/clustering/high-availability/best-practices#coordinator-runtime-settings))
 
 Once the coordinator gathers enough evidence that the MAIN is down, it begins a
 failover procedure using a small number of RPC messages. The exact time required
