@@ -1,0 +1,76 @@
+---
+title: DuckDB
+description: Connect MemGQL to DuckDB.
+---
+
+# DuckDB
+
+The DuckDB connector (`CONNECTOR_TYPE=duckdb`) translates GQL queries into SQL
+and executes them against an embedded DuckDB instance. It requires a
+[mapping file](../quick-start.mdx#mapping-file) that maps graph patterns to
+relational tables.
+
+DuckDB runs in-process (no separate server needed), making it ideal for local
+development and testing.
+
+## 1. Create and seed a DuckDB database
+
+```bash
+docker network create memgql-net
+
+# Create a DuckDB file with seed data using the DuckDB CLI
+docker run --rm -v ./data:/data \
+    datacatering/duckdb:v1.1.1 \
+    -c "
+CREATE TABLE persons (id INTEGER PRIMARY KEY, name TEXT, age INTEGER);
+CREATE TABLE companies (id INTEGER PRIMARY KEY, name TEXT);
+CREATE TABLE knows (from_id INTEGER, to_id INTEGER);
+CREATE TABLE works_at (person_id INTEGER, company_id INTEGER);
+
+INSERT INTO persons VALUES (1, 'Alice', 30), (2, 'Bob', 25);
+INSERT INTO companies VALUES (1, 'Acme Corp');
+INSERT INTO knows VALUES (1, 2);
+INSERT INTO works_at VALUES (1, 1);
+" /data/graph.duckdb
+```
+
+## 2. Start MemGQL
+
+```bash
+docker run --rm \
+    --name memgql \
+    --network memgql-net \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTOR_TYPE=duckdb \
+    --env DUCKDB_PATH=/data/graph.duckdb \
+    --env MAPPING_FILE=/data/mapping.json \
+    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    -v ./data:/data \
+    -v ./mapping.json:/data/mapping.json \
+    memgraph/memgql:latest
+```
+
+For an in-memory database (no persistence), omit `DUCKDB_PATH`.
+
+## 3. Connect
+
+```bash
+mgconsole --port 7688
+```
+
+## 4. Query
+
+```gql
+MATCH (p:Person) RETURN p.name, p.age;
+```
+
+```gql
+MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
+```
+
+```gql
+MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
+```
+
+For environment variables, see [Configuration](../config.mdx#duckdb-duckdb).

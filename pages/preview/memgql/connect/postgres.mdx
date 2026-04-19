@@ -1,0 +1,91 @@
+---
+title: PostgreSQL
+description: Connect MemGQL to PostgreSQL.
+---
+
+# PostgreSQL
+
+The PostgreSQL connector (`CONNECTOR_TYPE=postgres`) translates GQL queries into
+SQL and executes them against PostgreSQL. It requires a
+[mapping file](../quick-start.mdx#mapping-file) that maps graph patterns to
+relational tables.
+
+## 1. Start PostgreSQL
+
+```bash
+docker network create memgql-net
+
+docker run -d --rm \
+    --name postgres-dev \
+    --network memgql-net \
+    -p 5432:5432 \
+    --env POSTGRES_PASSWORD=postgres \
+    postgres:18
+```
+
+## 2. Seed data
+
+```bash
+docker exec -i postgres-dev psql -U postgres << 'SQL'
+CREATE TABLE IF NOT EXISTS persons (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    age INT
+);
+CREATE TABLE IF NOT EXISTS companies (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS knows (
+    from_id INT REFERENCES persons(id),
+    to_id INT REFERENCES persons(id)
+);
+CREATE TABLE IF NOT EXISTS works_at (
+    person_id INT REFERENCES persons(id),
+    company_id INT REFERENCES companies(id)
+);
+
+INSERT INTO persons (id, name, age) VALUES (1, 'Alice', 30), (2, 'Bob', 25);
+INSERT INTO companies (id, name) VALUES (1, 'Acme Corp');
+INSERT INTO knows (from_id, to_id) VALUES (1, 2);
+INSERT INTO works_at (person_id, company_id) VALUES (1, 1);
+SQL
+```
+
+## 3. Start MemGQL
+
+```bash
+docker run --rm \
+    --name memgql \
+    --network memgql-net \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTOR_TYPE=postgres \
+    --env POSTGRES_URL="host=postgres-dev user=postgres password=postgres dbname=postgres" \
+    --env MAPPING_FILE=/data/mapping.json \
+    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    -v ./mapping.json:/data/mapping.json \
+    memgraph/memgql:latest
+```
+
+## 4. Connect
+
+```bash
+mgconsole --port 7688
+```
+
+## 5. Query
+
+```gql
+MATCH (p:Person) RETURN p.name, p.age;
+```
+
+```gql
+MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
+```
+
+```gql
+MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
+```
+
+For environment variables, see [Configuration](../config.mdx#postgresql-postgres).

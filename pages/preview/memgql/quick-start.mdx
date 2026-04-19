@@ -1,0 +1,289 @@
+---
+title: Quick Start
+description: Get started with MemGQL quickly.
+---
+
+# Quick Start
+
+MemGQL is a federated GQL (ISO/IEC 39075) query engine that translates GQL queries
+into backend-native languages and executes them across graph databases.
+Clients connect via the Bolt protocol (port 7688) using any Bolt-compatible driver.
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-started/get-docker/)
+- [mgconsole](https://github.com/memgraph/mgconsole) (Memgraph Bolt CLI client)
+
+## Quick Start: Memgraph + MemGQL
+
+### 1. Create a Docker network
+
+```bash
+docker network create memgql-net
+```
+
+### 2. Start Memgraph
+
+```bash
+docker run -d --rm \
+    --name memgraph-dev \
+    --network memgql-net \
+    -p 7687:7687 \
+    memgraph/memgraph-mage:3.9.0 \
+    --log-level=TRACE --also-log-to-stderr
+```
+
+### 3. Start MemGQL
+
+```bash
+docker run --rm \
+    --name memgql \
+    --network memgql-net \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTOR_TYPE=memgraph-gql \
+    --env MEMGRAPH_URI=memgraph-dev:7687 \
+    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    memgraph/memgql:latest
+```
+
+### 4. Connect with mgconsole
+
+```bash
+mgconsole --port 7688
+```
+
+### 5. Seed some data
+
+```gql
+INSERT
+  (lana:Developer {name: "Lana", level: "senior", yoe: 12}),
+  (marco:Developer {name: "Marco", level: "mid", yoe: 5}),
+  (priya:Developer {name: "Priya", level: "senior", yoe: 9}),
+  (rs:Language {name: "Rust", releaseYear: 2010}),
+  (go:Language {name: "Go", releaseYear: 2009}),
+  (ts:Language {name: "TypeScript", releaseYear: 2012}),
+  (acme:Startup {name: "Acme Labs", funding: 4200000}),
+  (nova:Startup {name: "Nova AI", funding: 18500000}),
+  (lana)-[:WRITES {since: 2018}]->(rs),
+  (lana)-[:WRITES {since: 2021}]->(go),
+  (marco)-[:WRITES {since: 2022}]->(ts),
+  (priya)-[:WRITES {since: 2019}]->(rs),
+  (priya)-[:WRITES {since: 2020}]->(ts),
+  (lana)-[:MENTORS]->(marco),
+  (priya)-[:MENTORS]->(marco),
+  (lana)-[:EMPLOYED_AT {role: "CTO"}]->(acme),
+  (marco)-[:EMPLOYED_AT {role: "Backend Engineer"}]->(nova),
+  (priya)-[:EMPLOYED_AT {role: "Tech Lead"}]->(nova);
+```
+
+### 6. Run GQL queries
+
+Count all nodes in the graph:
+
+```gql
+MATCH () RETURN count(*);
+```
+
+Return developers and their experience:
+
+```gql
+MATCH (d:Developer) RETURN d.name, d.yoe;
+```
+
+Filter with WHERE inside the pattern (GQL syntax):
+
+```gql
+MATCH (d:Developer WHERE d.yoe > 8) RETURN d.name, d.level;
+```
+
+Label expression with IS keyword:
+
+```gql
+MATCH (s IS Startup) RETURN s.name, s.funding;
+```
+
+OR label expression — match multiple labels at once:
+
+```gql
+MATCH (n:Language|Startup) RETURN n;
+```
+
+Edge pattern with direction and type:
+
+```gql
+MATCH (:Developer)-[w:WRITES]->(lang:Language) RETURN lang.name, w.since;
+```
+
+Edge with WHERE clause:
+
+```gql
+MATCH (:Developer)-[w:WRITES WHERE w.since < 2020]->(lang:Language) RETURN lang.name;
+```
+
+Path variable binding:
+
+```gql
+MATCH p = (:Developer)-[:MENTORS]->(:Developer) RETURN p;
+```
+
+Two-hop traversal — who mentors someone employed at a startup:
+
+```gql
+MATCH (senior:Developer)-[:MENTORS]->(junior:Developer)-[:EMPLOYED_AT]->(s:Startup)
+RETURN senior.name, junior.name, s.name;
+```
+
+Variable-length path (quantified path pattern):
+
+```gql
+MATCH (d:Developer {name: "Lana"})-[:MENTORS]->{1,3}(mentee:Developer) RETURN mentee.name;
+```
+
+## Environment Variables
+
+See [Configuration](config.mdx) for the full list of environment variables
+and connector-specific settings.
+
+
+## Mapping File
+
+Relational connectors (PostgreSQL, DuckDB, Iceberg) and multi-connection mode
+require a JSON mapping file that defines how graph patterns map to relational
+tables. Node labels map to tables and edge types map to association tables,
+allowing GQL patterns like `MATCH (p:Person)-[:WORKS_AT]->(c:Company)` to be
+translated into SQL JOINs.
+
+Create a mapping file:
+
+```bash
+cat > mapping.json << 'EOF'
+{
+  "nodes": [
+    {
+      "label": "Person",
+      "table": "persons",
+      "id_column": "id",
+      "properties": { "name": "name", "age": "age" }
+    },
+    {
+      "label": "Company",
+      "table": "companies",
+      "id_column": "id",
+      "properties": { "name": "name" }
+    }
+  ],
+  "edges": [
+    {
+      "rel_type": "KNOWS",
+      "table": "knows",
+      "source_column": "from_id",
+      "target_column": "to_id",
+      "source_label": "Person",
+      "target_label": "Person"
+    },
+    {
+      "rel_type": "WORKS_AT",
+      "table": "works_at",
+      "source_column": "person_id",
+      "target_column": "company_id",
+      "source_label": "Person",
+      "target_label": "Company"
+    }
+  ]
+}
+EOF
+```
+
+Without `MAPPING_FILE`, a default Person/Company mapping (shown above) is used.
+
+## Multi-Connection Mode
+
+Multi-connection mode (`CONNECTOR_TYPE=multi`) lets you manage multiple backend
+connectors and connections at runtime using MemGQL statements. You can add
+connectors, establish connections, and route queries to specific backends — all
+from within the same Bolt session.
+
+### 1. Start MemGQL in multi mode
+
+```bash
+docker run --rm \
+    --name memgql \
+    --network memgql-net \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTOR_TYPE=multi \
+    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    -v ./mapping.json:/data/mapping.json \
+    memgraph/memgql:latest
+```
+
+### 2. Connect and manage backends
+
+```bash
+mgconsole --port 7688
+```
+
+Add connectors and establish connections:
+
+```gql
+ADD CONNECTOR mg TYPE memgraph URI 'memgraph-dev:7687' GRAPH memgraph;
+CONNECT mg AS mg_conn;
+
+ADD CONNECTOR neo TYPE neo4j URI 'neo4j-dev:7687' GRAPH neo4j;
+CONNECT neo AS neo_conn;
+```
+
+### 3. Route queries to specific connections
+
+```gql
+USE CONNECTION mg_conn MATCH (n) RETURN n.name LIMIT 5;
+USE CONNECTION neo_conn MATCH (n) RETURN n.name LIMIT 5;
+```
+
+### 4. Introspection
+
+```gql
+SHOW CONNECTORS;
+SHOW CONNECTIONS;
+SHOW MAPPINGS;
+PING mg_conn;
+```
+
+### 5. Adding relational backends
+
+Relational connectors (PostgreSQL, DuckDB, Iceberg) require a mapping that
+defines how graph patterns map to tables:
+
+```gql
+ADD MAPPING social FROM '/data/mapping.json';
+ADD CONNECTOR pg TYPE postgres USER 'postgres' PASSWORD 'postgres' DATABASE 'postgres' MAPPING social;
+CONNECT pg AS pg_conn;
+USE CONNECTION pg_conn MATCH (n:Person) RETURN n.name LIMIT 5;
+```
+
+### 6. Cleanup
+
+```gql
+DISCONNECT pg_conn;
+DROP CONNECTOR pg;
+DROP MAPPING social;
+```
+
+### MemGQL Statements Reference
+
+| Statement                                          | Description                           |
+|----------------------------------------------------|---------------------------------------|
+| `ADD MAPPING <name> FROM '<file>'`                 | Load a JSON schema mapping            |
+| `DROP MAPPING <name>`                              | Remove a mapping                      |
+| `ADD CONNECTOR <name> TYPE <type> [options...]`    | Register a backend connector          |
+| `DROP CONNECTOR <name>`                            | Remove a connector                    |
+| `CONNECT <connector> AS <name> [DEFAULT]`          | Establish a named connection          |
+| `DISCONNECT <name>`                                | Close a connection                    |
+| `PING <connection>`                                | Test a connection is alive            |
+| `USE CONNECTION <name> <query>`                    | Route a query to a specific connection|
+| `SET DEFAULT CONNECTOR <name>`                     | Set session default connector         |
+| `SET DEFAULT CONNECTION <name>`                    | Set session default connection        |
+| `SHOW CONNECTORS`                                  | List registered connectors            |
+| `SHOW CONNECTIONS`                                 | List active connections               |
+| `SHOW MAPPINGS`                                    | List loaded mappings                  |
