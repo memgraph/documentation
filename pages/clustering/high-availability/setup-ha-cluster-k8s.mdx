@@ -873,6 +873,50 @@ kubectl create secret generic monitoring-basic-auth -n <memgraph-namespace> \
   --from-literal=password='<password>'
 ```
 
+#### Kubernetes infrastructure metrics
+
+`vmagentRemote` can additionally scrape Kubernetes infrastructure metrics
+(`kube-state-metrics`, `node-exporter`, `kubelet`) required by
+`kube-prometheus-stack` Kubernetes and Node dashboards, and remote-write them
+to your centralized monitoring cluster.
+
+Enable Kubernetes scraping by extending your existing `vmagentRemote` values:
+
+```yaml
+vmagentRemote:
+  # ... existing fields (enabled, remoteWrite, externalLabels) ...
+  kubernetes:
+    enabled: true
+    kubeStateMetrics:
+      enabled: true
+      jobName: kube-state-metrics
+      targets:
+        - kube-prometheus-stack-kube-state-metrics.monitoring.svc.cluster.local:8080
+    nodeExporter:
+      enabled: true
+      jobName: node-exporter
+      targets:
+        - kube-prometheus-stack-prometheus-node-exporter.monitoring.svc.cluster.local:9100
+    kubelet:
+      enabled: true
+      jobName: kubelet
+      metricsPath: /metrics/cadvisor
+      apiServerAddress: kubernetes.default.svc:443
+      insecureSkipVerify: false
+```
+
+Notes:
+
+- RBAC and `ServiceAccount` resources are created only when an enabled scrape
+  job requires Kubernetes API access (for example `kubelet.enabled=true` or
+  `nodeExporter.useKubernetesDiscovery=true`).
+- Keep `jobName` values aligned with dashboard and recording-rule expectations
+  unless you also update those queries.
+- Dashboards that rely on precomputed recording-rule series still require
+  rule evaluation in your monitoring stack.
+
+A ready-to-use example values file is available in the Helm charts repository:
+[`examples/remote-monitoring/values-ha-k8s-metrics.yaml`](https://github.com/memgraph/helm-charts/blob/main/examples/remote-monitoring/values-ha-k8s-metrics.yaml).
 
 ## Configuration options
 
