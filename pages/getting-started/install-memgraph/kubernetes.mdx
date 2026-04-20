@@ -265,6 +265,162 @@ kubectl delete crd servicemonitors.monitoring.coreos.com
 kubectl delete crd thanosrulers.monitoring.coreos.com
 ```
 
+#### Remote metrics and logs
+
+The standalone chart can also ship:
+
+- metrics to a remote Prometheus-compatible backend via `vmagentRemote` (`remote_write`)
+- logs to a Loki-compatible backend via `vectorRemote`
+
+This is useful when your observability stack lives in a separate cluster or in a managed service.
+
+Prerequisites:
+
+- keep `prometheus.enabled: true` so `mg-exporter` is deployed
+- for standalone deployments, enable Memgraph monitoring endpoints:
+  - `service.enableHttpMonitoring: true`
+  - `service.enableWebsocketMonitoring: true`
+- when `vectorRemote.enabled: true`, add `--monitoring-port=<service.websocketPortMonitoring>` and `--monitoring-address=0.0.0.0` to `memgraphConfig`
+- if you only need remote shipping and do not want duplicate scraping from kube-prometheus, set `prometheus.serviceMonitor.enabled: false`
+
+Example `values.yaml`:
+
+```yaml
+prometheus:
+  enabled: true
+  namespace: monitoring
+  serviceMonitor:
+    enabled: false
+
+service:
+  enableHttpMonitoring: true
+  enableWebsocketMonitoring: true
+
+memgraphConfig:
+  - "--data-directory=/var/lib/memgraph/mg_data"
+  - "--also-log-to-stderr=true"
+  - "--monitoring-port=7444"
+  - "--monitoring-address=0.0.0.0"
+
+vmagentRemote:
+  enabled: true
+  namespace: monitoring
+  remoteWrite:
+    url: "https://<prom-remote-write>/api/v1/write"
+    # Optional: only set basicAuth when your remote_write endpoint requires basic auth.
+    basicAuth:
+      secretName: monitoring-basic-auth
+      usernameKey: username
+      passwordKey: password
+  externalLabels:
+    cluster_id: "memgraph-standalone"
+    service_name: "memgraph"
+    cluster_env: "dev"
+
+vectorRemote:
+  enabled: true
+  logsEndpoint: "https://<loki-endpoint>"
+  # Optional: only set auth when your endpoint requires basic auth.
+  auth:
+    secretName: monitoring-basic-auth
+    usernameKey: username
+    passwordKey: password
+  extraLabels:
+    cluster_id: "memgraph-standalone"
+    service_name: "memgraph"
+    cluster_env: "dev"
+    role: "standalone"
+```
+
+Create credentials secret in the namespace where vmagent runs (usually `monitoring`):
+
+```bash
+kubectl create secret generic monitoring-basic-auth -n monitoring \
+  --from-literal=username='<username>' \
+  --from-literal=password='<password>'
+```
+
+For the standalone Vector sidecar, create the same secret in the Memgraph release namespace as well:
+
+```bash
+kubectl create secret generic monitoring-basic-auth -n <memgraph-namespace> \
+  --from-literal=username='<username>' \
+  --from-literal=password='<password>'
+```
+
+
+### Node affinity
+
+The chart exposes the full Kubernetes `nodeAffinity` spec via the `nodeAffinity`
+parameter. This allows you to constrain which nodes Memgraph Pods can be
+scheduled on based on node labels, using both `requiredDuringSchedulingIgnoredDuringExecution`
+and `preferredDuringSchedulingIgnoredDuringExecution` rules.
+
+<Callout type="warning">
+**Breaking change in chart version 0.2.17**: The `affinity.nodeKey` and `affinity.nodeValue` parameters have been
+replaced by `nodeAffinity`. If you were using the old parameters, update your `values.yaml`
+to use the new `nodeAffinity` configuration.
+</Callout>
+
+Example `values.yaml` configuration:
+
+```yaml
+nodeAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+      - matchExpressions:
+          - key: topology.kubernetes.io/zone
+            operator: In
+            values:
+              - antarctica-east1
+              - antarctica-west1
+  preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 1
+      preference:
+        matchExpressions:
+          - key: my-organization/node-performance
+            operator: In
+            values:
+              - best
+```
+
+For more information, see the [Kubernetes documentation on node affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/).
+
+### External access with LoadBalancer
+
+By default, the standalone Helm chart creates a `ClusterIP` service, which is
+only accessible from within the Kubernetes cluster. If you need to access
+Memgraph from outside the cluster (e.g., from a local developer machine), you
+can enable an additional `LoadBalancer` service.
+
+To enable the LoadBalancer service, set `service.loadBalancer.enabled` to `true`
+in your `values.yaml` file:
+
+```yaml
+service:
+  loadBalancer:
+    enabled: true
+    type: LoadBalancer
+    enableBolt: true
+```
+
+The LoadBalancer service uses the same ports as the main service (Bolt,
+WebSocket monitoring, HTTP monitoring) but exposes them externally. You can
+restrict access using `loadBalancerSourceRanges`:
+
+```yaml
+service:
+  loadBalancer:
+    enabled: true
+    loadBalancerSourceRanges:
+      - 1.2.3.4/32
+      - 10.0.0.0/8
+```
+
+Additional options like `externalTrafficPolicy`, `ipFamilyPolicy`, and
+`ipFamilies` are available for fine-grained network configuration. See the
+[configuration table](#configuration-options) for all parameters.
+
 ### Configuration options
 
 The following table lists the configurable parameters of the Memgraph standalone chart and their default values.
@@ -427,7 +583,7 @@ and their default values.
 
 | Parameter                    | Description                                                                                             | Default                                |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `image.repository`           | Memgraph Lab Docker image repository                                                                    | `memgraph/memgraph-lab`                |
+| `image.repository`           | Memgraph Lab Docker image repository                                                                    | `docker.io/memgraph/lab`               |
 | `image.tag`                  | Specific tag for the Memgraph Lab Docker image. Overrides the image tag whose default is chart version. | `""` (Defaults to chart's app version) |
 | `image.pullPolicy`           | Image pull policy                                                                                       | `IfNotPresent`                         |
 | `replicaCount`               | Number of Memgraph Lab instances to run.                                                                | `1`                                    |

@@ -9,7 +9,9 @@ export default {
   "monitoring": "Monitoring",
   "multi-tenancy": "Multi-tenancy",
   "query-metadata": "Query metadata",
+  "server-side-parameters": "Server-side parameters",
   "server-stats": "Server stats",
   "ssl-encryption": "SSL encryption",
-  "system-configuration": "System configuration"
+  "system-configuration": "System configuration",
+  "upgrades": "Upgrades"
 }

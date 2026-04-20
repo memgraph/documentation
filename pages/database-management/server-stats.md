@@ -40,6 +40,8 @@ The result will contain the following fields:
 | unreleased_delta_objects     | The current number of still allocated objects with the information about the changes that write transactions have made, called Delta objects. Refer to allocation and deallocation of Delta objects [on this page](/fundamentals/storage-memory-usage#in-memory-transactional-storage-mode-default).                        |
 | disk_usage                   | The amount of disk space used by the data directory (in B, KiB, MiB, GiB or TiB).                                                                                                             |
 | memory_tracked               | The amount of RAM allocated in the system and tracked by Memgraph (in B, KiB, MiB, GiB or TiB).<br/>For more info, check out [memory control](/fundamentals/storage-memory-usage).        |
+| graph_memory_tracked         | The portion of `memory_tracked` used by graph structures (vertices, edges, properties). |
+| vector_index_memory_tracked  | The portion of `memory_tracked` used by vector index embeddings. |
 | allocation_limit             | The current allocation limit set for this instance (in B, KiB, MiB, GiB or TiB).<br/>For more info, check out the [memory control](/fundamentals/storage-memory-usage#control-memory-usage).                       |
 | global_isolation_level       | The current `global` isolation level.<br/>For more info, check out [isolation levels](/fundamentals/transactions#isolation-levels).                                                       |
 | session_isolation_level      | The current `session` isolation level.                                                                                                                                                        |
@@ -49,22 +51,25 @@ The result will contain the following fields:
 
 ## License information
 
-Running the following query will return certain information about the Memgraph 
-Enterprise License that was injected into the system.
+Running the following query will return information about the active Memgraph
+Enterprise license (the winning license selected from all configured sources).
 
 ```cypher
 SHOW LICENSE INFO;
 ```
 
-| Field             | Description                                         |
-|-------------------|-----------------------------------------------------|
-| organization_name | Organization name for the enterprise license.       |
-| license_key       | Encoded license key.                                |
-| is_valid          | Brief flag whether the license is currently valid.  |
-| license_type      | Enterprise / OEM                                    |
-| valid_until       | Date when the license expires.                      |
-| memory_limit      | Memory limit (in GiB).                              |
-| status            | Descriptive status of the license validity.         |
+| Field             | Description                                                                                          |
+|-------------------|------------------------------------------------------------------------------------------------------|
+| organization_name | Organization name for the enterprise license.                                                        |
+| license_key       | Encoded license key.                                                                                 |
+| is_valid          | Whether the license is currently valid. Uses the same validation logic as enterprise feature checks. |
+| license_type      | Enterprise / OEM                                                                                     |
+| valid_until       | Date when the license expires, or `FOREVER` for non-expiring licenses.                               |
+| memory_limit      | Memory limit (in GiB).                                                                               |
+| status            | Descriptive status of the license validity.                                                          |
+
+If no license has been provided, `is_valid` is `false` and `status` reads
+`"You have not provided any license!"`.
 
 
 
