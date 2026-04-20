@@ -46,6 +46,203 @@ guide.
 
 ## 🚀 Latest release
 
+### Memgraph v3.10.0 - May 6th, 2026
+
+{<h4 className="custom-header">⚠️ Breaking changes</h4>}
+
+- Coordinators ignore periodic storage snapshots (no user data to snapshot), and
+  `--init-file` / `--init-data-file` are rejected on coordinators and on data
+  instances that join an HA cluster (`--management-port` set). Remove those
+  flags from coordinator and HA data-instance configs before upgrading, and run
+  any bootstrap Cypher against the MAIN after the cluster is formed instead of
+  relying on startup init files.
+  [#4035](https://github.com/memgraph/memgraph/pull/4035)
+- Fine-grained label and edge-type permissions now support explicit `DENY`
+  semantics (including `DENY ALL`/`*`) which take precedence over `GRANT`. The
+  `UPDATE` permission is split into granular capabilities: `SET LABEL`, `REMOVE
+  LABEL`, `SET PROPERTY`, `CREATE EDGE`, `DELETE EDGE`. Existing grants that
+  relied on `GRANT NOTHING` / `REVOKE NOTHING` must be migrated to `DENY`.
+  [#3789](https://github.com/memgraph/memgraph/pull/3789)
+- `SHOW STORAGE INFO` output renames three fields and adds one new field:
+  `disk_usage` → `global_disk_usage`, `memory_tracked` → `global_memory_tracked`,
+  `allocation_limit` → `global_runtime_allocation_limit`, and adds
+  `global_license_allocation_limit`. Update any tooling or scripts that parse
+  these field names.
+  [#3999](https://github.com/memgraph/memgraph/pull/3999)
+
+{<h4 className="custom-header">✨ New features</h4>}
+
+- Coordinators now accept read-only system queries (`SHOW CONFIG`, `SHOW LICENSE
+  INFO`, `SHOW BUILD INFO`, `SHOW STORAGE INFO`) plus `SET DATABASE SETTING` and
+  `RELOAD SSL`, so you can inspect configuration or reload TLS from a
+  coordinator without opening a session to a data instance.
+  [#4035](https://github.com/memgraph/memgraph/pull/4035)
+- Added `SHOW QUERY CALLABLE MAPPINGS` to list all query procedure and function
+  aliases with their original source names and types (`procedure` / `function`),
+  so you can audit callable mappings without digging through configuration.
+  [#4014](https://github.com/memgraph/memgraph/pull/4014)
+- Added `WHERE` clause support directly after `YIELD` in procedure calls:
+  `CALL mg.procedures() YIELD * WHERE name = 'mg.procedures' RETURN name`. This
+  lets you filter procedure results inline instead of wrapping the call in a
+  `WITH … WHERE` subquery.
+  [#4010](https://github.com/memgraph/memgraph/pull/4010)
+- Memgraph now warns (or errors with `--strict-flag-check`) when unexpected
+  positional arguments appear after startup flag parsing, catching common
+  mistakes like `--flag false` (which silently ignores `false` and sets the flag
+  to `true`). Default behavior is strict in development builds; release builds
+  emit a warning.
+  [#4009](https://github.com/memgraph/memgraph/pull/4009)
+- Added `--storage-lock-timeout-sec` to retry acquiring the data-directory file
+  lock for a configurable duration before giving up. This prevents spurious
+  startup failures when a pod is force-killed and the old lock has not been
+  released yet (e.g. on CephFS or other distributed storage with propagation
+  delay).
+  [#4021](https://github.com/memgraph/memgraph/pull/4021)
+- Replication error messages now identify exactly which replica failed and why
+  (replica name, replication mode, failure reason) instead of generic "at least
+  one SYNC/STRICT_SYNC replica has not confirmed" messages, making it faster to
+  pinpoint replication issues.
+  [#3985](https://github.com/memgraph/memgraph/pull/3985)
+- Added `RELOAD BOLT_SERVER TLS` Cypher command to reload SSL/TLS certificates
+  at runtime without restarting Memgraph. Existing connections keep the old
+  certificate; new connections use the reloaded one. Useful for Let's Encrypt
+  renewals and compliance certificate rotations.
+  [#3962](https://github.com/memgraph/memgraph/pull/3962)
+- `WITH CONFIG` maps (e.g. `CREATE VECTOR INDEX … WITH CONFIG {…}`) now accept
+  query parameters as values, so you can pass `{dimension: $dim, capacity: $cap}`
+  instead of hard-coding values in the config literal.
+  [#3959](https://github.com/memgraph/memgraph/pull/3959)
+- `instance_down_timeout_sec` and `instance_health_check_frequency_sec` are now
+  Raft-replicated coordinator runtime settings changeable via
+  `SET COORDINATOR SETTING` without restarting the cluster. The old
+  `--instance-down-timeout-sec` and `--instance-health-check-frequency-sec`
+  flags are deprecated and ignored.
+  [#3949](https://github.com/memgraph/memgraph/pull/3949)
+- HA coordinator cluster operations (register, unregister, promote, demote)
+  now follow a Raft-first pattern: the state is committed to the Raft log and
+  acknowledged by a majority before returning success. RPCs to data instances
+  are retried automatically by the reconciliation loop, so transient network
+  issues no longer require manual intervention.
+  [#3942](https://github.com/memgraph/memgraph/pull/3942)
+  [#3922](https://github.com/memgraph/memgraph/pull/3922)
+- Point2D, Point3D, and Enum types are now fully supported in the MGP C, C++,
+  and Python query module APIs. Query modules can create, copy, compare, and
+  inspect these types as `mgp_value`, fixing crashes in `schema.node_type_properties()`
+  on graphs that use spatial or enum properties.
+  [#3980](https://github.com/memgraph/memgraph/pull/3980)
+- Added `schema.node_type_properties` and `schema.rel_type_properties` config
+  argument to match the Neo4j specification, improving compatibility with the
+  Neo4j ODBC BI Connector. Also adds the `apoc.version` mapping.
+  [#4000](https://github.com/memgraph/memgraph/pull/4000)
+- Added server-side descriptions: annotate labels, edge types, properties, and
+  databases with human-readable strings that are persisted and visible in
+  `SHOW SCHEMA INFO`. Useful for documenting your graph schema directly in the
+  database.
+  [#3894](https://github.com/memgraph/memgraph/pull/3894)
+- Vector edge indexes now use the single-store pattern (storing only a
+  `VectorIndexId` in edge properties rather than duplicating vector data),
+  matching vertex vector indexes. Snapshot serialization is backward-compatible.
+  [#3929](https://github.com/memgraph/memgraph/pull/3929)
+- Added GNN import/export module to MAGE: export the graph to PyTorch Geometric
+  (PyG) or TensorFlow GNN (TF-GNN) JSON format, run your GNN pipeline
+  externally, then write predictions back with `pyg_import` / `tf_import`.
+  [#3803](https://github.com/memgraph/memgraph/pull/3803)
+
+{<h4 className="custom-header">🛠️ Improvements</h4>}
+
+- Text index search performance is significantly improved: GIDs are now returned
+  directly from the Rust layer instead of full JSON documents, and Tantivy
+  searchers are pinned per transaction for snapshot-consistent reads.
+  [#3963](https://github.com/memgraph/memgraph/pull/3963)
+- Upgraded Tantivy to 0.25, bringing ~30% faster text index imports and ~20%
+  better search throughput under contention.
+  [#3927](https://github.com/memgraph/memgraph/pull/3927)
+- `ORDER BY` is now eliminated when an index scan already provides the required
+  ascending order, avoiding an unnecessary sort. With `LIMIT`, this means the
+  planner stops after N rows instead of sorting the entire result set first.
+  [#3950](https://github.com/memgraph/memgraph/pull/3950)
+- Added `AI_PLATFORM` license type that enforces memory limits only on graph
+  memory, leaving vector index memory unconstrained up to the system
+  `--memory-limit`. Useful when running large vector workloads alongside graph
+  data without hitting the overall allocation cap.
+  [#3999](https://github.com/memgraph/memgraph/pull/3999)
+- Most third-party build dependencies are now managed through Conan 2 packages,
+  making builds more reproducible and the contributor setup easier. See the
+  updated [build-from-source guide](/getting-started/build-memgraph-from-source)
+  for changes to the build workflow.
+  [#4002](https://github.com/memgraph/memgraph/pull/4002)
+
+{<h4 className="custom-header">🐞 Bug fixes</h4>}
+
+- Fixed a potential OOM crash when dropping a large vector index: the internal
+  transfer from indexed format back to property store now manages peak memory
+  usage so the operation completes cleanly even under tight memory limits.
+  [#4001](https://github.com/memgraph/memgraph/pull/4001)
+- `RELOAD BOLT_SERVER TLS` is now supported on coordinator instances, so you can
+  rotate TLS certificates cluster-wide without opening a session to each data
+  instance separately.
+  [#4003](https://github.com/memgraph/memgraph/pull/4003)
+- Fixed `refactor.merge_nodes` discarding relationship properties: all
+  properties on merged relationships are now correctly copied to the new
+  relationship.
+  [#3948](https://github.com/memgraph/memgraph/pull/3948)
+- Fixed `ORDER BY` failing for list values; Cypher list ordering semantics
+  (lexicographic / dictionary order) are now applied correctly.
+  [#3877](https://github.com/memgraph/memgraph/pull/3877)
+- Fixed the `link_prediction` MAGE module returning incorrect ROC-AUC scores
+  when all labels belong to a single class (returns a neutral 0.5 AUC instead
+  of erroring or producing inconsistent results).
+  [#3845](https://github.com/memgraph/memgraph/pull/3845)
+- Fixed a use-after-free crash on replicas receiving a snapshot: `Clear()` now
+  also discards pending GC deltas, preventing stale pointers from being
+  dereferenced on the next transaction commit.
+  [#4013](https://github.com/memgraph/memgraph/pull/4013)
+- Fixed a crash in HA coordinators caused by a dangling pointer in
+  `ReplicationInstanceConnector`; concurrent coordinator operations are now safe
+  and cluster membership changes complete without instability.
+  [#3922](https://github.com/memgraph/memgraph/pull/3922)
+- Fixed a bug where `std::thread::hardware_concurrency()` returning 0 on some
+  machines caused RPC and communication servers to be created with zero worker
+  threads, leading to silent failures. A safe fallback of 2 is now used.
+  [#3982](https://github.com/memgraph/memgraph/pull/3982)
+- Fixed replication network channels not being cleanly destroyed during
+  shutdown, which could block shutdown or leave sockets open.
+  [#4005](https://github.com/memgraph/memgraph/pull/4005)
+- Fixed a crash that could occur when calling `SetValueForce` on storage
+  failures during a scheduled license revalidation.
+  [#4004](https://github.com/memgraph/memgraph/pull/4004)
+- Fixed a TCP segmentation bug in SLK multi-file stream processing: when a file
+  transition arrives in a fragmented TCP segment, `CheckStreamStatus` now
+  validates metadata completeness before signalling `NEW_FILE`, preventing
+  incorrect stream state.
+  [#3925](https://github.com/memgraph/memgraph/pull/3925)
+- Fixed a crash if the telemetry server fails to initialize: the exception is
+  now caught, logged, and the instance shuts down gracefully instead of
+  terminating abruptly.
+  [#4026](https://github.com/memgraph/memgraph/pull/4026)
+- Transient disk failures when opening WAL or snapshot output files are now
+  handled without crashing; failed snapshots are skipped and retried at the next
+  scheduled interval (WAL failures remain fatal).
+  [#4025](https://github.com/memgraph/memgraph/pull/4025)
+- Fixed log rotation being skipped after instance restarts: spdlog in-memory
+  rotation state is now re-initialized on startup so daily log files are
+  rotated correctly even after frequent restarts.
+  [#4019](https://github.com/memgraph/memgraph/pull/4019)
+- Fixed a crash when calling `std::abort` while using an async logger: removing
+  the `spdlog::shutdown()` call before abort eliminates a window where the
+  logger could segfault, making core dumps more useful for diagnosis.
+  [#4034](https://github.com/memgraph/memgraph/pull/4034)
+- Fixed a network descriptor leak in the epoll listener and a potential crash
+  if `epoll_create1` fails; the latter now throws an exception instead of
+  crashing the database.
+  [#4032](https://github.com/memgraph/memgraph/pull/4032)
+
+### Lab v3.10.0 - May 6th, 2026
+
+<LabReleasesClient version="3.10.0" />
+
+## Previous releases
+
 ### Memgraph v3.9.0
 
 {<h4 className="custom-header">⚠️ Breaking changes</h4>}
@@ -285,8 +482,6 @@ guide.
 ### Lab v3.9.0 - March 18th, 2026
 
 <LabReleasesClient version="3.9.0" />
-
-## Previous releases
 
 ### Memgraph v3.8.1 - February 17th, 2026
 
@@ -622,8 +817,6 @@ triggers with `SECURITY DEFINER`. Triggers now report the definer's identity
 correctly for auditing and role-based logic.
 [#3768](https://github.com/memgraph/memgraph/pull/3768)
 
-## Previous releases
-
 ### Lab v3.8.0 - February 11th, 2026
 
 <LabReleasesClient version="3.8.0" />
@@ -691,7 +884,6 @@ correctly for auditing and role-based logic.
 ### MAGE v3.7.1 - November 25th, 2025
 
 - Version bump to v3.7.1 to match the latest Memgraph version.
-
 
 ### Lab v3.7.1 - December 19th, 2025
 

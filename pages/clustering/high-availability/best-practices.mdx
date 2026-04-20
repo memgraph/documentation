@@ -25,14 +25,10 @@ optimal availability they should be **physically separated**.
 
 ### Coordinator disk space
 
-Ensure enough disk capacity for:
-
-- `--snapshot-retention-count + 1` snapshots
-- Several WAL files
-
-A new snapshot is created before the oldest one is removed. Insufficient disk
-space may cause snapshot creation to fail. This is particularly important in
-**Kubernetes**, where volumes often have strict size limits.
+Storage snapshots are **automatically disabled** on coordinator instances since
+coordinators do not store user data. Coordinators still require disk capacity
+for Raft metadata and internal logs. In **Kubernetes**, ensure volumes have
+sufficient size limits for these files.
 
 
 ## Command-line flags
@@ -113,39 +109,39 @@ coordinator’s RPC messages.
 **Example:**
 `--management-port=10000`
 
-#### `--instance-health-check-frequency-sec`
+#### `--instance-health-check-frequency-sec` (deprecated)
 
-How often the coordinator pings data instances (default: 1 second).
-Changing is usually unnecessary.
+<Callout type="warning">
+**Deprecated in Memgraph 3.10.** This startup flag is now ignored. Use the
+`instance_health_check_frequency_sec` [coordinator runtime setting](#coordinator-runtime-settings)
+instead.
+</Callout>
 
-**Example:**
-`--instance-health-check-frequency-sec=1`
+#### `--instance-down-timeout-sec` (deprecated)
 
-#### `--instance-down-timeout-sec`
-
-How long to wait before marking an instance as down (default: 5 seconds).
-
-**Example:**
-`--instance-down-timeout-sec=5`
-
+<Callout type="warning">
+**Deprecated in Memgraph 3.10.** This startup flag is now ignored. Use the
+`instance_down_timeout_sec` [coordinator runtime setting](#coordinator-runtime-settings)
+instead.
+</Callout>
 
 ### Health check behavior
 
 Coordinator health checks follow this pattern:
 
-- A ping is sent every `--instance-health-check-frequency-sec`.
+- A ping is sent every `instance_health_check_frequency_sec` seconds.
 - An instance is marked **down** only after
-  `--instance-down-timeout-sec` elapses without a response.
+  `instance_down_timeout_sec` elapses without a response.
 
 Requirements & recommendations:
 
-- `down-timeout >= health-check-frequency`
+- `instance_down_timeout_sec >= instance_health_check_frequency_sec`
 - Prefer using a multiplier:
-  **down-timeout = N × health-check-frequency**, with **N ≥ 2**
+  **instance_down_timeout_sec = N × instance_health_check_frequency_sec**, with **N ≥ 2**
 
-**Example:**
-`--instance-down-timeout-sec=5`
-`--instance-health-check-frequency-sec=1`
+**Example (defaults):**
+`instance_down_timeout_sec=5`
+`instance_health_check_frequency_sec=1`
 
 
 ## Environment variable configuration
@@ -211,9 +207,39 @@ the command line argument.
 
 ## Coordinator runtime settings
 
-There is a configuration option for specifying whether reads from the main are
-enabled. The configuration value is by default false but can be changed in
-run-time using the following query:
+Coordinator runtime settings are Raft-replicated and can be changed on a live
+cluster without downtime. Use `SET COORDINATOR SETTING` to modify a value and
+`SHOW COORDINATOR SETTINGS` to inspect all current values. Changes propagate
+automatically to every coordinator in the cluster.
+
+### `instance_health_check_frequency_sec`
+
+How often the coordinator pings data instances, in seconds.
+
+```
+SET COORDINATOR SETTING 'instance_health_check_frequency_sec' TO '1' ;
+```
+
+**Default:** `1`
+
+### `instance_down_timeout_sec`
+
+How long to wait (in seconds) before marking an instance as down. Must be
+greater than or equal to `instance_health_check_frequency_sec`.
+
+```
+SET COORDINATOR SETTING 'instance_down_timeout_sec' TO '5' ;
+```
+
+**Default:** `5`
+
+<Callout type="warning">
+**Upgrade note (3.10):** Values previously set via the
+`--instance_down_timeout_sec` and `--instance_health_check_frequency_sec`
+startup flags are **not** automatically migrated. After upgrading, the settings
+revert to their defaults (`5` and `1`). If you had customized these flags, run
+`SET COORDINATOR SETTING` queries to re-apply your values.
+</Callout>
 
 ### `enabled_reads_on_main`
 
