@@ -631,6 +631,38 @@ must also be set to `true`, as the uploader sidecar mounts the same PVC used for
 `s3://<s3BucketName>/<s3Prefix>/<pod-hostname>/<core-dump-filename>`.
 
 
+## Graceful termination
+
+When a pod is stopped (e.g., during upgrades, rescheduling, or scale-down),
+Kubernetes sends `SIGTERM` and waits up to `terminationGracePeriodSeconds`
+for the container to exit cleanly before forcefully killing it with `SIGKILL`.
+The HA chart defaults this value to **30 seconds** for both data
+and coordinator pods, configurable via:
+
+- `container.data.terminationGracePeriodSeconds`
+- `container.coordinators.terminationGracePeriodSeconds`
+
+since `--storage-snapshot-on-exit` is explicitly set to false by default.
+
+### Using `--storage-snapshot-on-exit` with HA
+
+If you enable the [`--storage-snapshot-on-exit`](/database-management/configuration)
+flag on data instances, Memgraph will attempt to create a full snapshot of the
+database during shutdown. Snapshot creation time scales with dataset size and
+can easily exceed the default grace period on larger deployments.
+
+<Callout type="warning">
+If `terminationGracePeriodSeconds` is shorter than the time needed to write the
+on-exit snapshot, Kubernetes will `SIGKILL` the Memgraph process mid-write,
+leaving the snapshot incomplete and defeating the purpose of the flag.
+
+When enabling `--storage-snapshot-on-exit`, set
+`container.data.terminationGracePeriodSeconds` to a value that comfortably
+covers the expected snapshot duration for your dataset. Benchmark the snapshot
+time on a representative dataset and add a safety margin.
+</Callout>
+
+
 ## Monitoring
 
 Memgraph HA integrates with Kubernetes monitoring tools through:
@@ -893,8 +925,8 @@ and their default values.
 | `container.data.startupProbe.tcpSocket.port`               | Port used for TCP connection. Should be the same as bolt port.                                               | `7687`                         |
 | `container.data.startupProbe.failureThreshold`             | Failure threshold for startup probe                                                                          | `1440`                         |
 | `container.data.startupProbe.timeoutSeconds`               | Timeout for probe                                                                                            | `10`                           |
-| `container.data.startupProbe.periodSeconds`                | Period seconds for startup probe                                                                             | `5`                            |
-| `container.coordinators.terminationGracePeriodSeconds`     | Grace period for coordinator pod termination                                                                 | `1800`                         |
+| `container.data.startupProbe.periodSeconds`                | Period seconds for startup probe                                                                             | `10`                           |
+| `container.data.terminationGracePeriodSeconds`             | Grace period for data pod termination. Increase when `--storage-snapshot-on-exit` is enabled so the snapshot has time to finish. | `30`       |
 | `container.coordinators.livenessProbe.tcpSocket.port`      | Port used for TCP connection. Should be the same as coordinator port.                                        | `12000`                        |
 | `container.coordinators.livenessProbe.failureThreshold`    | Failure threshold for liveness probe                                                                         | `20`                           |
 | `container.coordinators.livenessProbe.timeoutSeconds`      | Timeout for liveness probe                                                                                   | `10`                           |
@@ -907,6 +939,7 @@ and their default values.
 | `container.coordinators.startupProbe.failureThreshold`     | Failure threshold for startup probe                                                                          | `20`                           |
 | `container.coordinators.startupProbe.timeoutSeconds`       | Timeout for probe                                                                                            | `10`                           |
 | `container.coordinators.startupProbe.periodSeconds`        | Period seconds for startup probe                                                                             | `10`                           |
+| `container.coordinators.terminationGracePeriodSeconds`     | Grace period for coordinators pod termination.                                                               | `30`.                          |
 | `data`                                                     | Configuration for data instances                                                                             | See `data` section             |
 | `coordinators`                                             | Configuration for coordinator instances                                                                      | See `coordinators` section     |
 | `sysctlInitContainer.enabled`                              | Enable the init container to set sysctl parameters                                                           | `true`                         |
