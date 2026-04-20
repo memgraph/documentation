@@ -15,5 +15,6 @@ export default {
   "clustering": "Clustering",
   "data-streams": "Data streams",
   "help-center": "Help center",
+  "preview": "Preview",
   "release-notes": "Release notes",
 }

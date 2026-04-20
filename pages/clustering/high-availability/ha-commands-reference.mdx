@@ -14,10 +14,16 @@ Memgraph High Availability (HA) cluster.
 ## Cluster registration commands
 
 <Callout type="warning">
-**Important:** **All registration commands (adding coordinators and registering
-data instances) must be executed on the *same* coordinator.** You may choose any
+**Important:** You may choose any
 coordinator for the initial setup; it automatically becomes the leader. After
 setup, the choice no longer matters.
+</Callout>
+
+<Callout type="info">
+All queries can be run on any coordinator. If currently the coordinator is not a
+leader, the query will be automatically forwarded to the current leader and
+executed there. This is because the Raft protocol specifies that only the
+leader should accept changes in the cluster. 
 </Callout>
 
 ### `ADD COORDINATOR`
@@ -78,7 +84,6 @@ REMOVE COORDINATOR coordinatorId;
 
 {<h4 className="custom-header"> Behavior & implications </h4>}
 
-- Must be executed on the **leader** coordinator.
 - Leader coordinator **cannot** remove itself. To remove the leader, first
   trigger a leadership change.
 
@@ -90,7 +95,9 @@ REMOVE COORDINATOR 2;
 
 ### `UPDATE CONFIG`
 
-Updates the configuration of the data instance/coordinator in the cluster.
+Updates the configuration of the data instance/coordinator in the cluster. Use
+this command to update the DNS of your bolt servers, for example, when
+migrating to new load balancers.
 
 ```cypher
 UPDATE CONFIG FOR ( INSTANCE instanceName | COORDINATOR coordinatorServerId ) configsMap=configMap ;
@@ -106,7 +113,6 @@ of each instance.
 
 {<h4 className="custom-header"> Behavior & implications </h4>}
 
-- Must be executed on the **leader** coordinator.
 - Only bolt server can be updated.
 
 {<h4 className="custom-header"> Example </h4>}
@@ -139,11 +145,16 @@ REGISTER INSTANCE instanceName ( AS ASYNC | AS STRICT_SYNC ) ? WITH CONFIG {
 
 {<h4 className="custom-header"> Behavior </h4>}
 
+- The operation is first committed to the Raft log and acknowledged by a
+  majority of coordinators.
 - Coordinator connects via `management_server` to verify liveness.
 - Coordinator begins periodic health checks.
 - Instance is automatically demoted to REPLICA.
 - Replication server is started on the data instance.
-- Operation is persisted in Raft.
+- If RPCs to the data instance fail (e.g., due to a transient network issue),
+  the registration still succeeds. The [reconciliation
+  loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works)
+  automatically retries the RPCs.
 
 {<h4 className="custom-header"> Replication mode rules </h4>}
 
@@ -186,7 +197,10 @@ UNREGISTER INSTANCE instanceName;
 
 - Do **not** unregister the MAIN instance; this may corrupt cluster state.
 - A healthy MAIN must exist during the operation.
-- The instance is also removed from MAIN’s replica set.
+- The instance is removed from the Raft state first. If the RPC to unregister
+  the replica from MAIN fails, the [reconciliation
+  loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works)
+  automatically retries the operation.
 
 {<h4 className="custom-header"> Example </h4>}
 
@@ -207,13 +221,17 @@ SET INSTANCE instanceName TO MAIN;
 
 {<h4 className="custom-header"> Behavior </h4>}
 
+- The promotion is first committed to the Raft log and acknowledged by a
+  majority of coordinators.
 - All other registered instances become replicas of the new MAIN.
-- Written to Raft log.
+- RPCs (`PromoteToMainRpc`, `SwapAndUpdateUUID`) are sent to data instances on
+  a best-effort basis. If they fail, the [reconciliation
+  loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works)
+  automatically retries them.
 
 {<h4 className="custom-header"> Implications </h4>}
 
 - Fails if a MAIN already exists.
-- Fails if any instance is unavailable.
 
 {<h4 className="custom-header"> Example </h4>}
 
@@ -232,8 +250,14 @@ DEMOTE INSTANCE instanceName;
 
 {<h4 className="custom-header"> Behavior </h4>}
 
+- The role change is first committed to the Raft log and acknowledged by a
+  majority of coordinators.
 - MAIN becomes REPLICA.
-- Written to Raft log.
+- The `DemoteMainToReplicaRpc` is sent on a best-effort basis. If it fails, the
+  [reconciliation
+  loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works)
+  automatically retries it.
+- Returns an error if the instance is already a REPLICA.
 
 {<h4 className="custom-header"> Implications </h4>}
 
@@ -294,8 +318,7 @@ SHOW INSTANCE;
 
 ### `SHOW REPLICATION LAG`
 
-Shows replication lag (in committed transactions) for all instances. Must be run
-on the **leader**.
+Shows replication lag (in committed transactions) for all instances.
 
 ```cypher
 SHOW REPLICATION LAG;
@@ -305,6 +328,14 @@ SHOW REPLICATION LAG;
 
 - Lag values survive restarts (stored in snapshots + WAL).
 - Useful during manual failover to evaluate risk of data loss.
+
+
+## Error handling
+
+If a Raft log commit fails for any cluster operation (register, unregister,
+promote, demote, add coordinator), the error message will indicate:
+
+> Writing to Raft log failed. Please retry the operation.
 
 
 ## Troubleshooting commands
@@ -325,8 +356,6 @@ FORCE RESET CLUSTER STATE;
 4. Writes changes to Raft.
 
 {<h4 className="custom-header"> Implications </h4>}
-
-- Must be executed on the **leader** coordinator.
 
 
 <CommunityLinks/>

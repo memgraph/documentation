@@ -7,4 +7,5 @@ export default {
     "best-practices": "Best practices",
     "ha-commands-reference": "Reference commands",
     "ha-reference-architectures": "Reference architectures",
+    "migrating-to-v3-9-ha": "Migrating to v3.9 HA",
 }

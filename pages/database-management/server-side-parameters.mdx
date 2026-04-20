@@ -1,0 +1,152 @@
+---
+title: Server-side parameters
+description: Configure and reuse server-side parameters in Memgraph with database or global scope.
+---
+
+# Server-side parameters
+
+Server-side parameters are named values stored by Memgraph and reusable in
+queries through `$parameterName`, just like user-provided parameters.
+
+They are useful when you want reusable defaults, while still allowing clients to override values when needed.
+
+## Parameter scopes
+
+Server-side parameters support two scopes:
+
+- **Database scope**: set with `SET PARAMETER ...`; visible only in the current
+  database.
+- **Global scope**: set with `SET GLOBAL PARAMETER ...`; visible across
+  databases.
+
+When you run `SHOW PARAMETERS`, Memgraph returns:
+- all global parameters
+- parameters from the current database
+
+## Resolution order
+
+When a query uses `$name`, values are resolved in this order:
+
+1. user-provided query parameter (from the client)
+2. database-scoped server-side parameter
+3. global server-side parameter
+
+This means:
+- user-provided parameters are preferred over server-side parameters
+- database-scoped server-side parameters are preferred over global ones
+
+## Set a parameter
+
+Use `SET PARAMETER` for database scope, or `SET GLOBAL PARAMETER` for global
+scope.
+
+```opencypher
+SET PARAMETER x = 'db_value';
+SET GLOBAL PARAMETER x = 'global_value';
+```
+
+You can set the value from:
+- a literal
+- a user-provided parameter (for example `$config`)
+- a map value
+
+```opencypher
+SET GLOBAL PARAMETER app_config = $config;
+SET GLOBAL PARAMETER limits = {timeout: 120, mode: 'safe'};
+SET GLOBAL PARAMETER ids = [10, 20, 30];
+```
+
+## Unset a parameter
+
+Remove a parameter by name in either database or global scope.
+
+```opencypher
+UNSET PARAMETER x;
+UNSET GLOBAL PARAMETER x;
+```
+
+## Show parameters
+
+List current server-side parameters:
+
+```opencypher
+SHOW PARAMETERS;
+```
+
+Output columns:
+- `name`: parameter name
+- `value`: stored value (JSON-encoded string form)
+- `scope`: `database` or `global`
+
+## Privileges
+
+Managing server-side parameters requires the `SERVER_SIDE_PARAMETERS`
+[privilege](/database-management/authentication-and-authorization/role-based-access-control#privileges).
+This applies to:
+
+- `SET [GLOBAL] PARAMETER`
+- `UNSET [GLOBAL] PARAMETER`
+- `SHOW PARAMETERS`
+
+Using a parameter in a query with `$parameterName` does **not** require any
+additional privilege, once a parameter is set, any user can reference it.
+
+See the [Query privileges reference](/database-management/authentication-and-authorization/query-privileges) for a full list of privilege requirements.
+
+## Use cases
+
+### Use in queries with `$`
+
+Once set, server-side parameters are available as `$name` in queries:
+
+```opencypher
+SET GLOBAL PARAMETER tenant = 'acme';
+CREATE (:Account {tenant: $tenant});
+```
+
+If the client sends a user parameter with the same name, that user value is
+used first:
+
+```opencypher
+SET GLOBAL PARAMETER x = 'server_value';
+CREATE (:Node {property: $x});
+```
+
+If the query is run with user parameter `x = 'client_value'`, the node property
+will be `'client_value'`.
+
+### Reusing connection config in data migrations
+
+The [`migrate` module](/advanced-algorithms/available-algorithms/migrate) procedures accept a `config` map with
+connection parameters like `host`, `port`, `user`, and `password`. When running multiple migration queries
+against the same source, repeating this map in every call is verbose and error-prone.
+
+Store the config once as a server-side parameter and reference it with `$config` across all your migration queries:
+
+```opencypher
+SET GLOBAL PARAMETER mysql_config = {
+  user: 'memgraph',
+  password: 'password',
+  host: 'localhost',
+  database: 'demo_db'
+};
+```
+
+Then use `$mysql_config` in every migration call instead of repeating the full map:
+
+```opencypher
+CALL migrate.mysql('users', $mysql_config)
+YIELD row
+CREATE (u:User {id: row.id, name: row.name});
+
+CALL migrate.mysql('orders', $mysql_config)
+YIELD row
+CREATE (o:Order {id: row.id, total: row.total});
+
+CALL migrate.mysql('SELECT user_id, order_id FROM user_orders', $mysql_config)
+YIELD row
+MATCH (u:User {id: row.user_id}), (o:Order {id: row.order_id})
+CREATE (u)-[:PLACED]->(o);
+```
+
+This works for all `migrate` procedures — `migrate.postgresql()`, `migrate.mysql()`, `migrate.neo4j()`, `migrate.sql_server()`, and others.
