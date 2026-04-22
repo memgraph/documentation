@@ -348,6 +348,50 @@ kubectl create secret generic monitoring-basic-auth -n <memgraph-namespace> \
   --from-literal=password='<password>'
 ```
 
+##### Kubernetes infrastructure metrics
+
+`vmagentRemote` can additionally scrape Kubernetes infrastructure metrics
+(`kube-state-metrics`, `node-exporter`, `kubelet`) required by
+`kube-prometheus-stack` Kubernetes and Node dashboards, and remote-write them
+to your centralized monitoring cluster.
+
+Enable Kubernetes scraping by extending your existing `vmagentRemote` values:
+
+```yaml
+vmagentRemote:
+  # ... existing fields (enabled, remoteWrite, externalLabels) ...
+  kubernetes:
+    enabled: true
+    kubeStateMetrics:
+      enabled: true
+      jobName: kube-state-metrics
+      targets:
+        - kube-prometheus-stack-kube-state-metrics.monitoring.svc.cluster.local:8080
+    nodeExporter:
+      enabled: true
+      jobName: node-exporter
+      targets:
+        - kube-prometheus-stack-prometheus-node-exporter.monitoring.svc.cluster.local:9100
+    kubelet:
+      enabled: true
+      jobName: kubelet
+      metricsPath: /metrics/cadvisor
+      apiServerAddress: kubernetes.default.svc:443
+      insecureSkipVerify: false
+```
+
+Notes:
+
+- RBAC and `ServiceAccount` resources are created only when an enabled scrape
+  job requires Kubernetes API access (for example `kubelet.enabled=true` or
+  `nodeExporter.useKubernetesDiscovery=true`).
+- Keep `jobName` values aligned with dashboard and recording-rule expectations
+  unless you also update those queries.
+- Dashboards that rely on precomputed recording-rule series still require
+  rule evaluation in your monitoring stack.
+
+A ready-to-use example values file is available in the Helm charts repository:
+[`examples/remote-monitoring/values-standalone-k8s-metrics.yaml`](https://github.com/memgraph/helm-charts/blob/main/examples/remote-monitoring/values-standalone-k8s-metrics.yaml).
 
 ### Node affinity
 
@@ -534,6 +578,38 @@ The following table lists the configurable parameters of the Memgraph standalone
 | `prometheus.serviceMonitor.enabled`                          | Deploy a `ServiceMonitor` object for Prometheus scraping.                                                                                    | `true`                                   |
 | `prometheus.serviceMonitor.kubePrometheusStackReleaseName`   | Release name under which `kube-prometheus-stack` is installed.                                                                               | `kube-prometheus-stack`                  |
 | `prometheus.serviceMonitor.interval`                         | How often Prometheus pulls data from Memgraph's exporter.                                                                                    | `15s`                                    |
+| `vmagentRemote.enabled`                                      | Deploy a vmagent Deployment that scrapes mg-exporter and remote-writes to a Prometheus-compatible endpoint.                                  | `false`                                  |
+| `vmagentRemote.namespace`                                    | Namespace for the vmagent Deployment and its resources. Defaults to `prometheus.namespace` when empty.                                       | `""`                                     |
+| `vmagentRemote.image.repository`                             | vmagent image repository.                                                                                                                    | `victoriametrics/vmagent`                |
+| `vmagentRemote.image.tag`                                    | vmagent image tag.                                                                                                                           | `v1.139.0`                               |
+| `vmagentRemote.image.pullPolicy`                             | vmagent image pull policy.                                                                                                                   | `IfNotPresent`                           |
+| `vmagentRemote.remoteWrite.url`                              | Prometheus `remote_write` URL. Required when `vmagentRemote.enabled=true`.                                                                   | `""`                                     |
+| `vmagentRemote.remoteWrite.basicAuth.secretName`             | Kubernetes Secret holding basic-auth credentials for `remote_write`. When empty, basic auth is not configured.                               | `""`                                     |
+| `vmagentRemote.remoteWrite.basicAuth.usernameKey`            | Key in the basic-auth Secret holding the username.                                                                                           | `username`                               |
+| `vmagentRemote.remoteWrite.basicAuth.passwordKey`            | Key in the basic-auth Secret holding the password.                                                                                           | `password`                               |
+| `vmagentRemote.scrapeInterval`                               | Global `scrape_interval` applied to vmagent scrape jobs.                                                                                     | `15s`                                    |
+| `vmagentRemote.externalLabels`                               | External labels attached to every scraped sample before remote-write.                                                                        | `{}`                                     |
+| `vmagentRemote.resources`                                    | Resource requests/limits for the vmagent container.                                                                                          | `{}`                                     |
+| `vmagentRemote.httpPort`                                     | vmagent local HTTP listen port for metrics/debug (the remote-write target is `remoteWrite.url`).                                             | `8429`                                   |
+| `vmagentRemote.kubernetes.enabled`                           | Enable scraping of Kubernetes infrastructure metrics used by kube-prometheus dashboards.                                                     | `false`                                  |
+| `vmagentRemote.kubernetes.kubeStateMetrics.enabled`          | Scrape `kube-state-metrics`.                                                                                                                 | `true`                                   |
+| `vmagentRemote.kubernetes.kubeStateMetrics.jobName`          | Prometheus `job` label for kube-state-metrics. Keep aligned with dashboard/recording-rule expectations.                                      | `kube-state-metrics`                     |
+| `vmagentRemote.kubernetes.kubeStateMetrics.targets`          | Static scrape targets for kube-state-metrics.                                                                                                | `[kube-prometheus-stack-kube-state-metrics.monitoring.svc.cluster.local:8080]` |
+| `vmagentRemote.kubernetes.nodeExporter.enabled`              | Scrape `node-exporter`.                                                                                                                      | `true`                                   |
+| `vmagentRemote.kubernetes.nodeExporter.jobName`              | Prometheus `job` label for node-exporter.                                                                                                    | `node-exporter`                          |
+| `vmagentRemote.kubernetes.nodeExporter.useKubernetesDiscovery` | Discover node-exporter pods via Kubernetes SD so namespace/pod/node labels are present for recording rules.                               | `false`                                  |
+| `vmagentRemote.kubernetes.nodeExporter.podMetricsPort`       | Pod port used by Kubernetes SD to match node-exporter pods.                                                                                  | `"9100"`                                 |
+| `vmagentRemote.kubernetes.nodeExporter.appNameLabel`         | Expected value of `app.kubernetes.io/name` on node-exporter pods.                                                                            | `prometheus-node-exporter`               |
+| `vmagentRemote.kubernetes.nodeExporter.appInstanceLabel`     | Expected value of `app.kubernetes.io/instance` on node-exporter pods.                                                                        | `kube-prometheus-stack-prometheus-node-exporter` |
+| `vmagentRemote.kubernetes.nodeExporter.targets`              | Static fallback targets for node-exporter when `useKubernetesDiscovery=false`.                                                               | `[kube-prometheus-stack-prometheus-node-exporter.monitoring.svc.cluster.local:9100]` |
+| `vmagentRemote.kubernetes.kubelet.enabled`                   | Scrape kubelet metrics via the Kubernetes API server node proxy.                                                                             | `true`                                   |
+| `vmagentRemote.kubernetes.kubelet.jobName`                   | Prometheus `job` label for kubelet. Keep as `kubelet` so kube-prometheus dashboards and recording rules continue to match.                   | `kubelet`                                |
+| `vmagentRemote.kubernetes.kubelet.metricsPath`               | Metrics path for the primary kubelet scrape (cAdvisor).                                                                                      | `/metrics/cadvisor`                      |
+| `vmagentRemote.kubernetes.kubelet.additionalMetricsEnabled`  | Enable a second kubelet scrape job for `/metrics` alongside the cAdvisor job.                                                                | `true`                                   |
+| `vmagentRemote.kubernetes.kubelet.additionalJobName`         | Prometheus `job` label for the additional kubelet scrape.                                                                                    | `kubelet-metrics`                        |
+| `vmagentRemote.kubernetes.kubelet.additionalMetricsPath`     | Metrics path for the additional kubelet scrape.                                                                                              | `/metrics`                               |
+| `vmagentRemote.kubernetes.kubelet.apiServerAddress`          | Kubernetes API server address used to proxy kubelet scrapes.                                                                                 | `kubernetes.default.svc:443`             |
+| `vmagentRemote.kubernetes.kubelet.insecureSkipVerify`        | Skip TLS verification of the kube-apiserver serving cert when scraping kubelet.                                                              | `false`                                  |
 
 <Callout type="warning">
 If you enable the [`--storage-snapshot-on-exit`](/database-management/configuration)
