@@ -1,6 +1,6 @@
 ---
 title: embeddings
-description: Calculate sentence embeddings on node strings using pytorch.
+description: Calculate sentence embeddings on node strings using a local SentenceTransformer model or any remote embedding provider (OpenAI, Ollama, Cohere, Voyage, Mistral, Jina, Bedrock, ...).
 ---
 
 # embeddings
@@ -9,7 +9,19 @@ import { Cards } from 'nextra/components'
 import GitHub from '/components/icons/GitHub'
 import { Callout } from 'nextra/components'
 
-The embeddings module provides tools for calculating sentence embeddings on node strings using pytorch.
+The embeddings module computes sentence embeddings for text — either for the string
+properties of nodes in the graph, or for an ad‑hoc list of strings. Two backends
+are supported:
+
+- **Local** (default): a `SentenceTransformer` model from Hugging Face, running on CPU or CUDA inside the Memgraph process.
+- **Remote**: any embedding provider supported by [LiteLLM](https://docs.litellm.ai/docs/providers) — e.g. OpenAI, Ollama, Voyage, Mistral, Bedrock, etc. (and any OpenAI‑compatible endpoint).
+
+Routing is decided by the `model_name` configuration key: a LiteLLM‑style
+provider prefix (for example `openai/text-embedding-3-small`,
+`ollama/nomic-embed-text`) is executed remotely; anything else (a bare name
+like `all-MiniLM-L6-v2` or an HF path like `BAAI/bge-small-en-v1.5`) is loaded
+locally. See [Remote providers](#remote-providers) for the full list and
+credentials.
 
 <Cards>
   <Cards.Card
@@ -43,12 +55,25 @@ created as a property of the nodes in the graph.
 | Name                       | Type         | Default           | Description                                                                                              |
 |----------------------------|--------------|-------------------|----------------------------------------------------------------------------------------------------------|
 | `embedding_property`       | string       | `"embedding"`     | The name of the property to store the embeddings in.                                                     |
-| `excluded_properties`      | List[string] | `[]`              | The list of properties to exclude from the embeddings computation.                                       |
-| `model_name`               | string       | `"all-MiniLM-L6-v2"` | The name of the model to use for the embeddings computation, provided by the `sentence-transformers` library. |
+| `excluded_properties`      | List[string] | `["embedding"]`   | The list of properties to exclude from the embeddings computation.                                       |
+| `model_name`               | string       | `"all-MiniLM-L6-v2"` | Model to use. A bare name or HF path (e.g. `"BAAI/bge-small-en-v1.5"`) is loaded locally via `sentence-transformers`. A LiteLLM provider prefix (e.g. `"openai/text-embedding-3-small"`, `"ollama/nomic-embed-text"`) routes the call to that remote provider — see [Remote providers](#remote-providers). |
 | `return_embeddings`        | bool         | `False`           | Whether to return the embeddings as an additional output or not.                                                                 |
-| `batch_size`               | int          | `2000`            | The batch size to use for the embeddings computation.                                                    |
-| `chunk_size`               | int          | `48`              | The number of batches per "chunk". This is used when computing embeddings across multiple GPUs, as this has to be done by spawning multiple processes. Each spawned process computes the embeddings for a single chunk. |
-| `device`                   | NULL\|string\| int\|List[string\|int] | `NULL` | The device to use for the embeddings computation (see below).                                                                                                      |
+| `batch_size`               | int          | `2000`            | The batch size to use for the embeddings computation (local path only).                                  |
+| `chunk_size`               | int          | `48`              | Number of batches per "chunk" when spawning per-GPU worker processes (local multi-GPU path only).        |
+| `device`                   | NULL\|string\| int\|List[string\|int] | `NULL` | The device to use for the local embeddings computation (see below). Ignored on the remote path.         |
+
+The following keys only apply when `model_name` routes to a remote provider:
+
+| Name                       | Type         | Default        | Description                                                                                                                         |
+|----------------------------|--------------|----------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `api_base`                 | string\|NULL | `NULL`         | Override the provider's HTTP endpoint. Needed when pointing at a self‑hosted Ollama on a non‑default host or an enterprise proxy. For most providers, LiteLLM already knows the default. |
+| `input_type`               | string       | `"document"`   | Forwarded to providers that distinguish document vs query embeddings (Voyage, Cohere). Use `"query"` when embedding retrieval queries. |
+| `dimensions`               | int\|NULL    | `NULL`         | Target output dimension for providers that support server‑side truncation (e.g. OpenAI `text-embedding-3-*`).                         |
+| `timeout`                  | int          | `60`           | Per‑HTTP‑call timeout in seconds.                                                                                                   |
+| `num_retries`              | int          | `3`            | Automatic retries on transient failures (429, 5xx, connection errors), handled by LiteLLM with backoff.                             |
+| `normalize`                | bool         | `True`         | L2‑normalize returned vectors client‑side so behavior matches the local path (which normalizes by default).                         |
+| `remote_batch_size`        | int\|NULL    | `NULL`         | Items per HTTP request. If `NULL`, the default matches each provider's documented hard cap — **2048** for OpenAI/Azure, **1000** for Voyage, **96** for Cohere. Other providers get **256**. Override with `remote_batch_size` for throughput tuning. |
+| `concurrency`              | int          | `4`            | Number of in‑flight HTTP requests per call. Higher values improve single‑query latency for large inputs but multiply against concurrent Cypher queries — be mindful of provider rate limits. |
 
 <Callout type="info">
 The `device` parameter can be one of the following:
@@ -69,10 +94,10 @@ documentation](/advanced-algorithms/install-mage).
 
 {<h4 className="custom-header"> Output: </h4>}
 
-- `success: bool` ➡ Whether the embeddings computation was successful.
+- `success: bool` ➡ Whether the embeddings computation was successful. `false` on any unrecoverable error (network, auth, invalid input); the procedure never throws.
 - `embeddings: List[List[float]]|NULL` ➡ The list of embeddings. Only returned if the 
 `return_embeddings` parameter is set to `true` in the configuration, otherwise `NULL`.
-- `dimension: int` ➡ The dimension of the embeddings.
+- `dimension: int|NULL` ➡ The dimension of the embeddings. `NULL` when `success` is `false`, or for empty input on the remote path.
 
 {<h4 className="custom-header"> Usage: </h4>}
 
@@ -126,17 +151,30 @@ This procedure can be used to return a list of embeddings when given a list of s
 
 | Name                       | Type         | Default           | Description                                                                                              |
 |----------------------------|--------------|-------------------|----------------------------------------------------------------------------------------------------------|
-| `model_name`               | string       | `"all-MiniLM-L6-v2"` | The name of the model to use for the embeddings computation, provided by the `sentence-transformers` library. |
-| `batch_size`               | int          | `2000`            | The batch size to use for the embeddings computation.                                                    |
-| `chunk_size`               | int          | `48`              | The number of batches per "chunk". This is used when computing embeddings across multiple GPUs, as this has to be done by spawning multiple processes. Each spawned process computes the embeddings for a single chunk. |
-| `device`                   | NULL\|string\| int\|List[string\|int] | `NULL` | The device to use for the embeddings computation.                                                                                                      |
+| `model_name`               | string       | `"all-MiniLM-L6-v2"` | Model to use. A bare name or HF path (e.g. `"BAAI/bge-small-en-v1.5"`) is loaded locally via `sentence-transformers`. A LiteLLM provider prefix (e.g. `"openai/text-embedding-3-small"`, `"ollama/nomic-embed-text"`) routes the call to that remote provider — see [Remote providers](#remote-providers). |
+| `batch_size`               | int          | `2000`            | The batch size to use for the embeddings computation (local path only).                                  |
+| `chunk_size`               | int          | `48`              | Number of batches per "chunk" when spawning per-GPU worker processes (local multi-GPU path only).        |
+| `device`                   | NULL\|string\| int\|List[string\|int] | `NULL` | The device to use for the local embeddings computation. Ignored on the remote path.                      |
+
+The following keys only apply when `model_name` routes to a remote provider:
+
+| Name                       | Type         | Default        | Description                                                                                                                         |
+|----------------------------|--------------|----------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `api_base`                 | string\|NULL | `NULL`         | Override the provider's HTTP endpoint. Needed when pointing at a self‑hosted Ollama on a non‑default host or an enterprise proxy. For most providers, LiteLLM already knows the default. |
+| `input_type`               | string       | `"document"`   | Forwarded to providers that distinguish document vs query embeddings (Voyage, Cohere). Use `"query"` when embedding retrieval queries. |
+| `dimensions`               | int\|NULL    | `NULL`         | Target output dimension for providers that support server‑side truncation (e.g. OpenAI `text-embedding-3-*`).                         |
+| `timeout`                  | int          | `60`           | Per‑HTTP‑call timeout in seconds.                                                                                                   |
+| `num_retries`              | int          | `3`            | Automatic retries on transient failures (429, 5xx, connection errors), handled by LiteLLM with backoff.                             |
+| `normalize`                | bool         | `True`         | L2‑normalize returned vectors client‑side so behavior matches the local path (which normalizes by default).                         |
+| `remote_batch_size`        | int\|NULL    | `NULL`         | Items per HTTP request. If `NULL`, the default matches each provider's documented hard cap — **2048** for OpenAI/Azure, **1000** for Voyage, **96** for Cohere. Other providers get **256**. Override with `remote_batch_size` for throughput tuning. |
+| `concurrency`              | int          | `4`            | Number of in‑flight HTTP requests per call. Higher values improve single‑query latency for large inputs but multiply against concurrent Cypher queries — be mindful of provider rate limits. |
 
 
 {<h4 className="custom-header"> Output: </h4>}
 
-- `success: bool` ➡ Whether the embeddings computation was successful.
-- `embeddings: List[List[float]]` ➡ The list of embeddings.
-- `dimension: int` ➡ The dimension of the embeddings.
+- `success: bool` ➡ Whether the embeddings computation was successful. `false` on any unrecoverable error; the procedure never throws.
+- `embeddings: List[List[float]]|NULL` ➡ The list of embeddings, or `NULL` on failure.
+- `dimension: int|NULL` ➡ The dimension of the embeddings. `NULL` when `success` is `false`.
 
 {<h4 className="custom-header"> Usage: </h4>}
 
@@ -158,13 +196,189 @@ The key `model_name` is used to specify the name of the model to use for the emb
 
 {<h4 className="custom-header"> Output: </h4>}
 
-- `model_info: mgp.Map` ➡ The information about the model used for the embeddings computation.
+- `info: mgp.Map` ➡ The information about the model used for the embeddings computation. Contents:
 
-| Name                       | Type         | Default           | Description                                                                                              |
-|----------------------------|--------------|-------------------|----------------------------------------------------------------------------------------------------------|
-| `model_name`               | string       | `"all-MiniLM-L6-v2"` | The name of the model to use for the embeddings computation, provided by the `sentence-transformers` library. |
-| `dimension`                | int          | `384`               | The dimension of the embeddings. |
-| `max_seq_length`           | int          | `256`               | The maximum sequence length. |
+| Name                       | Type         | Description                                                                                                                                                                   |
+|----------------------------|--------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `model_name`               | string       | The model name that was supplied (e.g. `"all-MiniLM-L6-v2"`, `"openai/text-embedding-3-small"`).                                                                              |
+| `dimension`                | int          | The dimension of the embeddings. On the remote path this is discovered by making a single probe call to the provider (cached per `(model_name, api_base)` for the process). |
+| `max_sequence_length`      | int\|NULL    | The maximum input sequence length for the local SentenceTransformer model. `NULL` on the remote path — providers don't expose this uniformly.                                 |
+
+## Remote providers
+
+To use a remote embedding provider, set `model_name` to a LiteLLM
+provider‑prefixed name. The procedure routes the call through
+[LiteLLM](https://litellm.ai/); any bare name or HF path
+continues to load locally via `sentence-transformers` as before. A few
+working examples:
+
+- `"openai/text-embedding-3-small"` — OpenAI, 1536 dims (or set `dimensions` for server‑side truncation)
+- `"openai/text-embedding-3-large"` — OpenAI, 3072 dims
+- `"azure/<your-deployment-name>"` — Azure OpenAI
+- `"ollama/nomic-embed-text"` — self‑hosted Ollama
+- `"cohere/embed-english-v3.0"` — Cohere (pass `input_type: "query"` for queries)
+- `"voyage/voyage-3"` — Voyage AI (pass `input_type: "query"` for queries)
+- `"mistral/mistral-embed"` — Mistral
+- `"jina_ai/jina-embeddings-v3"` — Jina
+- `"bedrock/amazon.titan-embed-text-v2:0"` — AWS Bedrock
+
+For the authoritative list of supported providers and model identifiers see
+the [LiteLLM providers index](https://docs.litellm.ai/docs/providers).
+
+### Credentials
+
+API keys are **not** accepted through Cypher — they are read from the Memgraph
+process environment by LiteLLM, using the canonical variable name for each
+provider. Set the relevant variable in the environment where Memgraph is
+running (container `-e` flag, systemd unit, shell export, etc.):
+
+| Provider prefix | Env vars LiteLLM reads                                                        |
+|-----------------|-------------------------------------------------------------------------------|
+| `openai/`       | `OPENAI_API_KEY` (and `OPENAI_API_BASE` if set)                               |
+| `azure/`        | `AZURE_API_KEY`, `AZURE_API_BASE`, `AZURE_API_VERSION`                        |
+| `cohere/`       | `COHERE_API_KEY`                                                              |
+| `voyage/`       | `VOYAGE_API_KEY`                                                              |
+| `jina_ai/`      | `JINA_AI_API_KEY`                                                             |
+| `mistral/`      | `MISTRAL_API_KEY`                                                             |
+| `ollama/`       | No key; `api_base` defaults to `http://localhost:11434`                       |
+| `bedrock/`      | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION_NAME`               |
+| `vertex_ai/`    | `GOOGLE_APPLICATION_CREDENTIALS` (path to a service‑account JSON)             |
+| `huggingface/`  | `HUGGINGFACE_API_KEY`                                                         |
+| `together_ai/`  | `TOGETHERAI_API_KEY`                                                          |
+| `fireworks_ai/` | `FIREWORKS_AI_API_KEY`                                                        |
+| `replicate/`    | `REPLICATE_API_KEY`                                                           |
+| `deepinfra/`    | `DEEPINFRA_API_KEY`                                                           |
+| `groq/`         | `GROQ_API_KEY`                                                                |
+
+If the required variable is missing, the call returns `success: false` and
+the reason is logged by Memgraph (look for lines starting with
+`Remote path failed:`).
+
+### Running the container with API access
+
+When Memgraph runs in Docker, provider API keys must be passed through to
+**the container's environment**, not just exported in your host shell. For
+example, with OpenAI:
+
+```bash
+docker run -p 7687:7687 \
+  -e OPENAI_API_KEY="$OPENAI_API_KEY" \
+  memgraph/memgraph-mage
+```
+
+You can verify the variable made it across with
+`docker inspect --format '{{.Config.Env}}' <container>`.
+
+The same pattern applies to every other provider — replace `OPENAI_API_KEY`
+with the variable(s) from the table above (e.g. `-e COHERE_API_KEY=...`,
+`-e AWS_ACCESS_KEY_ID=... -e AWS_SECRET_ACCESS_KEY=...`).
+
+#### Reaching a local Ollama from Memgraph
+
+Ollama is a special case because the daemon runs outside Memgraph. Three common setups:
+
+1. **Memgraph runs natively (not in Docker)** — the default `api_base`
+   (`http://localhost:11434`) works out of the box.
+2. **Memgraph in Docker, Ollama on the host** — bind Ollama to all interfaces
+   and point `api_base` at the host gateway:
+   ```bash
+   # on the host
+   OLLAMA_HOST=0.0.0.0:11434 ollama serve
+   # Linux only: add the host-gateway alias on docker run
+   docker run -p 7687:7687 \
+     --add-host=host.docker.internal:host-gateway \
+     memgraph/memgraph-mage
+   ```
+   Then in Cypher: `api_base: "http://host.docker.internal:11434"`.
+3. **Both in Docker on a shared network** (most portable):
+   ```bash
+   docker network create mg_net
+   docker run -d --name ollama --network mg_net -v ollama:/root/.ollama ollama/ollama
+   docker exec ollama ollama pull nomic-embed-text
+   docker run -d --name memgraph --network mg_net -p 7687:7687 memgraph/memgraph-mage
+   ```
+   Then in Cypher: `api_base: "http://ollama:11434"`.
+
+<Callout type="info">
+Credentials live in the Memgraph process environment, not in Cypher. This
+keeps API keys out of query logs and audit trails. If you need different
+keys per graph or per tenant, run separate Memgraph instances with their
+own environment.
+</Callout>
+
+### Examples
+
+**OpenAI — embed a list of strings:**
+
+```cypher
+CALL embeddings.text(
+  ["hello world", "graph databases are fun"],
+  {model_name: "openai/text-embedding-3-small"}
+)
+YIELD success, embeddings, dimension
+RETURN success, dimension, size(embeddings) AS n;
+```
+
+**OpenAI — smaller vectors via server‑side truncation:**
+
+```cypher
+CALL embeddings.text(
+  ["hello"],
+  {model_name: "openai/text-embedding-3-small", dimensions: 768}
+)
+YIELD dimension
+RETURN dimension;  // -> 768
+```
+
+**OpenAI — write back embeddings to nodes:**
+
+```cypher
+MATCH (n:Doc) WITH collect(n) AS nodes
+CALL embeddings.node_sentence(nodes, {model_name: "openai/text-embedding-3-small"})
+YIELD success, dimension
+RETURN success, dimension;
+```
+
+**Ollama — embed against a local daemon:**
+
+```cypher
+CALL embeddings.text(
+  ["hello world", "graph databases are fun"],
+  {model_name: "ollama/nomic-embed-text"}
+)
+YIELD success, embeddings, dimension
+RETURN success, dimension, size(embeddings) AS n;
+```
+
+If Memgraph is in a container and Ollama is on the host, pass the reachable URL:
+
+```cypher
+CALL embeddings.text(
+  ["hello world"],
+  {model_name: "ollama/nomic-embed-text",
+   api_base: "http://host.docker.internal:11434"}
+)
+YIELD success, dimension RETURN success, dimension;
+```
+
+**Cohere / Voyage — embedding queries rather than documents:**
+
+```cypher
+CALL embeddings.text(
+  ["what is a graph database?"],
+  {model_name: "voyage/voyage-3", input_type: "query"}
+)
+YIELD success, embeddings, dimension
+RETURN success, dimension;
+```
+
+**Inspect the active remote model:**
+
+```cypher
+CALL embeddings.model_info({model_name: "openai/text-embedding-3-small"})
+YIELD info RETURN info;
+// -> {model_name: "openai/text-embedding-3-small", dimension: 1536, max_sequence_length: null}
+```
 
 ## Example
 
