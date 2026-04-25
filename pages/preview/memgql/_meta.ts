@@ -1,6 +1,7 @@
 export default {
   "quick-start": "Quick Start",
   "features": "Features",
+  "use-cases": "Use Cases",
   "multiple-graphs": "Multiple Graphs",
   "connect": "Connect",
   "config": "Configuration",
