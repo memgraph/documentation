@@ -6,5 +6,6 @@ export default {
   "config": "Configuration",
   "complete": "Docker Compose",
   "changelog": "Changelog",
+  "reference": "Reference",
   "licensing": "Licensing",
 }
