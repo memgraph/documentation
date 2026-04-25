@@ -1,6 +1,7 @@
 export default {
   "quick-start": "Quick Start",
   "features": "Features",
+  "multiple-graphs": "Multiple Graphs",
   "connect": "Connect",
   "config": "Configuration",
   "complete": "Docker Compose",
