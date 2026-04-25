@@ -1,0 +1,96 @@
+---
+title: Apache Pinot
+description: Connect MemGQL to Apache Pinot.
+---
+
+# Apache Pinot
+
+The Pinot connector (`CONNECTOR_TYPE=pinot` or `CONNECTION_TYPE=pinot`)
+translates GQL queries into Pinot SQL and executes them through the Pinot broker
+SQL API. It uses the shared relational mapping file and is currently
+read-oriented: `MATCH`/`RETURN` queries are supported, while GQL mutations are
+rejected by the executor.
+
+Translated graph patterns use SQL joins, so MemGQL sends
+`PINOT_QUERY_OPTIONS=useMultistageEngine=true` by default.
+
+## 1. Start Pinot
+
+```bash
+docker network create memgql-net
+
+docker run -d --rm \
+    --name pinot-zookeeper-dev \
+    --network memgql-net \
+    -p 2182:2181 \
+    zookeeper:3.9.2
+
+docker run -d --rm \
+    --name pinot-controller-dev \
+    --network memgql-net \
+    -p 9010:9000 \
+    apachepinot/pinot:latest StartController \
+    -zkAddress pinot-zookeeper-dev:2181
+
+docker run -d --rm \
+    --name pinot-broker-dev \
+    --network memgql-net \
+    -p 8099:8099 \
+    apachepinot/pinot:latest StartBroker \
+    -zkAddress pinot-zookeeper-dev:2181
+
+docker run -d --rm \
+    --name pinot-server-dev \
+    --network memgql-net \
+    -p 8098:8098 \
+    apachepinot/pinot:latest StartServer \
+    -zkAddress pinot-zookeeper-dev:2181
+```
+
+## 2. Seed data
+
+The repository includes a seed script that creates Pinot offline tables and
+pushes segments matching the default `Person`/`Company` mapping.
+
+```bash
+./rust/tests/pinot/seed.sh
+```
+
+## 3. Start MemGQL
+
+```bash
+docker run --rm \
+    --name memgql \
+    --network memgql-net \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTION_TYPE=pinot \
+    --env PINOT_URL=http://pinot-broker-dev:8099 \
+    --env PINOT_QUERY_OPTIONS=useMultistageEngine=true \
+    --env MAPPING_FILE=/data/mapping.json \
+    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    -v ./mapping.json:/data/mapping.json \
+    memgraph/memgql:latest
+```
+
+## 4. Connect
+
+```bash
+mgconsole --port 7688
+```
+
+## 5. Query
+
+```gql
+MATCH (p:Person) RETURN p.name, p.age;
+```
+
+```gql
+MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
+```
+
+```gql
+MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
+```
+
+For environment variables, see [Configuration](../config.mdx#apache-pinot-pinot).
