@@ -1,0 +1,107 @@
+---
+title: MySQL
+description: Connect MemGQL to MySQL.
+---
+
+# MySQL
+
+The MySQL connector (`CONNECTOR_TYPE=mysql`) translates GQL queries into
+MySQL-dialect SQL and executes them against MySQL 8.0+. It requires a
+[mapping file](../quick-start.mdx#mapping-file) that maps graph patterns to
+relational tables.
+
+## 1. Start MySQL
+
+```bash
+docker network create memgql-net
+
+docker run -d --rm \
+    --name mysql-dev \
+    --network memgql-net \
+    -p 3306:3306 \
+    --env MYSQL_ROOT_PASSWORD=mysql \
+    --env MYSQL_DATABASE=test \
+    mysql:9
+```
+
+## 2. Seed data
+
+```bash
+docker exec -i mysql-dev mysql -uroot -pmysql test << 'SQL'
+CREATE TABLE IF NOT EXISTS persons (
+    id   INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    age  INT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS companies (
+    id   INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS knows (
+    from_id INT NOT NULL,
+    to_id   INT NOT NULL,
+    FOREIGN KEY (from_id) REFERENCES persons(id),
+    FOREIGN KEY (to_id)   REFERENCES persons(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS works_at (
+    person_id  INT NOT NULL,
+    company_id INT NOT NULL,
+    FOREIGN KEY (person_id)  REFERENCES persons(id),
+    FOREIGN KEY (company_id) REFERENCES companies(id)
+) ENGINE=InnoDB;
+
+INSERT INTO persons (id, name, age) VALUES (1, 'Alice', 30), (2, 'Bob', 25);
+INSERT INTO companies (id, name) VALUES (1, 'Acme Corp');
+INSERT INTO knows (from_id, to_id) VALUES (1, 2);
+INSERT INTO works_at (person_id, company_id) VALUES (1, 1);
+SQL
+```
+
+## 3. Start MemGQL
+
+```bash
+docker run --rm \
+    --name memgql \
+    --network memgql-net \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTOR_TYPE=mysql \
+    --env MYSQL_URL="mysql://root:mysql@mysql-dev:3306/test" \
+    --env MAPPING_FILE=/data/mapping.json \
+    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    -v ./mapping.json:/data/mapping.json \
+    memgraph/memgql:latest
+```
+
+## 4. Connect
+
+```bash
+mgconsole --port 7688
+```
+
+## 5. Query
+
+```gql
+MATCH (p:Person) RETURN p.name, p.age;
+```
+
+```gql
+MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
+```
+
+```gql
+MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
+```
+
+## Dialect notes
+
+- Positional `?` parameter placeholders (no numbered `$1` form).
+- No `RETURNING` on `INSERT` — use `last_insert_id()` if you need the
+  generated row id.
+- Aliased single-table `DELETE` is emitted as the multi-table form
+  `DELETE alias FROM table AS alias WHERE …` (MySQL 8.0+ requirement).
+
+For environment variables, see [Configuration](../config.mdx#mysql-mysql).

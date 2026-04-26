@@ -1,0 +1,278 @@
+---
+title: Multiple Graphs & Composite Queries
+description: Query across multiple graphs and backends using the graph catalog and composite queries.
+---
+
+# Multiple Graphs & Composite Queries
+
+MemGQL introduces a **graph catalog** that makes graphs first-class entities. Rather than specifying connectors and connections in every query, you register graphs once and reference them by name. This enables seamless multi-graph queries across heterogeneous backends using standard ISO GQL composite clauses.
+
+## Graph Registration
+
+Before querying across graphs, register them in the catalog using `ADD GRAPH` or `CREATE GRAPH`:
+
+```gql
+-- Register existing graphs on different backends
+ADD GRAPH social ON CONNECTOR neo4j_prod GRAPH neo4j;
+ADD GRAPH events ON CONNECTOR clickhouse_logs READ ONLY;
+ADD GRAPH warehouse ON CONNECTOR postgres_dw MAPPING company_mapping READ ONLY;
+ADD GRAPH dev ON CONNECTOR memgraph_dev;
+```
+
+Each graph entry stores:
+- **Name**: Local catalog identifier
+- **Connector**: Which connector hosts this graph
+- **Remote graph**: Backend-specific graph/database name (optional)
+- **Mapping**: Schema mapping for relational connectors (optional)
+- **Access mode**: `READ WRITE` (default) or `READ ONLY`
+
+## Single Graph Queries
+
+Once registered, use graphs by name without specifying connectors:
+
+```gql
+-- Query the social graph (resolves to neo4j_prod)
+USE social MATCH (p:Person) RETURN p.name;
+
+-- Query the events graph (read-only ClickHouse)
+USE events MATCH (e:Event) WHERE e.ts > '2025-01-01' RETURN e;
+
+-- Query the warehouse with mapping translation
+USE warehouse MATCH (c:Company) WHERE c.revenue > 1000000 RETURN c;
+```
+
+The engine resolves the graph name to its bound connector and executes the query on the appropriate backend.
+
+## Focused Multi-Graph Queries
+
+A single linear query can chain multiple `USE` clauses. Variables bind across parts, enabling joins across backends:
+
+```gql
+-- Find people in the social graph who work at high-revenue companies in the warehouse
+USE social
+MATCH (p:Person)-[:WORKS_AT]->(c:Company)
+USE warehouse
+MATCH (co:Company)
+WHERE co.name = c.name AND co.revenue > 1000000
+RETURN p.name AS person, c.name AS company, co.revenue AS revenue;
+```
+
+Execution flow:
+1. The `USE social` part executes on `neo4j_prod`, returning `(p, c)` bindings
+2. The `USE warehouse` part executes on `postgres_dw`, using `c.name` values as filters
+3. Results are joined locally and returned
+
+Another example correlating social connections with event logs:
+
+```gql
+-- Find friends of Alice who made purchases
+USE social
+MATCH (alice:Person {name: 'Alice'})-[:KNOWS]->(friend:Person)
+USE events
+MATCH (e:Event)
+WHERE e.user_email = friend.email AND e.type = 'purchase'
+RETURN friend.email AS email, e.item AS item, e.amount AS amount;
+```
+
+## Composite Queries Across Graphs
+
+The GQL standard defines composite expressions combining query branches with `UNION`, `INTERSECT`, and `EXCEPT`. Each branch can target a different graph.
+
+### UNION
+
+Combine results from multiple graphs:
+
+```gql
+-- All people from both production and dev environments
+USE social MATCH (p:Person) RETURN p.name AS name, p.email AS email
+UNION
+USE dev MATCH (p:Person) RETURN p.name AS name, p.email AS email;
+
+-- Events from ClickHouse combined with activity logs from Postgres
+USE events
+MATCH (e:Event) WHERE e.ts > '2025-06-01'
+RETURN e.type AS activity, e.user_email AS user, e.ts AS timestamp
+UNION ALL
+USE warehouse
+MATCH (a:ActivityLog) WHERE a.date > '2025-06-01'
+RETURN a.action AS activity, a.employee_email AS user, a.date AS timestamp;
+```
+
+### INTERSECT
+
+Find entities present in both graphs:
+
+```gql
+-- People who exist in both production and dev
+USE social MATCH (p:Person) RETURN p.email AS email
+INTERSECT
+USE dev MATCH (p:Person) RETURN p.email AS email;
+
+-- Companies appearing in both social graph and data warehouse
+USE social
+MATCH (c:Company) RETURN c.name AS company_name
+INTERSECT
+USE warehouse
+MATCH (c:Company) RETURN c.name AS company_name;
+```
+
+### EXCEPT
+
+Find entities in one graph but not another:
+
+```gql
+-- People in production not yet migrated to dev
+USE social MATCH (p:Person) RETURN p.email AS email
+EXCEPT
+USE dev MATCH (p:Person) RETURN p.email AS email;
+
+-- Events in ClickHouse with no matching warehouse activity log
+USE events
+MATCH (e:Event) WHERE e.type = 'purchase'
+RETURN e.user_email AS user, e.ts AS timestamp
+EXCEPT
+USE warehouse
+MATCH (a:ActivityLog) WHERE a.action = 'purchase'
+RETURN a.employee_email AS user, a.date AS timestamp;
+```
+
+### Mixed Composites
+
+Combine multiple composite operations:
+
+```gql
+-- People in production OR dev, but NOT in the warehouse's inactive list
+USE social MATCH (p:Person) RETURN p.email AS email
+UNION
+USE dev MATCH (p:Person) RETURN p.email AS email
+EXCEPT
+USE warehouse
+MATCH (p:Person) WHERE p.status = 'inactive'
+RETURN p.email AS email;
+```
+
+## Graph Introspection
+
+View all registered graphs:
+
+```gql
+SHOW GRAPHS;
+```
+
+```
++------------+---------------+----------------+--------------+------------------+---------------+---------------+------------+
+| name       | connector     | connector_type | remote       | mapping          | mapping_nodes | mapping_edges | access     |
++------------+---------------+----------------+--------------+------------------+---------------+---------------+------------+
+| social     | neo4j_prod    | neo4j          | neo4j        | —                | —             | —             | READ WRITE |
+| events     | ch_logs       | clickhouse     | —            | —                | —             | —             | READ ONLY  |
+| warehouse  | pg_warehouse  | postgres       | —            | company_mapping  | 2             | 2             | READ ONLY  |
+| dev        | mg_dev        | memgraph       | —            | —                | —             | —             | READ WRITE |
++------------+---------------+----------------+--------------+------------------+---------------+---------------+------------+
+```
+
+Filter by connector:
+
+```gql
+SHOW GRAPHS ON CONNECTOR neo4j_prod;
+```
+
+View details for a specific graph:
+
+```gql
+SHOW GRAPH social;
+```
+
+## Graph Lifecycle Management
+
+### Creating Graphs
+
+`CREATE GRAPH` both registers the graph and creates it on the remote backend:
+
+```gql
+-- Create an empty graph on a specific backend
+CREATE GRAPH analytics ON CONNECTOR memgraph_dev;
+
+-- Create with a GQL schema
+CREATE GRAPH typed_graph {
+    NODE Person ({name STRING, age INT}),
+    EDGE KNOWS ()-[]->()
+} ON CONNECTOR neo4j_prod;
+```
+
+### Modifying Graphs
+
+```gql
+-- Change access mode
+ALTER GRAPH social SET READ ONLY;
+ALTER GRAPH social SET READ WRITE;
+
+-- Rebind to a different connector (e.g., failover)
+ALTER GRAPH social SET CONNECTOR neo4j_staging;
+
+-- Change the remote graph name
+ALTER GRAPH social SET GRAPH production_db;
+
+-- Attach or change a mapping
+ALTER GRAPH knowledge SET MAPPING updated_mapping;
+ALTER GRAPH knowledge REMOVE MAPPING;
+```
+
+### Removing Graphs
+
+```gql
+-- Remove from catalog only (remote graph is untouched)
+UNADD GRAPH social;
+UNADD GRAPH IF EXISTS social;
+
+-- Remove from catalog AND drop on backend
+DROP GRAPH analytics;
+DROP GRAPH IF EXISTS analytics;
+```
+
+## Cross-Graph Query Rules
+
+1. **No pushed joins across backends**: Cross-graph joins always materialize both sides locally and hash-join. The engine never pushes join operations across different backends.
+
+2. **Property-based join keys**: Join keys must use node/edge properties. Internal IDs are backend-specific and not comparable across connectors.
+
+3. **Single-graph writes**: Mutations in multi-graph queries must target a single graph. The engine rejects mutations spanning multiple backends in one statement.
+
+4. **Compatible column types**: All branches of a composite query must produce result sets with the same number of columns, in the same order, with compatible types.
+
+## Complete Example
+
+Set up multiple backends and run cross-graph queries:
+
+```gql
+-- 1. Configure connectors
+ADD CONNECTOR neo4j_prod TYPE neo4j URI 'bolt://neo4j:7687' USER 'neo4j' PASSWORD 'secret';
+ADD CONNECTOR pg_warehouse TYPE postgres URI 'postgresql://pg:5432/dw';
+ADD CONNECTOR ch_logs TYPE clickhouse URI 'http://clickhouse:8123';
+
+-- 2. Register graphs
+ADD GRAPH social ON CONNECTOR neo4j_prod GRAPH neo4j;
+ADD GRAPH warehouse ON CONNECTOR pg_warehouse MAPPING company_mapping READ ONLY;
+ADD GRAPH events ON CONNECTOR ch_logs READ ONLY;
+
+-- 3. Single-graph queries
+USE social MATCH (p:Person) RETURN p.name LIMIT 5;
+USE events MATCH (e:Event) RETURN e.type, COUNT(*) GROUP BY e.type;
+
+-- 4. Multi-graph join
+USE social
+MATCH (p:Person)-[:WORKS_AT]->(c:Company)
+USE warehouse
+MATCH (wc:Company)
+WHERE wc.name = c.name AND wc.revenue > 1000000
+RETURN p.name, c.name, wc.revenue;
+
+-- 5. Composite across graphs
+USE social MATCH (p:Person) RETURN p.email AS email
+UNION
+USE warehouse MATCH (e:Employee) RETURN e.email AS email;
+
+-- 6. Cleanup
+UNADD GRAPH social;
+UNADD GRAPH warehouse;
+UNADD GRAPH events;
+```
