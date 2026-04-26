@@ -1,12 +1,11 @@
 export default {
   "quick-start": "Quick Start",
-  "features": "Features",
   "use-cases": "Use Cases",
-  "multiple-graphs": "Multiple Graphs",
+  "features": "Features",
   "connect": "Connect",
-  "config": "Configuration",
+  "multiple-graphs": "Multiple Graphs",
   "complete": "Docker Compose",
-  "changelog": "Changelog",
   "reference": "Reference",
   "licensing": "Licensing",
+  "changelog": "Changelog",
 }
