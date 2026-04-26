@@ -30,7 +30,7 @@ and encryption at rest.
                           │              │       │  (Public)    │
                           │    MemGQL    │       └──────────────┘
 ┌──────────────┐          │    :7688     │
-│ Memgraph Lab │──bolt───▶│              │ sql   ┌──────────────┐
+│   mgconsole  │──bolt───▶│              │ sql   ┌──────────────┐
 └──────────────┘          │              │──────▶│  PostgreSQL  │
                           └──────────────┘       │  (Private)   │
                                                  └──────────────┘
@@ -63,7 +63,6 @@ cat > docker-compose.yml << 'EOF'
 services:
   memgql:
     image: ${MEMGQL_IMAGE:-memgraph/memgql:0.2.1}
-    container_name: memgql
     ports:
       - "7688:7688"
     environment:
@@ -84,7 +83,6 @@ services:
 
   memgql-init:
     image: memgraph/mgconsole:1.5.1
-    container_name: memgql-init
     entrypoint:
       - sh
       - -c
@@ -104,10 +102,9 @@ services:
 
   memgraph:
     image: memgraph/memgraph-mage:3.9.0
-    container_name: memgraph
     ports:
       - "7687:7687"
-    command: --telemetry-enabled=False --log-level=TRACE --also-log-to-stderr
+    command: --log-level=TRACE --also-log-to-stderr
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/7687'"]
       interval: 2s
@@ -117,7 +114,6 @@ services:
 
   postgres:
     image: postgres:18
-    container_name: postgres
     ports:
       - "5432:5432"
     environment:
@@ -197,7 +193,7 @@ docker compose up -d
 Wait for the `memgql-init` container to finish bootstrapping the connections:
 
 ```bash
-docker logs memgql-init
+docker compose logs memgql-init
 # → MemGQL bootstrap complete.
 ```
 
@@ -213,6 +209,19 @@ Verify both connections are registered:
 SHOW CONNECTIONS;
 ```
 
+Register graphs in the catalog so they can be referenced by name in composite queries:
+
+```gql
+ADD GRAPH public ON CONNECTOR mg GRAPH memgraph;
+ADD GRAPH private ON CONNECTOR pg MAPPING pg_social;
+```
+
+Verify the graphs:
+
+```gql
+SHOW GRAPHS;
+```
+
 ## 7. Seed public data in Memgraph
 
 Insert a public product catalog:
@@ -223,9 +232,9 @@ SET DEFAULT CONNECTION mg_conn;
 
 ```gql
 INSERT
-  (p1:Product {sku: "MGX-100", name: "Graph Database", public_price: 5000, contact: "Alice"}),
-  (p2:Product {sku: "MGX-200", name: "Analytics Suite", public_price: 3000, contact: "Bob"}),
-  (p3:Product {sku: "MGX-300", name: "Managed Cloud", public_price: 2000, contact: "Charlie"}),
+  (p1:`Product` {sku: "MGX-100", name: "Graph Database", public_price: 5000, contact: "Alice"}),
+  (p2:`Product` {sku: "MGX-200", name: "Analytics Suite", public_price: 3000, contact: "Bob"}),
+  (p3:`Product` {sku: "MGX-300", name: "Managed Cloud", public_price: 2000, contact: "Charlie"}),
   (sw:Category {name: "Software"}),
   (cl:Category {name: "Cloud Services"}),
   (p1)-[:IN_CATEGORY]->(sw),
@@ -236,11 +245,11 @@ INSERT
 Query the catalog:
 
 ```gql
-MATCH (p:Product) RETURN p.sku, p.name, p.public_price;
+MATCH (p:`Product`) RETURN p.sku, p.name, p.public_price;
 ```
 
 ```gql
-MATCH (p:Product)-[:IN_CATEGORY]->(c:Category) RETURN p.name, c.name;
+MATCH (p:`Product`)-[:IN_CATEGORY]->(c:Category) RETURN p.name, c.name;
 ```
 
 ## 8. Seed private data in PostgreSQL
@@ -280,21 +289,18 @@ MATCH (u:User)-[:FRIEND_OF]->(f:User) RETURN u.name, f.name;
 ## 9. Cross-backend query
 
 Because both backends are wired into the same MemGQL session, you can run a
-single query that pulls from the public product catalog and the private customer
-directory, joining locally on a shared key (here the contact name):
+single composite query that combines results from the public product catalog and
+the private customer directory:
 
 ```gql
-USE CONNECTION mg_conn
-MATCH (p:Product) WHERE p.sku = "MGX-100"
-USE CONNECTION pg_conn
-MATCH (u:User) WHERE u.name = p.contact
-RETURN p.name AS product, u.email AS private_contact;
+USE public MATCH (p:`Product`) RETURN p.name AS name
+UNION ALL
+USE private MATCH (u:User) RETURN u.name AS name;
 ```
 
-MemGQL sends each sub-pattern to its respective backend, materializes the
-results in the federation layer, and performs the hash join locally. The private
-email never leaves the PostgreSQL backend except for the rows that match the
-public product filter.
+Each branch is routed to its respective backend and the results are combined
+locally. Standard GQL composite operators (`UNION`, `UNION ALL`, `INTERSECT`,
+`EXCEPT`) all work across backends.
 
 ## 10. Why this matters
 
@@ -306,6 +312,13 @@ public product filter.
 | **Backend independence** | Swap PostgreSQL for MySQL, DuckDB, or ClickHouse without changing the GQL schema. |
 
 ## Cleanup
+
+Remove the graph catalog entries:
+
+```gql
+UNADD GRAPH public;
+UNADD GRAPH private;
+```
 
 Clear the public data:
 
