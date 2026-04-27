@@ -265,6 +265,134 @@ kubectl delete crd servicemonitors.monitoring.coreos.com
 kubectl delete crd thanosrulers.monitoring.coreos.com
 ```
 
+#### Remote metrics and logs
+
+The standalone chart can also ship:
+
+- metrics to a remote Prometheus-compatible backend via `vmagentRemote` (`remote_write`)
+- logs to a Loki-compatible backend via `vectorRemote`
+
+This is useful when your observability stack lives in a separate cluster or in a managed service.
+
+Prerequisites:
+
+- keep `prometheus.enabled: true` so `mg-exporter` is deployed
+- for standalone deployments, enable Memgraph monitoring endpoints:
+  - `service.enableHttpMonitoring: true`
+  - `service.enableWebsocketMonitoring: true`
+- when `vectorRemote.enabled: true`, add `--monitoring-port=<service.websocketPortMonitoring>` and `--monitoring-address=0.0.0.0` to `memgraphConfig`
+- if you only need remote shipping and do not want duplicate scraping from kube-prometheus, set `prometheus.serviceMonitor.enabled: false`
+
+Example `values.yaml`:
+
+```yaml
+prometheus:
+  enabled: true
+  namespace: monitoring
+  serviceMonitor:
+    enabled: false
+
+service:
+  enableHttpMonitoring: true
+  enableWebsocketMonitoring: true
+
+memgraphConfig:
+  - "--data-directory=/var/lib/memgraph/mg_data"
+  - "--also-log-to-stderr=true"
+  - "--monitoring-port=7444"
+  - "--monitoring-address=0.0.0.0"
+
+vmagentRemote:
+  enabled: true
+  namespace: monitoring
+  remoteWrite:
+    url: "https://<prom-remote-write>/api/v1/write"
+    # Optional: only set basicAuth when your remote_write endpoint requires basic auth.
+    basicAuth:
+      secretName: monitoring-basic-auth
+      usernameKey: username
+      passwordKey: password
+  externalLabels:
+    cluster_id: "memgraph-standalone"
+    service_name: "memgraph"
+    cluster_env: "dev"
+
+vectorRemote:
+  enabled: true
+  logsEndpoint: "https://<loki-endpoint>"
+  # Optional: only set auth when your endpoint requires basic auth.
+  auth:
+    secretName: monitoring-basic-auth
+    usernameKey: username
+    passwordKey: password
+  extraLabels:
+    cluster_id: "memgraph-standalone"
+    service_name: "memgraph"
+    cluster_env: "dev"
+    role: "standalone"
+```
+
+Create credentials secret in the namespace where vmagent runs (usually `monitoring`):
+
+```bash
+kubectl create secret generic monitoring-basic-auth -n monitoring \
+  --from-literal=username='<username>' \
+  --from-literal=password='<password>'
+```
+
+For the standalone Vector sidecar, create the same secret in the Memgraph release namespace as well:
+
+```bash
+kubectl create secret generic monitoring-basic-auth -n <memgraph-namespace> \
+  --from-literal=username='<username>' \
+  --from-literal=password='<password>'
+```
+
+##### Kubernetes infrastructure metrics
+
+`vmagentRemote` can additionally scrape Kubernetes infrastructure metrics
+(`kube-state-metrics`, `node-exporter`, `kubelet`) required by
+`kube-prometheus-stack` Kubernetes and Node dashboards, and remote-write them
+to your centralized monitoring cluster.
+
+Enable Kubernetes scraping by extending your existing `vmagentRemote` values:
+
+```yaml
+vmagentRemote:
+  # ... existing fields (enabled, remoteWrite, externalLabels) ...
+  kubernetes:
+    enabled: true
+    kubeStateMetrics:
+      enabled: true
+      jobName: kube-state-metrics
+      targets:
+        - kube-prometheus-stack-kube-state-metrics.monitoring.svc.cluster.local:8080
+    nodeExporter:
+      enabled: true
+      jobName: node-exporter
+      targets:
+        - kube-prometheus-stack-prometheus-node-exporter.monitoring.svc.cluster.local:9100
+    kubelet:
+      enabled: true
+      jobName: kubelet
+      metricsPath: /metrics/cadvisor
+      apiServerAddress: kubernetes.default.svc:443
+      insecureSkipVerify: false
+```
+
+Notes:
+
+- RBAC and `ServiceAccount` resources are created only when an enabled scrape
+  job requires Kubernetes API access (for example `kubelet.enabled=true` or
+  `nodeExporter.useKubernetesDiscovery=true`).
+- Keep `jobName` values aligned with dashboard and recording-rule expectations
+  unless you also update those queries.
+- Dashboards that rely on precomputed recording-rule series still require
+  rule evaluation in your monitoring stack.
+
+A ready-to-use example values file is available in the Helm charts repository:
+[`examples/remote-monitoring/values-standalone-k8s-metrics.yaml`](https://github.com/memgraph/helm-charts/blob/main/examples/remote-monitoring/values-standalone-k8s-metrics.yaml).
+
 ### Node affinity
 
 The chart exposes the full Kubernetes `nodeAffinity` spec via the `nodeAffinity`
@@ -339,111 +467,161 @@ Additional options like `externalTrafficPolicy`, `ipFamilyPolicy`, and
 
 ### Configuration options
 
-The following table lists the configurable parameters of the Memgraph chart and their default values.
+The following table lists the configurable parameters of the Memgraph standalone chart and their default values.
 
 
-| Parameter                                                  | Description                                                                                                  | Default                        |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------ |
-| `image.repository`                                         | Memgraph Docker image repository                                                                             | `docker.io/memgraph/memgraph`  |
-| `image.tag`                                                | Specific tag for the Memgraph Docker image. Overrides the image tag whose default is chart version.          | `3.1.0`                        |
-| `image.pullPolicy`                                         | Image pull policy                                                                                            | `IfNotPresent`                 |
-| `env.MEMGRAPH_ENTERPRISE_LICENSE`                          | Memgraph enterprise license                                                                                  | `<your-license>`               |
-| `env.MEMGRAPH_ORGANIZATION_NAME`                           | Organization name                                                                                            | `<your-organization-name>`     |
-| `memgraphUserId`                                           | The user id that is hardcoded in Memgraph and Mage images                                                    | `101`                          |
-| `memgraphGroupId`                                          | The group id that is hardcoded in Memgraph and Mage images                                                   | `103`                          |
-| `storage.libPVCSize`                                       | Size of the storage PVC                                                                                      | `1Gi`                          |
-| `storage.libStorageClassName`                              | The name of the storage class used for storing data.                                                         | `""`                           |
-| `storage.libStorageAccessMode`                             | Access mode used for lib storage.                                                                            | `ReadWriteOnce`                |
-| `storage.logPVCSize`                                       | Size of the log PVC                                                                                          | `1Gi`                          |
-| `storage.logStorageClassName`                              | The name of the storage class used for storing logs.                                                         | `""`                           |
-| `storage.logStorageAccessMode`                             | Access mode used for log storage.                                                                            | `ReadWriteOnce`                |
-| `externalAccess.coordinator.serviceType`                   | IngressNginx, NodePort, CommonLoadBalancer or LoadBalancer. By default, no external service will be created. | `""`                           |
-| `externalAccess.coordinator.annotations`                   | Annotations for external services attached to coordinators.                                                  | `{}`                           |
-| `externalAccess.dataInstance.serviceType`                  | IngressNginx, NodePort or LoadBalancer. By default, no external service will be created.                     | `""`                           |
-| `externalAccess.dataInstance.annotations`                  | Annotations for external services attached to data instances.                                                | `{}`                           |
-| `headlessService.enabled`                                  | Specifies whether headless services will be used inside K8s network on all instances.                        | `false`                        |
-| `service.loadBalancer.enabled`                             | Defines if a Service intended for cluster-external access should be created.                                 | `false`                        |
-| `service.loadBalancer.type`                                | Kubernetes service type for the external access service.                                                     | `LoadBalancer`                 |
-| `service.loadBalancer.enableBolt`                          | Enable Bolt protocol on the LoadBalancer service.                                                            | `true`                         |
-| `service.loadBalancer.enableWebsocketMonitoring`           | Enable WebSocket monitoring on the LoadBalancer service.                                                     | `false`                        |
-| `service.loadBalancer.enableHttpMonitoring`                | Enable HTTP monitoring on the LoadBalancer service.                                                          | `false`                        |
-| `service.loadBalancer.annotations`                         | Annotations to add to the LoadBalancer service.                                                              | `{}`                           |
-| `service.loadBalancer.labels`                              | Labels to add to the LoadBalancer service.                                                                   | `{}`                           |
-| `service.loadBalancer.externalTrafficPolicy`               | Denotes if this Service desires to route external traffic to node-local or cluster-wide endpoints.           | `null`                         |
-| `service.loadBalancer.ipFamilyPolicy`                      | Represents the dual-stack-ness requested or required by this Service.                                        | `null`                         |
-| `service.loadBalancer.ipFamilies`                          | List of IP families (e.g. IPv4, IPv6) assigned to this service.                                              | `null`                         |
-| `service.loadBalancer.loadBalancerSourceRanges`            | Restricts traffic through the cloud-provider load-balancer to the specified client IPs.                      | `null`                         |
-| `ports.boltPort`                                           | Bolt port used on coordinator and data instances.                                                            | `7687`                         |
-| `ports.managementPort`                                     | Management port used on coordinator and data instances.                                                      | `10000`                        |
-| `ports.replicationPort`                                    | Replication port used on data instances.                                                                     | `20000`                        |
-| `ports.coordinatorPort`                                    | Coordinator port used on coordinators.                                                                       | `12000`                        |
-| `nodeAffinity`                                             | Allows constraining on which nodes Pods can be scheduled on based on node labels                             | `{}`                           |
-| `priorityClassName`                                        | Defines which [priority class](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/) should be assigned to the Memgraph pods | `null`                         |
-| `container.data.livenessProbe.tcpSocket.port`              | Port used for TCP connection. Should be the same as bolt port.                                               | `7687`                         |
-| `container.data.livenessProbe.failureThreshold`            | Failure threshold for liveness probe                                                                         | `20`                           |
-| `container.data.livenessProbe.timeoutSeconds`              | Timeout for liveness probe                                                                                   | `10`                           |
-| `container.data.livenessProbe.periodSeconds`               | Period seconds for readiness probe                                                                           | `5`                            |
-| `container.data.readinessProbe.tcpSocket.port`             | Port used for TCP connection. Should be the same as bolt port.                                               | `7687`                         |
-| `container.data.readinessProbe.failureThreshold`           | Failure threshold for readiness probe                                                                        | `20`                           |
-| `container.data.readinessProbe.timeoutSeconds`             | Timeout for readiness probe                                                                                  | `10`                           |
-| `container.data.readinessProbe.periodSeconds`              | Period seconds for readiness probe                                                                           | `5`                            |
-| `container.data.startupProbe.tcpSocket.port`               | Port used for TCP connection. Should be the same as bolt port.                                               | `7687`                         |
-| `container.data.startupProbe.failureThreshold`             | Failure threshold for startup probe                                                                          | `1440`                         |
-| `container.data.startupProbe.timeoutSeconds`               | Timeout for probe                                                                                            | `10`                           |
-| `container.data.startupProbe.periodSeconds`                | Period seconds for startup probe                                                                             | `10`                           |
-| `container.data.terminationGracePeriodSeconds`             | Grace period for data pod termination                                                                        | `1800`                         |
-| `container.coordinators.livenessProbe.tcpSocket.port`      | Port used for TCP connection. Should be the same as bolt port.                                               | `12000`                        |
-| `container.coordinators.livenessProbe.failureThreshold`    | Failure threshold for liveness probe                                                                         | `20`                           |
-| `container.coordinators.livenessProbe.timeoutSeconds`      | Timeout for liveness probe                                                                                   | `10`                           |
-| `container.coordinators.livenessProbe.periodSeconds`       | Period seconds for readiness probe                                                                           | `5`                            |
-| `container.coordinators.readinessProbe.tcpSocket.port`     | Port used for TCP connection. Should be the same as bolt port.                                               | `12000`                        |
-| `container.coordinators.readinessProbe.failureThreshold`   | Failure threshold for readiness probe                                                                        | `20`                           |
-| `container.coordinators.readinessProbe.timeoutSeconds`     | Timeout for readiness probe                                                                                  | `10`                           |
-| `container.coordinators.readinessProbe.periodSeconds`      | Period seconds for readiness probe                                                                           | `5`                            |
-| `container.coordinators.startupProbe.tcpSocket.port`       | Port used for TCP connection. Should be the same as bolt port.                                               | `12000`                        |
-| `container.coordinators.startupProbe.failureThreshold`     | Failure threshold for startup probe                                                                          | `1440`                         |
-| `container.coordinators.startupProbe.timeoutSeconds`       | Timeout for probe                                                                                            | `10`                           |
-| `container.coordinators.startupProbe.periodSeconds`        | Period seconds for startup probe                                                                             | `10`                           |
-| `container.coordinators.terminationGracePeriodSeconds`     | Grace period for coordinators pod termination                                                                | `1800`                         |
-| `data`                                                     | Configuration for data instances                                                                             | See `data` section             |
-| `coordinators`                                             | Configuration for coordinator instances                                                                      | See `coordinators` section     |
-| `sysctlInitContainer.enabled`                              | Enable the init container to set sysctl parameters                                                           | `true`                         |
-| `sysctlInitContainer.maxMapCount`                          | Value for `vm.max_map_count` to be set by the init container                                                 | `262144`                       |
-| `secrets.enabled`                                          | Enable the use of Kubernetes secrets for Memgraph credentials                                                | `false`                        |
-| `secrets.name`                                             | The name of the Kubernetes secret containing Memgraph credentials                                            | `memgraph-secrets`             |
-| `secrets.userKey`                                          | The key in the Kubernetes secret for the Memgraph user, the value is passed to the `MEMGRAPH_USER` env.      | `USER`                         |
-| `secrets.passwordKey`                                      | The key in the Kubernetes secret for the Memgraph password, the value is passed to the `MEMGRAPH_PASSWORD`.  | `PASSWORD`                     |
-| `resources.coordinators`                                   | CPU/Memory resource requests/limits. Left empty by default.                                                  | `{}`                           |
-| `resources.data`                                           | CPU/Memory resource requests/limits. Left empty by default.                                                  | `{}`                           |
-| `prometheus.enabled`                                       | If set to `true`, K8s resources representing Memgraph's Prometheus exporter will be deployed.                | `false`                        |
-| `prometheus.namespace`                                     | The namespace in which `kube-prometheus-stack` and Memgraph's Prometheus exporter are installed.             | `monitoring`                   |
-| `prometheus.memgraphExporter.port`                         | The port on which Memgraph's Prometheus exporter is available.                                               | `9115`                         |
-| `prometheus.memgraphExporter.pullFrequencySeconds`         | How often will Memgraph's Prometheus exporter pull data from Memgraph instances.                             | `5`                            |
-| `prometheus.memgraphExporter.repository`                   | The repository where Memgraph's Prometheus exporter image is available.                                      | `docker.io/memgraph/prometheus-exporter` |                      
-| `prometheus.memgraphExporter.tag`                          | The tag of Memgraph's Prometheus exporter image.                                                             | `0.2.1`                        |                      
-| `prometheus.serviceMonitor.enabled`                        | If enabled, a `ServiceMonitor` object will be deployed.                                                      | `true`                         |
-| `prometheus.serviceMonitor.kubePrometheusStackReleaseName` | The release name under which `kube-prometheus-stack` chart is installed.                                     | `kube-prometheus-stack`        |
-| `prometheus.serviceMonitor.interval`                       | How often will Prometheus pull data from Memgraph's Prometheus exporter.                                     | `15s`                          |
-| `labels.coordinators.podLabels`                            | Enables you to set labels on a pod level.                                                                    | `{}`                           |
-| `labels.coordinators.statefulSetLabels`                    | Enables you to set labels on a stateful set level.                                                           | `{}`                           |
-| `labels.coordinators.serviceLabels`                        | Enables you to set labels on a service level.                                                                | `{}`                           |
-| `updateStrategy.type`                                      | Update strategy for StatefulSets. Possible values are `RollingUpdate` and `OnDelete`                         | `RollingUpdate`                | 
-| `extraEnv.data`                                            | Env variables that users can define and are applied to data instances                                        | `[]`                           |
-| `extraEnv.coordinators`                                    | Env variables that users can define and are applied to coordinators                                          | `[]`                           |
-| `initContainers.data`                                      | Init containers that users can define that will be applied to data instances.                                | `[]`                           | 
-| `initContainers.coordinators`                              | Init containers that users can define that will be applied to coordinators.                                  | `[]`                           | 
-| `tolerations.coordinators`                                 | Applied to a coordinator pod and allows the pod to be scheduled on nodes with matching taints.               | `[]`                           |
-| `tolerations.data`                                         | Applied to a data pod and allows the pod to be scheduled on nodes with matching taints.                      | `[]`                           |
+| Parameter                                                    | Description                                                                                                                                  | Default                                  |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `image.repository`                                           | Memgraph Docker image repository.                                                                                                            | `docker.io/memgraph/memgraph`            |
+| `image.tag`                                                  | Specific tag for the Memgraph Docker image. Overrides the image tag whose default is chart's app version.                                    | `""` (chart's app version)               |
+| `image.pullPolicy`                                           | Image pull policy.                                                                                                                           | `IfNotPresent`                           |
+| `useImagePullSecrets`                                        | Whether to use image pull secrets defined under `imagePullSecrets`.                                                                          | `false`                                  |
+| `imagePullSecrets`                                           | List of image pull secrets.                                                                                                                  | `[{name: regcred}]`                      |
+| `replicaCount`                                               | Number of Memgraph StatefulSet replicas.                                                                                                     | `1`                                      |
+| `nodeAffinity`                                               | `spec.affinity.nodeAffinity` field for the Memgraph Pod.                                                                                     | `{}`                                     |
+| `priorityClassName`                                          | Indicates the importance of the Pod relative to other Pods.                                                                                  | `null`                                   |
+| `nodeSelector`                                               | Node selector for Pod scheduling.                                                                                                            | `{}`                                     |
+| `tolerations`                                                | Pod tolerations.                                                                                                                             | `[]`                                     |
+| `service.type`                                               | Kubernetes service type (`ClusterIP`, `NodePort`, `LoadBalancer`).                                                                           | `ClusterIP`                              |
+| `service.enableBolt`                                         | Enable the Bolt port on the main service.                                                                                                    | `true`                                   |
+| `service.boltPort`                                           | Bolt port. If changed, update ports in probes as well.                                                                                       | `7687`                                   |
+| `service.enableWebsocketMonitoring`                          | Enable the websocket monitoring port on the main service.                                                                                    | `false`                                  |
+| `service.websocketPortMonitoring`                            | Websocket monitoring port.                                                                                                                   | `7444`                                   |
+| `service.enableHttpMonitoring`                               | Enable the HTTP monitoring port on the main service.                                                                                         | `false`                                  |
+| `service.httpPortMonitoring`                                 | HTTP monitoring port.                                                                                                                        | `9091`                                   |
+| `service.annotations`                                        | Annotations to add to the main service.                                                                                                      | `{}`                                     |
+| `service.labels`                                             | Labels to add to the main service.                                                                                                           | `{}`                                     |
+| `service.loadBalancer.enabled`                               | Create an additional Service (default type `LoadBalancer`) for external access using the same ports as the main service.                     | `false`                                  |
+| `service.loadBalancer.type`                                  | Type of the additional external-access service.                                                                                              | `LoadBalancer`                           |
+| `service.loadBalancer.enableBolt`                            | Expose the Bolt port through the additional service.                                                                                         | `true`                                   |
+| `service.loadBalancer.enableWebsocketMonitoring`             | Expose the websocket monitoring port through the additional service.                                                                         | `false`                                  |
+| `service.loadBalancer.enableHttpMonitoring`                  | Expose the HTTP monitoring port through the additional service.                                                                              | `false`                                  |
+| `service.loadBalancer.annotations`                           | Annotations for the additional service.                                                                                                      | `{}`                                     |
+| `service.loadBalancer.labels`                                | Labels for the additional service.                                                                                                           | `{}`                                     |
+| `service.loadBalancer.externalTrafficPolicy`                 | `externalTrafficPolicy` for the additional service.                                                                                          | `null`                                   |
+| `service.loadBalancer.ipFamilyPolicy`                        | `ipFamilyPolicy` for the additional service.                                                                                                 | `null`                                   |
+| `service.loadBalancer.ipFamilies`                            | `ipFamilies` for the additional service.                                                                                                     | `null`                                   |
+| `service.loadBalancer.loadBalancerSourceRanges`              | Restrict traffic to the specified client IP ranges (only applies if the cloud provider supports it).                                         | `null`                                   |
+| `persistentVolumeClaim.createStorageClaim`                   | Create a PVC for data storage. If `false`, use `existingClaim` or `storageVolumeName`.                                                       | `true`                                   |
+| `persistentVolumeClaim.storageClassName`                     | Storage class for the data PVC. Use a `Retain` reclaim policy to preserve data when the release is deleted.                                  | `local-path`                             |
+| `persistentVolumeClaim.storageSize`                          | Size of the data PVC. Must be at least 4x the maximum dataset size to accommodate snapshots and WAL files.                                   | `10Gi`                                   |
+| `persistentVolumeClaim.libStorageAccessMode`                 | Access mode for the data PVC.                                                                                                                | `ReadWriteOnce`                          |
+| `persistentVolumeClaim.existingClaim`                        | Name of an existing PVC to use when `createStorageClaim` is `false`.                                                                         | `memgraph-0`                             |
+| `persistentVolumeClaim.storageVolumeName`                    | Existing volume to back the PVC.                                                                                                             | `""`                                     |
+| `persistentVolumeClaim.createLogStorage`                     | Create a PVC for logs. If `false`, logs are only written to stdout/stderr.                                                                   | `true`                                   |
+| `persistentVolumeClaim.logStorageClassName`                  | Storage class for the log PVC.                                                                                                               | `local-path`                             |
+| `persistentVolumeClaim.logStorageSize`                       | Size of the log PVC.                                                                                                                         | `1Gi`                                    |
+| `persistentVolumeClaim.createUserClaim`                      | Create a dynamic PVC for user files (configs, certificates, etc.).                                                                           | `false`                                  |
+| `persistentVolumeClaim.userStorageClassName`                 | Storage class for the user PVC.                                                                                                              | `""`                                     |
+| `persistentVolumeClaim.userStorageSize`                      | Size of the user PVC.                                                                                                                        | `1Gi`                                    |
+| `persistentVolumeClaim.userStorageAccessMode`                | Access mode for the user PVC.                                                                                                                | `ReadWriteOnce`                          |
+| `persistentVolumeClaim.userMountPath`                        | Mount path for the user PVC inside the container.                                                                                            | `""`                                     |
+| `persistentVolumeClaim.createCoreDumpsClaim`                 | Create a PVC for core dumps.                                                                                                                 | `false`                                  |
+| `persistentVolumeClaim.coreDumpsStorageClassName`            | Storage class for the core dumps PVC.                                                                                                        | `""`                                     |
+| `persistentVolumeClaim.coreDumpsStorageSize`                 | Size of the core dumps PVC.                                                                                                                  | `10Gi`                                   |
+| `persistentVolumeClaim.coreDumpsMountPath`                   | Mount path for the core dumps PVC.                                                                                                           | `/var/core/memgraph`                     |
+| `storageClass.create`                                        | Create a new StorageClass for data and logs.                                                                                                 | `false`                                  |
+| `storageClass.name`                                          | Name of the created StorageClass.                                                                                                            | `memgraph-generic-storage-class`         |
+| `storageClass.provisioner`                                   | StorageClass provisioner (change for production: AWS `ebs.csi.aws.com`, GCP `pd.csi.storage.gke.io`, Azure `disk.csi.azure.com`).             | `k8s.io/minikube-hostpath`               |
+| `storageClass.storageType`                                   | StorageClass storage type (e.g. `gp2`, `pd-standard`, `StandardSSD_LRS`).                                                                    | `hostPath`                               |
+| `storageClass.fsType`                                        | Filesystem type for the StorageClass.                                                                                                        | `ext4`                                   |
+| `storageClass.reclaimPolicy`                                 | Reclaim policy for the StorageClass.                                                                                                         | `Retain`                                 |
+| `storageClass.volumeBindingMode`                             | Volume binding mode for the StorageClass.                                                                                                    | `Immediate`                              |
+| `memgraphConfig`                                             | List of Memgraph CLI flags passed at startup. See [configuration settings](/database-management/configuration).                              | `["--data-directory=/var/lib/memgraph/mg_data", "--also-log-to-stderr=true"]` |
+| `memgraphUserId`                                             | The user ID hardcoded in Memgraph and MAGE images.                                                                                           | `101`                                    |
+| `memgraphGroupId`                                            | The group ID hardcoded in Memgraph and MAGE images.                                                                                          | `103`                                    |
+| `secrets.enabled`                                            | Enable the use of Kubernetes secrets for Memgraph credentials.                                                                               | `false`                                  |
+| `secrets.name`                                               | Name of the Kubernetes secret containing Memgraph credentials.                                                                               | `memgraph-secrets`                       |
+| `secrets.userKey`                                            | Key in the secret whose value is passed to the `MEMGRAPH_USER` environment variable.                                                         | `USER`                                   |
+| `secrets.passwordKey`                                        | Key in the secret whose value is passed to the `MEMGRAPH_PASSWORD` environment variable.                                                     | `PASSWORD`                               |
+| `memgraphEnterpriseLicense`                                  | Memgraph Enterprise license key.                                                                                                             | `""`                                     |
+| `memgraphOrganizationName`                                   | Organization name associated with the Enterprise license.                                                                                    | `""`                                     |
+| `statefulSetAnnotations`                                     | Annotations to add to the StatefulSet.                                                                                                       | `{}`                                     |
+| `podAnnotations`                                             | Annotations to add to the Pod.                                                                                                               | `{}`                                     |
+| `extraEnv`                                                   | Additional environment variables passed to the Memgraph container.                                                                           | `[]`                                     |
+| `resources`                                                  | CPU/Memory resource requests/limits. Left empty by default.                                                                                  | `{}`                                     |
+| `serviceAccount.create`                                      | Whether a service account should be created.                                                                                                 | `true`                                   |
+| `serviceAccount.annotations`                                 | Annotations to add to the service account.                                                                                                   | `{}`                                     |
+| `serviceAccount.name`                                        | Name of the service account to use. If empty and `create` is `true`, a name is generated.                                                    | `""`                                     |
+| `container.terminationGracePeriodSeconds`                    | Grace period for Pod termination. Increase this when `--storage-snapshot-on-exit` is enabled so the on-exit snapshot has time to finish before `SIGKILL`. | `1800`                       |
+| `container.readinessProbe.tcpSocket.port`                    | Port used for the readiness TCP probe. Keep aligned with `service.boltPort`.                                                                 | `7687`                                   |
+| `container.readinessProbe.failureThreshold`                  | Failure threshold for the readiness probe.                                                                                                   | `20`                                     |
+| `container.readinessProbe.timeoutSeconds`                    | Timeout (seconds) for the readiness probe.                                                                                                   | `10`                                     |
+| `container.readinessProbe.periodSeconds`                     | Period (seconds) for the readiness probe.                                                                                                    | `5`                                      |
+| `container.readinessProbe.initialDelaySeconds`               | Initial delay (seconds) for the readiness probe.                                                                                             | `0`                                      |
+| `container.livenessProbe.tcpSocket.port`                     | Port used for the liveness TCP probe. Keep aligned with `service.boltPort`.                                                                  | `7687`                                   |
+| `container.livenessProbe.failureThreshold`                   | Failure threshold for the liveness probe.                                                                                                    | `20`                                     |
+| `container.livenessProbe.timeoutSeconds`                     | Timeout (seconds) for the liveness probe.                                                                                                    | `10`                                     |
+| `container.livenessProbe.periodSeconds`                      | Period (seconds) for the liveness probe.                                                                                                     | `5`                                      |
+| `container.livenessProbe.initialDelaySeconds`                | Initial delay (seconds) for the liveness probe.                                                                                              | `0`                                      |
+| `container.startupProbe.tcpSocket.port`                      | Port used for the startup TCP probe. Keep aligned with `service.boltPort`.                                                                   | `7687`                                   |
+| `container.startupProbe.failureThreshold`                    | Failure threshold for the startup probe. Increase if recovery takes longer than 2 hours.                                                     | `1440`                                   |
+| `container.startupProbe.timeoutSeconds`                      | Timeout (seconds) for the startup probe.                                                                                                     | `1`                                      |
+| `container.startupProbe.periodSeconds`                       | Period (seconds) for the startup probe.                                                                                                      | `5`                                      |
+| `container.startupProbe.initialDelaySeconds`                 | Initial delay (seconds) for the startup probe.                                                                                               | `0`                                      |
+| `customQueryModules`                                         | List of custom query modules mounted into the Memgraph container and loaded at startup. Each item requires `volume` (ConfigMap name) and `file`. | `[]`                                  |
+| `lifecycleHooks`                                             | Container [lifecycle hooks](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/) for the Memgraph container.            | `{}`                                     |
+| `extraVolumes`                                               | Additional volumes mounted into the Pod.                                                                                                     | `[]`                                     |
+| `extraVolumeMounts`                                          | Additional volume mounts for the Memgraph container.                                                                                         | `[]`                                     |
+| `sysctlInitContainer.enabled`                                | Enable the init container that sets `vm.max_map_count`.                                                                                      | `true`                                   |
+| `sysctlInitContainer.maxMapCount`                            | Value to set for `vm.max_map_count`.                                                                                                         | `524289`                                 |
+| `sysctlInitContainer.image.repository`                       | Image repository for the sysctl init container.                                                                                              | `docker.io/library/busybox`              |
+| `sysctlInitContainer.image.tag`                              | Image tag for the sysctl init container.                                                                                                     | `latest`                                 |
+| `sysctlInitContainer.image.pullPolicy`                       | Image pull policy for the sysctl init container.                                                                                             | `IfNotPresent`                           |
+| `initContainers`                                             | Additional init containers to add to the Memgraph Pod.                                                                                       | `[]`                                     |
+| `prometheus.enabled`                                         | Deploy Kubernetes resources for Memgraph's Prometheus exporter.                                                                              | `false`                                  |
+| `prometheus.namespace`                                       | Namespace where the exporter and `kube-prometheus-stack` resources are installed.                                                            | `monitoring`                             |
+| `prometheus.memgraphExporter.port`                           | Port on which Memgraph's Prometheus exporter is exposed.                                                                                     | `9115`                                   |
+| `prometheus.memgraphExporter.pullFrequencySeconds`           | How often the exporter pulls data from Memgraph.                                                                                             | `5`                                      |
+| `prometheus.memgraphExporter.repository`                     | Image repository for Memgraph's Prometheus exporter.                                                                                         | `docker.io/memgraph/prometheus-exporter` |
+| `prometheus.memgraphExporter.tag`                            | Image tag for Memgraph's Prometheus exporter.                                                                                                | `0.2.1`                                  |
+| `prometheus.serviceMonitor.enabled`                          | Deploy a `ServiceMonitor` object for Prometheus scraping.                                                                                    | `true`                                   |
+| `prometheus.serviceMonitor.kubePrometheusStackReleaseName`   | Release name under which `kube-prometheus-stack` is installed.                                                                               | `kube-prometheus-stack`                  |
+| `prometheus.serviceMonitor.interval`                         | How often Prometheus pulls data from Memgraph's exporter.                                                                                    | `15s`                                    |
+| `vmagentRemote.enabled`                                      | Deploy a vmagent Deployment that scrapes mg-exporter and remote-writes to a Prometheus-compatible endpoint.                                  | `false`                                  |
+| `vmagentRemote.namespace`                                    | Namespace for the vmagent Deployment and its resources. Defaults to `prometheus.namespace` when empty.                                       | `""`                                     |
+| `vmagentRemote.image.repository`                             | vmagent image repository.                                                                                                                    | `victoriametrics/vmagent`                |
+| `vmagentRemote.image.tag`                                    | vmagent image tag.                                                                                                                           | `v1.139.0`                               |
+| `vmagentRemote.image.pullPolicy`                             | vmagent image pull policy.                                                                                                                   | `IfNotPresent`                           |
+| `vmagentRemote.remoteWrite.url`                              | Prometheus `remote_write` URL. Required when `vmagentRemote.enabled=true`.                                                                   | `""`                                     |
+| `vmagentRemote.remoteWrite.basicAuth.secretName`             | Kubernetes Secret holding basic-auth credentials for `remote_write`. When empty, basic auth is not configured.                               | `""`                                     |
+| `vmagentRemote.remoteWrite.basicAuth.usernameKey`            | Key in the basic-auth Secret holding the username.                                                                                           | `username`                               |
+| `vmagentRemote.remoteWrite.basicAuth.passwordKey`            | Key in the basic-auth Secret holding the password.                                                                                           | `password`                               |
+| `vmagentRemote.scrapeInterval`                               | Global `scrape_interval` applied to vmagent scrape jobs.                                                                                     | `15s`                                    |
+| `vmagentRemote.externalLabels`                               | External labels attached to every scraped sample before remote-write.                                                                        | `{}`                                     |
+| `vmagentRemote.resources`                                    | Resource requests/limits for the vmagent container.                                                                                          | `{}`                                     |
+| `vmagentRemote.httpPort`                                     | vmagent local HTTP listen port for metrics/debug (the remote-write target is `remoteWrite.url`).                                             | `8429`                                   |
+| `vmagentRemote.kubernetes.enabled`                           | Enable scraping of Kubernetes infrastructure metrics used by kube-prometheus dashboards.                                                     | `false`                                  |
+| `vmagentRemote.kubernetes.kubeStateMetrics.enabled`          | Scrape `kube-state-metrics`.                                                                                                                 | `true`                                   |
+| `vmagentRemote.kubernetes.kubeStateMetrics.jobName`          | Prometheus `job` label for kube-state-metrics. Keep aligned with dashboard/recording-rule expectations.                                      | `kube-state-metrics`                     |
+| `vmagentRemote.kubernetes.kubeStateMetrics.targets`          | Static scrape targets for kube-state-metrics.                                                                                                | `[kube-prometheus-stack-kube-state-metrics.monitoring.svc.cluster.local:8080]` |
+| `vmagentRemote.kubernetes.nodeExporter.enabled`              | Scrape `node-exporter`.                                                                                                                      | `true`                                   |
+| `vmagentRemote.kubernetes.nodeExporter.jobName`              | Prometheus `job` label for node-exporter.                                                                                                    | `node-exporter`                          |
+| `vmagentRemote.kubernetes.nodeExporter.useKubernetesDiscovery` | Discover node-exporter pods via Kubernetes SD so namespace/pod/node labels are present for recording rules.                               | `false`                                  |
+| `vmagentRemote.kubernetes.nodeExporter.podMetricsPort`       | Pod port used by Kubernetes SD to match node-exporter pods.                                                                                  | `"9100"`                                 |
+| `vmagentRemote.kubernetes.nodeExporter.appNameLabel`         | Expected value of `app.kubernetes.io/name` on node-exporter pods.                                                                            | `prometheus-node-exporter`               |
+| `vmagentRemote.kubernetes.nodeExporter.appInstanceLabel`     | Expected value of `app.kubernetes.io/instance` on node-exporter pods.                                                                        | `kube-prometheus-stack-prometheus-node-exporter` |
+| `vmagentRemote.kubernetes.nodeExporter.targets`              | Static fallback targets for node-exporter when `useKubernetesDiscovery=false`.                                                               | `[kube-prometheus-stack-prometheus-node-exporter.monitoring.svc.cluster.local:9100]` |
+| `vmagentRemote.kubernetes.kubelet.enabled`                   | Scrape kubelet metrics via the Kubernetes API server node proxy.                                                                             | `true`                                   |
+| `vmagentRemote.kubernetes.kubelet.jobName`                   | Prometheus `job` label for kubelet. Keep as `kubelet` so kube-prometheus dashboards and recording rules continue to match.                   | `kubelet`                                |
+| `vmagentRemote.kubernetes.kubelet.metricsPath`               | Metrics path for the primary kubelet scrape (cAdvisor).                                                                                      | `/metrics/cadvisor`                      |
+| `vmagentRemote.kubernetes.kubelet.additionalMetricsEnabled`  | Enable a second kubelet scrape job for `/metrics` alongside the cAdvisor job.                                                                | `true`                                   |
+| `vmagentRemote.kubernetes.kubelet.additionalJobName`         | Prometheus `job` label for the additional kubelet scrape.                                                                                    | `kubelet-metrics`                        |
+| `vmagentRemote.kubernetes.kubelet.additionalMetricsPath`     | Metrics path for the additional kubelet scrape.                                                                                              | `/metrics`                               |
+| `vmagentRemote.kubernetes.kubelet.apiServerAddress`          | Kubernetes API server address used to proxy kubelet scrapes.                                                                                 | `kubernetes.default.svc:443`             |
+| `vmagentRemote.kubernetes.kubelet.insecureSkipVerify`        | Skip TLS verification of the kube-apiserver serving cert when scraping kubelet.                                                              | `false`                                  |
 
+<Callout type="warning">
+If you enable the [`--storage-snapshot-on-exit`](/database-management/configuration)
+flag via `memgraphConfig`, Memgraph creates a full snapshot of the database
+during shutdown. Snapshot creation time scales with dataset size and can
+exceed the default 30-minute `container.terminationGracePeriodSeconds`.
 
-For the `data` and `coordinators` sections, each item in the list has the following parameters:
-
-| Parameter                                   | Description                                                                                         | Default                                 |
-|---------------------------------------------|-----------------------------------------------------------------------------------------------------|-----------------------------------------|
-| `id`                                        | ID of the instance                                                                                  | `0` for data, `1` for coordinators      |
-| `args`                                      | List of arguments for the instance                                                                  | See `args` section                      |
-
-The `args` section contains a list of arguments for the instance.
+If the grace period is shorter than the time needed to write the on-exit
+snapshot, Kubernetes will `SIGKILL` Memgraph mid-write, leaving the snapshot
+incomplete. Benchmark the snapshot time on a representative dataset and set
+`container.terminationGracePeriodSeconds` to comfortably cover it.
+</Callout>
 
 For all available database settings, refer to the [configuration settings
 docs](/database-management/configuration).
@@ -474,6 +652,81 @@ Or you can modify a `values.yaml` file and override the desired values:
 helm install <resource-name> memgraph/memgraph-lab -f values.yaml
 ```
 
+#### Gateway API support
+
+The Memgraph Lab Helm chart supports the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) for external access. When enabled, the chart creates an HTTPRoute resource to route HTTP(S) traffic to Memgraph Lab. You can either let the chart create its own Gateway or attach the route to a pre-existing one.
+
+<Callout type="info">
+Before enabling Gateway API, you must have a Gateway API controller (e.g., Envoy Gateway, Istio, Cilium) installed in your cluster, and a **GatewayClass** resource must exist. The chart does not create a GatewayClass — you must create it yourself or use one provided by your controller installation. See the [HA chart Gateway API prerequisites](/clustering/high-availability/setup-ha-cluster-k8s#prerequisites-1) for detailed setup instructions.
+</Callout>
+
+**Chart-managed Gateway**
+
+To let the chart create a Gateway with an HTTPRoute:
+
+```yaml
+gateway:
+  enabled: true
+  gatewayClassName: "eg"
+  listeners:
+    - name: lab-http
+      port: 80
+      protocol: HTTP
+```
+
+For HTTPS with TLS termination:
+
+```yaml
+gateway:
+  enabled: true
+  gatewayClassName: "eg"
+  listeners:
+    - name: lab-https
+      port: 443
+      protocol: HTTPS
+      tls:
+        certificateRefs:
+          - name: lab-tls-secret
+```
+
+**Existing (external) Gateway**
+
+To attach an HTTPRoute to a pre-existing Gateway (for example, a shared Gateway that also serves the HA chart):
+
+```yaml
+gateway:
+  enabled: true
+  existingGatewayName: "memgraph-gateway"
+```
+
+When the existing Gateway uses different listener names than the chart defaults, use `httpRoute.sectionNames` to specify which listener names the route should attach to:
+
+```yaml
+gateway:
+  enabled: true
+  existingGatewayName: "memgraph-gateway"
+  httpRoute:
+    sectionNames:
+      - lab-http
+```
+
+You can also configure host-based routing with `httpRoute.hostnames`:
+
+```yaml
+gateway:
+  enabled: true
+  existingGatewayName: "memgraph-gateway"
+  httpRoute:
+    sectionNames:
+      - lab-http
+    hostnames:
+      - lab.example.com
+```
+
+<Callout type="info">
+A standalone Gateway manifest with pre-configured listeners for both Lab and HA is available in the [Helm charts repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/gateway.yaml). Deploy it with `kubectl apply -f gateway.yaml` before installing the charts with `existingGatewayName`.
+</Callout>
+
 #### Configuration options
 
 The following table lists the configurable parameters of the Memgraph Lab chart
@@ -498,6 +751,16 @@ and their default values.
 | `secrets.enabled`            | Enable the use of Kubernetes secrets. Will be injected as env variables.                                | `false`                                |
 | `secrets.name`               | The name of the Kubernetes secret that will be used.                                                    | `memgraph-secrets`                     |
 | `secrets.keys`               | Keys from the `secrets.name` that will be stored as env variables inside the pod.                       | `[]`                                   |
+| `gateway.enabled`            | Enable Gateway API external access.                                                                     | `false`                                |
+| `gateway.gatewayClassName`   | Name of a pre-existing GatewayClass. Required when creating a new Gateway.                              | `""`                                   |
+| `gateway.existingGatewayName`| Name of an existing Gateway to attach routes to. Skips Gateway creation.                                | `""`                                   |
+| `gateway.existingGatewayNamespace` | Namespace of the existing Gateway. Defaults to release namespace.                                 | `""`                                   |
+| `gateway.annotations`        | Annotations for the Gateway resource.                                                                   | `{}`                                   |
+| `gateway.labels`             | Labels for the Gateway resource.                                                                        | `{}`                                   |
+| `gateway.listeners`          | List of Gateway listeners with `name`, `port`, `protocol`, and optional `tls` configuration.            | `[{name: lab-http, port: 80, protocol: HTTP}]` |
+| `gateway.httpRoute.sectionNames` | Listener names to attach to on the Gateway. If empty, derived from `listeners[].name`.              | `[]`                                   |
+| `gateway.httpRoute.hostnames`| Hostnames for the HTTPRoute.                                                                            | `[]`                                   |
+| `gateway.httpRoute.matches`  | HTTPRoute match rules.                                                                                  | `[{path: {type: PathPrefix, value: /}}]` |
 
 Memgraph Lab can be further configured with environment variables in your
 `values.yaml` file.
@@ -528,6 +791,3 @@ when running queries over 65 seconds.
 
 Refer to the [Memgraph Lab documentation](/memgraph-lab/configuration) for details on how to configure Memgraph Lab.
 
-
-
-kube
