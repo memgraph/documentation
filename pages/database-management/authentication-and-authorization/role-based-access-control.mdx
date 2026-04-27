@@ -8,12 +8,13 @@ import { Callout } from 'nextra/components'
 # Role-based access control <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
 
 **Role-Based access control (RBAC)** simplifies data security by grouping users
-into roles based on their tasks. Instead of assigning permissions to each user,
-RBAC assigns privileges to roles. Users, when linked to roles, gain the
-necessary access for their responsibilities. For example, in a company, a
-manager's role might have different access levels than an employee's role.
-Through RBAC, organizations efficiently ensure that users only access data
-relevant to their role, enhancing security and minimizing risks.
+into roles based on their tasks. Instead of assigning privileges and permissions
+to each user, RBAC assigns privileges and permissions to roles. Users, when
+linked to roles, gain the necessary access for their responsibilities. For
+example, in a company, a manager's role might have different access levels than
+an employee's role.  Through RBAC, organizations efficiently ensure that users
+only access data relevant to their role, enhancing security and minimizing
+risks.
 
 With role-based access control, a database administrator can assign various
 privileges to roles, but for even more control over who can access certain data,
@@ -429,15 +430,15 @@ adequate permission.
 
 ### Label-based access control
 
-Label-based permissions are set using `CREATE`, `READ`, `UPDATE`, and `DELETE`
-permissions, along with `NOTHING` to deny access:
-- `NOTHING` - denies user visibility and manipulation over nodes and
-relationships
-- `CREATE` - grants the user creation of a node or relationship
-- `READ` - grants the user visibility over nodes and relationships
-- `UPDATE` - grants the user visibility and the ability to edit nodes and
-relationships
-- `DELETE` - grants the user deletion of a node or a relationship
+<Callout type="warning">
+**Breaking change in v3.10.0**: Label-based access control has significant changes:
+
+- The `GRANT NOTHING` and `REVOKE NOTHING` syntax has been removed. Use `DENY`
+instead.
+- `UPDATE` on nodes is now a shorthand for five granular sub-permissions: `SET
+LABEL`, `REMOVE LABEL`, `SET PROPERTY`, `CREATE EDGE`, and `DELETE EDGE`.
+Existing `UPDATE` permissions are automatically migrated.
+</Callout>
 
 <Callout type="warning">
 **Breaking change in v3.7.0**: Label-based access control has significant changes:
@@ -464,8 +465,9 @@ GRANT permission ON NODES CONTAINING LABELS label_list [MATCHING ANY| MATCHING E
 ```
 
 with the legend:
-- `permission` is either `NOTHING`, or a comma-separated list containing one
-  or more of: `CREATE`, `READ`, `UPDATE` or `DELETE`
+- `permission` is a comma-separated list containing one or more of: `CREATE`,
+  `READ`, `UPDATE`, `DELETE`, `SET LABEL`, `REMOVE LABEL`, `SET PROPERTY`,
+  `CREATE EDGE`, or `DELETE EDGE`
 - `label_list` is a set of node labels, separated with a comma and with a colon
 in front of each label (e.g. `:Person`), or `*` for creating a global rule
 matching all labels in the graph
@@ -515,13 +517,14 @@ labels:
 GRANT READ ON NODES CONTAINING LABELS * TO charlie;
 ```
 
-For denying visibility to a node, use the `NOTHING` permission. Granting
-`NOTHING` creates an explicit **DENY** rule for the given label specification,
-**which overrides any existing permissions**.
+To explicitly deny access to a node label specification, use the `DENY` keyword:
 
 ```cypher
-GRANT NOTHING ON NODES CONTAINING LABELS :User, :Person TO charlie;
+DENY READ ON NODES CONTAINING LABELS :User, :Person TO charlie;
 ```
+
+`DENY` creates an explicit deny rule for the given label specification,
+overriding any existing grants.
 
 Permissions can be revoked using the following syntax:
 
@@ -533,16 +536,17 @@ The rules for specifying `REVOKE` label specifications are identical to those
 when using `GRANT`.
 
 Note that revoking all permissions for a label specification is not the same as
-`GRANT`ing `NOTHING`. The former removes already `GRANT`ed permissions for the
-label specification; the latter sets an explicit `DENY` on that label
-specification. This distinction is particularly important when it comes to
-[merging permissions](#merging-permissions) and
-[combining matching rules](#combining-matching-rules).
+using `DENY`. The former removes already granted permissions for the label
+specification; the latter sets an explicit deny that overrides any grants. This
+distinction is particularly important when it comes to [merging
+permissions](#merging-permissions) and [combining matching
+rules](#combining-matching-rules).
 
 #### Relationship permissions
 
-Edge type permissions work similarly to node permissions, and have the same
-permission types (`CREATE`, `READ`, `UPDATE`, `DELETE`, and `NOTHING`).
+Edge type permissions work similarly to node permissions, with the same
+permission types (`CREATE`, `READ`, `UPDATE`, `DELETE`, and `SET PROPERTY`).
+Note that `UPDATE` on edges is equivalent to `SET PROPERTY`.
 
 Permissions can be granted using the following syntax:
 
@@ -551,8 +555,8 @@ GRANT permission ON EDGES OF TYPE edge_type_list TO user_or_role;
 ```
 
 where:
-- `permission` is either `NOTHING`, or a comma-separated list containing one or
-more of: `CREATE`, `READ`, `UPDATE` or `DELETE`
+- `permission` is a comma-separated list containing one or more of: `CREATE`,
+  `READ`, `UPDATE`, `DELETE`, or `SET PROPERTY`
 - `edge_type_list` is a set of edge types, separated with a comma and with a
 colon in front of each type (e.g. `:KNOWS, :FOLLOWS`), or `*` for all edge types
 - `user_or_role` is the already created user or role in Memgraph
@@ -591,28 +595,57 @@ For example:
 REVOKE CREATE ON EDGES OF TYPE :KNOWS FROM charlie;
 ```
 
-As with node permissions, revoking all permissions is not the same as granting
-NOTHING. Revoking removes granted permissions, while NOTHING creates an explicit
-DENY rule.
+As with node permissions, revoking all permissions is not the same as using
+`DENY`. `REVOKE` removes existing `GRANT` or `DENY` permissions, while `DENY`
+creates an explicit deny rule that overrides any grants.
+
+#### Permission reference
+
+| Permission | Applies to | What it allows |
+|---|---|---|
+| `CREATE` | nodes, edges | Create a node bearing this label (`CREATE (:Person)`); assign this label to an existing node (`SET n:Person`); create an edge of this type |
+| `READ` | nodes, edges | Match nodes bearing this label; traverse edges of this type |
+| `DELETE` | nodes, edges | Delete nodes bearing this label; delete edges of this type |
+| `SET LABEL` | nodes | Required on a node's **existing** labels when adding any new label to it (`SET n:Manager` requires `SET LABEL` on all labels already on `n`) |
+| `REMOVE LABEL` | nodes | Required on a node's **existing** labels when removing any label from it (`REMOVE n:Inactive` requires `REMOVE LABEL` on all labels still on `n`) |
+| `SET PROPERTY` | nodes, edges | Set properties on nodes bearing this label, or on edges of this type |
+| `CREATE EDGE` | nodes | Required on **both** endpoint labels when creating an edge between them |
+| `DELETE EDGE` | nodes | Required on **both** endpoint labels when deleting an edge between them |
+| `UPDATE` | nodes, edges | Shorthand: expands to `SET LABEL`, `REMOVE LABEL`, `SET PROPERTY`, `CREATE EDGE`, `DELETE EDGE` on nodes; expands to `SET PROPERTY` on edges |
+
+The following table shows the permissions required for common Cypher operations:
+
+| Operation | Permissions required |
+|---|---|
+| `CREATE (:Person)` | `CREATE` on `:Person` |
+| `MATCH (n:Person)` | `READ` on `:Person` |
+| `MATCH (n:Person) SET n:Employee` | `READ`, `SET LABEL` on `:Person`; `CREATE` on `:Employee` |
+| `MATCH (n:Person) REMOVE n:Employee` | `READ`, `REMOVE LABEL` on `:Person`; `DELETE` on `:Employee` |
+| `MATCH (n:Person) SET n.age = 30` | `READ`, `SET PROPERTY` on `:Person` |
+| `MATCH (n:Person) DELETE n` | `READ`, `DELETE` on `:Person` |
+| `CREATE (a:Person)-[:KNOWS]->(b:Employee)` | `CREATE`, `CREATE EDGE` on `:Person`; `CREATE`, `CREATE EDGE` on `:Employee`; `CREATE` on `:KNOWS` |
+| `MATCH (:Person)-[r:KNOWS]->(:Employee) RETURN r` | `READ` on `:Person`, `:Employee`, `:KNOWS` |
+| `MATCH (n:Person)-[r:KNOWS]->(m:Employee) DELETE r` | `READ`, `DELETE EDGE` on `:Person`; `READ`, `DELETE EDGE` on `:Employee`; `READ`, `DELETE` on `:KNOWS` |
+| `MATCH (n:Person)-[r:KNOWS]->(m:Employee) SET r.x = 1` | `READ` on `:Person`, `:Employee`; `READ`, `SET PROPERTY` on `:KNOWS` |
 
 #### Merging permissions
 
 When a user has multiple roles, or when a user has both role-based and
 user-specific permissions, individual permission bits (`CREATE`, `READ`,
-`UPDATE`, `DELETE`) are combined using OR logic for grants and explicit denies:
+`UPDATE`, `DELETE`) are combined using OR logic for grants, and `DENY` takes
+precedence:
 
 - If any role or the user grants a specific permission on a label specification,
 the user has that permission
-- If any role or the user grants `NOTHING` (explicit deny) on a label
-specification, the user is denied all access to that label specification,
-overriding any grants
+- If any role or the user denies a permission on a label specification, the user
+is denied that access, overriding any grants
 - Each label specification is evaluated independently based on its label list
 and matching mode
 
 For example, if a user has Role A granting `READ` on `:Item` and Role B granting
 `UPDATE` on `:Item`, the user will have both `READ` and `UPDATE` permissions on
-`:Item` nodes. However, if Role C grants `NOTHING` on `:Item`, the explicit deny
-overrides all grants, and the user will have no access to any `:Item` nodes.
+`:Item` nodes. However, if Role C denies `READ` on `:Item`, the explicit deny
+overrides all grants, and the user will have no read access to any `:Item` nodes.
 
 #### Combining matching rules
 
@@ -621,8 +654,8 @@ applied and their permissions are combined:
 
 - The effective permissions for a node are the union (OR) of all permissions
 from matching rules
-- If any matching rule grants `NOTHING`, the node is denied: explicit deny
-overrides all grants
+- If any matching rule explicitly denies a permission, the deny overrides any
+grants for that permission
 - Rules are matched based on their label specification and matching mode
 
 For example, given the following rules:
@@ -639,12 +672,12 @@ matching rules are combined.
 However, if we add an explicit deny:
 
 ```cypher
-GRANT NOTHING ON NODES CONTAINING LABELS :Admin MATCHING ANY TO charlie;
+DENY READ, UPDATE ON NODES CONTAINING LABELS :Admin MATCHING ANY TO charlie;
 ```
 
-A node with labels `:User:Employee:Admin` matches all three rules. `charlie`
-will have `NOTHING` (explicit deny) on this node, since `NOTHING` takes
-precedence over any granted permissions.
+A node with labels `:User:Employee:Admin` matches all three rules. The explicit
+deny takes precedence, so `charlie` will have no `READ` or `UPDATE` access on
+this node.
 
 The `MATCHING` mode also affects which rules apply:
 
@@ -672,13 +705,13 @@ For example:
 
 ```cypher
 GRANT READ, UPDATE ON NODES CONTAINING LABELS * TO charlie;
-GRANT NOTHING ON NODES CONTAINING LABELS :Confidential MATCHING ANY TO charlie;
+DENY READ, UPDATE ON NODES CONTAINING LABELS :Confidential MATCHING ANY TO charlie;
 ```
 
 - A node with label `:User` has no specific rule match, so the global `*`
 permission applies. `charlie` has `READ` and `UPDATE`
-- A node with label `:Confidential` matches the specific rule. The specific
-`NOTHING` rule overrides the global permission, so `charlie` has no access
+- A node with label `:Confidential` matches the specific rule. The explicit deny
+overrides the global permission, so `charlie` has no access
 
 Another example:
 
@@ -911,8 +944,8 @@ GRANT UPDATE ON NODES CONTAINING LABELS :DataPoint TO dataEngineer;
 GRANT UPDATE ON EDGES OF TYPE :NEXT TO dataEngineer;
 ```
 
-However, `UPDATE` privilege capabilities only grant manipulation of properties,
-not the nodes and relationships themselves. Therefore, the query:
+However, `UPDATE` does not grant the ability to create or delete nodes and
+relationships themselves. Therefore, the query:
 
 ```cypher
 MATCH (n:DataPoint) WHERE localDateTime() - n.date > Duration({day:365}) DETACH DELETE n;
@@ -938,9 +971,8 @@ company. The management therefore decided to grant her visibility and
 manipulation over all the nodes. However, there are certain confidential nodes
 that are only for the management people to see.
 
-Since there could be a lot of different node labels or relationship types in the
-database, a shortcut can be made by granting `NOTHING` to the entity. The
-database administrator therefore sets Eve's role as:
+The database administrator grants Eve access to everything and then explicitly
+denies access to the confidential label:
 
 ```cypher
 CREATE ROLE seniorEngineer;
@@ -951,9 +983,9 @@ GRANT DATABASE exampledb TO Eve;
 GRANT MATCH, DELETE TO seniorEngineer;
 
 GRANT CREATE, READ, UPDATE, DELETE ON NODES CONTAINING LABELS * TO seniorEngineer;
-GRANT NOTHING ON NODES CONTAINING LABELS :SecretLabel TO seniorEngineer;
+DENY CREATE, READ, UPDATE, DELETE ON NODES CONTAINING LABELS :SecretLabel TO seniorEngineer;
 ```
 
-When granting `NOTHING`, the user is denied both visibility and manipulation of
-the entity. Eve is now able to see all the domain data while the management is
-happy since they have not leaked any confidential data.
+The explicit `DENY` overrides the global grant, so Eve cannot see or manipulate
+`:SecretLabel` nodes. Eve is now able to see all the domain data while the
+management is happy since they have not leaked any confidential data.
