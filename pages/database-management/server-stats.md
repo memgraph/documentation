@@ -63,7 +63,7 @@ SHOW LICENSE INFO;
 | organization_name | Organization name for the enterprise license.                                                        |
 | license_key       | Encoded license key.                                                                                 |
 | is_valid          | Whether the license is currently valid. Uses the same validation logic as enterprise feature checks. |
-| license_type      | One of `enterprise`, `ai_platform`, or `oem`. See [License types](/database-management/enabling-memgraph-enterprise#license-types). |
+| license_type      | `enterprise` / `ai_platform` / `oem`                                                                  |
 | valid_until       | Date when the license expires, or `FOREVER` for non-expiring licenses.                               |
 | memory_limit      | Memory limit (in GiB).                                                                               |
 | status            | Descriptive status of the license validity.                                                          |
