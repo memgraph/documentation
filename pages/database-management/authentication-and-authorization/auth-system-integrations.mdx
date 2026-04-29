@@ -688,7 +688,7 @@ When running in the default `ldap` role-mapping mode, the module additionally
 imports `ldap3`, which is **not** bundled. Install it separately:
 
 ```
-pip3 install ldap3
+pip install ldap3
 ```
 
 System packages needed at runtime:
@@ -738,7 +738,7 @@ is `ldap` (the default).
 | `MEMGRAPH_SSO_KERBEROS_LDAP_URI`                               | LDAP server URI, e.g. `ldap://dc.example.com:389` or `ldaps://dc.example.com:636`.                                                                   | Yes      |
 | `MEMGRAPH_SSO_KERBEROS_LDAP_BASE_DN`                           | Base DN for the directory, e.g. `DC=example,DC=com`.                                                                                                 | Yes      |
 | `MEMGRAPH_SSO_KERBEROS_LDAP_SEARCH_BASE`                       | Base under which the user lookup is performed. Defaults to `MEMGRAPH_SSO_KERBEROS_LDAP_BASE_DN`.                                                     | No       |
-| `MEMGRAPH_SSO_KERBEROS_LDAP_AUTH`                              | `gssapi` (default) — bind to LDAP using the keytab. `simple` — bind with a username and password (set the two variables below).                      | No       |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_AUTH`                              | `gssapi` (default) — bind to LDAP via SASL/GSSAPI using the credentials from the service keytab. `simple` — bind with a username and password (set the two variables below). | No       |
 | `MEMGRAPH_SSO_KERBEROS_LDAP_BIND_DN`                           | Bind DN, used only with `LDAP_AUTH=simple`.                                                                                                          | No       |
 | `MEMGRAPH_SSO_KERBEROS_LDAP_BIND_PASSWORD`                     | Bind password, used only with `LDAP_AUTH=simple`.                                                                                                    | No       |
 | `MEMGRAPH_SSO_KERBEROS_LDAP_USER_ATTRIBUTE`                    | LDAP attribute that matches the Kerberos principal name. Defaults to `sAMAccountName` (suitable for AD).                                             | No       |
@@ -801,73 +801,16 @@ authentication is enabled — see
 #### Connecting with the Neo4j Python driver
 
 Memgraph expects the credential to be the **base64-encoded GSSAPI service
-ticket** for the configured service principal. Acquire the ticket on the
-client (the local KDC must have already issued the user a TGT, e.g. via
-`kinit`) and pass it under the `kerberos` scheme:
+ticket** for the configured service principal. 
 
 ```python
-import base64
-import gssapi
-from neo4j import GraphDatabase, Auth
-
-# Acquire a GSSAPI service ticket targeting Memgraph's SPN.
-target = gssapi.Name(
-    "memgraph/dbhost.example.com@EXAMPLE.COM",
-    gssapi.NameType.kerberos_principal,
-)
-ctx = gssapi.SecurityContext(name=target, usage="initiate")
-token = ctx.step()
+from neo4j import GraphDatabase, kerberos_auth
 
 driver = GraphDatabase.driver(
     "bolt://dbhost.example.com:7687",
-    auth=Auth(
-        scheme="kerberos",
-        credentials=base64.b64encode(token).decode("ascii"),
-        principal=None,
-        realm=None,
-    ),
+    auth=kerberos_auth(base64_ticket),  # base64-encoded service ticket
 )
 ```
-
-<Callout type="info">
-Memgraph's Kerberos module performs **single-leg** GSSAPI acceptance only:
-mutual authentication and multi-leg negotiation are rejected. If the GSSAPI
-acceptor returns an output token or has not completed the context after the
-first step, the request fails with `Mutual authentication not supported` or
-`GSSAPI negotiation incomplete`. This is intentional and matches the
-SPNEGO/Bolt single-shot pattern.
-</Callout>
-
-#### Troubleshooting
-
-- **`KRB_AP_ERR_SKEW`** — the Memgraph host's clock and the KDC's clock are
-  more than ~5 minutes apart. Run NTP on both.
-- **`Server not found in Kerberos database` / wrong-SPN errors** — make sure
-  an SPN of the form `memgraph/<host>@<REALM>` is registered in the KDC and
-  matches the hostname clients use to connect (`setspn -A` on AD,
-  `kadmin -q "addprinc -randkey ..."` on MIT).
-- **Encryption-type mismatch** — the keytab and the KDC must agree on
-  encryption types (AES vs RC4). Inspect the keytab with `klist -k -e`; if the
-  KDC has been re-keyed, re-export the keytab.
-- **`kvno` drift** — after the service account password is rotated the keytab
-  must be re-exported, otherwise authentication fails with
-  `KDC has no support for encryption type` or `Decrypt integrity check
-  failed`.
-- **`ldap3 package not installed`** — appears in `ldap` role-mapping mode when
-  `ldap3` is missing. Run `pip3 install ldap3`.
-- **`Mutual authentication not supported` / `GSSAPI negotiation incomplete`**
-  — the client requested mutual auth or a multi-leg exchange, neither of
-  which is supported. Configure the client to send a single SPNEGO/GSSAPI
-  ticket without requesting mutual auth.
-- **`User <name> not found in LDAP under <base>`** — the principal's name
-  doesn't match any user under the configured search base. Check
-  `MEMGRAPH_SSO_KERBEROS_LDAP_USER_ATTRIBUTE` (default `sAMAccountName`) and
-  `MEMGRAPH_SSO_KERBEROS_LDAP_SEARCH_BASE`.
-- **No groups returned** — for AD with deeply nested groups, set
-  `MEMGRAPH_SSO_KERBEROS_LDAP_NESTED_GROUPS_ENABLED=true` to use the
-  transitive `LDAP_MATCHING_RULE_IN_CHAIN` filter.
-- **Lab cannot log in over Kerberos** — Lab does not currently support the
-  Kerberos scheme. Use a Bolt driver instead.
 
 ## Basic authentication
 
