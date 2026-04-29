@@ -1,0 +1,189 @@
+---
+title: Server-side descriptions
+description: Annotate labels, edge types, properties and databases with human-readable descriptions that are persisted by Memgraph and surfaced in SHOW SCHEMA INFO.
+---
+
+# Server-side descriptions
+
+Server-side descriptions are human-readable strings attached to schema
+elements - labels, edge types, properties and databases - that Memgraph stores
+durably and surfaces alongside the schema.
+
+They are useful for documenting the meaning of nodes, edges and properties
+directly inside the database, so tools that consume `SHOW SCHEMA INFO` (such as
+LLM-based clients, GraphChat, MCP, text2cypher, or your own tooling) can pick
+the descriptions up automatically.
+
+Descriptions are persisted to disk (WAL and snapshots), replicated to replicas
+and emitted by `DUMP DATABASE`, so they survive restarts and migrations the
+same way schema does.
+
+## Description targets
+
+You can attach a description to any of the following targets:
+
+| Target | Syntax |
+|--------|--------|
+| Label (single) | `LABEL :Person` |
+| Label (multi-label combo) | `LABEL :Person:Student` |
+| Edge type (global) | `EDGE TYPE :KNOWS` |
+| Edge type pattern | `EDGE TYPE (:Person)-[:KNOWS]->(:Person)` |
+| Edge type pattern (multi-label endpoints) | `EDGE TYPE (:Person:Employee)-[:MENTORS]->(:Person:Student)` |
+| Label property | `LABEL PROPERTY :Person(name)` |
+| Edge type property | `EDGE TYPE PROPERTY :KNOWS(since)` |
+| Edge type pattern property | `EDGE TYPE PROPERTY (:Person)-[:KNOWS]->(:Person)(since)` |
+| Property (global) | `PROPERTY age` |
+| Database | `DATABASE memgraph` |
+
+Multi-label combinations are matched exactly; setting a description on
+`:Person:Student` does not affect nodes that only carry `:Person`.
+
+## Set a description
+
+Use `SET DESCRIPTION ON <target> "<text>"`:
+
+```opencypher
+SET DESCRIPTION ON LABEL :Person "A person node";
+SET DESCRIPTION ON LABEL :Person:Student "A student person";
+
+SET DESCRIPTION ON EDGE TYPE :KNOWS "Knows relationship";
+SET DESCRIPTION ON EDGE TYPE (:Person)-[:KNOWS]->(:Person) "Person knows person";
+SET DESCRIPTION ON EDGE TYPE (:Person:Employee)-[:MENTORS]->(:Person:Student) "Employee mentors student";
+
+SET DESCRIPTION ON LABEL PROPERTY :Person(name) "Full name";
+SET DESCRIPTION ON EDGE TYPE PROPERTY :KNOWS(since) "Year they met";
+SET DESCRIPTION ON EDGE TYPE PROPERTY (:Person)-[:KNOWS]->(:Person)(since) "Year they met (pattern)";
+SET DESCRIPTION ON PROPERTY age "Age in years";
+
+SET DESCRIPTION ON DATABASE memgraph "Main graph database";
+```
+
+Setting a description on a target that already has one overwrites the previous
+value.
+
+## Delete a description
+
+Use the same target syntax with `DELETE DESCRIPTION`:
+
+```opencypher
+DELETE DESCRIPTION ON LABEL :Person;
+DELETE DESCRIPTION ON EDGE TYPE (:Person)-[:KNOWS]->(:Person);
+DELETE DESCRIPTION ON LABEL PROPERTY :Person(name);
+DELETE DESCRIPTION ON PROPERTY age;
+DELETE DESCRIPTION ON DATABASE memgraph;
+```
+
+## Show descriptions
+
+List every description currently stored in the database:
+
+```opencypher
+SHOW DESCRIPTIONS;
+```
+
+Result columns:
+
+- `type` - kind of target. One of `"label"`, `"edge type"`, `"label property"`,
+  `"edge type property"`, `"property"`, or `"database"`. Edge-type-pattern
+  targets share the `"edge type"` / `"edge type property"` value with their
+  global counterparts and are distinguished by the populated
+  `start_node_labels` and `end_node_labels` columns.
+- `label` - label or label combination, when applicable.
+- `start_node_labels` - source labels, for edge type patterns.
+- `end_node_labels` - destination labels, for edge type patterns.
+- `property` - property key, when applicable.
+- `description` - the stored text.
+
+Columns that don't apply to a given row are returned as `Null`.
+
+## Descriptions in `SHOW SCHEMA INFO`
+
+When [run-time schema tracking](/querying/schema) is enabled, `SHOW SCHEMA INFO`
+enriches its JSON output with optional `description` fields on nodes, edges and
+their properties. The field is only present when a matching description exists.
+
+Description resolution follows a priority chain:
+
+- **Nodes** - exact label-combo match.
+- **Node properties** - label-property description, falling back to the global
+  property description.
+- **Edges** - edge type pattern matching the exact source and destination
+  labels, falling back to the global edge type description.
+- **Edge properties** - edge-type-pattern-property, falling back to
+  edge-type-property, then to the global property description.
+
+For example, after:
+
+```opencypher
+SET DESCRIPTION ON LABEL :Person "A person node";
+SET DESCRIPTION ON LABEL PROPERTY :Person(name) "Full name";
+SET DESCRIPTION ON PROPERTY age "Age in years";
+```
+
+the relevant slice of `SHOW SCHEMA INFO` looks like:
+
+```json
+{
+  "nodes": [{
+    "labels": ["Person"],
+    "count": 1,
+    "description": "A person node",
+    "properties": [
+      { "key": "name", "count": 1, "filling_factor": 100.0, "description": "Full name", "types": [...] },
+      { "key": "age",  "count": 1, "filling_factor": 100.0, "description": "Age in years", "types": [...] }
+    ]
+  }]
+}
+```
+
+## Durability and replication
+
+- Descriptions are written to the WAL and stored in snapshots, so they are
+  preserved across restarts.
+- They are replicated to replicas as part of the normal replication stream.
+- [`DUMP DATABASE`](/database-management/backup-and-restore) emits the matching
+  `SET DESCRIPTION` statements, so dumps round-trip descriptions together with
+  the rest of the schema.
+
+## Privileges
+
+Managing descriptions requires the `SERVER_SIDE_DESCRIPTIONS`
+[privilege](/database-management/authentication-and-authorization/role-based-access-control#privileges).
+This applies to:
+
+- `SET DESCRIPTION ON ...`
+- `DELETE DESCRIPTION ON ...`
+- `SHOW DESCRIPTIONS`
+
+Reading descriptions through `SHOW SCHEMA INFO` follows the same privilege
+model as the rest of `SHOW SCHEMA INFO`, including
+[fine-grained access control](/database-management/authentication-and-authorization/role-based-access-control#label-based-access-control).
+
+See the [Query privileges reference](/database-management/authentication-and-authorization/query-privileges)
+for a full list of privilege requirements.
+
+## Use cases
+
+### Self-documenting schema for AI tooling
+
+Tools that hand `SHOW SCHEMA INFO` to an LLM benefit from descriptions
+because the model gets a richer, hand-curated view of the graph. This is true
+for the [Memgraph MCP server](/ai-ecosystem/mcp), [GraphChat](/memgraph-lab/features/graphchat),
+and [text2cypher pipelines](/ai-ecosystem/graph-rag/atomic-pipelines/text2cypher).
+
+```opencypher
+SET DESCRIPTION ON LABEL :Account "Customer account, one per signed-up user";
+SET DESCRIPTION ON LABEL PROPERTY :Account(tenant) "Tenant id this account belongs to";
+SET DESCRIPTION ON EDGE TYPE :OWNS "Account-to-resource ownership edge";
+```
+
+### Annotating a data model
+
+Descriptions can capture domain knowledge that the names alone don't convey -
+units, allowed value ranges, or links to upstream systems:
+
+```opencypher
+SET DESCRIPTION ON LABEL PROPERTY :Sensor(temperature) "Reading in degrees Celsius";
+SET DESCRIPTION ON LABEL PROPERTY :Order(amount) "Total in cents, in the order's currency";
+SET DESCRIPTION ON EDGE TYPE :PAID_WITH "Links an order to the payment method actually charged";
+```
