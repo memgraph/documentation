@@ -8,12 +8,13 @@ import { Callout } from 'nextra/components'
 # Role-based access control <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
 
 **Role-Based access control (RBAC)** simplifies data security by grouping users
-into roles based on their tasks. Instead of assigning permissions to each user,
-RBAC assigns privileges to roles. Users, when linked to roles, gain the
-necessary access for their responsibilities. For example, in a company, a
-manager's role might have different access levels than an employee's role.
-Through RBAC, organizations efficiently ensure that users only access data
-relevant to their role, enhancing security and minimizing risks.
+into roles based on their tasks. Instead of assigning privileges and permissions
+to each user, RBAC assigns privileges and permissions to roles. Users, when
+linked to roles, gain the necessary access for their responsibilities. For
+example, in a company, a manager's role might have different access levels than
+an employee's role.  Through RBAC, organizations efficiently ensure that users
+only access data relevant to their role, enhancing security and minimizing
+risks.
 
 With role-based access control, a database administrator can assign various
 privileges to roles, but for even more control over who can access certain data,
@@ -56,6 +57,14 @@ following rules:
 using grant/deny logic. See [Label-based access control](#label-based-access-control)
 below for details on how fine-grained permissions work and are combined.
 
+<Callout type="info">
+Users and roles are in separate namespaces and can share the same name. For
+example, you can have both a user and a role named `admin`. In commands that
+accept either a user or a role (such as `GRANT`, `DENY`, `REVOKE`, and `SHOW
+PRIVILEGES FOR`), use the optional `USER` or `ROLE` keyword to disambiguate
+when the name is shared.
+</Callout>
+
 To create a user role, run the following query:
 
 ```cypher
@@ -64,22 +73,39 @@ CREATE ROLE [IF NOT EXISTS] role_name;
 
 If a role already exists, you can use `IF NOT EXISTS` to only create new roles.
 
-To assign a user with a certain user role, run the following query:
+To assign roles to a user, you can use either of the following commands:
 
 ```cypher
 SET ROLE FOR user_name TO role_name [, another_role, ...];
 ```
 
+```cypher
+GRANT ROLE[S] role_name [, another_role, ...] TO user_name;
+```
+
+`SET ROLE FOR` replaces all of a user's roles in one operation. `GRANT ROLE[S]`
+adds the specified roles to any that the user already has, allowing roles to be
+assigned incrementally. Both commands accept an optional `ON database_name`
+clause to assign roles for a specific database.
+
+To remove specific roles from a user:
+
+```cypher
+REVOKE ROLE[S] role_name [, another_role, ...] FROM user_name;
+```
+
+This also accepts an optional `ON database_name` clause.
+
 To remove all roles from the user, run the following query:
 
 ```cypher
-CLEAR ROLE FOR user_name;
+CLEAR ROLE FOR user_name [ON database_name];
 ```
 
 To show all users with a certain role:
 
 ```cypher
-SHOW USERS FOR role_name;
+SHOW USERS FOR [ROLE] role_name;
 ```
 
 To show what roles a user has, run the following query:
@@ -132,6 +158,49 @@ To list all defined user roles run:
 ```cypher
 SHOW ROLES;
 ```
+
+This returns each role's name and a `builtin` flag indicating whether it is a
+[built-in role](#built-in-roles-enterprise).
+
+To delete a role:
+
+```cypher
+DROP ROLE role_name;
+```
+
+A role can only be dropped when no users are assigned to it. Remove all user
+assignments first.
+
+## Built-in roles <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+On Memgraph Enterprise, three built-in roles are created automatically when the
+first user is created, provided no roles exist yet:
+
+| Role | Privileges | Fine-grained access | Database access |
+|------|-----------|---------------------|-----------------|
+| `admin` | All privileges | Full read/write on all labels and edge types | All databases |
+| `readwrite` | `MATCH`, `CREATE`, `MERGE`, `DELETE`, `SET`, `REMOVE`, `INDEX` | Full read/write on all labels and edge types | Default `"memgraph"` database only |
+| `readonly` | `MATCH`, `STATS` | Read-only on all labels and edge types | Default `"memgraph"` database only |
+
+Built-in roles are created only once and are marked with `builtin: true` in
+`SHOW ROLES`. They behave like regular roles and can be assigned to users, but
+cannot be deleted while any user is assigned to them. Built-in roles can be
+modified like any other role, but doing so removes the `builtin` flag.
+
+The `readwrite` and `readonly` roles only have access to the default
+`"memgraph"` database. To grant access to additional databases:
+
+```cypher
+GRANT DATABASE database_name TO readwrite;
+GRANT DATABASE database_name TO readonly;
+```
+
+The first user is assigned the `admin` role automatically, so you do not need
+to grant privileges manually for initial setup.
+
+If you choose not to use the built-in roles, you can reproduce the same
+configuration manually using the [templates for granting
+privileges](#templates-for-granting-privileges).
 
 ## User profiles
 
@@ -189,7 +258,15 @@ For a comprehensive reference of which privileges are required for specific quer
 ### First user privileges
 
 When you create the first user in Memgraph, that user automatically becomes a
-superuser (administrator account with full system access) with all privileges.
+superuser with full system access.
+
+On **Memgraph Enterprise**, the first user is automatically assigned the
+built-in `admin` role, which grants all privileges, full fine-grained access,
+and access to all databases. See [Built-in roles](#built-in-roles-enterprise)
+for details. Successively created users beyond the first are not automatically
+assigned roles.
+
+On **Memgraph Community**, the first user is granted all privileges directly.
 See the [templates for granting privileges](#templates-for-granting-privileges)
 section for details on what privileges are granted.
 
@@ -231,11 +308,6 @@ data in it. This approach provides better security and isolation:
 #### Example setup for multi-tenant environments
 
 ```cypher
--- Create admin role with full privileges
-CREATE ROLE admin;
-GRANT ALL PRIVILEGES TO admin;
-GRANT DATABASE memgraph TO admin;
-
 -- Create tenant-specific roles
 CREATE ROLE tenant1_user;
 CREATE ROLE tenant2_user;
@@ -249,19 +321,19 @@ GRANT DATABASE tenant1_db TO tenant1_user;
 GRANT DATABASE tenant2_db TO tenant2_user;
 
 -- Create users
+-- On Enterprise, the first user is automatically assigned the built-in admin role
 CREATE USER admin_user IDENTIFIED BY 'admin_password';
 CREATE USER tenant1_user_account IDENTIFIED BY 'password1';
 CREATE USER tenant2_user_account IDENTIFIED BY 'password2';
 
--- Assign roles
-SET ROLE FOR admin_user TO admin;
+-- Assign roles to tenant users
 SET ROLE FOR tenant1_user_account TO tenant1_user;
 SET ROLE FOR tenant2_user_account TO tenant2_user;
 ```
 
 In this setup:
-- `admin_user` has access to the "memgraph" database and can perform all
-  authentication/authorization, replication, and multi-database operations
+- `admin_user` is the first user created, so on Enterprise it is automatically
+  assigned the built-in `admin` role and has full access to all databases
 - `tenant1_user_account` and `tenant2_user_account` can only access their
   respective tenant databases
 - Application data is stored in tenant-specific databases, not in the default
@@ -302,14 +374,18 @@ To grant a certain set of privileges to a specific user or user role, use the
 following query:
 
 ```cypher
-GRANT privilege_list TO user_or_role;
+GRANT privilege_list TO [USER | ROLE] user_or_role;
 ```
+
+The optional `USER` or `ROLE` keyword is only needed when a user and a role
+share the same name, to disambiguate which one is targeted. The same applies
+to `DENY` and `REVOKE`.
 
 For example, to grant `AUTH` and `INDEX` privileges to users with the
 `moderator` role, run:
 
 ```cypher
-GRANT AUTH, INDEX TO moderator:
+GRANT AUTH, INDEX TO moderator;
 ```
 #### Deny privileges
 
@@ -320,7 +396,7 @@ For example, to deny `AUTH` and `INDEX` privileges to users with the
 `moderator` role, run:
 
 ```cypher
-DENY AUTH, INDEX TO moderator:
+DENY AUTH, INDEX TO moderator;
 ```
 
 #### Revoke privileges
@@ -332,7 +408,7 @@ For example, to revoke `AUTH` and `INDEX` privileges to users with the
 `moderator` role, run:
 
 ```cypher
-REVOKE AUTH, INDEX FROM moderator:
+REVOKE AUTH, INDEX FROM moderator;
 ```
 
 Although semantically unintuitive, the level of a certain privilege can be
@@ -348,15 +424,15 @@ features because the role is granted that privilege.
 To grant, deny or revoke all privileges, use the `ALL PRIVILEGES` construct:
 
 ```cypher
-GRANT ALL PRIVILEGES TO <user>;
+GRANT ALL PRIVILEGES TO [USER | ROLE] user_or_role;
 ```
 
 ```cypher
-DENY ALL PRIVILEGES TO <user>;
+DENY ALL PRIVILEGES TO [USER | ROLE] user_or_role;
 ```
 
-```
-REVOKE ALL PRIVILEGES FROM <user>;
+```cypher
+REVOKE ALL PRIVILEGES FROM [USER | ROLE] user_or_role;
 ```
 
 <Callout type="warning">
@@ -377,7 +453,7 @@ section provides more details.
 To check privilege for a certain user or role, run the following query:
 
 ```cypher
-SHOW PRIVILEGES FOR user_or_role;
+SHOW PRIVILEGES FOR [USER | ROLE] user_or_role;
 ```
 
 In multi-tenant environments, privileges can differ depending on the target
@@ -386,17 +462,17 @@ specific databases as the following:
 
 1. **Show privileges for the user's main database:**
 ```cypher
-SHOW PRIVILEGES FOR user_or_role ON MAIN;
+SHOW PRIVILEGES FOR [USER | ROLE] user_or_role ON MAIN;
 ```
 
 2. **Show privileges for the current database:**
 ```cypher
-SHOW PRIVILEGES FOR user_or_role ON CURRENT;
+SHOW PRIVILEGES FOR [USER | ROLE] user_or_role ON CURRENT;
 ```
 
 3. **Show privileges for a specific database:**
 ```cypher
-SHOW PRIVILEGES FOR user_or_role ON DATABASE database_name;
+SHOW PRIVILEGES FOR [USER | ROLE] user_or_role ON DATABASE database_name;
 ```
 
 These commands return the aggregated privileges (including label-based
@@ -406,8 +482,8 @@ permissions) for the user or role in the specified database context.
 - For **users**: In multi-tenant environments, you must specify the database
   context.
 - For **roles**: This command does not require database specification, even in
-  multi-tenant environments. In which case, it will role's privileges without
-  filtering for database.
+  multi-tenant environments. In which case, it will show the role's privileges
+  without filtering for database.
 
 
 ## Fine-grained access control
@@ -428,16 +504,6 @@ database while keeping any private data secure from those who don't have
 adequate permission.
 
 ### Label-based access control
-
-Label-based permissions are set using `CREATE`, `READ`, `UPDATE`, and `DELETE`
-permissions, along with `NOTHING` to deny access:
-- `NOTHING` - denies user visibility and manipulation over nodes and
-relationships
-- `CREATE` - grants the user creation of a node or relationship
-- `READ` - grants the user visibility over nodes and relationships
-- `UPDATE` - grants the user visibility and the ability to edit nodes and
-relationships
-- `DELETE` - grants the user deletion of a node or a relationship
 
 <Callout type="warning">
 **Breaking change in v3.7.0**: Label-based access control has significant changes:
@@ -704,7 +770,7 @@ To check which privileges an existing user or role has in Memgraph, it is enough
 to write
 
 ```cypher
-SHOW PRIVILEGES FOR user_or_role;
+SHOW PRIVILEGES FOR [USER | ROLE] user_or_role;
 ```
 
 In multi-tenant environments, privileges can differ depending on the target
@@ -713,17 +779,17 @@ specific databases as the following:
 
 1. **Show privileges for the user's main database:**
 ```cypher
-SHOW PRIVILEGES FOR user_or_role ON MAIN;
+SHOW PRIVILEGES FOR [USER | ROLE] user_or_role ON MAIN;
 ```
 
 2. **Show privileges for the current database:**
 ```cypher
-SHOW PRIVILEGES FOR user_or_role ON CURRENT;
+SHOW PRIVILEGES FOR [USER | ROLE] user_or_role ON CURRENT;
 ```
 
 3. **Show privileges for a specific database:**
 ```cypher
-SHOW PRIVILEGES FOR user_or_role ON DATABASE database_name;
+SHOW PRIVILEGES FOR [USER | ROLE] user_or_role ON DATABASE database_name;
 ```
 
 These commands return the aggregated privileges (including label-based
@@ -733,16 +799,17 @@ permissions) for the user or role in the specified database context.
 - For **users**: In multi-tenant environments, you must specify the database
   context.
 - For **roles**: This command does not require database specification, even in
-  multi-tenant environments. In which case, it will role's privileges without
-  filtering for database.
+  multi-tenant environments. In which case, it will show the role's privileges
+  without filtering for database.
 
 ### Templates for granting privileges
 
 <Callout type="info">
 
-**Note**: The first user created automatically receives all privileges (as
-described in the [First user privileges](#first-user-privileges) section). The
-following templates are for granting privileges to additional users or roles.
+On Memgraph Enterprise, the `admin`, `readwrite`, and `readonly` roles are
+created automatically and match these templates. See [Built-in
+roles](#built-in-roles-enterprise) for details. Use the templates below to
+restore the default roles if you have removed or customized them.
 
 </Callout>
 
