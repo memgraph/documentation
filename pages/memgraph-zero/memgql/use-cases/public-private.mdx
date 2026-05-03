@@ -1,0 +1,344 @@
+---
+title: Public-Private Data / Hybrid Graphs / Data Sovereignty
+description: Keep sensitive data sovereign while querying it alongside public knowledge graphs.
+---
+
+# Public-Private Data / Hybrid Graphs / Data Sovereignty
+
+In many organizations, **public data** (open knowledge graphs, product catalogs,
+industry taxonomies) lives in a graph database like Memgraph, while
+**private or regulated data** (customer PII, financial records, health data)
+must remain in a controlled relational store such as PostgreSQL — often
+on-premise or in a sovereign cloud region.
+
+MemGQL lets you query both from a single GQL endpoint without ever moving the
+private data out of its backend. The public graph provides shared context; the
+private data stays under its existing access controls, compliance boundaries,
+and encryption at rest.
+
+## Scenario
+
+- **Public graph (Memgraph)**: An open product catalog with categories and pricing.
+- **Private graph (PostgreSQL)**: Customer profiles and internal social
+  relationships that must stay in a GDPR-compliant database.
+
+## Architecture
+
+```
+                          ┌──────────────┐ bolt  ┌──────────────┐
+                          │              │──────▶│  Memgraph    │
+                          │              │       │  (Public)    │
+                          │    MemGQL    │       └──────────────┘
+┌──────────────┐          │    :7688     │
+│   mgconsole  │──bolt───▶│              │ sql   ┌──────────────┐
+└──────────────┘          │              │──────▶│  PostgreSQL  │
+                          └──────────────┘       │  (Private)   │
+                                                 └──────────────┘
+```
+
+Clients connect to MemGQL on port **7688**. MemGQL routes each sub-query to the
+appropriate backend and can materialize both sides locally for cross-backend
+joins.
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-started/get-docker/) with Docker Compose
+- [mgconsole](https://github.com/memgraph/mgconsole)
+
+## 1. Create a project directory
+
+Create a clean directory and change into it — everything lives here:
+
+```bash
+mkdir public-private && cd public-private
+```
+
+## 2. Create the Docker Compose file
+
+Save a minimal stack with only the services we need: Memgraph, PostgreSQL,
+MemGQL, and a one-shot init container:
+
+```bash
+cat > docker-compose.yml << 'EOF'
+services:
+  memgql:
+    image: ${MEMGQL_IMAGE:-memgraph/memgql:0.3.0}
+    ports:
+      - "7688:7688"
+    environment:
+      CONNECTOR_TYPE: multi
+      MEMGRAPH_URI: memgraph:7687
+      BOLT_LISTEN_ADDR: 0.0.0.0:7688
+    volumes:
+      - ./pg_mapping.json:/mappings/pg_mapping.json:ro
+    depends_on:
+      memgraph:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/7688'"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 3s
+
+  memgql-init:
+    image: memgraph/mgconsole:1.5.1
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo "ADD CONNECTOR mg TYPE memgraph URI 'memgraph:7687' GRAPH memgraph;" | mgconsole --host memgql --port 7688 &&
+        echo "CONNECT mg AS mg_conn;" | mgconsole --host memgql --port 7688 &&
+        echo "ADD MAPPING pg_social FROM '/mappings/pg_mapping.json';" | mgconsole --host memgql --port 7688 &&
+        echo "ADD CONNECTOR pg TYPE postgres URI 'host=postgres user=postgres password=postgres dbname=postgres' MAPPING pg_social;" | mgconsole --host memgql --port 7688 &&
+        echo "CONNECT pg AS pg_conn;" | mgconsole --host memgql --port 7688 &&
+        echo "MemGQL bootstrap complete."
+    depends_on:
+      memgql:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  memgraph:
+    image: memgraph/memgraph-mage:3.9.0
+    ports:
+      - "7687:7687"
+    command: --log-level=TRACE --also-log-to-stderr
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/7687'"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 3s
+
+  postgres:
+    image: postgres:18
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./pg_init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 3s
+EOF
+```
+
+## 3. Create the PostgreSQL schema
+
+Create the tables that back the private graph:
+
+```bash
+cat > pg_init.sql << 'EOF'
+DROP TABLE IF EXISTS friend_of CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT
+);
+
+CREATE TABLE friend_of (
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    friend_id INTEGER NOT NULL REFERENCES users(id),
+    PRIMARY KEY (user_id, friend_id)
+);
+EOF
+```
+
+## 4. Create the MemGQL mapping
+
+Tell MemGQL how the relational tables map to graph labels:
+
+```bash
+cat > pg_mapping.json << 'EOF'
+{
+  "nodes": [
+    {
+      "label": "User",
+      "table": "users",
+      "id_column": "id",
+      "properties": {
+        "name": "name",
+        "email": "email"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "rel_type": "FRIEND_OF",
+      "table": "friend_of",
+      "source_column": "user_id",
+      "target_column": "friend_id",
+      "source_label": "User",
+      "target_label": "User"
+    }
+  ]
+}
+EOF
+```
+
+## 5. Start the stack
+
+```bash
+docker compose up -d
+```
+
+Wait for the `memgql-init` container to finish bootstrapping the connections:
+
+```bash
+docker compose logs memgql-init
+# → MemGQL bootstrap complete.
+```
+
+## 6. Connect with mgconsole
+
+```bash
+mgconsole --port 7688
+```
+
+Verify both connections are registered:
+
+```gql
+SHOW CONNECTIONS;
+```
+
+Register graphs in the catalog so they can be referenced by name in composite queries:
+
+```gql
+ADD GRAPH public ON CONNECTOR mg GRAPH memgraph;
+ADD GRAPH private ON CONNECTOR pg MAPPING pg_social;
+```
+
+Verify the graphs:
+
+```gql
+SHOW GRAPHS;
+```
+
+## 7. Seed public data in Memgraph
+
+Insert a public product catalog:
+
+```gql
+SET DEFAULT CONNECTION mg_conn;
+```
+
+```gql
+INSERT
+  (p1:`Product` {sku: "MGX-100", name: "Graph Database", public_price: 5000, contact: "Alice"}),
+  (p2:`Product` {sku: "MGX-200", name: "Analytics Suite", public_price: 3000, contact: "Bob"}),
+  (p3:`Product` {sku: "MGX-300", name: "Managed Cloud", public_price: 2000, contact: "Charlie"}),
+  (sw:Category {name: "Software"}),
+  (cl:Category {name: "Cloud Services"}),
+  (p1)-[:IN_CATEGORY]->(sw),
+  (p2)-[:IN_CATEGORY]->(sw),
+  (p3)-[:IN_CATEGORY]->(cl);
+```
+
+Query the catalog:
+
+```gql
+MATCH (p:`Product`) RETURN p.sku, p.name, p.public_price;
+```
+
+```gql
+MATCH (p:`Product`)-[:IN_CATEGORY]->(c:Category) RETURN p.name, c.name;
+```
+
+## 8. Seed private data in PostgreSQL
+
+Switch to the private backend and insert customer profiles:
+
+```gql
+SET DEFAULT CONNECTION pg_conn;
+```
+
+```gql
+INSERT (alice:User {name: "Alice", email: "alice@acme.com"});
+INSERT (bob:User {name: "Bob", email: "bob@acme.com"});
+INSERT (charlie:User {name: "Charlie", email: "charlie@startup.io"});
+INSERT (diana:User {name: "Diana", email: "diana@enterprise.com"});
+```
+
+Add private relationship edges:
+
+```gql
+MATCH (a:User {name: "Alice"}), (b:User {name: "Bob"}) INSERT (a)-[:FRIEND_OF]->(b);
+MATCH (a:User {name: "Alice"}), (b:User {name: "Charlie"}) INSERT (a)-[:FRIEND_OF]->(b);
+MATCH (a:User {name: "Bob"}), (b:User {name: "Diana"}) INSERT (a)-[:FRIEND_OF]->(b);
+MATCH (a:User {name: "Charlie"}), (b:User {name: "Diana"}) INSERT (a)-[:FRIEND_OF]->(b);
+```
+
+Query the private graph:
+
+```gql
+MATCH (u:User) RETURN u.name, u.email;
+```
+
+```gql
+MATCH (u:User)-[:FRIEND_OF]->(f:User) RETURN u.name, f.name;
+```
+
+## 9. Cross-backend query
+
+Because both backends are wired into the same MemGQL session, you can run a
+single composite query that combines results from the public product catalog and
+the private customer directory:
+
+```gql
+USE public MATCH (p:`Product`) RETURN p.name AS name
+UNION ALL
+USE private MATCH (u:User) RETURN u.name AS name;
+```
+
+Each branch is routed to its respective backend and the results are combined
+locally. Standard GQL composite operators (`UNION`, `UNION ALL`, `INTERSECT`,
+`EXCEPT`) all work across backends.
+
+## 10. Why this matters
+
+| Concern | How MemGQL addresses it |
+|---|---|
+| **Data sovereignty** | Private data stays in PostgreSQL; no ETL or replication required. |
+| **Compliance** | Only filtered, joined results cross the wire. Raw PII never moves to Memgraph. |
+| **Single query surface** | Analysts and applications write one GQL query instead of orchestrating multiple clients. |
+| **Backend independence** | Swap PostgreSQL for MySQL, DuckDB, or ClickHouse without changing the GQL schema. |
+
+## Cleanup
+
+Remove the graph catalog entries:
+
+```gql
+UNADD GRAPH public;
+UNADD GRAPH private;
+```
+
+Clear the public data:
+
+```gql
+USE CONNECTION mg_conn MATCH (n) DETACH DELETE n;
+```
+
+Clear the private data:
+
+```gql
+USE CONNECTION pg_conn MATCH (n) DETACH DELETE n;
+```
+
+Stop and remove the stack:
+
+```bash
+docker compose down -v
+cd .. && rm -rf public-private
+```
+
+This pattern extends to any public-private split: open knowledge graphs vs.
+internal CRM, shared medical ontologies vs. patient records, or industry-wide
+supply chains vs. proprietary pricing.
