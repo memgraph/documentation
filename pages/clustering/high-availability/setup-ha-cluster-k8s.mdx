@@ -41,18 +41,38 @@ helm repo update
 ### Install Memgraph HA
 
 Since Memgraph HA requires an [Enterprise
-license](/database-management/enabling-memgraph-enterprise), you need to provide
-the license and organization name during the installation.
+license](/database-management/enabling-memgraph-enterprise), you must provide
+the license and organization name to the chart through a Kubernetes `Secret`.
+
+<Callout type="warning">
+**Breaking change**: Starting with Memgraph HA chart version 1.0.0, the HA chart no longer accepts
+the license and organization name as plaintext values via `env.MEMGRAPH_ENTERPRISE_LICENSE`
+and `env.MEMGRAPH_ORGANIZATION_NAME`. Both values are now read from a Kubernetes
+`Secret` referenced via `secretKeyRef`, and the secret **must exist before you run
+`helm install`** — the StatefulSets will fail to start otherwise. The previous
+`env.*` values have been removed from `values.yaml`.
+</Callout>
+
+Create the secret first, then install the chart:
 
 ```
-helm install <release-name> memgraph/memgraph-high-availability --set env.MEMGRAPH_ENTERPRISE_LICENSE=<your-license>,env.MEMGRAPH_ORGANIZATION_NAME=<your-organization-name>
+kubectl create secret generic memgraph-secrets \
+  --from-literal=MEMGRAPH_ENTERPRISE_LICENSE=<your-license> \
+  --from-literal=MEMGRAPH_ORGANIZATION_NAME=<your-organization-name>
+
+helm install <release-name> memgraph/memgraph-high-availability
 ```
 
-Replace `<release-name>` with a name of your choice for the release and provide your Enterprise license.
-The cluster will be fully connected once installation completes. Note that the install command may take a moment while instances establish connections.
-If clients connect from outside the cluster, update the Bolt server address on each instance to use its external IP as explained in the section on setting up the cluster.
-If for your installation, you are using a namespace different from the default one, make sure to change `--coordinator-hostname` flag in your `values.yaml` file where
-coordinators flags are specified.
+Replace `<release-name>` with a name of your choice for the release. The
+secret name and keys are configurable via `secrets.name`, `secrets.licenseKey`
+and `secrets.organizationKey` (defaults: `memgraph-secrets`,
+`MEMGRAPH_ENTERPRISE_LICENSE`, `MEMGRAPH_ORGANIZATION_NAME`).
+
+The cluster will be fully connected once installation completes. Note that the
+install command may take a moment while instances establish connections. If
+clients connect from outside the cluster, update the Bolt server address on
+each instance to use its external IP as explained in the section on setting up
+the cluster.
 
 <Callout type="info"> **Tip:** Always install a specific chart version. Using
 the `latest` tag can lead to unexpected behavior if pods restart and pull newer,
@@ -296,20 +316,15 @@ data:
   - id: "0"
     externalAccessAnnotations:
       external-dns.alpha.kubernetes.io/hostname: "data-0.memgraph.example.com"
-    args:
-      - "--management-port=10000"
-      - "--bolt-port=7687"
   - id: "1"
     externalAccessAnnotations:
       external-dns.alpha.kubernetes.io/hostname: "data-1.memgraph.example.com"
-    args:
-      - "--management-port=10000"
-      - "--bolt-port=7687"
 ```
 
 In this example, each data instance's external Service gets the shared
 `aws-load-balancer-scheme` annotation plus its own unique `external-dns`
-hostname.
+hostname. Bolt and management ports are not set per-instance — they come from
+`ports.boltPort` and `ports.managementPort`.
 
 ### Node affinity
 
@@ -365,16 +380,24 @@ high-memory workloads, such as increasing:
 
 By default, Memgraph HA starts **without authentication** enabled.
 
-To configure credentials, create a Kubernetes `secret`:
+<Callout type="warning">
+**Breaking change**: The HA chart no longer creates a Memgraph user from the
+`USER`/`PASSWORD` keys of the `memgraph-secrets` Secret. The `secrets.enabled`,
+`secrets.userKey` and `secrets.passwordKey` values have been removed because
+the previous implementation also applied these env variables to coordinators,
+which run without auth. The `memgraph-secrets` Secret is now reserved for the
+license and organization name.
+</Callout>
 
-```bash
-kubectl create secret generic memgraph-secrets \
-  --from-literal=USER=memgraph \
-  --from-literal=PASSWORD=memgraph
+To configure credentials, connect to a data instance after installation and
+create users with Cypher, for example:
+
+```cypher
+CREATE USER memgraph IDENTIFIED BY 'memgraph';
 ```
 
-The same user will then be created on all coordinator and data instances through
-Memgraph's environment variables.
+Run the same statements on every data instance you want the user to exist on.
+Coordinators run without authentication and do not need user setup.
 
 
 ## Setting up the cluster
@@ -383,9 +406,10 @@ Although many configuration options exist, especially for networking, the workfl
 
 1. Provision the Kubernetes cluster. Ensure your nodes, storage, and networking are ready.
 2. Label nodes according to your chosen affinity strategy (optional). For example, when using `nodeSelection`, label nodes as `data-node` or `coordinator-node`.
-3. Install the Memgraph HA Helm chart using `helm install`. This creates a fully connected cluster.
-4. Install auxiliary components for external access, such as `ingress-nginx` (optional).
-5. Update Bolt server addresses if clients will connect from outside the cluster (optional).
+3. Create the `memgraph-secrets` Kubernetes secret holding `MEMGRAPH_ENTERPRISE_LICENSE` and `MEMGRAPH_ORGANIZATION_NAME` (required — the chart reads these via `secretKeyRef`).
+4. Install the Memgraph HA Helm chart using `helm install`. This creates a fully connected cluster.
+5. Install auxiliary components for external access, such as `ingress-nginx` (optional).
+6. Update Bolt server addresses if clients will connect from outside the cluster (optional).
 
 ### Update bolt server
 
@@ -483,12 +507,12 @@ externalAccessConfig:
       app: memgraph-ha
 ```
 
-To install with a chart-managed Gateway:
+To install with a chart-managed Gateway (assuming the `memgraph-secrets`
+Secret with the license and organization name already exists, see [Install
+Memgraph HA](#install-memgraph-ha)):
 
 ```bash
 helm install memgraph-ha memgraph/memgraph-high-availability \
-  --set env.MEMGRAPH_ENTERPRISE_LICENSE=<license> \
-  --set env.MEMGRAPH_ORGANIZATION_NAME=<organization> \
   --set externalAccessConfig.gateway.enabled=true \
   --set externalAccessConfig.gateway.gatewayClassName=eg
 ```
@@ -516,12 +540,12 @@ externalAccessConfig:
     existingGatewayNamespace: "gateway-system"
 ```
 
-To install with an existing Gateway:
+To install with an existing Gateway (assuming the `memgraph-secrets` Secret
+with the license and organization name already exists, see [Install Memgraph
+HA](#install-memgraph-ha)):
 
 ```bash
 helm install memgraph-ha memgraph/memgraph-high-availability \
-  --set env.MEMGRAPH_ENTERPRISE_LICENSE=<license> \
-  --set env.MEMGRAPH_ORGANIZATION_NAME=<organization> \
   --set externalAccessConfig.gateway.enabled=true \
   --set externalAccessConfig.gateway.existingGatewayName=memgraph-gateway
 ```
@@ -554,12 +578,12 @@ protocol), allowing all Memgraph instances to share:
 Clients connect to any coordinator or data instance by using **different Bolt
 ports**.
 
-To install Memgraph HA with IngressNginx enabled:
+To install Memgraph HA with IngressNginx enabled (assuming the
+`memgraph-secrets` Secret with the license and organization name already
+exists, see [Install Memgraph HA](#install-memgraph-ha)):
 
 ```bash
 helm install mem-ha-test ./charts/memgraph-high-availability --set \
-  env.MEMGRAPH_ENTERPRISE_LICENSE=<license>,\
-  env.MEMGRAPH_ORGANIZATION_NAME=<organization>,\
   affinity.nodeSelection=true,\
   externalAccessConfig.dataInstance.serviceType=IngressNginx,\
   externalAccessConfig.coordinator.serviceType=IngressNginx
@@ -609,10 +633,15 @@ production. One way is to send us logs from all instances if you notice some
 issue. That's why we advise users to set the log level to `TRACE` if possible.
 Note however that running `TRACE` log level has some performance costs,
 especially when logging to stderr in addition to files. If performance is your
-concern, first try to set `--also-log-to-stderr=false` since logging to files is
-cheaper. If you're still unhappy with the performance overhead of logging, use
-`--log-level=DEBUG` (higher log level will also be fine like `INFO`,
-`CRITICAL`...) and `--also-log-to-stderr=true`.
+concern, first set `commonArgs.data.logging.also_log_to_stderr` and
+`commonArgs.coordinators.logging.also_log_to_stderr` to `false` since logging
+to files is cheaper. If you're still unhappy with the performance overhead of
+logging, set `commonArgs.{data,coordinators}.logging.log_level` to `DEBUG`
+(higher log levels like `INFO` or `CRITICAL` are also fine) and keep
+`also_log_to_stderr: true`. These settings replace the `--log-level` and
+`--also-log-to-stderr` flags that the chart now appends to instance args
+automatically — setting them directly in `data[].args` or
+`coordinators[].args` is rejected.
 
 If you notice your application is crashing, you will be able to collect core
 dumps by setting `storage.data.createCoreDumpsClaim` and
@@ -819,43 +848,36 @@ vectorRemote:
 data:
   - id: "0"
     args:
-      - "--management-port=10000"
-      - "--bolt-port=7687"
       - "--monitoring-port=7444"
       - "--monitoring-address=0.0.0.0"
   - id: "1"
     args:
-      - "--management-port=10000"
-      - "--bolt-port=7687"
       - "--monitoring-port=7444"
       - "--monitoring-address=0.0.0.0"
 
 coordinators:
   - id: "1"
     args:
-      - "--coordinator-id=1"
-      - "--coordinator-port=12000"
-      - "--management-port=10000"
-      - "--bolt-port=7687"
       - "--monitoring-port=7444"
       - "--monitoring-address=0.0.0.0"
   - id: "2"
     args:
-      - "--coordinator-id=2"
-      - "--coordinator-port=12000"
-      - "--management-port=10000"
-      - "--bolt-port=7687"
       - "--monitoring-port=7444"
       - "--monitoring-address=0.0.0.0"
   - id: "3"
     args:
-      - "--coordinator-id=3"
-      - "--coordinator-port=12000"
-      - "--management-port=10000"
-      - "--bolt-port=7687"
       - "--monitoring-port=7444"
       - "--monitoring-address=0.0.0.0"
 ```
+
+<Callout type="info">
+The chart auto-appends `--bolt-port`, `--management-port`, `--coordinator-port`,
+`--coordinator-id`, `--coordinator-hostname`, `--data-directory`, `--log-level`,
+`--also-log-to-stderr` and `--log-file` from `ports.*` and
+`commonArgs.{data,coordinators}.logging.*`. Setting any of these in
+`data[].args` or `coordinators[].args` causes `helm install` to fail with a
+template error.
+</Callout>
 
 Create credentials secret in the namespace where vmagent runs (usually `monitoring`):
 
@@ -929,8 +951,6 @@ and their default values.
 | `image.repository`                                         | Memgraph Docker image repository                                                                             | `docker.io/memgraph/memgraph`  |
 | `image.tag`                                                | Specific tag for the Memgraph Docker image. Overrides the image tag whose default is chart version.          | `3.1.0`                        |
 | `image.pullPolicy`                                         | Image pull policy                                                                                            | `IfNotPresent`                 |
-| `env.MEMGRAPH_ENTERPRISE_LICENSE`                          | Memgraph enterprise license                                                                                  | `<your-license>`               |
-| `env.MEMGRAPH_ORGANIZATION_NAME`                           | Organization name                                                                                            | `<your-organization-name>`     |
 | `memgraphUserId`                                           | The user id that is hardcoded in Memgraph and Mage images                                                    | `101`                          |
 | `memgraphGroupId`                                          | The group id that is hardcoded in Memgraph and Mage images                                                   | `103`                          |
 | `storage.data.libPVCSize`                                  | Size of the lib storage PVC for data instances                                                               | `1Gi`                          |
@@ -943,6 +963,9 @@ and their default values.
 | `storage.data.coreDumpsStorageClassName`                   | Storage class name for core dumps PVC on data instances                                                      | `""`                           |
 | `storage.data.coreDumpsStorageSize`                        | Size of the core dumps PVC on data instances                                                                 | `10Gi`                         |
 | `storage.data.coreDumpsMountPath`                          | Mount path for core dumps on data instances                                                                  | `/var/core/memgraph`           |
+| `storage.data.coreDumpsImage.repository`                   | Image repository for the data instance core-dumps init container.                                            | `docker.io/library/busybox`    |
+| `storage.data.coreDumpsImage.tag`                          | Image tag for the data instance core-dumps init container.                                                   | `latest`                       |
+| `storage.data.coreDumpsImage.pullPolicy`                   | Image pull policy for the data instance core-dumps init container.                                           | `IfNotPresent`                 |
 | `storage.data.extraVolumes`                                | Additional volumes to add to data instance pods                                                              | `[]`                           |
 | `storage.data.extraVolumeMounts`                           | Additional volume mounts to add to data instance containers                                                  | `[]`                           |
 | `storage.coordinators.libPVCSize`                          | Size of the lib storage PVC for coordinators                                                                 | `1Gi`                          |
@@ -955,6 +978,9 @@ and their default values.
 | `storage.coordinators.coreDumpsStorageClassName`           | Storage class name for core dumps PVC on coordinators                                                        | `""`                           |
 | `storage.coordinators.coreDumpsStorageSize`                | Size of the core dumps PVC on coordinators                                                                   | `10Gi`                         |
 | `storage.coordinators.coreDumpsMountPath`                  | Mount path for core dumps on coordinators                                                                    | `/var/core/memgraph`           |
+| `storage.coordinators.coreDumpsImage.repository`           | Image repository for the coordinator core-dumps init container.                                              | `docker.io/library/busybox`    |
+| `storage.coordinators.coreDumpsImage.tag`                  | Image tag for the coordinator core-dumps init container.                                                     | `latest`                       |
+| `storage.coordinators.coreDumpsImage.pullPolicy`           | Image pull policy for the coordinator core-dumps init container.                                             | `IfNotPresent`                 |
 | `storage.coordinators.extraVolumes`                        | Additional volumes to add to coordinator pods                                                                | `[]`                           |
 | `storage.coordinators.extraVolumeMounts`                   | Additional volume mounts to add to coordinator containers                                                    | `[]`                           |
 | `externalAccessConfig.coordinator.serviceType`             | IngressNginx, NodePort, CommonLoadBalancer or LoadBalancer. By default, no external service will be created. | `""`                           |
@@ -1015,18 +1041,19 @@ and their default values.
 | `sysctlInitContainer.image.repository`                     | Image repository for the sysctl init container                                                               | `library/busybox`              |
 | `sysctlInitContainer.image.tag`                            | Image tag for the sysctl init container                                                                      | `latest`                       |
 | `sysctlInitContainer.image.pullPolicy`                     | Image pull policy for the sysctl init container                                                              | `IfNotPresent`                 |
-| `secrets.enabled`                                          | Enable the use of Kubernetes secrets for Memgraph credentials                                                | `false`                        |
-| `secrets.name`                                             | The name of the Kubernetes secret containing Memgraph credentials                                            | `memgraph-secrets`             |
-| `secrets.userKey`                                          | The key in the Kubernetes secret for the Memgraph user, the value is passed to the `MEMGRAPH_USER` env.      | `USER`                         |
-| `secrets.passwordKey`                                      | The key in the Kubernetes secret for the Memgraph password, the value is passed to the `MEMGRAPH_PASSWORD`.  | `PASSWORD`                     |
+| `secrets.name`                                             | Name of the Kubernetes Secret holding the Memgraph Enterprise license and organization name. Must exist before `helm install`. | `memgraph-secrets`     |
+| `secrets.licenseKey`                                       | Key in the Secret whose value is exposed as `MEMGRAPH_ENTERPRISE_LICENSE` to data and coordinator pods.       | `MEMGRAPH_ENTERPRISE_LICENSE`  |
+| `secrets.organizationKey`                                  | Key in the Secret whose value is exposed as `MEMGRAPH_ORGANIZATION_NAME` to data and coordinator pods.        | `MEMGRAPH_ORGANIZATION_NAME`   |
 | `resources.coordinators`                                   | CPU/Memory resource requests/limits for coordinators. Left empty by default.                                 | `{}`                           |
 | `resources.data`                                           | CPU/Memory resource requests/limits for data instances. Left empty by default.                               | `{}`                           |
 | `prometheus.enabled`                                       | If set to `true`, K8s resources representing Memgraph's Prometheus exporter will be deployed.                | `false`                        |
-| `prometheus.namespace`                                     | The namespace in which `kube-prometheus-stack` and Memgraph's Prometheus exporter are installed.             | `monitoring`                   |
+| `prometheus.namespace`                                     | Namespace in which `kube-prometheus-stack` and Memgraph's Prometheus exporter are installed. When empty, the release namespace is used. | `""`         |
 | `prometheus.memgraphExporter.port`                         | The port on which Memgraph's Prometheus exporter is available.                                               | `9115`                         |
 | `prometheus.memgraphExporter.pullFrequencySeconds`         | How often will Memgraph's Prometheus exporter pull data from Memgraph instances.                             | `5`                            |
 | `prometheus.memgraphExporter.repository`                   | The repository where Memgraph's Prometheus exporter image is available.                                      | `docker.io/memgraph/prometheus-exporter` |                      
 | `prometheus.memgraphExporter.tag`                          | The tag of Memgraph's Prometheus exporter image.                                                             | `0.2.1`                        |                      
+| `prometheus.memgraphExporter.extraVolumes`                 | Additional volumes mounted on the `mg-exporter` Deployment (e.g. ConfigMaps with custom exporter configs).   | `[]`                           |
+| `prometheus.memgraphExporter.extraVolumeMounts`            | Additional volume mounts for the `mg-exporter` container.                                                    | `[]`                           |
 | `prometheus.serviceMonitor.enabled`                        | If enabled, a `ServiceMonitor` object will be deployed.                                                      | `true`                         |
 | `prometheus.serviceMonitor.kubePrometheusStackReleaseName` | The release name under which `kube-prometheus-stack` chart is installed.                                     | `kube-prometheus-stack`        |
 | `prometheus.serviceMonitor.interval`                       | How often will Prometheus pull data from Memgraph's Prometheus exporter.                                     | `15s`                          |
@@ -1071,6 +1098,12 @@ and their default values.
 | `updateStrategy.type`                                      | Update strategy for StatefulSets. Possible values are `RollingUpdate` and `OnDelete`                         | `RollingUpdate`                |
 | `extraEnv.data`                                            | Env variables that users can define and are applied to data instances                                        | `[]`                           |
 | `extraEnv.coordinators`                                    | Env variables that users can define and are applied to coordinators                                          | `[]`                           |
+| `commonArgs.data.logging.log_level`                        | Log level applied to every data instance via `--log-level`. Must not be empty.                               | `TRACE`                        |
+| `commonArgs.data.logging.also_log_to_stderr`               | When `true`, appends `--also-log-to-stderr` to every data instance. Must be a boolean.                       | `true`                         |
+| `commonArgs.data.logging.log_file`                         | Log-file path applied to every data instance via `--log-file`. Empty disables file logging.                  | `/var/log/memgraph/memgraph.log` |
+| `commonArgs.coordinators.logging.log_level`                | Log level applied to every coordinator via `--log-level`. Must not be empty.                                 | `TRACE`                        |
+| `commonArgs.coordinators.logging.also_log_to_stderr`       | When `true`, appends `--also-log-to-stderr` to every coordinator. Must be a boolean.                         | `true`                         |
+| `commonArgs.coordinators.logging.log_file`                 | Log-file path applied to every coordinator via `--log-file`. Empty disables file logging.                    | `/var/log/memgraph/memgraph.log` |
 | `userContainers.data`                                      | Additional sidecar containers for data instance pods                                                         | `[]`                           |
 | `userContainers.coordinators`                              | Additional sidecar containers for coordinator pods                                                           | `[]`                           |
 | `tolerations.data`                                         | Tolerations for data instance pods                                                                           | `[]`                           |
@@ -1096,9 +1129,14 @@ following parameters:
 |---------------------------------------------|-----------------------------------------------------------------------------------------------------|-----------------------------------------|
 | `id`                                        | ID of the instance                                                                                  | `0` for data, `1` for coordinators      |
 | `externalAccessAnnotations`                 | Per-instance annotations for the external access Service, merged with global annotations.           | `{}`                                    |
-| `args`                                      | List of arguments for the instance                                                                  | See `args` section                      |
+| `args`                                      | Per-instance Memgraph CLI flags. Append-only — see the note below for flags the chart manages.       | `["--storage-snapshot-on-exit=false"]` for data, `[]` for coordinators |
 
-The `args` section contains a list of arguments for the instance.
+The `args` field accepts any Memgraph CLI flag **except** the following, which
+the chart appends automatically and rejects when set per-instance:
+`--bolt-port`, `--management-port`, `--coordinator-port`, `--coordinator-id`,
+`--coordinator-hostname`, `--data-directory`, `--log-level`,
+`--also-log-to-stderr`, and `--log-file`. Configure those through `ports.*`
+and `commonArgs.{data,coordinators}.logging.*` instead.
 
 For all available database settings, refer to the [configuration settings
 docs](/database-management/configuration).
