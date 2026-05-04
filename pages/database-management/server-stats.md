@@ -27,22 +27,24 @@ SHOW STORAGE INFO;
 
 The result will contain the following fields:
 
+> **Instance-wide vs. per-database fields:** The memory-related fields (`memory_res`, `peak_memory_res`, `memory_tracked`, `allocation_limit`) are **instance-wide** — they reflect the total memory used by the entire Memgraph process across all databases. The `disk_usage` field, `vertex_count`, `edge_count` and `average_degree` are **per-database**, scoped to the database you are currently connected to.
+
 | Field                        | Description                                                                                                                                                                                   |
 |------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | name                         | Name of the current database.                    |
 | database_uuid                | Unique UUID of the database.                     |
-| vertex_count                 | The number of stored nodes (vertices).                                                                                                                                                        |
-| edge_count                   | The number of stored relationships (edges).                                                                                                                                                   |
-| average_degree               | The average number of relationships of a single node.                                                                                                                                         |
+| vertex_count                 | The number of stored nodes (vertices) in the current database.                                                                                                                                                        |
+| edge_count                   | The number of stored relationships (edges) in the current database.                                                                                                                                                   |
+| average_degree               | The average number of relationships of a single node in the current database.                                                                                                                                         |
 | vm_max_map_count             | The number of memory-mapped areas that the kernel allows a process to have. If it is unknown, returns -1. </br> For more info, check out [virtual memory section of the docs](/fundamentals/storage-memory-usage#virtual-memory).                                    |
-| memory_res                   | The non-swapped physical RAM memory a task has used, reported by the OS (in B, KiB, MiB, GiB or TiB).                                                                                                                       |
-| peak_memory_res              | Peak RAM memory usage in the system during the whole run.                                        |
+| memory_res                   | The non-swapped physical RAM memory used by the whole Memgraph process, as reported by the OS (in B, KiB, MiB, GiB or TiB). This is instance-wide and includes all databases.                                                                                                                       |
+| peak_memory_res              | Peak RAM memory usage of the Memgraph process during the whole run (instance-wide).                                        |
 | unreleased_delta_objects     | The current number of still allocated objects with the information about the changes that write transactions have made, called Delta objects. Refer to allocation and deallocation of Delta objects [on this page](/fundamentals/storage-memory-usage#in-memory-transactional-storage-mode-default).                        |
-| disk_usage                   | The amount of disk space used by the data directory (in B, KiB, MiB, GiB or TiB).                                                                                                             |
-| memory_tracked               | The amount of RAM allocated in the system and tracked by Memgraph (in B, KiB, MiB, GiB or TiB).<br/>For more info, check out [memory control](/fundamentals/storage-memory-usage).        |
+| disk_usage                   | The amount of disk space used by the current database's data directory (in B, KiB, MiB, GiB or TiB).                                                                                                             |
+| memory_tracked               | The amount of RAM allocated in the system and tracked by Memgraph across all databases (in B, KiB, MiB, GiB or TiB). **This is the value used for [license enforcement](/database-management/enabling-memgraph-enterprise#upgrading-or-downgrading-the-license)** — when it reaches the `allocation_limit`, write queries are blocked.<br/>For more info, check out [memory control](/fundamentals/storage-memory-usage).        |
 | graph_memory_tracked         | The portion of `memory_tracked` used by graph structures (vertices, edges, properties). |
 | vector_index_memory_tracked  | The portion of `memory_tracked` used by vector index embeddings. |
-| allocation_limit             | The current allocation limit set for this instance (in B, KiB, MiB, GiB or TiB).<br/>For more info, check out the [memory control](/fundamentals/storage-memory-usage#control-memory-usage).                       |
+| allocation_limit             | The current allocation limit for the whole instance (in B, KiB, MiB, GiB or TiB). This is set to the lower of the [Enterprise license memory limit](/database-management/enabling-memgraph-enterprise) and the [`--memory-limit` configuration flag](/fundamentals/storage-memory-usage#control-memory-usage).                       |
 | global_isolation_level       | The current `global` isolation level.<br/>For more info, check out [isolation levels](/fundamentals/transactions#isolation-levels).                                                       |
 | session_isolation_level      | The current `session` isolation level.                                                                                                                                                        |
 | next_session_isolation_level | The current `next` isolation level.                                                                                                                                                           |
@@ -65,7 +67,7 @@ SHOW LICENSE INFO;
 | is_valid          | Whether the license is currently valid. Uses the same validation logic as enterprise feature checks. |
 | license_type      | `enterprise` / `ai_platform` / `oem`                                                                  |
 | valid_until       | Date when the license expires, or `FOREVER` for non-expiring licenses.                               |
-| memory_limit      | Memory limit (in GiB).                                                                               |
+| memory_limit      | The maximum `memory_tracked` value allowed by this license (in GiB). When `memory_tracked` (from `SHOW STORAGE INFO`) reaches this limit, write queries are blocked. |
 | status            | Descriptive status of the license validity.                                                          |
 
 If no license has been provided, `is_valid` is `false` and `status` reads
