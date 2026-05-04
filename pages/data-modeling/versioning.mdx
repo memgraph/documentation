@@ -1,0 +1,422 @@
+---
+title: Versioning
+description: Learn how to model entity history, validity windows, and ordered revisions in Memgraph.
+---
+
+import { Callout } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# Versioning graph data
+
+Every time you update operational data or refactor part of your model, you
+create a new version of something: a project plan, a task state, or a
+stream-derived reading. In Memgraph, you rarely need to version the entire
+graph. Most of the time, you only version the nodes and relationships whose
+history matters to your queries.
+
+The examples on this page reuse domains that already appear elsewhere in the
+Memgraph docs:
+
+- [project management knowledge graph](/data-modeling/modeling-guides/model-a-knowledge-graph)
+- [temporal data types](/fundamentals/data-types)
+- [nested delivery properties and indices](/fundamentals/indexes)
+- [streaming sensor data](/data-streams/kafka)
+
+## How to choose a strategy
+
+- Use **entity versioning** when you mostly care about the current state, but
+  still need to retrieve explicit older versions.
+- Use **time-based versioning** when your main question is "What was true at a
+  specific point in time?"
+- Use **linked list versioning** when the exact order of revisions matters.
+- Use a **timeline tree** when you browse or aggregate historical data by day,
+  month, or year.
+
+<Callout type="info">
+
+Only version the part of the graph that actually changes and needs an audit
+trail. Since Memgraph is an in-memory database, duplicating the whole graph by
+default increases both memory usage and write cost.
+
+</Callout>
+
+## Entity versioning
+
+Entity versioning keeps one stable identity node and stores each mutable state
+in a separate version node. This is a good fit when you need both a fast path to
+the current state and an easy way to inspect older states.
+
+### How it works
+
+This example builds on the `Project` domain from the knowledge graph guide and
+reuses the nested `delivery.status.due_date` structure shown in the indexes
+documentation. The `Project` node stays stable, while `ProjectSnapshot` nodes
+store the mutable planning data.
+
+```cypher
+CREATE (p:Project {name: "Data Preprocessing"})
+
+CREATE (v1:ProjectSnapshot {
+  budget: 85000,
+  delivery: {milestone: "v3.12", status: {due_date: date("2025-05-15")}},
+  updated_at: localDateTime("2025-01-10T09:00:00")
+})
+CREATE (v2:ProjectSnapshot {
+  budget: 90000,
+  delivery: {milestone: "v3.13", status: {due_date: date("2025-06-04")}},
+  updated_at: localDateTime("2025-02-18T14:30:00")
+})
+CREATE (v3:ProjectSnapshot {
+  budget: 95000,
+  delivery: {milestone: "v3.14", status: {due_date: date("2025-07-01")}},
+  updated_at: localDateTime("2025-04-02T11:15:00")
+})
+
+CREATE (p)-[:HAS_VERSION {version: 1}]->(v1)
+CREATE (p)-[:HAS_VERSION {version: 2}]->(v2)
+CREATE (p)-[:HAS_VERSION {version: 3}]->(v3)
+CREATE (p)-[:LATEST]->(v3);
+```
+
+With this model:
+
+- The `Project` node keeps the business identity stable.
+- Each `ProjectSnapshot` node stores one version of the mutable state.
+- A `HAS_VERSION` relationship stores the explicit version number.
+- A dedicated `LATEST` relationship provides a fast lookup for the current
+  state.
+
+### Pros and cons
+
+| Pros | Cons |
+|---|---|
+| Simple to model and explain to users. | Every update requires a new version node and a new `LATEST` relationship. |
+| Easy to retrieve either a specific version or the latest version. | Relationship count grows linearly with the number of versions. |
+| Version numbers are explicit and easy to audit. | "As of date X" queries are weaker unless you also store time metadata. |
+
+### Query examples
+
+Get version 2 of the `Data Preprocessing` project:
+
+```cypher
+MATCH (:Project {name: "Data Preprocessing"})-[:HAS_VERSION {version: 2}]->(state:ProjectSnapshot)
+RETURN state.delivery.status.due_date AS due_date,
+       state.delivery.milestone AS milestone,
+       state.budget AS budget;
+```
+
+Get the latest version of the project:
+
+```cypher
+MATCH (:Project {name: "Data Preprocessing"})-[:LATEST]->(state:ProjectSnapshot)
+RETURN state.delivery.status.due_date AS due_date,
+       state.delivery.milestone AS milestone,
+       state.budget AS budget;
+```
+
+Get the full version history ordered by version number:
+
+```cypher
+MATCH (:Project {name: "Data Preprocessing"})-[v:HAS_VERSION]->(state:ProjectSnapshot)
+RETURN v.version AS version,
+       state.delivery.status.due_date AS due_date,
+       state.delivery.milestone AS milestone,
+       state.budget AS budget,
+       state.updated_at AS updated_at
+ORDER BY version;
+```
+
+<Callout>
+
+When inserting a new version, update `LATEST` in the same query. That keeps the
+current-state pointer and the version history consistent.
+
+</Callout>
+
+## Time-based versioning of entities
+
+Time-based versioning stores the validity window of each state. Use this when
+you need graph snapshots, historical comparisons, or "show me the state as of
+this date" queries.
+
+### How it works
+
+Using the same `Project` domain, this model represents planning history through
+`ProjectPlan` nodes. Instead of an explicit version number, each state is valid
+for a specific time interval.
+
+```cypher
+CREATE (p:Project {name: "Data Preprocessing"})
+
+CREATE (plan1:ProjectPlan {
+  delivery: {milestone: "v3.12", status: {due_date: date("2025-05-15")}},
+  validFrom: date("2025-01-01"),
+  validTo: date("2025-02-17")
+})
+CREATE (plan2:ProjectPlan {
+  delivery: {milestone: "v3.13", status: {due_date: date("2025-06-04")}},
+  validFrom: date("2025-02-18"),
+  validTo: date("2025-04-01")
+})
+CREATE (plan3:ProjectPlan {
+  delivery: {milestone: "v3.14", status: {due_date: date("2025-07-01")}},
+  validFrom: date("2025-04-02"),
+  validTo: date("9999-12-31")
+})
+
+CREATE (p)-[:USES_PLAN]->(plan1)
+CREATE (p)-[:USES_PLAN]->(plan2)
+CREATE (p)-[:USES_PLAN]->(plan3);
+```
+
+With this model:
+
+- Each `ProjectPlan` node is valid only during its `validFrom`/`validTo`
+  interval.
+- `date("9999-12-31")` acts as the open-ended interval for the current plan.
+- The same pattern can be applied to relationships when the connection itself
+  changes over time.
+
+### Pros and cons
+
+| Pros | Cons |
+|---|---|
+| Excellent for "state at time X" queries. | Updates duplicate state across intervals. |
+| Works well for audits and temporal comparisons. | Requires careful interval management to avoid gaps and overlaps. |
+| Flexible enough for both nodes and relationships. | Slightly more complex than explicit version numbers. |
+
+### Query examples
+
+Get the current delivery plan:
+
+```cypher
+MATCH (:Project {name: "Data Preprocessing"})-[:USES_PLAN]->(plan:ProjectPlan)
+WHERE plan.validTo = date("9999-12-31")
+RETURN plan.delivery.status.due_date AS due_date,
+       plan.delivery.milestone AS milestone;
+```
+
+Get the delivery plan that was valid on March 1st 2025:
+
+```cypher
+MATCH (:Project {name: "Data Preprocessing"})-[:USES_PLAN]->(plan:ProjectPlan)
+WHERE plan.validFrom <= date("2025-03-01")
+  AND plan.validTo >= date("2025-03-01")
+RETURN plan.delivery.status.due_date AS due_date,
+       plan.delivery.milestone AS milestone;
+```
+
+Get the current delivery plans for all projects:
+
+```cypher
+MATCH (project:Project)-[:USES_PLAN]->(plan:ProjectPlan)
+WHERE plan.validTo = date("9999-12-31")
+RETURN project.name,
+       plan.delivery.status.due_date AS due_date,
+       plan.delivery.milestone AS milestone;
+```
+
+<Callout type="info">
+
+Use Memgraph temporal types such as `date` and `localDateTime` instead of
+strings. That keeps comparisons, filtering, and range queries simple.
+
+</Callout>
+
+## Linked list versioning
+
+Linked-list versioning is useful when the order of changes matters as much as
+the content of each change. It is a natural fit for revision history, state
+machines, and undo/redo style workflows.
+
+### How it works
+
+This example uses the `Task` domain from the project management guide. Each
+change to the `Data Cleaning` task is modeled as a `TaskRevision` node, and the
+revisions are chained through `NEXT` relationships.
+
+```cypher
+CREATE (t:Task {name: "Data Cleaning"})
+
+CREATE (r1:TaskRevision {
+  status: "planned",
+  assigned_to: "Jane Smith",
+  updated_at: localDateTime("2025-01-12T08:30:00")
+})
+CREATE (r2:TaskRevision {
+  status: "in_progress",
+  assigned_to: "Jane Smith",
+  updated_at: localDateTime("2025-01-20T13:15:00")
+})
+CREATE (r3:TaskRevision {
+  status: "completed",
+  assigned_to: "Jane Smith",
+  updated_at: localDateTime("2025-01-27T17:45:00")
+})
+
+CREATE (t)-[:FIRST_REVISION]->(r1)
+CREATE (t)-[:LAST_REVISION]->(r3)
+CREATE (r1)-[:NEXT]->(r2)
+CREATE (r2)-[:NEXT]->(r3);
+```
+
+With this model:
+
+- The `Task` node is the stable anchor.
+- `FIRST_REVISION` and `LAST_REVISION` give you fast access to both ends.
+- The `NEXT` chain keeps the exact order of changes in the graph itself.
+
+### Pros and cons
+
+| Pros | Cons |
+|---|---|
+| Efficient for stepping forward and backward through revisions. | Reaching the middle of a long chain requires traversal. |
+| Makes ordered change history explicit. | On its own, it is weaker for direct "state at time X" lookups. |
+| Works well for workflows and revision logs. | Insertions in the middle require relinking. |
+
+### Query examples
+
+Get the latest revision of the task:
+
+```cypher
+MATCH (:Task {name: "Data Cleaning"})-[:LAST_REVISION]->(revision:TaskRevision)
+RETURN revision.status, revision.assigned_to, revision.updated_at;
+```
+
+Get the revision before the latest one:
+
+```cypher
+MATCH (:Task {name: "Data Cleaning"})-[:LAST_REVISION]->(latest:TaskRevision)
+MATCH (previous:TaskRevision)-[:NEXT]->(latest)
+RETURN previous.status, previous.assigned_to, previous.updated_at;
+```
+
+Walk the full revision history in order:
+
+```cypher
+MATCH (:Task {name: "Data Cleaning"})-[:FIRST_REVISION]->(first:TaskRevision)
+MATCH path = (first)-[:NEXT*0..]->(revision:TaskRevision)
+RETURN length(path) + 1 AS revision_number,
+       revision.status,
+       revision.assigned_to,
+       revision.updated_at
+ORDER BY revision_number;
+```
+
+## Timeline tree
+
+A timeline tree organizes historical data into a Year -> Month -> Day hierarchy.
+This pattern is especially useful when your graph already stores event-like
+nodes and your queries are centered around time windows.
+
+### How it works
+
+This example reuses the `SensorData` records from the Kafka guide. The readings
+remain ordinary nodes, while the timeline tree provides a reusable time index
+for browsing history.
+
+```cypher
+CREATE (root:Timeline {name: "Sensor Readings"})
+
+CREATE (y2025:Year {value: 2025})
+CREATE (dec:Month {value: 12})
+CREATE (d15:Day {value: 15})
+CREATE (d16:Day {value: 16})
+
+CREATE (root)-[:IN_YEAR]->(y2025)
+CREATE (y2025)-[:IN_MONTH]->(dec)
+CREATE (dec)-[:ON_DAY]->(d15)
+CREATE (dec)-[:ON_DAY]->(d16)
+
+CREATE (reading1:SensorData {
+  sensorId: "S101",
+  temperature: 22.5,
+  humidity: 45,
+  timestamp: localDateTime("2025-12-15T09:00:00")
+})
+CREATE (reading2:SensorData {
+  sensorId: "S102",
+  temperature: 24.1,
+  humidity: 50,
+  timestamp: localDateTime("2025-12-15T09:05:00")
+})
+CREATE (reading3:SensorData {
+  sensorId: "S103",
+  temperature: 23.3,
+  humidity: 48,
+  timestamp: localDateTime("2025-12-16T09:10:00")
+})
+
+CREATE (reading1)-[:RECORDED_ON]->(d15)
+CREATE (reading2)-[:RECORDED_ON]->(d15)
+CREATE (reading3)-[:RECORDED_ON]->(d16);
+```
+
+With this model:
+
+- The timeline tree gives you a stable entry point for time-based queries.
+- The event nodes themselves stay simple and queryable outside the tree.
+- You can attach many event types to the same calendar structure if needed.
+
+### Pros and cons
+
+| Pros | Cons |
+|---|---|
+| Excellent for browsing and aggregating data by day, month, or year. | Adds extra nodes and relationships to maintain. |
+| Makes calendar-based traversals very clear. | Can be unnecessary for small datasets with simple timestamp filters. |
+| Useful when many queries start with a time window. | Deep trees add hops to each query. |
+
+### Query examples
+
+Get all sensor readings recorded on December 15th 2025:
+
+```cypher
+MATCH (:Timeline {name: "Sensor Readings"})-[:IN_YEAR]->(:Year {value: 2025})-[:IN_MONTH]->(:Month {value: 12})-[:ON_DAY]->(:Day {value: 15})<-[:RECORDED_ON]-(reading:SensorData)
+RETURN reading.sensorId, reading.temperature, reading.humidity, reading.timestamp
+ORDER BY reading.sensorId;
+```
+
+Get all readings from December 2025:
+
+```cypher
+MATCH (:Timeline {name: "Sensor Readings"})-[:IN_YEAR]->(:Year {value: 2025})-[:IN_MONTH]->(:Month {value: 12})-[:ON_DAY]->(day:Day)
+MATCH (reading:SensorData)-[:RECORDED_ON]->(day)
+RETURN day.value AS day,
+       reading.sensorId,
+       reading.temperature,
+       reading.humidity,
+       reading.timestamp
+ORDER BY day, reading.sensorId;
+```
+
+## Combined approach
+
+Real systems often need more than one versioning pattern at the same time. The
+best combination depends on the questions your application needs to answer.
+
+For example:
+
+- Use **entity versioning** on `Project` nodes when you want simple access to
+  version numbers and the latest plan.
+- Add **time-based versioning** when project plans need accurate "as of" lookups.
+- Use **linked-list versioning** on `Task` revisions when the order of changes
+  matters.
+- Add a **timeline tree** for stream data such as `SensorData` when dashboards
+  and historical exploration start from calendar ranges.
+
+When choosing a combination, focus on:
+
+- **Query patterns**: optimize for the questions you ask most often.
+- **Write frequency**: frequent updates favor simpler models.
+- **Audit depth**: stronger history requirements justify more explicit models.
+- **Memory trade-offs**: storing many historical states increases memory usage.
+
+<Callout type="info">
+
+Start with the smallest model that answers your real historical queries. Add
+more structure only when ordered revisions, calendar navigation, or exact
+time-slice queries become first-class requirements.
+
+</Callout>
+
+<CommunityLinks/>
