@@ -396,7 +396,7 @@ export default function MemGQLAnimation() {
 
   const wrapperClass = zoomed
     ? `fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-md bg-white/70 dark:bg-black/70 ${PALETTE_VARS}`
-    : `relative scale-[0.65] max-[1160px]:hidden min-[1280px]:scale-[0.55] min-[1400px]:scale-[0.65] ${PALETTE_VARS}`;
+    : `scale-[0.65] max-[1160px]:hidden min-[1280px]:scale-[0.55] min-[1400px]:scale-[0.65] ${PALETTE_VARS}`;
 
   return (
     <>
@@ -409,64 +409,72 @@ export default function MemGQLAnimation() {
           style={{ width: naturalSize.w, height: naturalSize.h }}
         />
       )}
-      <div ref={wrapperRef} className={wrapperClass}>
-      <div
-        ref={containerRef}
-        className="relative flex flex-row gap-[80px] items-center justify-center"
-      >
-        <DataSourcesRow ref={sourcesRef} />
-        <MemGQLPanel
-          ref={memgqlRef}
-          graphRef={graphRef}
-          nodeCount={nodeCount}
-          pulseToken={pulseToken}
-          onGraphCountChange={setNodeCount}
-        />
-        {/* Two bolt badges centered in the gap between the panels. */}
-        <div className="-mx-[40px] z-10 flex flex-col gap-4">
-          <div className="mb-[72px]">
-            <BoltBadge />
-          </div>
-          <div className="mb-[64px]">
-            <BoltBadge />
+      <div className="relative max-[1160px]:hidden">
+        <div ref={wrapperRef} className={wrapperClass}>
+          <div
+            ref={containerRef}
+            className="relative flex flex-row gap-[80px] items-center justify-center"
+          >
+            <DataSourcesRow ref={sourcesRef} />
+            <MemGQLPanel
+              ref={memgqlRef}
+              graphRef={graphRef}
+              nodeCount={nodeCount}
+              pulseToken={pulseToken}
+              onGraphCountChange={setNodeCount}
+            />
+            {/* Two bolt badges centered in the gap between the panels. */}
+            <div className="-mx-[40px] z-10 flex flex-col gap-4">
+              <div className="mb-[72px]">
+                <BoltBadge />
+              </div>
+              <div className="mb-[64px]">
+                <BoltBadge />
+              </div>
+            </div>
+            <div className="relative flex flex-col items-center shrink-0">
+              <MCPPanel ref={mcpRef} pulseToken={mcpPulseToken} />
+              <div className="h-[24px]" />
+              <EditorPanel
+                ref={editorRef}
+                pendingQuery={pendingQuery}
+                committedQuery={committedQuery}
+                pressToken={pressToken}
+                running={running}
+                results={results}
+                resultMs={resultMs}
+              />
+            </div>
+            <AgentPanel ref={agentRef} phase={agentPhase} />
+            <PathOverlay
+              ref={pathOverlayRef}
+              containerRef={containerRef}
+              sourcesRef={sourcesRef}
+              memgqlRef={memgqlRef}
+              editorRef={editorRef}
+              mcpRef={mcpRef}
+              agentRef={agentRef}
+              onArrive={handleArrive}
+            />
           </div>
         </div>
-        <div className="relative flex flex-col items-center shrink-0">
-          <MCPPanel ref={mcpRef} pulseToken={mcpPulseToken} />
-          <div className="h-[24px]" />
-          <EditorPanel
-            ref={editorRef}
-            pendingQuery={pendingQuery}
-            committedQuery={committedQuery}
-            pressToken={pressToken}
-            running={running}
-            results={results}
-            resultMs={resultMs}
+        {/* Sibling overlay — full width of the wrapper's layout box (not subject
+          to the wrapper's transform), so the click/cursor target covers the
+          natural footprint cleanly. Goes fixed-fullscreen when zoomed so any
+          click closes. Only present on screens ≥1370px. */}
+        {zoomEnabled && (
+          <div
+            className={
+              zoomed
+                ? "fixed inset-0 z-[200]"
+                : "absolute inset-0 z-[200] w-[110%] left-[-5%]"
+            }
+            style={{ cursor: zoomed ? "zoom-out" : "zoom-in" }}
+            onClick={() => setZoomed((z) => !z)}
+            role="button"
+            aria-label={zoomed ? "Close zoomed animation" : "Zoom animation"}
           />
-        </div>
-        <AgentPanel ref={agentRef} phase={agentPhase} />
-        <PathOverlay
-          ref={pathOverlayRef}
-          containerRef={containerRef}
-          sourcesRef={sourcesRef}
-          memgqlRef={memgqlRef}
-          editorRef={editorRef}
-          mcpRef={mcpRef}
-          agentRef={agentRef}
-          onArrive={handleArrive}
-        />
-      </div>
-      {/* Transparent surface sitting on top of everything inside the wrapper —
-          owns the cursor and click toggle. Only present on screens ≥1370px. */}
-      {zoomEnabled && (
-        <div
-          className="absolute inset-0 z-[200]"
-          style={{ cursor: zoomed ? "zoom-out" : "zoom-in" }}
-          onClick={() => setZoomed((z) => !z)}
-          role="button"
-          aria-label={zoomed ? "Close zoomed animation" : "Zoom animation"}
-        />
-      )}
+        )}
       </div>
     </>
   );
