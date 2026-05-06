@@ -48,6 +48,48 @@ The result will contain the following fields:
 | next_session_isolation_level | The current `next` isolation level.                                                                                                                                                           |
 | storage_mode                 | The current storage mode.<br/>For more info, check out [storage modes](/fundamentals/storage-memory-usage#storage-modes).       |
 
+### Per-database storage information
+
+To get storage information for a specific database, use the `ON DATABASE` variant.
+This is available only in Memgraph Enterprise Edition and requires the `STATS` privilege.
+
+```cypher
+SHOW STORAGE INFO ON DATABASE mydb;
+```
+
+This returns per-database storage and memory fields. The result includes
+the fields below in addition to the database-level fields shared with
+`SHOW STORAGE INFO` (`name`, `database_uuid`, `vertex_count`, `edge_count`,
+`average_degree`, `unreleased_delta_objects`, `disk_usage`, `storage_mode`,
+and `storage_isolation_level`):
+
+| Field                         | Description                                                                                     |
+|-------------------------------|-------------------------------------------------------------------------------------------------|
+| `graph_memory_tracked`        | Memory used by this database's graph structures (vertices, edges, properties).                  |
+| `query_memory_tracked`        | Memory used by this database's query execution.                                                 |
+| `vector_index_memory_tracked` | Memory used by this database's vector indices.                                                  |
+| `tenant_memory_tracked`       | Current tracked memory for the database (sum of the three fields above).                        |
+| `tenant_peak_memory_tracked`  | Peak memory tracked for the database.                                                           |
+| `tenant_memory_limit`         | The memory limit set by the tenant profile, or `"unlimited"` if no profile is attached.         |
+
+## Memory information <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+Running the following query returns per-database memory tracking information.
+It requires the `STATS` privilege and is available only in Memgraph Enterprise Edition.
+
+```cypher
+SHOW MEMORY INFO;
+```
+
+The result contains these fields:
+
+| Field                   | Description                                                     |
+|-------------------------|-----------------------------------------------------------------|
+| `name`                  | Database name                                                   |
+| `tenant_memory_tracked` | Current tracked memory for the database in bytes                |
+| `profile`               | Active tenant profile name, or `null` if none is attached       |
+| `tenant_memory_limit`   | Configured memory limit (e.g. `"4096 MB"`), or `"unlimited"`   |
+
 
 ## License information
 

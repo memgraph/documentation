@@ -1,0 +1,243 @@
+---
+title: Tenant profiles
+description: Set per-database memory limits with tenant profiles in Memgraph Enterprise. Cap memory usage, prevent noisy neighbors, and monitor tenant consumption.
+---
+
+import { Callout } from 'nextra/components'
+
+# Tenant profiles <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+Tenant profiles let you define named memory-limit profiles and attach them to
+individual databases. This prevents a memory-intensive database from starving
+others in a multi-tenant deployment.
+
+When a tenant profile is attached to a database, Memgraph enforces the limit.
+Any query that would exceed the cap is rejected.
+
+Tenant profiles are separate from [User profiles](/database-management/authentication-and-authorization/user-profiles).
+User profiles control session counts and per-user transaction memory. Tenant
+profiles cap the **total** memory of an entire database, regardless of which
+user is responsible.
+
+## Prerequisites
+
+- [Memgraph Enterprise Edition](/database-management/enabling-memgraph-enterprise)
+- The [`PROFILE_RESTRICTION` privilege](/database-management/authentication-and-authorization/role-based-access-control#privileges)
+  to create, alter, or drop tenant profiles
+- The [`STATS` privilege](/database-management/authentication-and-authorization/role-based-access-control#privileges)
+  to run `SHOW MEMORY INFO` and `SHOW STORAGE INFO ON DATABASE`
+
+## Creating a tenant profile
+
+Create a named profile with a memory limit:
+
+```cypher
+CREATE TENANT PROFILE "gold" LIMIT memory_limit 4096 MB;
+CREATE TENANT PROFILE "silver" LIMIT memory_limit 2048 MB;
+```
+
+### Limit format
+
+- **Units**: `KB`, `MB` (case-insensitive)
+- **Unlimited** (no cap):
+
+```cypher
+CREATE TENANT PROFILE "unlimited" LIMIT memory_limit UNLIMITED;
+```
+
+<Callout type="info">
+A profile with `memory_limit UNLIMITED` still imposes no per-database cap, but
+it can be useful as a placeholder: attach it now and `ALTER` the limit later
+without re-running `SET TENANT PROFILE`.
+</Callout>
+
+- Profile names must be unique across the instance.
+- `memory_limit` is the only supported limit key. Using any other key will
+  cause the query to fail with an error.
+
+## Altering a tenant profile
+
+Change the memory limit of an existing profile:
+
+```cypher
+ALTER TENANT PROFILE "gold" SET memory_limit 8192 MB;
+```
+
+The new limit takes effect immediately on all databases that use the profile.
+Running queries are not interrupted, but subsequent allocations that would
+exceed the new cap are blocked.
+
+## Attaching a profile to a database
+
+```cypher
+SET TENANT PROFILE ON DATABASE mydb TO "gold";
+```
+
+- A database can have at most one tenant profile at a time.
+- Setting a new profile replaces the previous one automatically — there is no
+  need to `REMOVE` first.
+- The database `mydb` must exist.
+- The profile `"gold"` must exist.
+- The memory limit is enforced immediately.
+
+## Detaching a profile from a database
+
+```cypher
+REMOVE TENANT PROFILE FROM DATABASE mydb;
+```
+
+The database returns to unrestricted memory usage, subject only to the global
+[`--memory-limit`](/database-management/configuration#configuration-settings)
+and [license limits](/database-management/enabling-memgraph-enterprise#license-types).
+
+## Dropping a tenant profile
+
+```cypher
+DROP TENANT PROFILE "gold";
+```
+
+<Callout type="warning">
+`DROP` fails if any databases are still attached to the profile. Detach them
+all first with `REMOVE TENANT PROFILE FROM DATABASE`.
+</Callout>
+
+## Viewing tenant profiles
+
+### List all profiles
+
+```cypher
+SHOW TENANT PROFILES;
+```
+
+| Field         | Description                                         |
+|---------------|-----------------------------------------------------|
+| `profile`     | Profile name                                        |
+| `memory_limit` | Configured memory limit, or `"unlimited"`          |
+| `databases`   | Comma-separated list of attached database names     |
+
+### Inspect a single profile
+
+```cypher
+SHOW TENANT PROFILE "gold";
+```
+
+Returns one row with the same columns as `SHOW TENANT PROFILES`.
+
+### Per-database view
+
+`SHOW MEMORY INFO` shows the profile and limit for every database:
+
+```cypher
+SHOW MEMORY INFO;
+```
+
+| Field                   | Description                                   |
+|-------------------------|-----------------------------------------------|
+| `name`                  | Database name                                 |
+| `tenant_memory_tracked` | Current tracked bytes for the database        |
+| `profile`               | Active tenant profile name, or `null`         |
+| `tenant_memory_limit`   | Configured limit, or `"unlimited"`            |
+
+For a detailed breakdown of a single database, use:
+
+```cypher
+SHOW STORAGE INFO ON DATABASE mydb;
+```
+
+This returns per-database storage and memory fields, including:
+
+| Field                         | Description                                               |
+|-------------------------------|-----------------------------------------------------------|
+| `graph_memory_tracked`        | Storage memory for this database (vertices, edges, properties) |
+| `query_memory_tracked`        | Query execution memory for this database                  |
+| `vector_index_memory_tracked` | Vector index memory for this database                     |
+| `tenant_memory_tracked`       | Current tracked bytes for the database                    |
+| `tenant_peak_memory_tracked`  | Peak memory tracked                                       |
+| `tenant_memory_limit`         | Limit from the tenant profile, or `"unlimited"`           |
+
+## What happens when a limit is hit
+
+- Any query that needs to allocate memory beyond the limit is **rejected**.
+  This includes read queries (aggregations, sorting, large intermediate
+  results), not only writes.
+- Setting a lower limit (or attaching a profile with one) does not interrupt
+  running queries, but any subsequent allocation beyond the new cap is rejected —
+  for both new and already-running queries.
+- No data is lost — the database remains intact. The aborted query's changes
+  are rolled back (in transactional storage mode) and the query does **not**
+  resume automatically; you must re-issue it once there is headroom under the
+  limit.
+
+## Durability and restart
+
+Tenant profiles are stored in Memgraph's internal key-value store and survive
+restarts:
+
+- `CREATE`, `ALTER`, `DROP`, `SET ON DATABASE`, and `REMOVE FROM DATABASE` are
+  all persisted durably before the query returns.
+- On startup, Memgraph re-applies every profile's memory limit to its attached
+  databases.
+- If a database no longer exists (e.g., it was dropped while Memgraph was
+  offline), the profile mapping for that database is silently skipped.
+
+## Replication
+
+In a [high-availability](/clustering/high-availability) cluster, tenant profile
+operations on the MAIN are replicated to all replicas:
+
+- `CREATE`, `ALTER`, `DROP`, `SET ON DATABASE`, and `REMOVE FROM DATABASE` are
+  forwarded via `TenantProfileRpc`.
+- Replicas apply profiles on a best-effort basis — errors are logged but do not
+  interrupt replication.
+- Read queries like `SHOW TENANT PROFILES` and `SHOW MEMORY INFO` are local to
+  each instance and not replicated.
+
+## Monitoring with tenant profiles
+
+Combine tenant profiles with the per-database memory queries to monitor usage:
+
+```cypher
+-- See which databases are near their caps
+SHOW MEMORY INFO;
+
+-- Drill into a specific database
+SHOW STORAGE INFO ON DATABASE production_db;
+```
+
+The `tenant_memory_tracked` field in `SHOW MEMORY INFO` reflects the database's
+total tracked memory — the sum of storage, embedding, and query execution
+memory for that database.
+
+## Example: multi-tenant deployment
+
+```cypher
+-- Create tiered profiles
+CREATE TENANT PROFILE "large" LIMIT memory_limit 8192 MB;
+CREATE TENANT PROFILE "medium" LIMIT memory_limit 4096 MB;
+CREATE TENANT PROFILE "small" LIMIT memory_limit 512 MB;
+
+-- Create isolated databases
+CREATE DATABASE tenant_a;
+CREATE DATABASE tenant_b;
+CREATE DATABASE tenant_c;
+
+-- Assign profiles
+SET TENANT PROFILE ON DATABASE tenant_a TO "large";
+SET TENANT PROFILE ON DATABASE tenant_b TO "medium";
+SET TENANT PROFILE ON DATABASE tenant_c TO "small";
+
+-- Verify the setup
+SHOW MEMORY INFO;
+```
+
+## Limitations
+
+- A database can have at most one tenant profile attached at a time.
+- Tenant profiles cap memory only — there is no CPU or disk I/O throttling.
+  Each tenant database has its own durable storage directory.
+- The memory tracked by tenant profiles (`tenant_memory_tracked`) is the sum of
+  storage, embedding, and query execution memory attributed to the database. It
+  does not include process-level overhead (e.g., the Memgraph binary itself,
+  connection buffers, or the global jemalloc metadata).
+- `SHOW STORAGE INFO ON DATABASE` and `SHOW MEMORY INFO` are enterprise-only
+  queries. They return an error on Community Edition.
