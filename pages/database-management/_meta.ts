@@ -8,6 +8,7 @@ export default {
   "logs": "Logs",
   "monitoring": "Monitoring",
   "multi-tenancy": "Multi-tenancy",
+  "tenant-profiles": "Tenant profiles",
   "query-metadata": "Query metadata",
   "server-side-descriptions": "Server-side descriptions",
   "server-side-parameters": "Server-side parameters",
