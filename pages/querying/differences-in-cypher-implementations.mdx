@@ -19,19 +19,27 @@ Cypher implementation is for users who are already familiar with Neo4j.
 
 ### Indexes and constraints
 
-In Memgraph, indexes are not created in advance and creating constraints does not imply index creation. Memgraph supports label-property and label node indexes, node property existence and uniqueness constraints. 
+In Memgraph, indexes are not created in advance and creating constraints does not imply index creation. Memgraph supports label-property and label node indexes, node property existence and uniqueness constraints.
 
-By default, Neo4j will create a range index for the `CREATE ... INDEX ...` command. Here is an example of such a query:
+Memgraph accepts both its native `ON :Label(property)` / `ASSERT` syntax **and** the Neo4j-compatible `FOR (...) ON (...)` / `FOR (...) REQUIRE ...` syntax, so existing Neo4j code that creates indexes or constraints can run unchanged.
+
+#### Indexes
+
+The following Neo4j-style queries all work in Memgraph:
+
 ```cypher
-CREATE INDEX node_range_index_name FOR (n:Person) ON (n.surname);
+CREATE INDEX FOR (n:Person) ON (n.surname);
+CREATE INDEX person_surname FOR (n:Person) ON (n.surname);
+CREATE INDEX FOR (n:Person) ON (n.age, n.country);
+CREATE INDEX FOR ()-[r:KNOWS]-() ON (r.since);
 ```
-Memgraph does not support the same syntax. To create such an index in Memgraph, run:
+
+The native Memgraph syntax remains supported as well:
+
 ```cypher
 CREATE INDEX ON :Person(surname);
-```
-To create only label index in Memgraph, run the following query:
-```cypher
 CREATE INDEX ON :Person;
+CREATE EDGE INDEX ON :KNOWS(since);
 ```
 
 You can instruct the planner to use specific index(es) in Memgraph by using the syntax below:
@@ -49,43 +57,28 @@ Besides index hinting, the [`ANALYZE GRAPH`](/fundamentals/indexes#analyze-graph
     />
 </Cards>
 
-To **create a node property existence constraint** in Neo4j, you would run the following query:
+#### Constraints
+
+Existence, uniqueness, and type constraints can be created with either syntax:
+
 ```cypher
-CREATE CONSTRAINT author_name
-FOR (author:Author) REQUIRE author.name IS NOT NULL;
-```
-To achieve the same in Memgraph, change the syntax to:
-```cypher
-CREATE CONSTRAINT ON (author:Author) ASSERT EXISTS (author.name);
+-- existence
+CREATE CONSTRAINT FOR (n:Author) REQUIRE n.name IS NOT NULL;
+CREATE CONSTRAINT ON (n:Author) ASSERT EXISTS (n.name);
+
+-- uniqueness (single and composite)
+CREATE CONSTRAINT FOR (n:Book) REQUIRE n.isbn IS UNIQUE;
+CREATE CONSTRAINT FOR (n:Book) REQUIRE (n.title, n.year) IS UNIQUE;
+CREATE CONSTRAINT ON (n:Book) ASSERT n.isbn IS UNIQUE;
+
+-- type
+CREATE CONSTRAINT FOR (n:Movie) REQUIRE n.title IS :: STRING;
+CREATE CONSTRAINT ON (n:Movie) ASSERT n.title IS TYPED STRING;
 ```
 
-To **drop a node property existence constraint** in Neo4j, you would run the following query:
-```cypher
-DROP CONSTRAINT author_name;
-```
-To achieve the same in Memgraph, change the syntax to:
-```cypher
-DROP CONSTRAINT ON (author:Author) ASSERT EXISTS (author.name);
-```
+Constraint names in the Neo4j-style syntax are parsed but not stored — Memgraph does not have a named index/constraint system, so a `WARNING` notification is emitted to the client when a name is provided. Drops therefore must use the `DROP CONSTRAINT ON (...) ASSERT ...` form rather than `DROP CONSTRAINT <name>`.
 
-To **create a node property uniqueness constraint** in Neo4j, you would run the following query:
-```cypher
-CREATE CONSTRAINT book_isbn
-FOR (book:Book) REQUIRE book.isbn IS UNIQUE
-```
-To achieve the same in Memgraph, change the syntax to:
-```cypher
-CREATE CONSTRAINT ON (book:Book) ASSERT book.isbn IS UNIQUE;
-```
-
-To **drop a node property uniqueness constraint** in Neo4j, you would run the following query:
-```cypher
-DROP CONSTRAINT book_isbn;
-```
-To achieve the same in Memgraph, change the syntax to:
-```cypher
-DROP CONSTRAINT ON (book:Book) ASSERT book.isbn IS UNIQUE;
-```
+Relationship uniqueness, existence, and type constraints are **not** supported and will raise a `SemanticException`.
 
 <Cards>
     <Cards.Card
