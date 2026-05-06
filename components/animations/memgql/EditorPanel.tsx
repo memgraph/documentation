@@ -101,9 +101,8 @@ const EditorPanel = forwardRef<HTMLDivElement, Props>(
               <button
                 disabled
                 data-icon="run"
-                className={`px-3 py-1.5 rounded-md text-[11px] text-white bg-gradient-to-r from-[#FFC500] via-[#FF8B25] to-[#DD2222] cursor-default transition-all duration-150 ${
-                  pressing ? "scale-95 brightness-125" : "scale-100"
-                }`}
+                className={`px-3 py-1.5 rounded-md text-[11px] text-white bg-gradient-to-r from-[#FFC500] via-[#FF8B25] to-[#DD2222] cursor-default transition-all duration-150 ${pressing ? "scale-95 brightness-125" : "scale-100"
+                  }`}
               >
                 Run query
               </button>
@@ -141,7 +140,7 @@ const EditorPanel = forwardRef<HTMLDivElement, Props>(
               </div>
             ) : results ? (
               <div className="px-3 py-1 overflow-hidden">
-                <div className="grid grid-cols-[24px_1fr_1fr_1fr] text-[10px] text-white/45 py-1 border-b border-white/5">
+                <div className="grid grid-cols-[24px_1fr_1.5fr_1fr] text-[10px] text-white/45 py-1 border-b border-white/5">
                   <span>#</span>
                   <span>n</span>
                   <span>v</span>
@@ -150,7 +149,7 @@ const EditorPanel = forwardRef<HTMLDivElement, Props>(
                 {results.slice(0, 2).map((r, i) => (
                   <div
                     key={i}
-                    className="grid grid-cols-[24px_1fr_1fr_1fr] text-[10.5px] py-[5px] border-b border-white/5 animate-[chatIn_0.35s_ease-out]"
+                    className="grid grid-cols-[24px_1fr_1.5fr_1fr] text-[10.5px] py-[5px] border-b border-white/5 animate-[chatIn_0.35s_ease-out]"
                   >
                     <span className="text-white/35">{i + 1}</span>
                     <NodeChip label={r.n.label} id={r.n.id} kind="node" />
@@ -250,11 +249,10 @@ function NodeChip({
   return (
     <span className="flex items-center gap-1 truncate">
       <span
-        className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${
-          kind === "node"
+        className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${kind === "node"
             ? "bg-[#0e2a14] text-[#4ade80] border border-[#30AF1955]"
             : "bg-[#2a1a06] text-[#FB6E00] border border-[#FB6E0055]"
-        }`}
+          }`}
       >
         <span className="opacity-60">{kind === "node" ? "●" : "→"}</span>
         {label}
