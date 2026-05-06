@@ -23,11 +23,11 @@ const AgentPanel = forwardRef<HTMLDivElement, Props>(
     return (
       <div
         ref={ref}
-        className="relative rounded-lg p-[1px] bg-gradient-to-br from-white/40 to-white/0 w-[160px] h-[180px] shrink-0 self-start"
+        className="relative rounded-lg p-[1px] bg-gradient-to-br from-[var(--mg-rim)] to-[var(--mg-rim-fade)] w-[160px] h-[180px] shrink-0 self-start"
       >
-        <div className="relative flex flex-col h-full rounded-[7px] bg-[#0F0F10] overflow-hidden">
-          <div className="flex items-center px-3 py-3 border-b border-white/10">
-            <div className="text-[10px] uppercase tracking-wider text-white">
+        <div className="relative flex flex-col h-full rounded-[7px] bg-[var(--mg-deep)] overflow-hidden">
+          <div className="flex items-center px-3 py-3 border-b border-[var(--mg-border)]">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--mg-fg-strong)]">
               Agent
             </div>
           </div>
@@ -41,15 +41,23 @@ const AgentPanel = forwardRef<HTMLDivElement, Props>(
                   aria-hidden
                 />
               )}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`${basePath}/pages/memgraph-zero/memgql/brain.svg`}
-                alt=""
-                width={28}
-                height={28}
-                className={`relative transition-transform duration-300 ${
+              <div
+                aria-hidden
+                className={`relative bg-[var(--mg-fg)] transition-transform duration-300 ${
                   active ? "scale-110" : "scale-100"
                 }`}
+                style={{
+                  width: 28,
+                  height: 28,
+                  WebkitMaskImage: `url(${basePath}/pages/memgraph-zero/memgql/brain.svg)`,
+                  maskImage: `url(${basePath}/pages/memgraph-zero/memgql/brain.svg)`,
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center",
+                  WebkitMaskSize: "contain",
+                  maskSize: "contain",
+                }}
               />
             </div>
 
@@ -58,7 +66,7 @@ const AgentPanel = forwardRef<HTMLDivElement, Props>(
               <div
                 key={phase}
                 className={`text-[11px] font-medium animate-[statusIn_0.35s_ease-out] ${
-                  active ? "text-[#FFC500]" : "text-white/70"
+                  active ? "text-[#FFC500]" : "text-[var(--mg-fg-soft)]"
                 }`}
               >
                 {PHASE_LABEL[phase]}

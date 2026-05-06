@@ -55,7 +55,8 @@ type Flight = {
 const INGESTION_INTERVAL_MS = 1100;
 const DOT_SPEED_PX_PER_MS = 0.12;
 
-const COLOR_INGEST = "#bab8bb";
+// Use CSS vars defined on the animation root so colors track the page theme.
+const COLOR_INGEST = "var(--mg-dot)";
 const COLOR_ORANGE = "#FB6E00";
 
 function buildStraightPath(from: Point, to: Point): string {
@@ -376,7 +377,7 @@ const PathOverlay = forwardRef<PathOverlayHandle, Props>(function PathOverlay(
           <path
             d="M 1 1 L 9 5 L 1 9"
             fill="none"
-            stroke="#FFFFFF66"
+            stroke="var(--mg-edge)"
             strokeWidth={1.5}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -399,7 +400,7 @@ const PathOverlay = forwardRef<PathOverlayHandle, Props>(function PathOverlay(
             }}
             d={r.d}
             fill="none"
-            stroke={hidden ? "none" : "#FFFFFF66"}
+            stroke={hidden ? "none" : "var(--mg-edge)"}
             strokeWidth={1}
             strokeDasharray={hidden ? undefined : "4 4"}
             markerEnd={hidden ? undefined : "url(#memgql-arrow)"}

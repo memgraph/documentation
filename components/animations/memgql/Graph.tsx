@@ -5,9 +5,11 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from "react";
+import { useTheme } from "nextra-theme-docs";
 
 export type GraphHandle = {
   addNodeFromViewport: (client: { x: number; y: number }) => void;
@@ -63,14 +65,31 @@ const DRIFT_AMPLITUDE = 18;
 // MAX_AGE is derived from population: at the ingestion rate, this is how
 // long each node lives at equilibrium.
 const MAX_AGE_MS = TARGET_POPULATION * INGESTION_INTERVAL_MS;
-// Last stage stays a visible mid-gray; fade-to-invisible is handled by
-// opacity in the DEATH_WINDOW so nodes don't merge into the bg color.
-const AGE_STAGES: { until: number; color: string }[] = [
-  { until: MAX_AGE_MS * 0.25, color: "#bab8bb" },
-  { until: MAX_AGE_MS * 0.55, color: "#646265" },
-  { until: MAX_AGE_MS * 0.85, color: "#4B4445" },
-  { until: MAX_AGE_MS, color: "#3A3536" },
-];
+// Per-theme palettes. Dark theme fades white → near-bg; light theme fades
+// from a mid gray toward the panel bg. Colors are hex so they can be parsed
+// for RGB blending with the orange cascade.
+type Palette = {
+  ageStages: { until: number; color: string }[];
+  edgeIdle: string;
+};
+const PALETTE_DARK: Palette = {
+  ageStages: [
+    { until: MAX_AGE_MS * 0.25, color: "#bab8bb" },
+    { until: MAX_AGE_MS * 0.55, color: "#646265" },
+    { until: MAX_AGE_MS * 0.85, color: "#4B4445" },
+    { until: MAX_AGE_MS, color: "#3A3536" },
+  ],
+  edgeIdle: "#4B4445",
+};
+const PALETTE_LIGHT: Palette = {
+  ageStages: [
+    { until: MAX_AGE_MS * 0.25, color: "#52525B" },
+    { until: MAX_AGE_MS * 0.55, color: "#A1A1AA" },
+    { until: MAX_AGE_MS * 0.85, color: "#D4D4D8" },
+    { until: MAX_AGE_MS, color: "#E4E4E7" },
+  ],
+  edgeIdle: "#D4D4D8",
+};
 
 const CLUSTER_BIAS = 0.7;
 const CLUSTER_JITTER = 120;
@@ -89,8 +108,7 @@ const ORPHAN_EDGE_FADE_MS = 700;
 const COLOR_ORANGE: [number, number, number] = [251, 110, 0];
 const ORANGE_GLOW = "drop-shadow(0 0 6px rgba(251,110,0,0.9))";
 
-// Edge styling. Set EDGE_IDLE_COLOR to null to fall back to per-endpoint age color.
-const EDGE_IDLE_COLOR: string | null = "#4B4445";
+// Edge styling. Idle color now comes from the theme palette below.
 const EDGE_IDLE_WIDTH = 1;
 const EDGE_IDLE_OPACITY = 0.35;
 const EDGE_ORANGE_WIDTH = 1;
@@ -178,24 +196,28 @@ function blendRgb(
 }
 
 /** Continuously interpolated age color so gray transitions are smooth like the orange one. */
-function ageColorRgb(age: number): [number, number, number] {
-  if (age <= AGE_STAGES[0].until) return hexToRgb(AGE_STAGES[0].color);
-  for (let i = 1; i < AGE_STAGES.length; i++) {
-    if (age < AGE_STAGES[i].until) {
-      const prev = AGE_STAGES[i - 1];
-      const cur = AGE_STAGES[i];
+function ageColorRgb(
+  age: number,
+  stages: { until: number; color: string }[]
+): [number, number, number] {
+  if (age <= stages[0].until) return hexToRgb(stages[0].color);
+  for (let i = 1; i < stages.length; i++) {
+    if (age < stages[i].until) {
+      const prev = stages[i - 1];
+      const cur = stages[i];
       const t = clamp((age - prev.until) / (cur.until - prev.until), 0, 1);
       return blendRgb(hexToRgb(prev.color), hexToRgb(cur.color), t);
     }
   }
-  return hexToRgb(AGE_STAGES[AGE_STAGES.length - 1].color);
+  return hexToRgb(stages[stages.length - 1].color);
 }
 
 // ---- Component -----------------------------------------------------------
 
-const EDGE_IDLE_RGB = EDGE_IDLE_COLOR ? hexToRgb(EDGE_IDLE_COLOR) : null;
-
 const Graph = forwardRef<GraphHandle, Props>(({ onCountChange }, ref) => {
+  const { resolvedTheme } = useTheme();
+  const palette = resolvedTheme === "light" ? PALETTE_LIGHT : PALETTE_DARK;
+  const edgeIdleRgb = useMemo(() => hexToRgb(palette.edgeIdle), [palette]);
   const svgRef = useRef<SVGSVGElement>(null);
   const nodesRef = useRef<Node[]>([]);
   const edgesRef = useRef<Edge[]>([]);
@@ -624,7 +646,7 @@ const Graph = forwardRef<GraphHandle, Props>(({ onCountChange }, ref) => {
     }
 
     const orange = n.orangeAmount;
-    const idleRgb = ageColorRgb(n.age);
+    const idleRgb = ageColorRgb(n.age, palette.ageStages);
     const targetRgb = orange > 0 ? blendRgb(idleRgb, COLOR_ORANGE, orange) : idleRgb;
     const color = rgbToCss(targetRgb);
 
@@ -670,7 +692,7 @@ const Graph = forwardRef<GraphHandle, Props>(({ onCountChange }, ref) => {
         const orangeMix = Math.max(a.orangeAmount, b.orangeAmount);
         // Idle base: explicit constant if set, otherwise older endpoint's age color.
         const baseRgb =
-          EDGE_IDLE_RGB ?? (a.age > b.age ? a.idleRgb : b.idleRgb);
+          edgeIdleRgb ?? (a.age > b.age ? a.idleRgb : b.idleRgb);
         let stroke: string;
         let opacity: number;
         let width: number;

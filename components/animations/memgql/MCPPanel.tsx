@@ -26,23 +26,23 @@ const MCPPanel = forwardRef<HTMLDivElement, Props>(
     return (
       <div
         ref={ref}
-        className="relative rounded-lg p-[1px] bg-gradient-to-br from-white/40 to-white/0 w-[420px] h-[44px] shrink-0"
+        className="relative rounded-lg p-[1px] bg-gradient-to-br from-[var(--mg-rim)] to-[var(--mg-rim-fade)] w-[420px] h-[44px] shrink-0"
       >
         <div
           className={`relative flex items-center px-4 h-full rounded-[7px] transition-all duration-200 ${
             flash
-              ? "bg-[#1c1108] shadow-[0_0_18px_rgba(251,110,0,0.55)]"
-              : "bg-[#0F0F10]"
+              ? "bg-[var(--mg-flash-bg)] shadow-[0_0_18px_rgba(251,110,0,0.55)]"
+              : "bg-[var(--mg-deep)]"
           }`}
         >
           <div
             className={`text-[10px] uppercase tracking-wider transition-colors duration-200 ${
-              flash ? "text-[#FB6E00]" : "text-white"
+              flash ? "text-[#FB6E00]" : "text-[var(--mg-fg-strong)]"
             }`}
           >
             MCP
           </div>
-          <div className="ml-auto text-[10px] text-white/40">
+          <div className="ml-auto text-[10px] text-[var(--mg-fg-soft)]">
             Model Context Protocol
           </div>
         </div>

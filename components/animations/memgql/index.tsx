@@ -25,7 +25,7 @@ function BoltBadge() {
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="rounded-md p-[1px] bg-gradient-to-br flex flex-col items-center from-[#FFC500] via-[#DD2222] to-[#8C0082]">
-        <div className="rounded-[5px] bg-[#141414] p-1 flex flex-col items-center justify-center gap-1">
+        <div className="rounded-[5px] bg-[var(--mg-panel)] p-1 flex flex-col items-center justify-center gap-1">
           <svg
             width="18"
             height="18"
@@ -39,7 +39,7 @@ function BoltBadge() {
           >
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
           </svg>
-          <div className="text-[9px] uppercase tracking-wider text-white">
+          <div className="text-[9px] uppercase tracking-wider text-[var(--mg-fg-strong)]">
             Bolt
           </div>
         </div>
@@ -317,7 +317,23 @@ export default function MemGQLAnimation() {
   }, []);
 
   return (
-    <div className="scale-[0.65] max-[1160px]:hidden min-[1280px]:scale-[0.55] min-[1400px]:scale-[0.65]">
+    <div
+      className="scale-[0.65] max-[1160px]:hidden min-[1280px]:scale-[0.55] min-[1400px]:scale-[0.65]
+        [--mg-panel:#FAFAFA] [--mg-card:#FFFFFF] [--mg-deep:#FFFFFF] [--mg-code:#F8F8F8]
+        [--mg-fg:#3F3F46] [--mg-fg-soft:#71717A] [--mg-fg-strong:#18181B]
+        [--mg-border:#0000001a] [--mg-edge:#00000059] [--mg-dot:#71717A]
+        [--mg-rim:#00000066] [--mg-rim-fade:#00000000]
+        [--mg-chip-node-bg:#DCFCE7] [--mg-chip-node-fg:#15803D] [--mg-chip-node-bd:#86EFAC]
+        [--mg-chip-rel-bg:#FFEDD5] [--mg-chip-rel-fg:#C2410C] [--mg-chip-rel-bd:#FDBA74]
+        [--mg-flash-bg:#FFF1E1]
+        dark:[--mg-panel:#141414] dark:[--mg-card:#231F20] dark:[--mg-deep:#0F0F10] dark:[--mg-code:#0c0c0d]
+        dark:[--mg-fg:#BAB8BB] dark:[--mg-fg-soft:#FFFFFFB3] dark:[--mg-fg-strong:#FFFFFF]
+        dark:[--mg-border:#FFFFFF22] dark:[--mg-edge:#FFFFFF66] dark:[--mg-dot:#BAB8BB]
+        dark:[--mg-rim:#FFFFFF66] dark:[--mg-rim-fade:#FFFFFF00]
+        dark:[--mg-chip-node-bg:#0e2a14] dark:[--mg-chip-node-fg:#4ade80] dark:[--mg-chip-node-bd:#30AF1955]
+        dark:[--mg-chip-rel-bg:#2a1a06] dark:[--mg-chip-rel-fg:#FB6E00] dark:[--mg-chip-rel-bd:#FB6E0055]
+        dark:[--mg-flash-bg:#1c1108]"
+    >
       <div
         ref={containerRef}
         className="relative flex flex-row gap-[80px] items-center justify-center"

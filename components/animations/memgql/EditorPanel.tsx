@@ -76,25 +76,25 @@ const EditorPanel = forwardRef<HTMLDivElement, Props>(
     return (
       <div
         ref={ref}
-        className="relative rounded-xl p-[1px] bg-gradient-to-br from-white/40 to-white/0 w-[420px] h-[260px] shrink-0"
+        className="relative rounded-xl p-[1px] bg-gradient-to-br from-[var(--mg-rim)] to-[var(--mg-rim-fade)] w-[420px] h-[260px] shrink-0"
       >
-        <div className="relative flex flex-col h-full rounded-[11px] bg-[#0F0F10] overflow-hidden text-white">
+        <div className="relative flex flex-col h-full rounded-[11px] bg-[var(--mg-deep)] overflow-hidden text-[var(--mg-fg-strong)]">
           {/* Header row */}
-          <div className="px-4 pt-3 pb-2 border-b border-white/10">
-            <div className="text-[10px] uppercase tracking-wider text-white">
+          <div className="px-4 pt-3 pb-2 border-b border-[var(--mg-border)]">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--mg-fg-strong)]">
               GQL
             </div>
           </div>
 
           {/* Code area */}
-          <div className="relative flex bg-[#0c0c0d] min-h-[88px]">
-            <div className="select-none px-3 py-3 text-[11px] text-white/30 font-mono leading-[18px]">
+          <div className="relative flex bg-[var(--mg-code)] min-h-[88px]">
+            <div className="select-none px-3 py-3 text-[11px] text-[var(--mg-fg-soft)] font-mono leading-[18px]">
               1
             </div>
             <div className="flex-1 px-2 py-3 text-[11px] font-mono leading-[18px]">
               <CypherSyntax text={displayedCode} />
               {showCaret && (
-                <span className="inline-block w-[1px] h-[12px] bg-white ml-[1px] align-middle animate-pulse" />
+                <span className="inline-block w-[1px] h-[12px] bg-[var(--mg-fg-strong)] ml-[1px] align-middle animate-pulse" />
               )}
             </div>
             <div className="absolute right-3 bottom-3 flex items-center gap-2">
@@ -110,37 +110,37 @@ const EditorPanel = forwardRef<HTMLDivElement, Props>(
           </div>
 
           {/* Status bar */}
-          <div className="flex items-center justify-between px-3 py-2 border-t border-white/10 text-[10px]">
+          <div className="flex items-center justify-between px-3 py-2 border-t border-[var(--mg-border)] text-[10px]">
             <div className="flex items-center gap-1.5">
               {running ? (
                 <>
                   <span className="w-1.5 h-1.5 rounded-full bg-[#FFC500] animate-pulse" />
-                  <span className="text-white/70">Running query…</span>
+                  <span className="text-[var(--mg-fg-soft)]">Running query…</span>
                 </>
               ) : results ? (
                 <>
                   <span className="text-[#30AF19]">✓ Query successful</span>
                 </>
               ) : (
-                <span className="text-white/40">Ready</span>
+                <span className="text-[var(--mg-fg-soft)]">Ready</span>
               )}
             </div>
             {results && (
-              <div className="text-white/40">{resultMs}</div>
+              <div className="text-[var(--mg-fg-soft)]">{resultMs}</div>
             )}
           </div>
 
           {/* Results area */}
-          <div className="relative flex-1 min-h-[88px] max-h-[88px] overflow-hidden bg-[#0c0c0d]">
+          <div className="relative flex-1 min-h-[88px] max-h-[88px] overflow-hidden bg-[var(--mg-code)]">
             {running ? (
               <div className="flex items-center justify-center h-[60px]">
-                <div className="w-[60%] h-[3px] rounded-full bg-white/10 overflow-hidden">
+                <div className="w-[60%] h-[3px] rounded-full bg-[var(--mg-border)] overflow-hidden">
                   <div className="h-full w-1/3 bg-gradient-to-r from-[#FFC500] to-[#DD2222] animate-[loadingBar_1.4s_ease-in-out_infinite]" />
                 </div>
               </div>
             ) : results ? (
               <div className="px-3 py-1 overflow-hidden">
-                <div className="grid grid-cols-[24px_1fr_1.5fr_1fr] text-[10px] text-white/45 py-1 border-b border-white/5">
+                <div className="grid grid-cols-[24px_1fr_1.5fr_1fr] text-[10px] text-[var(--mg-fg-soft)] py-1 border-b border-[var(--mg-border)]">
                   <span>#</span>
                   <span>n</span>
                   <span>v</span>
@@ -149,9 +149,9 @@ const EditorPanel = forwardRef<HTMLDivElement, Props>(
                 {results.slice(0, 2).map((r, i) => (
                   <div
                     key={i}
-                    className="grid grid-cols-[24px_1fr_1.5fr_1fr] text-[10.5px] py-[5px] border-b border-white/5 animate-[chatIn_0.35s_ease-out]"
+                    className="grid grid-cols-[24px_1fr_1.5fr_1fr] text-[10.5px] py-[5px] border-b border-[var(--mg-border)] animate-[chatIn_0.35s_ease-out]"
                   >
-                    <span className="text-white/35">{i + 1}</span>
+                    <span className="text-[var(--mg-fg-soft)]">{i + 1}</span>
                     <NodeChip label={r.n.label} id={r.n.id} kind="node" />
                     <NodeChip label={r.v.label} id={r.v.id} kind="rel" />
                     <NodeChip label={r.m.label} id={r.m.id} kind="node" />
@@ -159,7 +159,7 @@ const EditorPanel = forwardRef<HTMLDivElement, Props>(
                 ))}
               </div>
             ) : (
-              <div className="flex items-center justify-center h-[60px] text-white/30 text-[10px]">
+              <div className="flex items-center justify-center h-[60px] text-[var(--mg-fg-soft)] text-[10px]">
                 Run a query to see results
               </div>
             )}
@@ -250,14 +250,14 @@ function NodeChip({
     <span className="flex items-center gap-1 truncate">
       <span
         className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${kind === "node"
-            ? "bg-[#0e2a14] text-[#4ade80] border border-[#30AF1955]"
-            : "bg-[#2a1a06] text-[#FB6E00] border border-[#FB6E0055]"
+            ? "bg-[var(--mg-chip-node-bg)] text-[var(--mg-chip-node-fg)] border border-[var(--mg-chip-node-bd)]"
+            : "bg-[var(--mg-chip-rel-bg)] text-[var(--mg-chip-rel-fg)] border border-[var(--mg-chip-rel-bd)]"
           }`}
       >
         <span className="opacity-60">{kind === "node" ? "●" : "→"}</span>
         {label}
       </span>
-      <span className="text-white/40">{id}</span>
+      <span className="text-[var(--mg-fg-soft)]">{id}</span>
     </span>
   );
 }

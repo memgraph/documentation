@@ -54,12 +54,14 @@ export default function TravelingDot({
     return () => cancelAnimationFrame(rafId);
   }, [path, speed]);
 
+  // The glow tint matches the dot color so it blooms outward instead of
+  // washing into the background — works in both light and dark themes.
   return (
     <circle
       ref={circleRef}
       r={radius}
       fill={color}
-      filter="drop-shadow(0 0 4px rgba(255,255,255,0.7))"
+      style={{ filter: `drop-shadow(0 0 4px ${color})` }}
     />
   );
 }

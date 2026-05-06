@@ -33,17 +33,27 @@ const DataSourcesRow = forwardRef<HTMLDivElement>((_, ref) => {
         <div
           key={s.id}
           data-source-index={i}
-          className="relative flex flex-row items-center gap-2.5 rounded-lg border border-[#FFFFFF22] bg-[#231F20] px-3.5 py-2.5 w-[148px]"
+          className="relative flex flex-row items-center gap-2.5 rounded-lg border border-[var(--mg-border)] bg-[var(--mg-card)] px-3.5 py-2.5 w-[148px]"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`${basePath}${s.icon}`}
-            alt=""
-            width={24}
-            height={24}
-            className="opacity-90 shrink-0"
+          {/* mask-image lets the icon pick up the parent text color, so it
+              follows the theme without per-theme SVG variants. */}
+          <div
+            aria-hidden
+            className="opacity-90 shrink-0 bg-[var(--mg-fg)]"
+            style={{
+              width: 24,
+              height: 24,
+              WebkitMaskImage: `url(${basePath}${s.icon})`,
+              maskImage: `url(${basePath}${s.icon})`,
+              WebkitMaskRepeat: "no-repeat",
+              maskRepeat: "no-repeat",
+              WebkitMaskPosition: "center",
+              maskPosition: "center",
+              WebkitMaskSize: "contain",
+              maskSize: "contain",
+            }}
           />
-          <div className="text-[13px] text-[#BAB8BB] leading-tight">
+          <div className="text-[13px] text-[var(--mg-fg)] leading-tight">
             {s.label}
           </div>
           <div
