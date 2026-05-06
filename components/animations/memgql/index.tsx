@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import DataSourcesRow from "./DataSourcesRow";
 import MemGQLPanel from "./MemGQLPanel";
 import EditorPanel, { ResultRow } from "./EditorPanel";
@@ -155,6 +161,62 @@ export default function MemGQLAnimation() {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<ResultRow[] | null>(null);
   const [resultMs, setResultMs] = useState<string>("13 ms");
+  const [zoomed, setZoomed] = useState(false);
+  const [zoomEnabled, setZoomEnabled] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
+
+  // Zoom-on-click is only offered on wide screens — below 1370px the layout is
+  // already tight, so the lightbox would feel intrusive.
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1370px)");
+    const update = () => setZoomEnabled(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // If the viewport shrinks below the threshold while zoomed, drop out of zoom.
+  useEffect(() => {
+    if (!zoomEnabled && zoomed) setZoomed(false);
+  }, [zoomEnabled, zoomed]);
+
+  // Measure the wrapper's in-flow size while it's idle so we can render an
+  // identical-size placeholder when it goes `fixed` (zoomed) — keeps content
+  // below from jumping. offsetWidth ignores `transform: scale`, so it returns
+  // the unscaled layout box that the wrapper actually occupies in flow.
+  useLayoutEffect(() => {
+    if (zoomed || !wrapperRef.current) return;
+    const el = wrapperRef.current;
+    const measure = () =>
+      setNaturalSize({ w: el.offsetWidth, h: el.offsetHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [zoomed]);
+
+  // Lock body scroll + Esc-to-close while zoomed; nudge PathOverlay/Graph to
+  // remeasure after the layout swap (ResizeObserver doesn't see fixed/relative
+  // toggles).
+  useEffect(() => {
+    if (!zoomed) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setZoomed(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [zoomed]);
+
+  useEffect(() => {
+    const t = setTimeout(() => window.dispatchEvent(new Event("resize")), 60);
+    return () => clearTimeout(t);
+  }, [zoomed]);
 
   const handleArrive = useCallback(
     (kind: FlightKind, clientPoint: { x: number; y: number }) => {
@@ -316,24 +378,38 @@ export default function MemGQLAnimation() {
     };
   }, []);
 
+  const PALETTE_VARS =
+    "[--mg-panel:#FAFAFA] [--mg-card:#FFFFFF] [--mg-deep:#FFFFFF] [--mg-code:#F8F8F8] " +
+    "[--mg-fg:#3F3F46] [--mg-fg-soft:#71717A] [--mg-fg-strong:#18181B] " +
+    "[--mg-border:#0000001a] [--mg-edge:#00000059] [--mg-dot:#71717A] " +
+    "[--mg-rim:#00000066] [--mg-rim-fade:#00000000] " +
+    "[--mg-chip-node-bg:#DCFCE7] [--mg-chip-node-fg:#15803D] [--mg-chip-node-bd:#86EFAC] " +
+    "[--mg-chip-rel-bg:#FFEDD5] [--mg-chip-rel-fg:#C2410C] [--mg-chip-rel-bd:#FDBA74] " +
+    "[--mg-flash-bg:#FFF1E1] " +
+    "dark:[--mg-panel:#141414] dark:[--mg-card:#231F20] dark:[--mg-deep:#0F0F10] dark:[--mg-code:#0c0c0d] " +
+    "dark:[--mg-fg:#BAB8BB] dark:[--mg-fg-soft:#FFFFFFB3] dark:[--mg-fg-strong:#FFFFFF] " +
+    "dark:[--mg-border:#FFFFFF22] dark:[--mg-edge:#FFFFFF66] dark:[--mg-dot:#BAB8BB] " +
+    "dark:[--mg-rim:#FFFFFF66] dark:[--mg-rim-fade:#FFFFFF00] " +
+    "dark:[--mg-chip-node-bg:#0e2a14] dark:[--mg-chip-node-fg:#4ade80] dark:[--mg-chip-node-bd:#30AF1955] " +
+    "dark:[--mg-chip-rel-bg:#2a1a06] dark:[--mg-chip-rel-fg:#FB6E00] dark:[--mg-chip-rel-bd:#FB6E0055] " +
+    "dark:[--mg-flash-bg:#1c1108]";
+
+  const wrapperClass = zoomed
+    ? `fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-md bg-white/70 dark:bg-black/70 ${PALETTE_VARS}`
+    : `relative scale-[0.65] max-[1160px]:hidden min-[1280px]:scale-[0.55] min-[1400px]:scale-[0.65] ${PALETTE_VARS}`;
+
   return (
-    <div
-      className="scale-[0.65] max-[1160px]:hidden min-[1280px]:scale-[0.55] min-[1400px]:scale-[0.65]
-        [--mg-panel:#FAFAFA] [--mg-card:#FFFFFF] [--mg-deep:#FFFFFF] [--mg-code:#F8F8F8]
-        [--mg-fg:#3F3F46] [--mg-fg-soft:#71717A] [--mg-fg-strong:#18181B]
-        [--mg-border:#0000001a] [--mg-edge:#00000059] [--mg-dot:#71717A]
-        [--mg-rim:#00000066] [--mg-rim-fade:#00000000]
-        [--mg-chip-node-bg:#DCFCE7] [--mg-chip-node-fg:#15803D] [--mg-chip-node-bd:#86EFAC]
-        [--mg-chip-rel-bg:#FFEDD5] [--mg-chip-rel-fg:#C2410C] [--mg-chip-rel-bd:#FDBA74]
-        [--mg-flash-bg:#FFF1E1]
-        dark:[--mg-panel:#141414] dark:[--mg-card:#231F20] dark:[--mg-deep:#0F0F10] dark:[--mg-code:#0c0c0d]
-        dark:[--mg-fg:#BAB8BB] dark:[--mg-fg-soft:#FFFFFFB3] dark:[--mg-fg-strong:#FFFFFF]
-        dark:[--mg-border:#FFFFFF22] dark:[--mg-edge:#FFFFFF66] dark:[--mg-dot:#BAB8BB]
-        dark:[--mg-rim:#FFFFFF66] dark:[--mg-rim-fade:#FFFFFF00]
-        dark:[--mg-chip-node-bg:#0e2a14] dark:[--mg-chip-node-fg:#4ade80] dark:[--mg-chip-node-bd:#30AF1955]
-        dark:[--mg-chip-rel-bg:#2a1a06] dark:[--mg-chip-rel-fg:#FB6E00] dark:[--mg-chip-rel-bd:#FB6E0055]
-        dark:[--mg-flash-bg:#1c1108]"
-    >
+    <>
+      {/* Sibling placeholder — only present while zoomed, sized to the
+          wrapper's idle layout box so the page below doesn't reflow. */}
+      {zoomed && naturalSize && (
+        <div
+          aria-hidden
+          className="max-[1160px]:hidden"
+          style={{ width: naturalSize.w, height: naturalSize.h }}
+        />
+      )}
+      <div ref={wrapperRef} className={wrapperClass}>
       <div
         ref={containerRef}
         className="relative flex flex-row gap-[80px] items-center justify-center"
@@ -380,6 +456,18 @@ export default function MemGQLAnimation() {
           onArrive={handleArrive}
         />
       </div>
-    </div>
+      {/* Transparent surface sitting on top of everything inside the wrapper —
+          owns the cursor and click toggle. Only present on screens ≥1370px. */}
+      {zoomEnabled && (
+        <div
+          className="absolute inset-0 z-[200]"
+          style={{ cursor: zoomed ? "zoom-out" : "zoom-in" }}
+          onClick={() => setZoomed((z) => !z)}
+          role="button"
+          aria-label={zoomed ? "Close zoomed animation" : "Zoom animation"}
+        />
+      )}
+      </div>
+    </>
   );
 }
