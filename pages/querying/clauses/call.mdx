@@ -21,12 +21,14 @@ Switch to MAGE documentation if you want to CALL a graph algorithm or some other
     1.2. [Cartesian products with bounded symbols](#12-cartesian-products-with-bounded-symbols) <br />
     1.3. [Post-union processing](#13-post-union-processing) <br />
     1.4. [Observing changes from previous executions](#14-observing-changes-from-previous-executions)<br />
-    1.5. [Unit subqueries](#15-unit-subqueries)
+    1.5. [Unit subqueries](#15-unit-subqueries) <br />
+    1.6. [Scoped variables with `CALL (...)`](#16-scoped-variables-with-call-)
 
 2. [Invalid uses of CALL subquery](#2-invalid-uses-of-call-subquery) <br />
     2.1. [Returning variables with the same name as those in the outer scope](#21-returning-variables-with-same-name-as-those-in-the-outer-scope) <br />
     2.2. [Returning non-aliased expressions](#22-returning-non-aliased-expressions) <br />
     2.3. [Referencing outer scope variables that don't exist](#22-referencing-outer-scope-variables-that-dont-exist) <br />
+    2.4. [Using `OPTIONAL CALL` with scoped variables](#24-using-optional-call-with-scoped-variables) <br />
 
 ## 1. Uses of CALL subquery
 
@@ -173,6 +175,55 @@ Output:
 +------------------+
 ```
 
+### 1.6. Scoped variables with `CALL (...)`
+
+Instead of importing outer-scope variables with a leading `WITH` clause, you
+can list them in parentheses directly after `CALL`. Three forms are
+supported:
+
+- `CALL () { ... }` — no outer variables are imported. The subquery sees
+  only what it produces internally.
+- `CALL (v1, v2, ...) { ... }` — only the listed variables are imported.
+- `CALL (*) { ... }` — every variable currently in the outer scope is
+  imported.
+
+Importing only `p` from the outer scope:
+
+```cypher
+MATCH (p:Player)-[:PLAYS_FOR]->(t:Team)
+CALL (p) {
+  WITH p.age / 100.0 AS rating
+  SET p.rating = rating
+  RETURN p.rating AS rating
+}
+RETURN p.name AS playerName, rating, t AS team;
+```
+
+Importing every outer variable with `CALL (*)`:
+
+```cypher
+MATCH (p:Player)-[:PLAYS_FOR]->(t:Team)
+CALL (*) {
+  SET p.lastUpdated = timestamp()
+  SET t.lastUpdated = timestamp()
+}
+RETURN p.name, t.name;
+```
+
+Running a subquery that does not depend on the outer row with `CALL ()`:
+
+```cypher
+UNWIND [0, 1, 2] AS x
+CALL () {
+  RETURN 'hello' AS innerReturn
+}
+RETURN x, innerReturn;
+```
+
+The scoped form is equivalent to using `WITH` to import variables, but
+narrows the subquery's scope explicitly at the boundary, which makes the
+import list visible at a glance.
+
 ## 2. Invalid uses of CALL subquery
 
 ### 2.1. Returning variables with the same name as those in the outer scope
@@ -256,3 +307,20 @@ CALL {
 }
 RETURN DISTINCT n;
 ```
+
+### 2.4. Using `OPTIONAL CALL` with scoped variables
+
+The scoped `CALL (...)` form cannot be combined with `OPTIONAL`:
+
+```cypher
+MATCH (p:Player)
+OPTIONAL CALL (p) {
+  MATCH (p)-[:PLAYS_FOR]->(team:Team)
+  RETURN team.name AS team
+}
+RETURN p.name, team;
+```
+
+The above query results in an error. To make a scoped subquery optional,
+emit a sentinel value from the inner block instead, or fall back to the
+plain `OPTIONAL MATCH` outside the `CALL`.

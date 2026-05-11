@@ -1,0 +1,110 @@
+---
+title: Federated GQL Across Heterogeneous Backends
+description: Run graph queries across non-graph stores like ClickHouse and PostgreSQL through a single GQL endpoint.
+---
+
+# Federated GQL Across Heterogeneous Backends
+
+Most operational data does not live in a graph database. Transactional records
+sit in PostgreSQL. Analytical events sit in ClickHouse. Each store was chosen
+for good reasons — strong OLTP semantics on one side, fast columnar scans on
+the other — and neither team plans to migrate. But the *relationships* between
+the rows in those stores are exactly what an analyst, an application, or an
+agent wants to traverse.
+
+MemGQL exposes any registered backend as a graph behind a single GQL endpoint
+(ISO/IEC 39075). Clients write standard GQL over Bolt; MemGQL parses the query
+once, plans across all connected backends, pushes the maximal sub-plan each
+backend can execute, and joins the rest locally. Tables in PostgreSQL and
+ClickHouse become nodes and edges through a mapping file — no ETL, no schema
+change, no per-vendor query rewrites.
+
+## The Problem
+
+Cross-store relationships in heterogeneous estates run into four recurring
+frictions:
+
+1. **Dialect Drift**: PostgreSQL speaks standard SQL, ClickHouse speaks its own
+   dialect, graph stores speak Cypher or GQL. Each system has its own
+   functions, type coercions, and join semantics. Queries written against one
+   rarely run unchanged on another.
+
+2. **Cross-Store Joins**: Following a foreign key from a row in PostgreSQL to
+   a row in ClickHouse means pulling both sides into the application, matching
+   keys by hand, and re-implementing join logic the database should be doing.
+
+3. **No Native Graph Surface**: Many of the most interesting questions are
+   graph-shaped — "who is connected to whom", "what's reachable in three hops"
+   — but neither relational nor columnar engines offer a first-class
+   pattern-matching syntax.
+
+4. **Operational Fragmentation**: Each backend has its own driver, connection
+   pool, credentials, TLS setup, and monitoring. Application code accumulates
+   a per-store adapter layer that drifts out of sync with the underlying
+   schemas.
+
+## The Solution
+
+MemGQL sits in front of every registered backend and presents a standards-based
+GQL surface. The query engine:
+
+- **Parses once** — the same GQL parser handles queries regardless of which
+  backends they touch.
+- **Plans globally** — a cost-based optimizer decides, per sub-pattern, which
+  backend should execute it. Sub-plans the backend's `CapabilityProfile`
+  supports are pushed down; the rest runs locally.
+- **Joins across stores** — cross-backend joins materialize both sides locally
+  and hash-join with Arrow IPC shuffle, so a `MATCH` that spans ClickHouse and
+  PostgreSQL behaves like any other join.
+- **Maps tables to graph patterns** — a per-connector mapping file declares
+  which tables become nodes, which become edges, and how columns become
+  properties. The relational schema stays untouched.
+
+Backends stay where they are. Their data, security, and operational ownership
+do not change. What changes is that every client — `mgconsole`, an existing
+Bolt driver, a BI tool — connects to one endpoint and writes one language.
+
+## Scenario
+
+- **PostgreSQL** — the system of record for `persons` and their `knows`
+  relationships, governed by OLTP transactions.
+- **ClickHouse** — a columnar store of `companies` and `works_at` events,
+  optimized for analytical scans across billions of rows.
+- **MemGQL** — a single Bolt endpoint on `:7688` that registers both as named
+  graphs and routes each sub-query appropriately.
+
+```
+                          ┌──────────────┐ sql   ┌──────────────┐
+                          │              │──────▶│  PostgreSQL  │
+                          │              │       │ (Identity)   │
+                          │    MemGQL    │       └──────────────┘
+┌──────────────┐          │    :7688     │
+│   mgconsole  │──bolt───▶│              │ http  ┌──────────────┐
+└──────────────┘          │              │──────▶│  ClickHouse  │
+                          └──────────────┘       │ (Analytics)  │
+                                                 └──────────────┘
+```
+
+A composite query like:
+
+```gql
+USE identity MATCH (p:Person {id: $uid})-[:KNOWS]->(f:Person) RETURN f.id AS fid
+UNION ALL
+USE analytics MATCH (p:Person {id: $uid})-[:WORKS_AT]->(c:Company) RETURN c.id AS fid;
+```
+
+is parsed once, dispatched to the two backends in parallel, and merged at the
+coordinator. The application never opens a connection to PostgreSQL or
+ClickHouse directly. Cross-store joins — for example, finding the companies
+where a person's friends work — are expressed as a single GQL pattern; MemGQL
+materializes both sides and joins them locally.
+
+## Why this matters
+
+| Concern | How MemGQL addresses it |
+|---|---|
+| **Standards-based interface** | One ISO/IEC 39075 GQL surface, regardless of backend dialect. |
+| **No migration** | Existing PostgreSQL and ClickHouse deployments stay in place; MemGQL fronts them. |
+| **Graph queries on non-graph stores** | Pattern matching, variable-length paths, and quantified path patterns work over relational and columnar tables. |
+| **Cross-store joins** | Joins between rows in different backends run as first-class GQL, not application glue. |
+| **Capability-aware push-down** | Each connector declares what it can execute; the optimizer pushes down maximal sub-plans. |
