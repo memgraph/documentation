@@ -17,6 +17,7 @@ Currently, we prepared and released the following charts:
 - [Memgraph standalone Helm chart](#memgraph-standalone-helm-chart)
 - [Memgraph high availability Helm chart](#memgraph-high-availability-helm-chart)
 - [Memgraph Lab Helm chart](#memgraph-lab-helm-chart)
+- [Memgraph MCP Helm chart](#memgraph-mcp-helm-chart)
 
 The Helm charts are published on [Artifact
 Hub](https://artifacthub.io/packages/search?org=memgraph&sort=relevance&page=1).
@@ -789,4 +790,147 @@ variable to a higher value to ensure that Memgraph Lab stays connected to Memgra
 when running queries over 65 seconds.
 
 Refer to the [Memgraph Lab documentation](/memgraph-lab/configuration) for details on how to configure Memgraph Lab.
+
+## Memgraph MCP Helm chart
+
+A Helm chart for deploying the [Memgraph MCP
+server](https://github.com/memgraph/ai-toolkit/tree/main/integrations/mcp-memgraph)
+on Kubernetes. The MCP server exposes Memgraph to LLM clients via the [Model
+Context Protocol](/ai-ecosystem/mcp), so you can connect agentic applications
+running in your cluster to a Memgraph backend.
+
+The chart deploys the MCP server as a `Deployment` fronted by a `ClusterIP`
+`Service` on port `8000`. The server connects to a Memgraph instance over Bolt
+using the URL configured via the `MEMGRAPH_URL` environment variable; Memgraph
+itself is not deployed by this chart, so install it separately (for example with
+the [standalone](#memgraph-standalone-helm-chart) or
+[HA](#memgraph-high-availability-helm-chart) chart) before installing
+`memgraph-mcp`.
+
+### Installing the Memgraph MCP Helm chart
+
+Before installing, review the `env` and `authSecret` sections in
+`values.yaml`. The defaults assume Memgraph is reachable at
+`bolt://memgraph-data-0:7687` and that no authentication is required
+(`authSecret.enabled=false`).
+
+To install the chart against an unauthenticated Memgraph instance, run:
+
+```
+helm install <release-name> memgraph/memgraph-mcp
+```
+
+Replace `<release-name>` with a name of your choice for the release.
+
+If your Memgraph deployment requires authentication, create a Kubernetes
+secret with the credentials and enable `authSecret`:
+
+```
+kubectl create secret generic mcp-auth-secret \
+  --from-literal=MEMGRAPH_USER=<your-user> \
+  --from-literal=MEMGRAPH_PASSWORD=<your-password>
+
+helm install <release-name> memgraph/memgraph-mcp \
+  --set authSecret.enabled=true
+```
+
+The secret name and key names are configurable via `authSecret.name`,
+`authSecret.userKey`, and `authSecret.passwordKey`.
+
+#### Changing the default chart values
+
+To change the default chart values, run the command with the specified set of
+flags:
+
+```
+helm install <release-name> memgraph/memgraph-mcp --set <flag1>=<value1>,<flag2>=<value2>,...
+```
+
+Or modify a `values.yaml` file and override the desired values:
+
+```
+helm install <release-name> memgraph/memgraph-mcp -f values.yaml
+```
+
+#### Connecting the MCP server to Memgraph
+
+The MCP server is configured through environment variables passed via the
+`env` list in `values.yaml`. The most important variables are:
+
+| Variable          | Description                                                                                  | Default                          |
+| ----------------- | -------------------------------------------------------------------------------------------- | -------------------------------- |
+| `MEMGRAPH_URL`    | Bolt URL of the target Memgraph instance.                                                    | `bolt://memgraph-data-0:7687`    |
+| `MEMGRAPH_DATABASE` | Memgraph database the MCP server connects to.                                              | `memgraph`                       |
+| `MCP_SERVER`      | MCP server implementation to run. Alternatives: `server`, `memgraph-experimental`.           | `server`                         |
+| `MCP_TRANSPORT`   | Transport used by the MCP server. Alternatives: `streamable-http`, `stdio`.                  | `streamable-http`                |
+| `MCP_READ_ONLY`   | Enable read-only mode, blocking write operations (`CREATE`, `MERGE`, `DELETE`, `SET`, `DROP`). | `true`                         |
+
+Example `values.yaml` snippet connecting the MCP server to a standalone
+Memgraph release named `memgraph` in the same namespace:
+
+```yaml
+env:
+  - name: MEMGRAPH_URL
+    value: bolt://memgraph:7687
+  - name: MEMGRAPH_DATABASE
+    value: memgraph
+  - name: MCP_SERVER
+    value: server
+  - name: MCP_TRANSPORT
+    value: streamable-http
+  - name: MCP_READ_ONLY
+    value: "true"
+
+authSecret:
+  enabled: true
+  name: mcp-auth-secret
+  userKey: MEMGRAPH_USER
+  passwordKey: MEMGRAPH_PASSWORD
+```
+
+Once installed, the MCP server is available inside the cluster at
+`http://<release-name>-memgraph-mcp:8000/mcp`. To reach it from outside the
+cluster, use `kubectl port-forward` or override `service.type` to expose the
+service through a `NodePort` or `LoadBalancer`.
+
+#### Configuration options
+
+The following table lists the configurable parameters of the Memgraph MCP
+chart and their default values.
+
+| Parameter                       | Description                                                                                                                                                | Default                            |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `replicaCount`                  | Number of MCP server replicas.                                                                                                                             | `1`                                |
+| `image.repository`              | MCP server Docker image repository.                                                                                                                        | `docker.io/memgraph/mcp-memgraph`  |
+| `image.tag`                     | Specific tag for the MCP server Docker image.                                                                                                              | `0.1.13`                           |
+| `image.pullPolicy`              | Image pull policy.                                                                                                                                         | `IfNotPresent`                     |
+| `imagePullSecrets`              | List of image pull secrets for pulling from private registries.                                                                                            | `[]`                               |
+| `nameOverride`                  | Override the chart name.                                                                                                                                   | `""`                               |
+| `fullnameOverride`              | Override the fully qualified app name.                                                                                                                     | `""`                               |
+| `podAnnotations`                | Annotations to add to the Pod.                                                                                                                             | `{}`                               |
+| `podLabels`                     | Labels to add to the Pod.                                                                                                                                  | `{}`                               |
+| `defaultPodSecurityContext`     | Default Pod-level security context applied when `podSecurityContext` is empty. Runs as the Memgraph `101:103` user, non-root, with `RuntimeDefault` seccomp. | See `values.yaml`                |
+| `podSecurityContext`            | Pod-level security context. Overrides `defaultPodSecurityContext` when set.                                                                                | `{}`                               |
+| `defaultSecurityContext`        | Default container-level security context applied when `securityContext` is empty. Drops all capabilities, read-only root filesystem, non-root.            | See `values.yaml`                  |
+| `securityContext`               | Container-level security context. Overrides `defaultSecurityContext` when set.                                                                             | `{}`                               |
+| `initContainers`                | Additional init containers to run before the main container starts.                                                                                        | `[]`                               |
+| `service.type`                  | Kubernetes service type.                                                                                                                                   | `ClusterIP`                        |
+| `service.port`                  | Service port exposed by the MCP server.                                                                                                                    | `8000`                             |
+| `service.targetPort`            | Container port the service targets. Defaults to the named `http` port that tracks `service.port`.                                                          | `http`                             |
+| `service.annotations`           | Annotations to add to the service.                                                                                                                         | `{}`                               |
+| `resources`                     | CPU/Memory resource requests/limits for the MCP container.                                                                                                 | `{cpu: 100m, memory: 128Mi}` (requests and limits) |
+| `extraContainers`               | Additional containers (sidecars) to add to the Pod. Each entry is a full container spec.                                                                   | `[]`                               |
+| `nodeSelector`                  | Node selector for Pod scheduling.                                                                                                                          | `{}`                               |
+| `tolerations`                   | Pod tolerations.                                                                                                                                           | `[]`                               |
+| `affinity`                      | Pod affinity rules.                                                                                                                                        | `{}`                               |
+| `livenessProbe`                 | Liveness probe configuration. Rendered through `tpl`, so values may reference other Helm values.                                                           | `GET /health` on `http`, 15s delay, 10s period, 20 failures, 10s timeout |
+| `readinessProbe`                | Readiness probe configuration. Rendered through `tpl`, so values may reference other Helm values.                                                          | `GET /health` on `http`, 15s delay, 10s period, 20 failures, 10s timeout |
+| `env`                           | Environment variables passed to the MCP container. Controls `MEMGRAPH_URL`, `MEMGRAPH_DATABASE`, `MCP_SERVER`, `MCP_TRANSPORT`, and `MCP_READ_ONLY`.       | See `values.yaml`                  |
+| `authSecret.enabled`            | Inject `MEMGRAPH_USER` and `MEMGRAPH_PASSWORD` from a Kubernetes secret.                                                                                   | `false`                            |
+| `authSecret.name`               | Name of the Kubernetes secret holding Memgraph credentials.                                                                                                | `mcp-auth-secret`                  |
+| `authSecret.userKey`            | Key in the secret whose value is passed to the `MEMGRAPH_USER` environment variable.                                                                       | `MEMGRAPH_USER`                    |
+| `authSecret.passwordKey`        | Key in the secret whose value is passed to the `MEMGRAPH_PASSWORD` environment variable.                                                                   | `MEMGRAPH_PASSWORD`                |
+
+Refer to the [MCP documentation](/ai-ecosystem/mcp) for details on how to use
+the Memgraph MCP server with LLM clients.
 
