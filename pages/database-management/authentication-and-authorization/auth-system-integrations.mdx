@@ -61,6 +61,7 @@ can enable them by listing just the scheme names (without a path), e.g.
 * `oidc-entra-id`
 * `oidc-okta`
 * `oidc-custom`
+* `kerberos`
 
 If you are not using the Memgraph Docker image, or if you want to use your own
 custom module, you must provide the full path: `<scheme>:<absolute path to module>`, e.g.
@@ -74,8 +75,9 @@ provide the path, e.g.
 ### Environment variables
 
 The built-in SSO modules (used with the `saml-entra-id`, `saml-okta`,
-`oidc-entra-id`, and `oidc-okta` auth schemes) are further configured using
-**environment variables**. See their respective sections below for more details.
+`oidc-entra-id`, `oidc-okta`, and `kerberos` auth schemes) are further
+configured using **environment variables**. See their respective sections
+below for more details.
 
 > **Note:** Unlike the SSO modules, which can be configured entirely via
 **environment variables**, the LDAP module requires a configuration file
@@ -661,6 +663,154 @@ depending on the SSO provider you want to use.
 Connecting using SSO is supported with the Neo4j Python driver. For the
 instructions on how to connect, check the [Python driver
 docs](/client-libraries/python#connect-with-single-sign-on-sso).
+
+### Kerberos
+
+Memgraph supports Kerberos SSO via a built-in `kerberos.py` auth module.
+Authentication is performed by validating a client-supplied service ticket via
+GSSAPI; authorization is delegated either to **AD/LDAP group membership**
+(default) or a static **principal-to-role** map. The module is registered
+under the `kerberos` auth scheme.
+
+<Callout type="info">
+Memgraph Lab does not currently support Kerberos SSO. Connect to a
+Kerberos-enabled Memgraph instance through a Bolt driver (e.g. the Neo4j
+Python driver).
+</Callout>
+
+#### Module requirements
+
+The Kerberos module is written in Python 3 and uses the `gssapi` package
+(included in the bundled `requirements.txt`, version `1.9.0`). The package
+is preinstalled in the Memgraph Docker image.
+
+When running in the default `ldap` role-mapping mode, the module additionally
+imports `ldap3`, which is **not** bundled. Install it separately:
+
+```
+pip install ldap3
+```
+
+System packages needed at runtime:
+
+- RHEL family: `krb5-libs`
+- Debian family: `libkrb5-3`
+
+(Building Memgraph from source additionally needs `krb5-devel` /
+`libkrb5-dev`.)
+
+#### Enabling Kerberos
+
+Enable the built-in module via `--auth-module-mappings`:
+
+```
+--auth-module-mappings=kerberos
+```
+
+Or, to use a custom path:
+
+```
+--auth-module-mappings=kerberos:/path/to/kerberos.py
+```
+
+#### Server-side configuration
+
+The module is fully configured via environment variables.
+
+{<h5 className="custom-header">Core variables</h5>}
+
+| Variable                                          | Description                                                                                                                                                  | Required |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| `MEMGRAPH_SSO_KERBEROS_KEYTAB`                    | Absolute path to the keytab containing the service principal's key. The module sets `KRB5_KTNAME` to this value.                                             | Yes      |
+| `MEMGRAPH_SSO_KERBEROS_SERVICE_PRINCIPAL`         | Service principal Memgraph runs as, in the form `service/fqdn@REALM`, e.g. `memgraph/dbhost.example.com@EXAMPLE.COM`.                                        | Yes      |
+| `MEMGRAPH_SSO_KERBEROS_ROLE_MAPPING`              | The [role mapping](#role-mapping) string. Use `*:<role>` to map any authenticated principal to a default role.                                               | Yes      |
+| `MEMGRAPH_SSO_KERBEROS_REALM`                     | When set, authenticated principals must belong to this realm; otherwise the request is rejected.                                                             | No       |
+| `MEMGRAPH_SSO_KERBEROS_USERNAME_FIELD`            | What to use as the Memgraph username: `name` (default — the part of the principal before `@`) or `principal` (the full principal).                          | No       |
+| `MEMGRAPH_SSO_KERBEROS_ROLE_MAPPING_MODE`         | `ldap` (default) — query AD/LDAP for group membership and map groups to roles. `principal` — match the Kerberos principal name directly against the mapping. | No       |
+
+{<h5 className="custom-header">LDAP role-mapping mode</h5>}
+
+The variables below apply only when `MEMGRAPH_SSO_KERBEROS_ROLE_MAPPING_MODE`
+is `ldap` (the default).
+
+| Variable                                                       | Description                                                                                                                                          | Required |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_URI`                               | LDAP server URI, e.g. `ldap://dc.example.com:389` or `ldaps://dc.example.com:636`.                                                                   | Yes      |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_BASE_DN`                           | Base DN for the directory, e.g. `DC=example,DC=com`.                                                                                                 | Yes      |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_SEARCH_BASE`                       | Base under which the user lookup is performed. Defaults to `MEMGRAPH_SSO_KERBEROS_LDAP_BASE_DN`.                                                     | No       |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_AUTH`                              | `gssapi` (default) — bind to LDAP via SASL/GSSAPI using the credentials from the service keytab. `simple` — bind with a username and password (set the two variables below). | No       |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_BIND_DN`                           | Bind DN, used only with `LDAP_AUTH=simple`.                                                                                                          | No       |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_BIND_PASSWORD`                     | Bind password, used only with `LDAP_AUTH=simple`.                                                                                                    | No       |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_USER_ATTRIBUTE`                    | LDAP attribute that matches the Kerberos principal name. Defaults to `sAMAccountName` (suitable for AD).                                             | No       |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_USER_OBJECT_CLASS`                 | LDAP object class of user entries. Defaults to `user`.                                                                                               | No       |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_USER_SEARCH_FILTER`                | Custom LDAP user-search filter; use `{username}` as a placeholder. Overrides the two variables above.                                                | No       |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_GROUP_MEMBERSHIP_ATTRIBUTE`        | LDAP attribute holding group memberships on the user entry. Defaults to `memberOf`.                                                                  | No       |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_NESTED_GROUPS_ENABLED`             | `true` to transitively resolve nested groups via AD's `LDAP_MATCHING_RULE_IN_CHAIN` (`1.2.840.113556.1.4.1941`). Defaults to `false`.                | No       |
+| `MEMGRAPH_SSO_KERBEROS_LDAP_NESTED_GROUPS_SEARCH_FILTER`       | Custom nested-group filter; use `{user_dn}` as a placeholder. Defaults to `(&(objectClass=group)(member:1.2.840.113556.1.4.1941:={user_dn}))`.       | No       |
+
+#### Role-mapping examples
+
+Role mapping uses the same syntax as the other SSO modules — see
+[Role mapping](#role-mapping).
+
+In `principal` mode, the left-hand side of each pair is matched against either
+the full Kerberos principal (`alice@EXAMPLE.COM`) or the name before `@`
+(`alice`). In `ldap` mode, the left-hand side is matched against AD group
+**CNs** (the canonical names extracted from group DNs).
+
+```bash
+# principal mode: full principal or name-before-@
+MEMGRAPH_SSO_KERBEROS_ROLE_MAPPING_MODE=principal
+MEMGRAPH_SSO_KERBEROS_ROLE_MAPPING="alice@EXAMPLE.COM:memadmin; bob:memuser"
+```
+
+```bash
+# ldap mode: AD group CNs map to Memgraph roles
+MEMGRAPH_SSO_KERBEROS_ROLE_MAPPING_MODE=ldap
+MEMGRAPH_SSO_KERBEROS_ROLE_MAPPING="Memgraph Admins:memadmin; Memgraph Users:memuser, memdev"
+```
+
+`*:role` is a wildcard that maps any authenticated principal (or any LDAP user
+the search returns) to that role.
+
+#### End-to-end example
+
+A minimal working setup for realm `EXAMPLE.COM` and host
+`dbhost.example.com`:
+
+```bash
+# Memgraph startup
+docker run -it -p 7687:7687 -p 7444:7444 \
+  -e MEMGRAPH_SSO_KERBEROS_KEYTAB=/etc/memgraph/memgraph.keytab \
+  -e MEMGRAPH_SSO_KERBEROS_SERVICE_PRINCIPAL=memgraph/dbhost.example.com@EXAMPLE.COM \
+  -e MEMGRAPH_SSO_KERBEROS_REALM=EXAMPLE.COM \
+  -e MEMGRAPH_SSO_KERBEROS_USERNAME_FIELD=name \
+  -e MEMGRAPH_SSO_KERBEROS_ROLE_MAPPING_MODE=ldap \
+  -e MEMGRAPH_SSO_KERBEROS_LDAP_URI=ldap://dc.example.com:389 \
+  -e MEMGRAPH_SSO_KERBEROS_LDAP_BASE_DN="DC=example,DC=com" \
+  -e MEMGRAPH_SSO_KERBEROS_ROLE_MAPPING="Memgraph Admins:memadmin; Memgraph Users:memuser" \
+  -v /etc/memgraph/memgraph.keytab:/etc/memgraph/memgraph.keytab:ro \
+  memgraph/memgraph \
+  --auth-module-mappings=kerberos
+```
+
+Make sure the `memadmin` and `memuser` roles exist in the database before
+authentication is enabled — see
+[Docker deployment note](#docker-deployment-note).
+
+#### Connecting with the Neo4j Python driver
+
+Memgraph expects the credential to be the **base64-encoded GSSAPI service
+ticket** for the configured service principal. 
+
+```python
+from neo4j import GraphDatabase, kerberos_auth
+
+driver = GraphDatabase.driver(
+    "bolt://dbhost.example.com:7687",
+    auth=kerberos_auth(base64_ticket),  # base64-encoded service ticket
+)
+```
 
 ## Basic authentication
 

@@ -377,6 +377,106 @@ DROP INDEX ON :Label(property1, property2);
 
 ```
 
+### Descending label-property index
+
+By default, a label-property index — single-property or composite — stores
+entries in ascending order of the indexed properties. Queries that use
+`ORDER BY … ASC` can then be served directly from the index, skipping the
+sort step. If your workload frequently sorts in descending order (for example,
+timestamps, scores, or any "newest/largest first" query), you can create a
+descending index using the `WITH CONFIG` clause:
+
+```cypher
+CREATE INDEX ON :Person(age) WITH CONFIG {"order": "DESC"};
+```
+
+A descending index is used to eliminate the sort step for queries that order
+the indexed property in descending order:
+
+```cypher
+MATCH (n:Person) WHERE n.age > 30 RETURN n ORDER BY n.age DESC;
+```
+
+The benefit is especially large when the query also uses `LIMIT`. Without a
+matching index, Memgraph must read all candidate rows, sort them, and then
+return only the top *N*. With a matching descending index, rows are already
+produced in the desired order, so execution can stop as soon as the first
+*N* valid entries are yielded — a "top-N" query becomes O(*N*) index reads
+instead of O(*all matches*) reads plus a sort:
+
+```cypher
+MATCH (n:Person) RETURN n ORDER BY n.age DESC LIMIT 10;
+```
+
+Without the explicit `{"order": "DESC"}` config, the index defaults to
+ascending order — both of the following are equivalent:
+
+```cypher
+CREATE INDEX ON :Person(age);
+CREATE INDEX ON :Person(age) WITH CONFIG {"order": "ASC"};
+```
+
+#### Descending composite index
+
+The `{"order": "DESC"}` configuration applies equally to composite indices. In
+that case, every column in the index is ordered in descending direction:
+
+```cypher
+CREATE INDEX ON :Person(name, age) WITH CONFIG {"order": "DESC"};
+```
+
+A descending composite index can eliminate the sort for queries where *all*
+columns are ordered in the same (descending) direction:
+
+```cypher
+MATCH (p:Person) WHERE p.name > '' RETURN p ORDER BY p.name DESC, p.age DESC;
+```
+
+Mixed-direction `ORDER BY` clauses (for example `ORDER BY p.name ASC, p.age
+DESC`) are not eliminated by the index; use a regular `OrderBy` for those.
+
+#### Coexistence with ascending indices
+
+Ascending and descending indices on the same label and properties are
+independent and can coexist. When both exist, Memgraph automatically picks the
+one whose direction matches the query's `ORDER BY`:
+
+```cypher
+CREATE INDEX ON :Person(age);
+CREATE INDEX ON :Person(age) WITH CONFIG {"order": "DESC"};
+
+MATCH (n:Person) WHERE n.age > 30 RETURN n ORDER BY n.age;       // uses ASC index
+MATCH (n:Person) WHERE n.age > 30 RETURN n ORDER BY n.age DESC;  // uses DESC index
+```
+
+In `SHOW INDEX INFO`, descending indices are listed as `label+property (DESC)`
+to distinguish them from ascending ones.
+
+#### Dropping descending indices
+
+`DROP INDEX ON :Label(property)` without a config drops both the ascending
+and descending index (if they both exist) in a single operation. To drop only
+one of them, pass the matching config:
+
+```cypher
+DROP INDEX ON :Person(age) WITH CONFIG {"order": "DESC"};
+DROP INDEX ON :Person(age) WITH CONFIG {"order": "ASC"};
+```
+
+The same applies to composite indices:
+
+```cypher
+DROP INDEX ON :Person(name, age) WITH CONFIG {"order": "DESC"};
+```
+
+<Callout type="info">
+
+Descending indices are currently supported only in the `IN_MEMORY_TRANSACTIONAL`
+storage mode. Creating a descending index in `ON_DISK_TRANSACTIONAL` mode is
+not yet supported.
+
+</Callout>
+
 ### Edge-type index
 
 <Callout type="info">

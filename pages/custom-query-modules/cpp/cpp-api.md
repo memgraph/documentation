@@ -339,6 +339,18 @@ Inserts a value of given type under field `field_name`.
 ```
 
 ```cpp
+  void Insert(const char *field_name, const Point2d &value)
+```
+
+```cpp
+  void Insert(const char *field_name, const Point3d &value)
+```
+
+```cpp
+  void Insert(const char *field_name, const Enum &value)
+```
+
+```cpp
   void Insert(const char *field_name, const Value &value)
 ```
 
@@ -429,6 +441,18 @@ Sets a return value of given type.
 
 ```cpp
   void SetValue(const Duration &value)
+```
+
+```cpp
+  void SetValue(const Point2d &value)
+```
+
+```cpp
+  void SetValue(const Point3d &value)
+```
+
+```cpp
+  void SetValue(const Enum &value)
 ```
 
 ##### SetErrorMessage
@@ -1801,6 +1825,252 @@ Object is hashable using
 std::hash<mgp::Duration>
 ```
 
+### Point2d
+
+Represents a 2D point with x and y coordinates and a spatial reference identifier (SRID).
+
+#### Constructors
+
+Creates a Point2d object from the copy of the given `mgp_point_2d`.
+
+```cpp
+explicit Point2d(mgp_point_2d *ptr)
+explicit Point2d(const mgp_point_2d *const_ptr)
+```
+
+Creates a Point2d object with the given `x`, `y` coordinates and `srid`.
+
+```cpp
+Point2d(double x, double y, uint16_t srid)
+```
+
+Supported SRIDs: 4326 (WGS-84), 7203 (Cartesian 2D).
+
+Copy and move constructors:
+
+```cpp
+Point2d(const Point2d &other)
+Point2d(Point2d &&other) noexcept
+```
+
+#### Member functions
+
+| Name    | Description                                       |
+| ------- | ------------------------------------------------- |
+| `X`     | Returns the x coordinate.                         |
+| `Y`     | Returns the y coordinate.                         |
+| `Srid`  | Returns the spatial reference identifier (SRID).  |
+| `ToString` | Returns the point's string representation.     |
+
+##### X
+
+Returns the x coordinate of the point.
+
+```cpp
+double X() const
+```
+
+##### Y
+
+Returns the y coordinate of the point.
+
+```cpp
+double Y() const
+```
+
+##### Srid
+
+Returns the SRID (spatial reference identifier) of the point.
+
+```cpp
+uint16_t Srid() const
+```
+
+##### ToString
+
+Returns the point's string representation.
+
+```cpp
+std::string ToString() const
+```
+
+#### Operators
+
+| Name         | Description          |
+| ------------ | -------------------- |
+| `operator==` | comparison operator  |
+| `operator!=` | comparison operator  |
+
+Object is hashable using
+
+```cpp
+std::hash<mgp::Point2d>
+```
+
+### Point3d
+
+Represents a 3D point with x, y, and z coordinates and a spatial reference identifier (SRID).
+
+#### Constructors
+
+Creates a Point3d object from the copy of the given `mgp_point_3d`.
+
+```cpp
+explicit Point3d(mgp_point_3d *ptr)
+explicit Point3d(const mgp_point_3d *const_ptr)
+```
+
+Creates a Point3d object with the given `x`, `y`, `z` coordinates and `srid`.
+
+```cpp
+Point3d(double x, double y, double z, uint16_t srid)
+```
+
+Supported SRIDs: 4979 (WGS-84 3D), 9157 (Cartesian 3D).
+
+Copy and move constructors:
+
+```cpp
+Point3d(const Point3d &other)
+Point3d(Point3d &&other) noexcept
+```
+
+#### Member functions
+
+| Name    | Description                                       |
+| ------- | ------------------------------------------------- |
+| `X`     | Returns the x coordinate.                         |
+| `Y`     | Returns the y coordinate.                         |
+| `Z`     | Returns the z coordinate.                         |
+| `Srid`  | Returns the spatial reference identifier (SRID).  |
+| `ToString` | Returns the point's string representation.     |
+
+##### X
+
+Returns the x coordinate of the point.
+
+```cpp
+double X() const
+```
+
+##### Y
+
+Returns the y coordinate of the point.
+
+```cpp
+double Y() const
+```
+
+##### Z
+
+Returns the z coordinate of the point.
+
+```cpp
+double Z() const
+```
+
+##### Srid
+
+Returns the SRID (spatial reference identifier) of the point.
+
+```cpp
+uint16_t Srid() const
+```
+
+##### ToString
+
+Returns the point's string representation.
+
+```cpp
+std::string ToString() const
+```
+
+#### Operators
+
+| Name         | Description          |
+| ------------ | -------------------- |
+| `operator==` | comparison operator  |
+| `operator!=` | comparison operator  |
+
+Object is hashable using
+
+```cpp
+std::hash<mgp::Point3d>
+```
+
+### Enum
+
+Represents an enum value with a type name and value name.
+
+> **Note:** Enum values can be received as procedure input and inspected (type name, value name, equality), but cannot be returned from procedures.
+
+#### Constructors
+
+Creates an Enum object from the copy of the given `mgp_enum`.
+
+```cpp
+explicit Enum(mgp_enum *ptr)
+explicit Enum(const mgp_enum *const_ptr)
+```
+
+Creates an Enum from type name and value name strings.
+
+```cpp
+Enum(std::string_view type_name, std::string_view value_name)
+```
+
+Copy and move constructors:
+
+```cpp
+Enum(const Enum &other)
+Enum(Enum &&other) noexcept
+```
+
+#### Member functions
+
+| Name        | Description                                      |
+| ----------- | ------------------------------------------------ |
+| `TypeName`  | Returns the type name of the enum.               |
+| `ValueName` | Returns the value name of the enum.              |
+| `ToString`  | Returns the enum's string representation.        |
+
+##### TypeName
+
+Returns the type name of the enum (e.g. `"Status"` for `Status.Active`).
+
+```cpp
+std::string_view TypeName() const
+```
+
+##### ValueName
+
+Returns the value name of the enum (e.g. `"Active"` for `Status.Active`).
+
+```cpp
+std::string_view ValueName() const
+```
+
+##### ToString
+
+Returns the enum's string representation.
+
+```cpp
+std::string ToString() const
+```
+
+#### Operators
+
+| Name         | Description          |
+| ------------ | -------------------- |
+| `operator==` | comparison operator  |
+| `operator!=` | comparison operator  |
+
+Object is hashable using
+
+```cpp
+std::hash<mgp::Enum>
+```
+
 ### Path
 
 A path is a data structure consisting of alternating nodes and relationships, with the start
@@ -2313,6 +2583,22 @@ explicit Value(const Duration &value)
 explicit Value(Duration &&value)
 ```
 
+Spatial type constructors:
+
+```cpp
+explicit Value(const Point2d &value)
+explicit Value(Point2d &&value)
+explicit Value(const Point3d &value)
+explicit Value(Point3d &&value)
+```
+
+Enum type constructors:
+
+```cpp
+explicit Value(const Enum &value)
+explicit Value(Enum &&value)
+```
+
 Copy and move constructors:
 
 ```cpp
@@ -2428,6 +2714,21 @@ Duration ValueDuration() const
 Duration ValueDuration()
 ```
 
+```cpp
+Point2d ValuePoint2d() const
+Point2d ValuePoint2d()
+```
+
+```cpp
+Point3d ValuePoint3d() const
+Point3d ValuePoint3d()
+```
+
+```cpp
+Enum ValueEnum() const
+Enum ValueEnum()
+```
+
 ##### Is[TYPE]
 
 Returns whether the value stored in the `Value` object is of the type in the call.
@@ -2494,6 +2795,18 @@ bool IsZonedDateTime() const
 
 ```cpp
 bool IsDuration() const
+```
+
+```cpp
+bool IsPoint2d() const
+```
+
+```cpp
+bool IsPoint3d() const
+```
+
+```cpp
+bool IsEnum() const
 ```
 
 ##### ToString
@@ -2568,6 +2881,9 @@ The types are listed and described [in the reference guide](/fundamentals/data-t
 - `Type::LocalDateTime`
 - `Type::ZonedDateTime`
 - `Type::Duration`
+- `Type::Point2d`
+- `Type::Point3d`
+- `Type::Enum`
 
 Additionally, operator<< is overloaded for Type enum, and usage of this operator will print the type represented by mgp::Type enum.
 

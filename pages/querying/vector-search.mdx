@@ -19,10 +19,7 @@ specifically operates at `READ_UNCOMMITTED`. This design maintains all
 transactional guarantees at the database level. Only the vector index
 operations use this relaxed isolation level, ensuring the database's ACID
 properties remain intact for all other operations.
-Memgraph supports two kinds of vector indexes:
-
-- **Single-store vector index on nodes**. The vector value is stored only in the vector index backend (USearch); the property store keeps only a reference (vector index ID). This avoids duplicating vector data between the property store and the index.
-- **Vector index on edges**. This uses a different storage model: the vector remains in the edge property store and is also indexed in USearch. Creating, querying, and dropping edge vector indexes is done with separate syntax and procedures from the single-store (node) index.
+Memgraph supports vector indexes on both **nodes** and **edges**. Both use the same **single-store** pattern: the vector value is stored only in the vector index backend (USearch), and the property store keeps only a reference (a vector index ID). This avoids duplicating vector data between the property store and the index. The creation syntax (`CREATE VECTOR INDEX` vs. `CREATE VECTOR EDGE INDEX`) and the search procedure (`vector_search.search()` vs. `vector_search.search_edges()`) differ between the node and the edge variant; `DROP VECTOR INDEX` and `SHOW VECTOR INDEX INFO` work for both.
 
 <Callout type="warning">
 To configure vector search as described in the example, please use the latest Memgraph version.
@@ -36,11 +33,10 @@ systems to find entities based on semantic similarity rather than exact matches.
 
 ## Create vector index 
 
-To run vector search, first create a vector index. The syntax and storage behavior differ for nodes and edges.
+To run vector search, first create a vector index.
+### Vector index on nodes
 
-### Single-store vector index
-
-Single-store vector indices are created with the `CREATE VECTOR INDEX` command. You need to:
+Vector indexes on nodes are created with the `CREATE VECTOR INDEX` command. You need to:
 
 1. Provide the index name
 2. Specify the label and property it applies to
@@ -64,7 +60,7 @@ CREATE VECTOR EDGE INDEX vector_index_name ON :EDGE_TYPE(embedding) WITH CONFIG 
 
 ### Configuration parameters
 
-The following options apply to both single-store vector indexes (nodes) and vector indexes on edges:
+The following options apply to vector indexes on both nodes and edges:
 
 - `dimension: int` ➡ The dimension of vectors in the index.
 - `capacity: int` ➡ Minimum capacity for the vector index, which prefers powers of two and is adjusted internally for optimal performance but will be at least the given value.
@@ -72,6 +68,27 @@ The following options apply to both single-store vector indexes (nodes) and vect
 - `resize_coefficient: int (default=2)` ➡ When the index reaches its capacity, it resizes by multiplying the current capacity by this coefficient, if sufficient memory is available. 
 If resizing fails due to memory limitations, an exception will be thrown. Default value is `2`.
 - `scalar_kind: string (default=f32)` ➡ The [scalar kind](#scalar-kind) used to store each vector component. Smaller types reduce memory usage but may decrease precision.
+
+
+### Using parameters for configuration
+
+The `WITH CONFIG` map accepts query parameters, both for the whole map and for individual values. This lets a client supply the configuration at query time without rebuilding the Cypher string.
+
+Pass the entire config as a parameter:
+
+```cypher
+CREATE VECTOR INDEX idx ON :Label(embedding) WITH CONFIG $config;
+```
+
+with `$config` bound by the client to a map such as `{dimension: 128, capacity: 1000, metric: "cos"}`.
+
+Or parameterize individual values:
+
+```cypher
+CREATE VECTOR INDEX idx ON :Label(embedding) WITH CONFIG {"dimension": $dim, "capacity": $cap};
+```
+
+Both forms work for `CREATE VECTOR INDEX` and `CREATE VECTOR EDGE INDEX`.
 
 ### Using a function for configuration
 
@@ -130,7 +147,7 @@ Additionally, the same information can be retrieved with the `SHOW VECTOR INDEX 
 - `metric: string` ➡ [Similarity metric](#similarity-metrics) used for vector search.
 - `size: int` ➡ The number of entries in the vector index.
 - `scalar_kind: string` ➡ The [scalar kind](#scalar-kind) used for each vector element.
-- `index_type: string` ➡ The type of the index. For a single-store vector index on nodes, the output is `label+property_vector`; for an index on edges, it is `edge-type+property_vector`.
+- `index_type: string` ➡ The type of the index. For a vector index on nodes, the output is `label+property_vector`; for a vector index on edges, it is `edge-type+property_vector`.
 
 {<h3 className="custom-header"> Usage: </h3>}
 
@@ -250,6 +267,10 @@ Two fields are relevant:
 
 Together, these two fields sum to `memory_tracked` (the total tracked allocation). The instance-level `--memory-limit` applies to the combined total: if inserting a vector would exceed the limit, Memgraph throws a `Memory limit exceeded` error.
 
+<Callout type="info">
+With the [AI Platform license](/database-management/enabling-memgraph-enterprise#license-types), the license-imposed memory limit gates only `graph_memory_tracked`. Vector index memory grows up to the system `--memory-limit`, so embedding storage does not consume the licensed graph capacity.
+</Callout>
+
 <Callout type="warning">
 Deleting vertices or removing a vector property from nodes does **not** free `vector_index_memory_tracked`. However, that memory is reused when new vectors are inserted into the same index, so the reserved capacity is not wasted. Memory is fully released only when the entire index is dropped with `DROP VECTOR INDEX`.
 </Callout>
@@ -263,7 +284,7 @@ DROP VECTOR INDEX vector_index_name;
 ```
 
 <Callout type="warning">
-**Single-store vector index (nodes only):** When you drop a single-store vector index, Memgraph must move all vector data from USearch back into the property store. Every affected node's property is rewritten from a vector index ID to the full vector. This can be **slow** (one write per indexed node) and **memory costly** (vectors are stored in the property store as 64-bit values, increasing property store size). 
+**Drop cost:** When you drop a vector index, Memgraph must move all vector data from USearch back into the property store. Every affected node's or edge's property is rewritten from a vector index ID to the full vector. This can be **slow** (one write per indexed entry) and **memory costly** (float components are stored in the property store at the precision set by `--storage-floating-point-resolution-bits`, default 64-bit, increasing property store size).
 The same effect occurs when you **remove a label** from a node that had a vector index on that label: if no other vector index references that property, the vector is restored from USearch to the property store. Plan accordingly when dropping indexes or changing labels on large datasets.
 </Callout>
 

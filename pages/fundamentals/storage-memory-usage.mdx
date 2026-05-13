@@ -683,6 +683,15 @@ memory limit is exceeded, only the queries that don't require additional memory
 are allowed. If the memory limit is exceeded while a query is running, the query
 is aborted and its transaction becomes invalid.
 
+The effective allocation limit (shown as `global_runtime_allocation_limit` in
+`SHOW STORAGE INFO`) is set to the **lower** of the `--memory-limit`
+configuration flag and the [Enterprise license memory
+limit](/database-management/enabling-memgraph-enterprise#upgrading-or-downgrading-the-license).
+This limit applies to the entire Memgraph instance across all databases. To set
+a per-database / per-tenant memory limit (which also covers query memory usage
+against a single database), visit [Tenant
+Profiles](/database-management/tenant-profiles).
+
 If the flag is set to 0, it will use the default values.
 Default values are:
 -  90% of the total memory if the system doesn't have swap memory.
@@ -783,6 +792,87 @@ SHOW STORAGE INFO;
 
 Find out more about `SHOW STORAGE INFO` query on [Server
 stats](/database-management/server-stats).
+
+### Per-database memory tracking <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+In [multi-tenant](/database-management/multi-tenancy) deployments, Memgraph Enterprise
+tracks memory for each database independently. Each database's allocations are
+counted against both the database's own limit and the global instance limit,
+ensuring no single database can starve others of resources.
+
+Storage, query execution, and vector index allocations are all attributed to the
+database that originated them, giving a complete picture of per-database memory
+usage.
+
+Per-database tracking enables several new queries:
+
+```cypher
+SHOW STORAGE INFO ON DATABASE mydb;
+SHOW MEMORY INFO;
+```
+
+`SHOW STORAGE INFO ON DATABASE` returns per-database storage and memory fields:
+
+| Field                         | Description                                               |
+|-------------------------------|-----------------------------------------------------------|
+| `graph_memory_tracked`        | Storage memory (vertices, edges, properties)              |
+| `query_memory_tracked`        | Query execution memory                                    |
+| `vector_index_memory_tracked` | Vector index memory                                       |
+| `tenant_memory_tracked`       | Current tracked memory for the database                   |
+| `tenant_peak_memory_tracked`  | Peak memory tracked                                       |
+| `tenant_memory_limit`         | Limit from the tenant profile, or `"unlimited"`           |
+
+`SHOW MEMORY INFO` lists all databases with their profile and current usage:
+
+| Field                   | Description                                                 |
+|-------------------------|-------------------------------------------------------------|
+| `name`                  | Database name                                               |
+| `tenant_memory_tracked` | Current tracked memory for the database                     |
+| `profile`               | Tenant profile name, or `null`                              |
+| `tenant_memory_limit`   | Configured limit, or `"unlimited"`                          |
+
+`SHOW STORAGE INFO ON DATABASE` requires the `STATS` privilege.
+`SHOW MEMORY INFO` requires no privilege beyond a valid Enterprise license.
+Both queries are available only in the Memgraph Enterprise Edition.
+
+### How the memory fields relate
+
+The global fields in `SHOW STORAGE INFO` and the per-database fields in
+`SHOW STORAGE INFO ON DATABASE` form a hierarchy:
+
+```text
+Per-database memory tracking flow (SHOW STORAGE INFO ON DATABASE columns)
+tenant_memory_tracked ──────────────────────── total per-database
+├── graph_memory_tracked       (vertices, edges, properties)
+├── query_memory_tracked       (query runtime, not storage)
+└── vector_index_memory_tracked (vector indices)
+
+Per-database fields also include:
+  tenant_peak_memory_tracked   highest value seen so far
+  tenant_memory_limit          cap from tenant profile, or "unlimited"
+
+Global relationship:
+  graph_memory_tracked       (per-DB)  ──sum──▶  graph_memory_tracked       (global)
+  vector_index_memory_tracked (per-DB)  ──sum──▶  vector_index_memory_tracked (global)
+  query_memory_tracked        (per-DB)  counts only against the per-DB total;
+                               at the global level it is accounted via
+                               the global graph tracker's arena hooks,
+                               not double-counted under graph or vector.
+```
+
+<Callout type="info">
+The per-database `query_memory_tracked` field tracks only **runtime
+memory** — intermediate results, aggregations, and operator state during query
+execution. It does **not** include storage allocations made by the query (those
+are counted in `graph_memory_tracked`). This is different from the
+`QUERY MEMORY LIMIT` clause, which caps both runtime and storage allocations
+together.
+</Callout>
+
+Per-database memory limits are enforced via
+[tenant profiles](/database-management/tenant-profiles). When a limit is hit,
+any query that would allocate memory beyond the cap is rejected — read queries
+are not exempt.
 
 ### Reduce memory usage
 

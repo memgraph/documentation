@@ -19,7 +19,7 @@ import {CommunityLinks} from '/components/social-card/CommunityLinks'
 3. [Write query forbidden on the replica!](#error-2)
 4. [Query forbidden on the replica!](#error-2)
 5. [Replication clause not allowed in multicommand transactions.](#error-3)
-6. [Replication Exception: At least one SYNC replica has not confirmed committing last transaction. Check the status of the replicas using 'SHOW REPLICAS' query.](#error-4)
+6. [Failed to replicate to SYNC/STRICT_SYNC replica 'replica_name': reason.](#error-4)
 
 
 ## Warning
@@ -44,11 +44,52 @@ MAIN is the only source of truth.
 
 System queries cannot be executed inside a multicommand/explicit transaction.
 
-## At least one of the SYNC replicas has not confirmed committing [#error-4]
+## Replication failure error [#error-4]
 
-This is a spurious error. While it is true that a SYNC replica has failed to
-commit, it does not mean MAIN has not committed.
-NOTE: Future releases will move this error under a notification instead.
+When a transaction fails to replicate to one or more SYNC or STRICT_SYNC
+replicas, Memgraph returns an error that identifies exactly which replicas
+failed and why. The error message follows this format:
+
+```
+Failed to replicate to SYNC replica 'instance_1': <reason>.
+Replica will be recovered automatically.
+Transaction is still committed on the main instance and other alive replicas.
+```
+
+When multiple replicas fail, each failure is listed with its replica name, 
+replication mode, and specific reason:
+
+```
+Failed to replicate to SYNC replicas 'instance_1' and 'instance_2': <reason>.
+Replicas will be recovered automatically.
+Transaction is still committed on the main instance and other alive replicas.
+```
+
+The possible failure reasons are:
+
+| Reason | Description |
+|--------|-------------|
+| `replica is not reachable or not in sync with the main` | The replica is down, behind, or the connection could not be established. |
+| `failed to obtain RPC lock (another transaction is in progress)` | Another replication transaction is already in progress on that replica. |
+| `RPC communication error` | A generic error occurred during the RPC call. |
+| `replica has diverged from main` | The replica's data has diverged and manual recovery may be needed. |
+| `RPC timeout while replicating` | The MAIN timed out waiting for a response from the replica. |
+
+The error message also indicates the transaction outcome:
+- **"Transaction is still committed on the main instance and other alive replicas."** — 
+  This appears for SYNC replicas. The transaction succeeded on MAIN despite the
+  replica failure.
+- **"Transaction was aborted on all instances."** — This appears for STRICT_SYNC
+  replicas. The two-phase commit protocol ensures that if any STRICT_SYNC replica
+  fails, the transaction is rolled back everywhere.
+
+<Callout type="info">
+Failed replicas will be recovered automatically. Check the status of replicas
+using the `SHOW REPLICAS` query.
+</Callout>
+
+If the failure reason is an RPC timeout, the error message includes additional
+guidance about adjusting the `deltas_batch_progress_size` coordinator setting.
 
 ## Snapshots are disabled for replicas [#warning-1]
 
