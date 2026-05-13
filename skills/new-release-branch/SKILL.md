@@ -122,29 +122,33 @@ Make sure to do:
 Milestones
 * Memgraph -> <milestone_url>
 
-### Memgraph PRs Docs Needed
+### Docs Integration Tracking
 
-#### memgraph
+#### Breaking changes PRs
 
-- [ ] {{memgraph_pr_link}} -> {{documentation_pr_link}} {{@author}}
+- [ ] https://github.com/memgraph/memgraph/pull/NNNN — short title @author
 
-#### helm-charts
+#### Docs needed (Memgraph PR → Docs PR)
 
-- [ ] {{helm-charts_pr_link}} -> {{documentation_pr_link}} {{@author}}
+- [ ] https://github.com/memgraph/memgraph/pull/NNNN → https://github.com/memgraph/documentation/pull/MMMM @author
+- [ ] https://github.com/memgraph/memgraph/pull/NNNN → no doc PR yet @author
 
-#### prometheus-exporter
+#### Changelog (all PRs requiring a changelog entry)
 
-- [ ] {{prometheus-exporter_pr_link}} -> {{documentation_pr_link}} {{@author}}
-
-### Release Notes Required
-
-#### memgraph
-
-- [ ] {{memgraph_pr_link}} {{@author}}
+- [ ] https://github.com/memgraph/memgraph/pull/NNNN @author
 ~~~
 
 Replace `<milestone_url>` with the actual URL provided by the user.
-Keep the `{{...}}` placeholders as-is — they are filled in manually later.
+The `NNNN` / `MMMM` / `@author` / `short title` placeholders are filled in manually
+as PRs are merged — remove the example lines and replace them with real entries.
+Rules for each section:
+- **Breaking changes PRs** — one line per merged PR carrying the `breaking` label.
+- **Docs needed** — one line per merged PR labeled `Docs needed`; end with the doc PR link
+  (or `no doc PR yet`) and the code PR author's `@handle`. Tick `[x]` once the doc PR is merged.
+- **Changelog** — one line per merged PR labeled `Docs needed` **or** `Docs - changelog only`;
+  end with the author's `@handle`. This section deliberately duplicates `Docs needed` entries —
+  it tracks the changelog entry independently of the doc page. Tick `[x]` once the entry lands
+  in `release-notes.mdx`.
 
 ## Step 6 — Update the milestone description
 

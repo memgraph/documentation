@@ -75,6 +75,41 @@ This ensures:
 - **Transparency:** Clients work seamlessly whether they connect to leaders or
   followers.
 
+### Routing table TTL and refresh behavior
+
+Because routing is entirely client-side, the driver caches the routing table and
+decides when to refresh it. There are two triggers:
+
+1. **TTL expiration.** Memgraph returns a TTL alongside the routing table, and
+   it is **hard-coded to 5 minutes**. Once the TTL expires, the driver fetches
+   a new routing table from a coordinator on the next request.
+
+2. **Driver-detected failure.** If the driver notices that the cached routing
+   table is wrong, it refreshes it before retrying:
+
+   - `execute_read` refreshes the routing table when all read instances from the previous routing table become unavailable.
+   - `execute_write` refreshes the routing table when the **MAIN goes down**.
+   - `session.run` does **not** trigger a refresh on failure - it is up to the
+     application to handle the error and retry.
+
+<Callout type="warning">
+
+The driver only refreshes the routing table for failures that match the query
+type it dispatched. This means some topology changes stay hidden until the TTL
+expires:
+
+- If the **set of REPLICAs changes** (a REPLICA is added, removed, or swapped)
+  and the driver is only issuing **write** queries, the routing table is not
+  refreshed.
+- If the **MAIN changes** to an instance that was not part of the previously
+  cached routing table and the driver is only issuing **read** queries, the
+  routing table is not refreshed.
+
+In both cases, the routing table will eventually self-heal after the 5-minute
+TTL expires.
+
+</Callout>
+
 ### Routing examples
 
 **WRITE query** using Bolt+routing - routed to MAIN:

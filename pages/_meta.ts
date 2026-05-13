@@ -14,7 +14,7 @@ export default {
   "deployment": "Deployment",
   "clustering": "Clustering",
   "data-streams": "Data streams",
+  "memgraph-zero": "Memgraph Zero",
   "help-center": "Help center",
-  "preview": "Preview",
   "release-notes": "Release notes",
 }
