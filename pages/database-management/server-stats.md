@@ -118,7 +118,7 @@ SHOW LICENSE INFO;
 | is_valid          | Whether the license is currently valid. Uses the same validation logic as enterprise feature checks. |
 | license_type      | `enterprise` / `ai_platform` / `oem`                                                                  |
 | valid_until       | Date when the license expires, or `FOREVER` for non-expiring licenses.                               |
-| memory_limit      | The maximum `memory_tracked` value allowed by this license (in GiB). When `memory_tracked` (from `SHOW STORAGE INFO`) reaches this limit, write queries are blocked. |
+| memory_limit      | The maximum `global_memory_tracked` value allowed by this license (in GiB). When `global_memory_tracked` (from `SHOW STORAGE INFO`) reaches this limit, write queries are blocked. |
 | status            | Descriptive status of the license validity.                                                          |
 
 If no license has been provided, `is_valid` is `false` and `status` reads
