@@ -1,0 +1,147 @@
+---
+title: Oracle
+description: Connect MemGQL to Oracle Database (incl. Oracle Database Free 23ai).
+---
+
+# Oracle
+
+The Oracle connector (`CONNECTOR_TYPE=oracle`) translates GQL queries into
+Oracle-dialect SQL and executes them against Oracle Database 19c+, including
+[Oracle Database Free 23ai](https://www.oracle.com/database/free/). It requires
+a [mapping file](../quick-start.mdx#mapping-file) that maps graph patterns to
+relational tables.
+
+The driver is [oracle-rs](https://crates.io/crates/oracle-rs), a **pure-Rust**
+implementation of Oracle's TNS wire protocol, pooled via
+[deadpool-oracle](https://crates.io/crates/deadpool-oracle). No OCI / ODPI-C /
+Instant Client is required at build or runtime — the `memgraph/memgql:latest`
+Docker image ships only the bolt server binary plus TLS roots, and `cargo run`
+works on macOS, Linux, and Windows without any extra system packages.
+
+## 1. Start Oracle Database Free 23ai
+
+```bash
+docker network create memgql-net
+
+docker run -d --rm \
+    --name oracle-dev \
+    --network memgql-net \
+    -p 1521:1521 \
+    --env ORACLE_PASSWORD=oracle \
+    --env APP_USER=app \
+    --env APP_USER_PASSWORD=oracle \
+    gvenzl/oracle-free:23-slim-faststart
+```
+
+The first start downloads the image and bootstraps the PDB (`FREEPDB1`); this
+takes ~2-3 minutes. Subsequent starts are near-instant. Watch readiness with:
+
+```bash
+docker logs -f oracle-dev   # wait for: DATABASE IS READY TO USE!
+```
+
+## 2. Seed data
+
+```bash
+docker exec -i oracle-dev bash -lc \
+    "sqlplus -L -S system/oracle@//localhost:1521/FREEPDB1" << 'SQL'
+WHENEVER SQLERROR EXIT FAILURE
+SET ECHO OFF FEEDBACK OFF HEADING OFF
+
+CREATE TABLE persons (
+    id   NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR2(255) NOT NULL,
+    age  NUMBER
+);
+
+CREATE TABLE companies (
+    id   NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR2(255) NOT NULL
+);
+
+CREATE TABLE knows (
+    id      NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    from_id NUMBER NOT NULL REFERENCES persons(id),
+    to_id   NUMBER NOT NULL REFERENCES persons(id)
+);
+
+CREATE TABLE works_at (
+    id         NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    person_id  NUMBER NOT NULL REFERENCES persons(id),
+    company_id NUMBER NOT NULL REFERENCES companies(id)
+);
+
+INSERT INTO persons (name, age) VALUES ('Alice', 30);
+INSERT INTO persons (name, age) VALUES ('Bob',   25);
+INSERT INTO companies (name)     VALUES ('Acme Corp');
+INSERT INTO knows (from_id, to_id) VALUES (1, 2);
+INSERT INTO works_at (person_id, company_id) VALUES (1, 1);
+COMMIT;
+EXIT
+SQL
+```
+
+## 3. Start MemGQL
+
+```bash
+docker run --rm \
+    --name memgql \
+    --network memgql-net \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTOR_TYPE=oracle \
+    --env ORACLE_URL="oracle://system:oracle@oracle-dev:1521/FREEPDB1" \
+    --env MAPPING_FILE=/data/mapping.json \
+    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    -v ./mapping.json:/data/mapping.json \
+    memgraph/memgql:latest
+```
+
+## 4. Connect
+
+```bash
+mgconsole --port 7688
+```
+
+## 5. Query
+
+```gql
+MATCH (p:Person) RETURN p.name, p.age;
+```
+
+```gql
+MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
+```
+
+```gql
+MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
+```
+
+## Dialect notes
+
+- Positional bind variables use Oracle's native `:1`, `:2`, … form.
+- `LIMIT n OFFSET m` is rendered as the SQL-standard
+  `OFFSET m ROWS FETCH NEXT n ROWS ONLY` (Oracle 12c+).
+- Aliased single-table `DELETE` is `DELETE FROM table alias WHERE alias.col …`
+  — Oracle accepts table aliases but does not allow the `AS` keyword in this
+  position.
+- No `INSERT … RETURNING *`. Oracle supports `RETURNING <cols> INTO :out`, but
+  this is bind-variable based and the planner stays bind-agnostic; the executor
+  uses it only when the caller needs the auto-generated key.
+- Identifiers from the mapping file are emitted unquoted, so Oracle's
+  default UPPERCASE folding applies — match your mapping `table` / `id_column`
+  spellings to your physical schema accordingly.
+
+## Multi-connection mode
+
+Inside `CONNECTOR_TYPE=multi`, register Oracle the same way as any other
+backend:
+
+```gql
+ADD MAPPING social FROM '/data/mapping.json';
+ADD CONNECTOR ora TYPE oracle URI 'oracle://system:oracle@oracle-dev:1521/FREEPDB1' MAPPING social;
+CONNECT ora AS ora_conn;
+USE CONNECTION ora_conn MATCH (n:Person) RETURN n.name LIMIT 5;
+```
+
+For environment variables, see [Reference](../reference.mdx#oracle-oracle).
