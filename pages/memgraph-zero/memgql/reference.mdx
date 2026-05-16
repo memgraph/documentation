@@ -3,6 +3,60 @@ title: Reference
 description: All the details about syntax and various configs
 ---
 
+## Supported GQL Query Features
+
+What works today, split by backend category. "Cypher backends" means
+Memgraph and Neo4j (translation is largely passthrough); "SQL backends"
+means PostgreSQL, MySQL and DuckDB.
+
+ClickHouse, Apache Iceberg, and Apache Pinot are also supported as
+connectors but with a narrower verified surface. See each connector's page for the exact list of features each one
+supports.
+
+| Feature                                       | Cypher backends   | SQL backends                                |
+|-----------------------------------------------|-------------------|---------------------------------------------|
+| `MATCH` / `WHERE` / `RETURN`                  | ✓                 | ✓                                           |
+| Pattern-level `WHERE` (`MATCH (n WHERE …)`)   | ✓                 | ✓                                           |
+| Multi-MATCH (cross-join)                      | ✓                 | ✓                                           |
+| `OPTIONAL MATCH` (LEFT JOIN semantics)        | ✓                 | ✓                                           |
+| `WITH` pipeline boundary (scope D)            | ✓                 | ✓                             |
+| `WITH DISTINCT` / `WITH … ORDER BY … LIMIT N` | ✓                 | ✓                                           |
+| Chained `WITH … WITH …`                       | ✓                 | ✓                                           |
+| Whole-node `WITH n` carry-through             | ✓                 | ✓                                           |
+| `MATCH (n)-[r:R]->(m)` typed edge expansion   | ✓                 | ✓                                           |
+| Untyped edge `()-[]->(b)` (union over types)  | ✓                 | ✓                                           |
+| `UNION` / `UNION ALL` / `UNION DISTINCT`      | ✓                 | ✓                                           |
+| `INTERSECT` / `EXCEPT`                        | ✗                 | ✗                                           |
+| Quantified path `(){m,n}` — bounded           | ✓                 | ✓                            |
+| Quantified path `(){m,}` — unbounded          | ✓                 | ✗                                           |
+| Shortest-path (`ALL SHORTEST` / `ANY SHORTEST` / `SHORTEST k`) | ✓ | ✗                                |
+| Map projections `RETURN n {.id, .title}`      | ✓                  | ✓                  |
+| `IN` list membership `WHERE x IN […]`         | ✓                 | ✓                                           |
+| `STARTS WITH` / `ENDS WITH` / `CONTAINS`      | ✓                 | ✓                              |
+| `collect()` / `collect_list()` (aggregate)    | ✓                  | ✓          |
+| `count`, `sum`, `avg`, `min`, `max`           | ✓                 | ✓                                           |
+| `COUNT(DISTINCT …)`                           | ✓                 | ✓                                           |
+| Arithmetic `+ - * / %`                        | ✓                 | ✓                                           |
+| `CASE WHEN … THEN … ELSE … END`               | ✓                 | ✓                                           |
+| `COALESCE`, `NULLIF`                          | ✓                 | ✓                                           |
+| Temporals (`date`, `datetime`, `localTime`, …) | ✓                | ✗                          |
+| `INSERT (a {…}) RETURN a.x`                   | ✓                 | ✓                                           |
+| `DELETE`                                      | ✓                 | ✓                                           |
+| `DETACH DELETE`                               | ✓                 | ✗                                           |
+| `SET` (property update)                       | ✓                 | ✗                                           |
+| `REMOVE` (property delete)                    | ✓                 | ✗                                           |
+
+### Known limitations
+
+- **Unbounded variable-length paths on SQL backends** (`()-[*]->()`)
+  return an actionable error.
+- **`MATCH p = (...)` path binding** on quantified traversals
+  (`MATCH p = (a){1,3}(b) RETURN p`) is not yet supported on SQL
+  backends. Drop the path binding or run the query against a Cypher
+  backend.
+- **Whole-node `RETURN n`** over SQL backends projects scalar columns;
+  the Bolt Node struct shape is reserved for Cypher backends today.
+
 ## Graph Management Query Syntax
 
 ```
@@ -96,11 +150,13 @@ connections.
 | `neo4j-gql`    | GQL -> Cypher      | Neo4j                            |
 | `postgres`     | GQL -> SQL         | PostgreSQL                       |
 | `mysql`        | GQL -> SQL         | MySQL 8.0+                       |
+| `oracle`       | GQL -> SQL         | Oracle 19c+ (incl. Free 23ai)    |
 | `duckdb`       | GQL -> SQL         | DuckDB (embedded)                |
 | `clickhouse`   | GQL -> SQL         | ClickHouse                       |
 | `iceberg`      | GQL -> SQL         | Iceberg via Trino                |
 | `pinot`        | GQL -> SQL         | Apache Pinot                     |
 | `multi`        | Per-connector      | Multiple backends simultaneously |
+
 
 #### Memgraph (`memgraph`, `memgraph-gql`)
 
@@ -133,6 +189,20 @@ connections.
 |----------------|-----------------------------------------------|------------------------------------------|
 | `MYSQL_URL`    | `mysql://root:mysql@localhost:3306/test`      | MySQL connection URL (`mysql://user:pass@host:port/database`) |
 | `MAPPING_FILE` | _(none, uses built-in default)_               | Path to JSON mapping file                |
+
+#### Oracle (`oracle`)
+
+| Variable        | Default                                                  | Description                              |
+|-----------------|----------------------------------------------------------|------------------------------------------|
+| `ORACLE_URL`    | `oracle://system:oracle@localhost:1521/FREEPDB1`         | Easy Connect URL (`oracle://user:pass@host:port/service_name`). The default targets [Oracle Database Free 23ai](https://www.oracle.com/database/free/) (service `FREEPDB1`). |
+| `MAPPING_FILE`  | _(none, uses built-in default)_                          | Path to JSON mapping file (same format as Postgres) |
+
+The Oracle connector uses [oracle-rs](https://crates.io/crates/oracle-rs), a
+pure-Rust implementation of Oracle's TNS wire protocol, pooled via
+[deadpool-oracle](https://crates.io/crates/deadpool-oracle). No OCI / ODPI-C
+/ Instant Client is required at build or runtime — the bundled Docker image
+ships only the bolt server binary plus TLS roots, and local builds work on
+macOS, Linux, and Windows without any extra system packages.
 
 #### DuckDB (`duckdb`)
 
