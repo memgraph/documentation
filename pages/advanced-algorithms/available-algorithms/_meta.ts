@@ -13,6 +13,7 @@ export default {
   "convert_c": "convert_c",
   "do": "do",
   "create": "create",
+  "cross_database": "cross_database",
   "cugraph": "cugraph",
   "cycles": "cycles",
   "date": "date",  
