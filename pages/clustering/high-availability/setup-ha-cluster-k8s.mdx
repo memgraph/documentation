@@ -190,7 +190,8 @@ All Memgraph HA instances run as Kubernetes `StatefulSet` workloads, each with a
 single pod. Depending on configuration, the pod contains two or three
 containers:
 - **memgraph-coordinator** - runs the Memgraph binary.
-- **Optional init container** - enabled when `sysctlInitContainer.enabled` is set.
+- **Optional sysctl init container** - enabled when `sysctlInitContainer.enabled` is set.
+- **Optional fix-ownership init container** - enabled when `fixOwnershipInitContainer.enabled` is set. See [Manual ownership fix](#manual-ownership-fix).
 
 Memgraph processes run as the non-root **memgraph** user with **no Linux capabilities
 and no privilege escalation**.
@@ -397,6 +398,36 @@ Use the `sysctlInitContainer` to configure kernel parameters required for
 high-memory workloads, such as increasing:
 
 - [`vm.max_map_count`](/database-management/system-configuration#increasing-memory-map-areas)
+
+
+### Manual ownership fix
+
+Some storage drivers (notably `rancher.io/local-path`) do not honor pod-level
+`fsGroup`, leaving the volume root owned by `root:root`. Because Memgraph runs
+as a non-root user, its storage directory ownership assertion (process euid ==
+data directory owner uid) fails on startup.
+
+When `fixOwnershipInitContainer.enabled` is set to `true`, an init container
+runs as root before Memgraph starts and `chown`s the lib, log, and core-dumps
+mount points to `memgraphUserId:memgraphGroupId`. The container drops all Linux
+capabilities except `CHOWN`, uses a read-only root filesystem, and disables
+privilege escalation.
+
+To enable it:
+
+```yaml
+fixOwnershipInitContainer:
+  enabled: true
+  image:
+    repository: docker.io/library/busybox
+    tag: 1.37.0
+    pullPolicy: IfNotPresent
+```
+
+The container only chowns the mount paths that exist for the role — `/var/log/memgraph`
+is included when `storage.<role>.createLogStorageClaim` is `true`, and
+`storage.<role>.coreDumpsMountPath` is included when `storage.<role>.createCoreDumpsClaim`
+is `true`.
 
 
 ### Authentication
@@ -1008,7 +1039,7 @@ and their default values.
 | `storage.data.coreDumpsStorageSize`                        | Size of the core dumps PVC on data instances                                                                 | `10Gi`                         |
 | `storage.data.coreDumpsMountPath`                          | Mount path for core dumps on data instances                                                                  | `/var/core/memgraph`           |
 | `storage.data.coreDumpsImage.repository`                   | Image repository for the data instance core-dumps init container.                                            | `docker.io/library/busybox`    |
-| `storage.data.coreDumpsImage.tag`                          | Image tag for the data instance core-dumps init container.                                                   | `latest`                       |
+| `storage.data.coreDumpsImage.tag`                          | Image tag for the data instance core-dumps init container.                                                   | `1.37.0`                       |
 | `storage.data.coreDumpsImage.pullPolicy`                   | Image pull policy for the data instance core-dumps init container.                                           | `IfNotPresent`                 |
 | `storage.data.extraVolumes`                                | Additional volumes to add to data instance pods                                                              | `[]`                           |
 | `storage.data.extraVolumeMounts`                           | Additional volume mounts to add to data instance containers                                                  | `[]`                           |
@@ -1024,7 +1055,7 @@ and their default values.
 | `storage.coordinators.coreDumpsStorageSize`                | Size of the core dumps PVC on coordinators                                                                   | `10Gi`                         |
 | `storage.coordinators.coreDumpsMountPath`                  | Mount path for core dumps on coordinators                                                                    | `/var/core/memgraph`           |
 | `storage.coordinators.coreDumpsImage.repository`           | Image repository for the coordinator core-dumps init container.                                              | `docker.io/library/busybox`    |
-| `storage.coordinators.coreDumpsImage.tag`                  | Image tag for the coordinator core-dumps init container.                                                     | `latest`                       |
+| `storage.coordinators.coreDumpsImage.tag`                  | Image tag for the coordinator core-dumps init container.                                                     | `1.37.0`                       |
 | `storage.coordinators.coreDumpsImage.pullPolicy`           | Image pull policy for the coordinator core-dumps init container.                                             | `IfNotPresent`                 |
 | `storage.coordinators.extraVolumes`                        | Additional volumes to add to coordinator pods                                                                | `[]`                           |
 | `storage.coordinators.extraVolumeMounts`                   | Additional volume mounts to add to coordinator containers                                                    | `[]`                           |
@@ -1078,8 +1109,12 @@ and their default values.
 | `sysctlInitContainer.enabled`                              | Enable the init container to set sysctl parameters                                                           | `true`                         |
 | `sysctlInitContainer.maxMapCount`                          | Value for `vm.max_map_count` to be set by the init container                                                 | `262144`                       |
 | `sysctlInitContainer.image.repository`                     | Image repository for the sysctl init container                                                               | `library/busybox`              |
-| `sysctlInitContainer.image.tag`                            | Image tag for the sysctl init container                                                                      | `latest`                       |
+| `sysctlInitContainer.image.tag`                            | Image tag for the sysctl init container                                                                      | `1.37.0`                       |
 | `sysctlInitContainer.image.pullPolicy`                     | Image pull policy for the sysctl init container                                                              | `IfNotPresent`                 |
+| `fixOwnershipInitContainer.enabled`                        | Enable the init container that `chown`s lib/log/core-dump mounts to `memgraphUserId:memgraphGroupId` before Memgraph starts. Use when the storage driver does not honor `fsGroup`. | `false`                        |
+| `fixOwnershipInitContainer.image.repository`               | Image repository for the fix-ownership init container.                                                       | `docker.io/library/busybox`    |
+| `fixOwnershipInitContainer.image.tag`                      | Image tag for the fix-ownership init container.                                                              | `1.37.0`                       |
+| `fixOwnershipInitContainer.image.pullPolicy`               | Image pull policy for the fix-ownership init container.                                                      | `IfNotPresent`                 |
 | `secrets.name`                                             | Name of the Kubernetes Secret holding the Memgraph Enterprise license and organization name. Must exist before `helm install`. | `memgraph-secrets`     |
 | `secrets.licenseKey`                                       | Key in the Secret whose value is exposed as `MEMGRAPH_ENTERPRISE_LICENSE` to data and coordinator pods.       | `MEMGRAPH_ENTERPRISE_LICENSE`  |
 | `secrets.organizationKey`                                  | Key in the Secret whose value is exposed as `MEMGRAPH_ORGANIZATION_NAME` to data and coordinator pods.        | `MEMGRAPH_ORGANIZATION_NAME`   |
