@@ -423,6 +423,80 @@ Run the same statements on every data instance you want the user to exist on.
 Coordinators run without authentication and do not need user setup.
 
 
+### Bolt SSL/TLS
+
+Each data instance and coordinator can independently terminate Bolt
+connections over TLS. When enabled, the chart mounts a pre-existing
+Kubernetes Secret containing the certificate and private key at
+`/etc/memgraph/ssl/` and auto-appends `--bolt-cert-file=/etc/memgraph/ssl/tls.crt`
+and `--bolt-key-file=/etc/memgraph/ssl/tls.key` to the instance's args.
+
+<Callout type="warning">
+**Breaking change in HA chart version with TLS config**: The previous way of
+enabling Bolt TLS — passing `--bolt-cert-file` / `--bolt-key-file` through
+`data[].args` / `coordinators[].args` and mounting the certificate Secret
+through `storage.{data,coordinators}.extraVolumes` / `extraVolumeMounts` — is
+no longer supported. Setting `--bolt-cert-file` or `--bolt-key-file` in `args`
+now causes `helm install` to fail with a template error. Migrate to the
+`tls.bolt` block on each instance instead.
+</Callout>
+
+To enable Bolt TLS, first create a Kubernetes Secret holding the certificate
+and private key in the release namespace:
+
+```bash
+kubectl create secret tls bolt-tls-secret \
+  --cert=path/to/tls.crt \
+  --key=path/to/tls.key
+```
+
+Then enable `tls.bolt` on each instance that should terminate TLS:
+
+```yaml
+data:
+  - id: "0"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+        certSecretPath: tls.crt
+        keySecretPath: tls.key
+  - id: "1"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+        certSecretPath: tls.crt
+        keySecretPath: tls.key
+
+coordinators:
+  - id: "1"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+  - id: "2"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+  - id: "3"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+```
+
+`certSecretPath` and `keySecretPath` are the keys inside the Secret holding
+the certificate and key respectively (default `tls.crt` and `tls.key`).
+The chart fails the install if `tls.bolt.enabled` is `true` but
+`tls.bolt.secretName` is empty.
+
+When a coordinator has `tls.bolt.enabled: true`, the cluster-setup job
+that registers coordinators and data instances automatically uses
+`--use-ssl` when connecting to coordinator 1.
+
+
 ## Setting up the cluster
 
 Although many configuration options exist, especially for networking, the workflow for creating a Memgraph HA cluster follows these steps:
@@ -799,8 +873,9 @@ prometheus:
     port: 9115
     pullFrequencySeconds: 5
     repository: memgraph/mg-exporter
-    tag: 0.2.1
+    tag: 0.2.3
   serviceMonitor:
+    enabled: true
     kubePrometheusStackReleaseName: kube-prometheus-stack
     interval: 15s
 ```
@@ -809,8 +884,50 @@ If you set `prometheus.enabled` to `false`, resources from
 `charts/memgraph-high-availability/templates/mg-exporter.yaml` will still be
 installed into the `monitoring` namespace.
 
+`prometheus.serviceMonitor.enabled` defaults to `false`; set it to `true` only
+when you have `kube-prometheus-stack` (or another Prometheus Operator) in the
+cluster to consume the `ServiceMonitor` resource.
+
 Refer to the configuration table later in the document for details on all
 parameters.
+
+#### mg-exporter TLS
+
+When any data instance or coordinator has `tls.bolt.enabled: true`, the
+chart automatically configures the mg-exporter to scrape that instance over
+`https://` instead of `http://`. Each instance entry in the exporter config
+also gets `skip_tls_verify` and (optionally) `ca_file` derived from
+`prometheus.memgraphExporter.tls`:
+
+```yaml
+prometheus:
+  memgraphExporter:
+    tls:
+      skipVerify: true
+      caSecretName: ""
+      caSecretKey: ca.crt
+```
+
+- `skipVerify` — when `true` (default), the exporter does not verify the
+  Memgraph server certificate. Convenient for self-signed certs but not
+  suitable for production.
+- `caSecretName` — name of a pre-created Secret holding the CA bundle that
+  signed Memgraph's certificate. When set and `skipVerify` is `false`, the
+  chart mounts the Secret at `/etc/mg-exporter/ssl` and passes
+  `ca_file=/etc/mg-exporter/ssl/<caSecretKey>` to the exporter.
+- `caSecretKey` — key inside the Secret holding the CA certificate
+  (default `ca.crt`).
+
+Example with strict CA verification:
+
+```yaml
+prometheus:
+  memgraphExporter:
+    tls:
+      skipVerify: false
+      caSecretName: bolt-ca-bundle
+      caSecretKey: ca.crt
+```
 
 ### Uninstall kube-prometheus-stack
 
@@ -916,10 +1033,10 @@ coordinators:
 <Callout type="info">
 The chart auto-appends `--bolt-port`, `--management-port`, `--coordinator-port`,
 `--coordinator-id`, `--coordinator-hostname`, `--data-directory`, `--log-level`,
-`--also-log-to-stderr` and `--log-file` from `ports.*` and
-`commonArgs.{data,coordinators}.logging.*`. Setting any of these in
-`data[].args` or `coordinators[].args` causes `helm install` to fail with a
-template error.
+`--also-log-to-stderr`, `--log-file`, `--bolt-cert-file` and `--bolt-key-file`
+from `ports.*`, `commonArgs.{data,coordinators}.logging.*` and the per-instance
+`tls.bolt.*` block. Setting any of these in `data[].args` or
+`coordinators[].args` causes `helm install` to fail with a template error.
 </Callout>
 
 Create credentials secret in the namespace where vmagent runs (usually `monitoring`):
@@ -1090,10 +1207,13 @@ and their default values.
 | `prometheus.memgraphExporter.port`                         | The port on which Memgraph's Prometheus exporter is available.                                               | `9115`                         |
 | `prometheus.memgraphExporter.pullFrequencySeconds`         | How often will Memgraph's Prometheus exporter pull data from Memgraph instances.                             | `5`                            |
 | `prometheus.memgraphExporter.repository`                   | The repository where Memgraph's Prometheus exporter image is available.                                      | `docker.io/memgraph/prometheus-exporter` |                      
-| `prometheus.memgraphExporter.tag`                          | The tag of Memgraph's Prometheus exporter image.                                                             | `0.2.1`                        |                      
+| `prometheus.memgraphExporter.tag`                          | The tag of Memgraph's Prometheus exporter image.                                                             | `0.2.3`                        |                      
+| `prometheus.memgraphExporter.tls.skipVerify`               | When `true`, mg-exporter does not verify Memgraph's server certificate. Only applied when scraping instances with `tls.bolt.enabled=true`. | `true`         |
+| `prometheus.memgraphExporter.tls.caSecretName`             | Name of a pre-created Secret containing the CA bundle. When set (and `skipVerify=false`), the chart mounts it at `/etc/mg-exporter/ssl`.   | `""`           |
+| `prometheus.memgraphExporter.tls.caSecretKey`              | Key inside the Secret holding the CA certificate.                                                            | `ca.crt`                       |
 | `prometheus.memgraphExporter.extraVolumes`                 | Additional volumes mounted on the `mg-exporter` Deployment (e.g. ConfigMaps with custom exporter configs).   | `[]`                           |
 | `prometheus.memgraphExporter.extraVolumeMounts`            | Additional volume mounts for the `mg-exporter` container.                                                    | `[]`                           |
-| `prometheus.serviceMonitor.enabled`                        | If enabled, a `ServiceMonitor` object will be deployed.                                                      | `true`                         |
+| `prometheus.serviceMonitor.enabled`                        | If enabled, a `ServiceMonitor` object will be deployed.                                                      | `false`                        |
 | `prometheus.serviceMonitor.kubePrometheusStackReleaseName` | The release name under which `kube-prometheus-stack` chart is installed.                                     | `kube-prometheus-stack`        |
 | `prometheus.serviceMonitor.interval`                       | How often will Prometheus pull data from Memgraph's Prometheus exporter.                                     | `15s`                          |
 | `vmagentRemote.enabled`                                    | Deploy a vmagent Deployment that scrapes mg-exporter and remote-writes to a Prometheus-compatible endpoint.  | `false`                        |
@@ -1169,14 +1289,19 @@ following parameters:
 | `id`                                        | ID of the instance                                                                                  | `0` for data, `1` for coordinators      |
 | `internalAccessAnnotations`                 | Per-instance annotations for the internal ClusterIP Service.                                        | `{}`                                    |
 | `externalAccessAnnotations`                 | Per-instance annotations for the external access Service, merged with global annotations.           | `{}`                                    |
+| `tls.bolt.enabled`                          | Enable Bolt TLS termination on this instance. The chart auto-appends `--bolt-cert-file` / `--bolt-key-file` and mounts the certificate Secret at `/etc/memgraph/ssl`. | `false`                  |
+| `tls.bolt.secretName`                       | Name of a pre-existing Kubernetes Secret holding the Bolt TLS certificate and private key. Required when `tls.bolt.enabled=true`. | `bolt-tls-secret`     |
+| `tls.bolt.certSecretPath`                   | Key inside the Secret holding the TLS certificate.                                                  | `tls.crt`                               |
+| `tls.bolt.keySecretPath`                    | Key inside the Secret holding the TLS private key.                                                  | `tls.key`                               |
 | `args`                                      | Per-instance Memgraph CLI flags. Append-only — see the note below for flags the chart manages.       | `["--storage-snapshot-on-exit=false"]` for data, `[]` for coordinators |
 
 The `args` field accepts any Memgraph CLI flag **except** the following, which
 the chart appends automatically and rejects when set per-instance:
 `--bolt-port`, `--management-port`, `--coordinator-port`, `--coordinator-id`,
 `--coordinator-hostname`, `--data-directory`, `--log-level`,
-`--also-log-to-stderr`, and `--log-file`. Configure those through `ports.*`
-and `commonArgs.{data,coordinators}.logging.*` instead.
+`--also-log-to-stderr`, `--log-file`, `--bolt-cert-file` and `--bolt-key-file`.
+Configure those through `ports.*`, `commonArgs.{data,coordinators}.logging.*`
+and the per-instance `tls.bolt.*` block instead.
 
 For all available database settings, refer to the [configuration settings
 docs](/database-management/configuration).
