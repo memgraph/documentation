@@ -24,7 +24,7 @@ supports.
 | Chained `WITH … WITH …`                                            | ✓               | ✓            |
 | Whole-node `WITH n` carry-through                                  | ✓               | ✓            |
 | `MATCH (n)-[r:R]->(m)` typed edge expansion                        | ✓               | ✓            |
-| Untyped edge `()-[]->(b)` (union over types)                       | ✓               | ✓            |
+| Untyped edge `()-[]->(b)` (union over types)                       | ✓               | ✗            |
 | `UNION` / `UNION ALL` / `UNION DISTINCT`                           | ✓               | ✓            |
 | `INTERSECT` / `EXCEPT`                                             | ✗               | ✗            |
 | Quantified path `(){m,n}` — bounded                                | ✓               | ✓            |
@@ -242,3 +242,90 @@ macOS, Linux, and Windows without any extra system packages.
 | `TRINO_CATALOG` | `iceberg`               | Trino catalog             |
 | `TRINO_SCHEMA`  | `default`               | Trino schema              |
 | `MAPPING_FILE`  | _(none, uses built-in default)_ | Path to JSON mapping file |
+
+## Mapping Schema
+
+The graph mapping file is a JSON document with two top-level arrays:
+`nodes` and `edges`. MemGQL loads it either from the path in `MAPPING_FILE`
+at startup or via the `ADD MAPPING <name> FROM '<path>'` statement at
+runtime — both paths apply the same validation. A mapping with any
+required field missing is rejected before the server begins serving
+queries against it.
+
+```json
+{
+  "nodes": [ /* NodeMapping objects */ ],
+  "edges": [ /* EdgeMapping objects */ ]
+}
+```
+
+### Node mapping fields
+
+| Field        | Type                    | Required | Description |
+|--------------|-------------------------|----------|-------------|
+| `label`      | string                  | yes      | GQL node label (e.g. `"Person"`). Looked up case-insensitively. |
+| `table`      | string                  | yes      | Backend table or view name backing this label. |
+| `id_column`  | string                  | yes      | Primary key column. Surfaces as GQL `id(n)` and is used to join across edges. |
+| `properties` | object (string→string)  | no       | Map from GQL property name → backend column name. Properties not listed here pass through with the same name (`p.name` → column `name`). |
+
+Connector-specific fields:
+
+- **Iceberg** also accepts `catalog` and `schema_name` to fully qualify the
+  table reference (defaults: `"iceberg"`, `"default"`).
+- **ClickHouse** also accepts `database` (default: `"default"`).
+
+### Edge mapping fields
+
+| Field            | Type                    | Required | Description |
+|------------------|-------------------------|----------|-------------|
+| `rel_type`       | string                  | yes      | GQL relationship type (e.g. `"KNOWS"`). Looked up case-insensitively. |
+| `table`          | string                  | yes      | Junction or association table backing this edge type. |
+| `id_column`      | string                  | yes      | Per-edge primary key. **Required since v0.6.** Carried through the recursive CTE's visited-edge set to enforce trail semantics on variable-length traversal. |
+| `source_column`  | string                  | yes      | FK column pointing to the source node's `id_column`. |
+| `target_column`  | string                  | yes      | FK column pointing to the target node's `id_column`. |
+| `source_label`   | string                  | yes      | Label of the source node (must match a `label` declared in `nodes`). |
+| `target_label`   | string                  | yes      | Label of the target node. |
+| `properties`     | object (string→string)  | no       | Map from GQL property name → column name on the edge table. |
+
+Connector-specific fields are the same as for nodes (`catalog` / `schema_name`
+for Iceberg; `database` for ClickHouse).
+
+### Example
+
+```json
+{
+  "nodes": [
+    {
+      "label": "Person",
+      "table": "persons",
+      "id_column": "id",
+      "properties": { "name": "full_name", "age": "age" }
+    },
+    {
+      "label": "Company",
+      "table": "companies",
+      "id_column": "id"
+    }
+  ],
+  "edges": [
+    {
+      "rel_type": "KNOWS",
+      "table": "knows",
+      "id_column": "id",
+      "source_column": "from_id",
+      "target_column": "to_id",
+      "source_label": "Person",
+      "target_label": "Person"
+    },
+    {
+      "rel_type": "WORKS_AT",
+      "table": "works_at",
+      "id_column": "id",
+      "source_column": "person_id",
+      "target_column": "company_id",
+      "source_label": "Person",
+      "target_label": "Company"
+    }
+  ]
+}
+```
