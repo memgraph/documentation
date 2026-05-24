@@ -5,6 +5,68 @@ description: MemGQL release notes
 
 # MemGQL Changelog
 
+## MemGQL v0.6.0 - May 23rd, 2026
+
+### ⚠️ Breaking changes
+
+- **`id_column` is now required on every edge mapping.** Previously optional
+  (enforced at query time only for variable-length traversal), it must now
+  be present on every edge entry in the mapping JSON. A mapping without
+  `id_column` on an edge now fails at registration with
+  `Failed to parse mapping JSON: missing field 'id_column' at line N`,
+  whether the mapping is supplied via `MAPPING_FILE` at startup or via
+  `ADD MAPPING` at runtime. Update existing mappings by adding the edge
+  table's primary key column to every edge — see the
+  [quick-start](/memgraph-zero/memgql/quick-start) and connector examples
+  for the new shape.
+- **Untyped edge traversal `()-[]->(b)` now errors on SQL backends.**
+  Previously this expanded into a `UNION` over candidate rel-type mappings
+  and could silently over-count when label-distinct node tables shared
+  numeric IDs. The translator now returns an actionable error explaining
+  why untyped traversal isn't safe on SQL backends and pointing users at
+  either declaring the edge type or running on a Cypher backend (Memgraph,
+  Neo4j). Cypher backends still accept `()-[]->()` natively.
+
+### ✨ New features & Improvements
+
+- **Trail semantics for bounded variable-length on SQL backends.** Patterns
+  like `(){1,3}` now enforce the GQL `DIFFERENT EDGES` default — no edge
+  is reused within a single matched path. The recursive CTE carries an
+  `_edges` visited-set whose shape is per-dialect (Postgres `ARRAY`, MySQL
+  `JSON_ARRAY`, DuckDB `LIST`). On cyclic graphs this matches Memgraph and
+  Neo4j byte-for-byte where previously SQL backends returned extra rows.
+- **`COUNT(DISTINCT …)`** works end-to-end on every backend. Previously
+  `count(DISTINCT x)` could leak through to backends as the synthetic
+  `COUNT_DISTINCT(...)` function (no engine has that). Both Cypher and SQL
+  translators now special-case `count_distinct` / `collect_distinct` /
+  `collect_list_distinct` to emit the dialect-native `COUNT(DISTINCT …)`.
+- **GQL parse errors now surface the actual ANTLR diagnostic** (`line 1:N
+  no viable alternative at input '...'`) instead of being swallowed into
+  the generic `No statements in GQL query` message.
+- **Cypher-style variable-length syntax** (`[:R*]`, `[:R*1..3]`, `[:R*1..]`)
+  now produces an actionable hint pointing at the GQL quantified-path-pattern
+  form `(-[:R]->()){1,3}` instead of a confusing parse error.
+- **Cross-graph parse errors** (multiple `USE <graph>` clauses in one query)
+  now return a clear "not yet supported" message instead of the generic
+  parse-failure error.
+
+### 🐞 Bug fixes
+
+- `%` (modulo) parses as a proper binary operator, not as a synthetic
+  function call.
+- `FOR x IN [...]` retains the iterated list and binds `x` correctly
+  (new `UnwindClause` AST node; planner emits `LogicalPlan::Unwind`).
+  **Execution is Cypher-only today** — SQL backends parse and plan it,
+  then return an actionable error. See the
+  [reference](/memgraph-zero/memgql/reference) limitations for the
+  SQL-side status.
+- `NEXT` query composition resolves names bound on the left-hand-side
+  when the right-hand-side `RETURN` references them.
+- Rel-variable reuse across `MATCH` clauses parses without a redeclaration
+  error.
+- `RETURN 1`'s internal `_dummy` placeholder no longer leaks into Cypher
+  queries sent to native backends.
+
 ## MemGQL v0.5.0 - May 16th, 2026
 
 ### ✨ New features & Improvements
