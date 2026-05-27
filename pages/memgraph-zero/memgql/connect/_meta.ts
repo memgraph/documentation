@@ -4,6 +4,7 @@ export default {
   "iceberg": "to Iceberg",
   "memgraph": "to Memgraph",
   "neo4j": "to Neo4j",
+  "oracle": "to Oracle",
   "postgres": "to PostgreSQL",
   "mysql": "to MySQL",
   "pinot": "to Pinot",

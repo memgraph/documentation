@@ -3,6 +3,68 @@ title: Reference
 description: All the details about syntax and various configs
 ---
 
+## Supported GQL Query Features
+
+What works today, split by backend category. "Cypher backends" means
+Memgraph and Neo4j (translation is largely passthrough); "SQL backends"
+means PostgreSQL, MySQL and DuckDB.
+
+ClickHouse, Apache Iceberg, and Apache Pinot are also supported as
+connectors but with a narrower verified surface. See each connector's page for the exact list of features each one
+supports.
+
+| Feature                                                            | Cypher backends | SQL backends |
+|--------------------------------------------------------------------|-----------------|--------------|
+| `MATCH` / `WHERE` / `RETURN`                                       | ✓               | ✓            |
+| Pattern-level `WHERE` (`MATCH (n WHERE …)`)                        | ✓               | ✓            |
+| Multiple `MATCH` clauses in one query                              | ✓               | ✓            |
+| `OPTIONAL MATCH` (keep left side when no match found)              | ✓               | ✓            |
+| `WITH` clause (chain query steps)                                  | ✓               | ✓            |
+| `WITH DISTINCT` / `WITH … ORDER BY … LIMIT N`                      | ✓               | ✓            |
+| Multiple chained `WITH` steps in one query                         | ✓               | ✓            |
+| Pass a whole node through `WITH n` to a later step                 | ✓               | ✓            |
+| `MATCH (n)-[r:R]->(m)` typed edge expansion                        | ✓               | ✓            |
+| Untyped edge `()-[]->(b)` (union over types)                       | ✓               | ✗            |
+| `UNION` / `UNION ALL` / `UNION DISTINCT`                           | ✓               | ✓            |
+| `INTERSECT` / `EXCEPT`                                             | ✗               | ✗            |
+| Quantified path `(){m,n}` — bounded                                | ✓               | ✓            |
+| Quantified path `(){m,}` — unbounded                               | ✓               | ✗            |
+| Shortest-path (`ALL SHORTEST` / `ANY SHORTEST` / `SHORTEST k`) | ✓ | ✗               | ✗            |
+| Map projections `RETURN n {.id, .title}`                           | ✓               | ✓            |
+| `IN` list membership `WHERE x IN […]`                              | ✓               | ✓            |
+| `STARTS WITH` / `ENDS WITH` / `CONTAINS`                           | ✓               | ✓            |
+| `collect()` / `collect_list()` (aggregate)                         | ✓               | ✓            |
+| `count`, `sum`, `avg`, `min`, `max`                                | ✓               | ✓            |
+| `COUNT(DISTINCT …)`                                                | ✓               | ✓            |
+| Arithmetic `+ - * / %`                                             | ✓               | ✓            |
+| `CASE WHEN … THEN … ELSE … END`                                    | ✓               | ✓            |
+| `COALESCE`, `NULLIF`                                               | ✓               | ✓            |
+| Temporals (`date`, `datetime`, `localTime`, …)                     | ✓               | ✗            |
+| `INSERT (a {…}) RETURN a.x`                                        | ✓               | ✓            |
+| `DELETE`                                                           | ✓               | ✓            |
+| `DETACH DELETE`                                                    | ✓               | ✗            |
+| `SET` (property update)                                            | ✓               | ✗            |
+| `REMOVE` (property delete)                                         | ✓               | ✗            |
+
+### Known limitations
+
+- **Unbounded variable-length paths on SQL backends** (`()-[*]->()`)
+  return an actionable error.
+- **Untyped edge traversal on SQL backends** (`MATCH ()-[]->(b)` with
+  no rel-type) returns an actionable error pointing users at declaring
+  the edge type or running on a Cypher backend. The form is still
+  accepted natively on Cypher backends.
+- **`FOR x IN [...]` (UNWIND-style) on SQL backends** returns an
+  actionable error pointing users at running the query on a Cypher
+  backend. The form is still accepted natively on Cypher backends.
+- **Path variables on variable-length patterns** —
+  `MATCH p = (a){1,3}(b) RETURN p` is not yet supported on SQL backends.
+  Drop the `p =` binding (or query a Cypher backend) and `RETURN` the
+  individual nodes / edges instead.
+- **`RETURN n` on SQL backends returns the node's column values** rather
+  than a single structured node object. For a structured result, use a
+  map projection: `RETURN n {.id, .name} AS info`.
+
 ## Graph Management Query Syntax
 
 ```
@@ -96,11 +158,13 @@ connections.
 | `neo4j-gql`    | GQL -> Cypher      | Neo4j                            |
 | `postgres`     | GQL -> SQL         | PostgreSQL                       |
 | `mysql`        | GQL -> SQL         | MySQL 8.0+                       |
+| `oracle`       | GQL -> SQL         | Oracle 19c+ (incl. Free 23ai)    |
 | `duckdb`       | GQL -> SQL         | DuckDB (embedded)                |
 | `clickhouse`   | GQL -> SQL         | ClickHouse                       |
 | `iceberg`      | GQL -> SQL         | Iceberg via Trino                |
 | `pinot`        | GQL -> SQL         | Apache Pinot                     |
 | `multi`        | Per-connector      | Multiple backends simultaneously |
+
 
 #### Memgraph (`memgraph`, `memgraph-gql`)
 
@@ -133,6 +197,20 @@ connections.
 |----------------|-----------------------------------------------|------------------------------------------|
 | `MYSQL_URL`    | `mysql://root:mysql@localhost:3306/test`      | MySQL connection URL (`mysql://user:pass@host:port/database`) |
 | `MAPPING_FILE` | _(none, uses built-in default)_               | Path to JSON mapping file                |
+
+#### Oracle (`oracle`)
+
+| Variable        | Default                                                  | Description                              |
+|-----------------|----------------------------------------------------------|------------------------------------------|
+| `ORACLE_URL`    | `oracle://system:oracle@localhost:1521/FREEPDB1`         | Easy Connect URL (`oracle://user:pass@host:port/service_name`). The default targets [Oracle Database Free 23ai](https://www.oracle.com/database/free/) (service `FREEPDB1`). |
+| `MAPPING_FILE`  | _(none, uses built-in default)_                          | Path to JSON mapping file (same format as Postgres) |
+
+The Oracle connector uses [oracle-rs](https://crates.io/crates/oracle-rs), a
+pure-Rust implementation of Oracle's TNS wire protocol, pooled via
+[deadpool-oracle](https://crates.io/crates/deadpool-oracle). No OCI / ODPI-C
+/ Instant Client is required at build or runtime — the bundled Docker image
+ships only the bolt server binary plus TLS roots, and local builds work on
+macOS, Linux, and Windows without any extra system packages.
 
 #### DuckDB (`duckdb`)
 
@@ -168,3 +246,90 @@ connections.
 | `TRINO_CATALOG` | `iceberg`               | Trino catalog             |
 | `TRINO_SCHEMA`  | `default`               | Trino schema              |
 | `MAPPING_FILE`  | _(none, uses built-in default)_ | Path to JSON mapping file |
+
+## Mapping Schema
+
+The graph mapping file is a JSON document with two top-level arrays:
+`nodes` and `edges`. MemGQL loads it either from the path in `MAPPING_FILE`
+at startup or via the `ADD MAPPING <name> FROM '<path>'` statement at
+runtime — both paths apply the same validation. A mapping with any
+required field missing is rejected before the server begins serving
+queries against it.
+
+```json
+{
+  "nodes": [ /* NodeMapping objects */ ],
+  "edges": [ /* EdgeMapping objects */ ]
+}
+```
+
+### Node mapping fields
+
+| Field        | Type                    | Required | Description |
+|--------------|-------------------------|----------|-------------|
+| `label`      | string                  | yes      | GQL node label (e.g. `"Person"`). Looked up case-insensitively. |
+| `table`      | string                  | yes      | Backend table or view name backing this label. |
+| `id_column`  | string                  | yes      | Primary key column. Surfaces as GQL `id(n)` and is used to join across edges. |
+| `properties` | object (string→string)  | no       | Map from GQL property name → backend column name. Properties not listed here pass through with the same name (`p.name` → column `name`). |
+
+Connector-specific fields:
+
+- **Iceberg** also accepts `catalog` and `schema_name` to fully qualify the
+  table reference (defaults: `"iceberg"`, `"default"`).
+- **ClickHouse** also accepts `database` (default: `"default"`).
+
+### Edge mapping fields
+
+| Field            | Type                    | Required | Description |
+|------------------|-------------------------|----------|-------------|
+| `rel_type`       | string                  | yes      | GQL relationship type (e.g. `"KNOWS"`). Looked up case-insensitively. |
+| `table`          | string                  | yes      | Junction or association table backing this edge type. |
+| `id_column`      | string                  | yes      | Per-edge primary key. **Required since v0.6.** Carried through the recursive CTE's visited-edge set to enforce trail semantics on variable-length traversal. |
+| `source_column`  | string                  | yes      | FK column pointing to the source node's `id_column`. |
+| `target_column`  | string                  | yes      | FK column pointing to the target node's `id_column`. |
+| `source_label`   | string                  | yes      | Label of the source node (must match a `label` declared in `nodes`). |
+| `target_label`   | string                  | yes      | Label of the target node. |
+| `properties`     | object (string→string)  | no       | Map from GQL property name → column name on the edge table. |
+
+Connector-specific fields are the same as for nodes (`catalog` / `schema_name`
+for Iceberg; `database` for ClickHouse).
+
+### Example
+
+```json
+{
+  "nodes": [
+    {
+      "label": "Person",
+      "table": "persons",
+      "id_column": "id",
+      "properties": { "name": "full_name", "age": "age" }
+    },
+    {
+      "label": "Company",
+      "table": "companies",
+      "id_column": "id"
+    }
+  ],
+  "edges": [
+    {
+      "rel_type": "KNOWS",
+      "table": "knows",
+      "id_column": "id",
+      "source_column": "from_id",
+      "target_column": "to_id",
+      "source_label": "Person",
+      "target_label": "Person"
+    },
+    {
+      "rel_type": "WORKS_AT",
+      "table": "works_at",
+      "id_column": "id",
+      "source_column": "person_id",
+      "target_column": "company_id",
+      "source_label": "Person",
+      "target_label": "Company"
+    }
+  ]
+}
+```

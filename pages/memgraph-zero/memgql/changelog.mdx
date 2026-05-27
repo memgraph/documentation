@@ -5,6 +5,103 @@ description: MemGQL release notes
 
 # MemGQL Changelog
 
+## MemGQL v0.6.0 - May 23rd, 2026
+
+### ⚠️ Breaking changes
+
+- **`id_column` is now required on every edge mapping.** Previously optional
+  (enforced at query time only for variable-length traversal), it must now
+  be present on every edge entry in the mapping JSON. A mapping without
+  `id_column` on an edge now fails at registration with
+  `Failed to parse mapping JSON: missing field 'id_column' at line N`,
+  whether the mapping is supplied via `MAPPING_FILE` at startup or via
+  `ADD MAPPING` at runtime. Update existing mappings by adding the edge
+  table's primary key column to every edge — see the
+  [quick-start](/memgraph-zero/memgql/quick-start) and connector examples
+  for the new shape.
+- **Untyped edge traversal `()-[]->(b)` now errors on SQL backends.**
+  Previously this expanded into a `UNION` over candidate rel-type mappings
+  and could silently over-count when label-distinct node tables shared
+  numeric IDs. The translator now returns an actionable error explaining
+  why untyped traversal isn't safe on SQL backends and pointing users at
+  either declaring the edge type or running on a Cypher backend (Memgraph,
+  Neo4j). Cypher backends still accept `()-[]->()` natively.
+
+### ✨ New features & Improvements
+
+- **Trail semantics for bounded variable-length on SQL backends.** Patterns
+  like `(){1,3}` now enforce the GQL `DIFFERENT EDGES` default — no edge
+  is reused within a single matched path. The recursive CTE carries an
+  `_edges` visited-set whose shape is per-dialect (Postgres `ARRAY`, MySQL
+  `JSON_ARRAY`, DuckDB `LIST`). On cyclic graphs this matches Memgraph and
+  Neo4j byte-for-byte where previously SQL backends returned extra rows.
+- **`COUNT(DISTINCT …)`** works end-to-end on every backend. Previously
+  `count(DISTINCT x)` could leak through to backends as the synthetic
+  `COUNT_DISTINCT(...)` function (no engine has that). Both Cypher and SQL
+  translators now special-case `count_distinct` / `collect_distinct` /
+  `collect_list_distinct` to emit the dialect-native `COUNT(DISTINCT …)`.
+- **GQL parse errors now surface the actual ANTLR diagnostic** (`line 1:N
+  no viable alternative at input '...'`) instead of being swallowed into
+  the generic `No statements in GQL query` message.
+- **Cypher-style variable-length syntax** (`[:R*]`, `[:R*1..3]`, `[:R*1..]`)
+  now produces an actionable hint pointing at the GQL quantified-path-pattern
+  form `(-[:R]->()){1,3}` instead of a confusing parse error.
+- **Cross-graph parse errors** (multiple `USE <graph>` clauses in one query)
+  now return a clear "not yet supported" message instead of the generic
+  parse-failure error.
+
+### 🐞 Bug fixes
+
+- `%` (modulo) parses as a proper binary operator, not as a synthetic
+  function call.
+- `FOR x IN [...]` retains the iterated list and binds `x` correctly
+  (new `UnwindClause` AST node; planner emits `LogicalPlan::Unwind`).
+  **Execution is Cypher-only today** — SQL backends parse and plan it,
+  then return an actionable error. See the
+  [reference](/memgraph-zero/memgql/reference) limitations for the
+  SQL-side status.
+- `NEXT` query composition resolves names bound on the left-hand-side
+  when the right-hand-side `RETURN` references them.
+- Rel-variable reuse across `MATCH` clauses parses without a redeclaration
+  error.
+- `RETURN 1`'s internal `_dummy` placeholder no longer leaks into Cypher
+  queries sent to native backends.
+
+## MemGQL v0.5.0 - May 16th, 2026
+
+### ✨ New features & Improvements
+
+- Added **Oracle** connector (`CONNECTOR_TYPE=oracle`).
+- **DuckDB connector** joins as a fifth GQL-over-SQL backend (alongside Memgraph, Neo4j, PostgreSQL, MySQL).
+- **`OPTIONAL MATCH`** now works on SQL backends (PostgreSQL, MySQL, DuckDB) — previously Cypher-only.
+- **`WITH` pipeline boundary** (GQL scope D) on SQL backends — supports `WITH`, `WITH DISTINCT`, `WITH … ORDER BY … LIMIT N`, chained `WITH … WITH …`, and whole-node `WITH n` carry-through via derived-table SQL.
+- **`UNION` / `UNION ALL` / `UNION DISTINCT`** between query statements work
+across all five backends. Branches on the same backend translate to that
+backend's native combinator; branches on different backends materialize
+locally and combine in-memory. - **Map projections** — `RETURN n {.id, .title}
+AS info` returns a Bolt Map (Memgraph, Neo4j, PostgreSQL, MySQL, DuckDB).
+- **`collect()`** aggregate returns a typed Bolt List (Memgraph, Neo4j, PostgreSQL, MySQL, DuckDB).
+- **`IN` list-membership** predicate — `WHERE n.name IN ['Alice', 'Bob']`.
+- **`STARTS WITH` / `ENDS WITH` / `CONTAINS`** string predicates portable across all backends.
+- **Quantified path patterns `(){m,n}`** on SQL backends emit a recursive CTE.
+- **`MATCH p = (…) RETURN p`** path binding works on Cypher backends and bounded-path SQL.
+- Unbounded variable-length paths (`()-[*]->()`) on SQL backends now return a clear error pointing at the bounded form (`(){1,5}`) or the Cypher fallback.
+- `SHOW MAPPINGS` / `SHOW CONNECTORS` error messages now hint at the correct setup statements (`ADD MAPPING`, `ADD CONNECTOR`).
+- Untyped edges `()-[]->(b)` on SQL backends translate via a `UNION ALL` over candidate rel-type mappings.
+
+### 🐞 Bug fixes
+
+- `INSERT (a {…}) RETURN a.name` no longer drops the `RETURN` clause.
+- `%` (modulo) operator now recognized in the grammar and routed through every translator.
+- `PATH_LENGTH(p)` on Cypher backends returns the integer length, not the relationship list.
+- Temporal types (`date(...)`, `LOCAL_DATETIME(...)`, etc.) arrive at the Bolt driver as proper Date / LocalDateTime structs (previously leaked as Rust debug-format strings).
+- `RETURN` column headers reflect the source expression text (`n.age`) instead of the literal placeholder `"expr"`.
+- `RETURN *` no longer leaks internal Strategy-B `_u` / `_e` placeholders.
+- `SKIP` without `LIMIT` is now honored (was silently dropped).
+- `NULL` cells are sent as the PackStream `0xC0` byte (previously the string `"NULL"`).
+- `NULLIF` and `COALESCE` work end-to-end on every backend.
+- `OPTIONAL MATCH` WHERE predicates inside the optional pattern land on the correct `JOIN` clause so unmatched outer rows survive Cypher's semantics.
+
 ## MemGQL v0.4.0 - May 7th, 2026
 
 - Added "Federated GQL Across Heterogeneous Backends" use case showing graph queries over ClickHouse and PostgreSQL
