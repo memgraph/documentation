@@ -92,7 +92,7 @@ SHOW TRANSACTIONS;
 ```
 
 Each row in the result represents one transaction (or one in-progress snapshot
-creation) and contains five columns:
+creation) and contains seven columns:
 
 | Column | Type | Description |
 |---|---|---|
@@ -101,15 +101,17 @@ creation) and contains five columns:
 | `query` | `List[String]` | Queries executed within the transaction so far. |
 | `status` | `String` | Lifecycle phase of the transaction: `running`, `committing`, or `aborting`. Snapshot rows always show `running`. |
 | `metadata` | `Map` | Metadata supplied by the client when the transaction was opened. For in-progress snapshots this contains progress details (see below). |
+| `start_time` | `ZonedDateTime` | UTC time at which the transaction started. |
+| `elapsed_ms` | `Integer` | How long the transaction has been running, in milliseconds. |
 
 ```copy=false
 memgraph> SHOW TRANSACTIONS;
-+----------+------------------------+-----------------------------------------------+--------------+----------+
-| username | transaction_id         | query                                         | status       | metadata |
-+----------+------------------------+-----------------------------------------------+--------------+----------+
-| ""       | "9223372036854794885"  | ["UNWIND range(1,100) AS i CREATE(:L{p:i});"] | "committing" | {}       |
-| ""       | "9223372036854794896"  | ["SHOW TRANSACTIONS"]                         | "running"    | {}       |
-+----------+------------------------+-----------------------------------------------+--------------+----------+
++----------+-----------------------+-----------------------------------------------+--------------+----------+-------------------------------+------------+
+| username | transaction_id        | query                                         | status       | metadata | start_time                    | elapsed_ms |
++----------+-----------------------+-----------------------------------------------+--------------+----------+-------------------------------+------------+
+| ""       | "9223372036854794885" | ["UNWIND range(1,100) AS i CREATE(:L{p:i});"] | "committing" | {}       | 2026-05-12T14:32:18.412Z[UTC] | 47         |
+| ""       | "9223372036854794896" | ["SHOW TRANSACTIONS"]                         | "running"    | {}       | 2026-05-12T14:32:18.451Z[UTC] | 8          |
++----------+-----------------------+-----------------------------------------------+--------------+----------+-------------------------------+------------+
 ```
 
 #### Filter by status
@@ -140,16 +142,18 @@ rows contains:
 | `phase` | Current phase of snapshot creation: `EDGES`, `VERTICES`, `INDICES`, `CONSTRAINTS`, or `FINALIZING`. |
 | `items_done` | Number of objects serialized in the current phase so far. |
 | `items_total` | Total number of objects expected in the current phase. |
-| `elapsed_ms` | Milliseconds elapsed since the snapshot started. |
 | `db_name` | Name of the database whose snapshot is being created. |
+
+The top-level `start_time` and `elapsed_ms` columns are populated for snapshot
+rows as well, reflecting when the snapshot started.
 
 ```copy=false
 memgraph> SHOW TRANSACTIONS;
-+----------+----------------+-----------------------------+-----------+------------------------------------------------------------------+
-| username | transaction_id | query                       | status    | metadata                                                         |
-+----------+----------------+-----------------------------+-----------+------------------------------------------------------------------+
-| ""       | "snapshot"     | ["CREATE SNAPSHOT"]         | "running" | {phase: "VERTICES", items_done: 142000, items_total: 500000, ... |
-+----------+----------------+-----------------------------+-----------+------------------------------------------------------------------+
++----------+----------------+---------------------+-----------+------------------------------------------------------------------+-------------------------------+------------+
+| username | transaction_id | query               | status    | metadata                                                         | start_time                    | elapsed_ms |
++----------+----------------+---------------------+-----------+------------------------------------------------------------------+-------------------------------+------------+
+| ""       | "snapshot"     | ["CREATE SNAPSHOT"] | "running" | {phase: "VERTICES", items_done: 142000, items_total: 500000, ... | 2026-05-12T14:32:17.205Z[UTC] | 1247       |
++----------+----------------+---------------------+-----------+------------------------------------------------------------------+-------------------------------+------------+
 ```
 
 <Callout type="info">
@@ -157,8 +161,9 @@ Snapshot progress values are read from independent atomic counters and are not
 captured as a single consistent snapshot. `items_done`, `items_total`, and
 `phase` may reflect slightly different points in time, so treat them as
 best-effort estimates rather than exact figures. In particular, `items_done`
-may briefly read as `0` when the phase transitions, and `elapsed_ms` may be
-absent if the snapshot started between the phase check and the time read.
+may briefly read as `0` when the phase transitions, and `start_time` may be
+`null` if the snapshot was observed in the brief window before it recorded
+its start.
 </Callout>
 
 <Callout type="warning">
@@ -289,12 +294,12 @@ currently being run as part of the transaction ID "9223372036854794885".
 
 ```copy=false
 memgraph> SHOW TRANSACTIONS;
-+----------+------------------------+-------------------------------------------+-----------+----------+
-| username | transaction_id         | query                                     | status    | metadata |
-+----------+------------------------+-------------------------------------------+-----------+----------+
-| ""       | "9223372036854794885"  | ["CALL infinite.get() YIELD * RETURN *;"] | "running" | {}       |
-| ""       | "9223372036854794896"  | ["SHOW TRANSACTIONS"]                     | "running" | {}       |
-+----------+------------------------+-------------------------------------------+-----------+----------+
++----------+-----------------------+-------------------------------------------+-----------+----------+-------------------------------+------------+
+| username | transaction_id        | query                                     | status    | metadata | start_time                    | elapsed_ms |
++----------+-----------------------+-------------------------------------------+-----------+----------+-------------------------------+------------+
+| ""       | "9223372036854794885" | ["CALL infinite.get() YIELD * RETURN *;"] | "running" | {}       | 2026-05-12T14:32:00.000Z[UTC] | 18230      |
+| ""       | "9223372036854794896" | ["SHOW TRANSACTIONS"]                     | "running" | {}       | 2026-05-12T14:32:18.230Z[UTC] | 0          |
++----------+-----------------------+-------------------------------------------+-----------+----------+-------------------------------+------------+
 ```
 
 To terminate the transaction, run the following query:
