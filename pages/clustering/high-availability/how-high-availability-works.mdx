@@ -118,7 +118,8 @@ That means, you cannot run any data queries on the coordinator directly (we
 will talk more about routing data queries in the next sections). However,
 system information queries such as `SHOW CONFIG`, `SHOW LICENSE INFO`,
 `SHOW BUILD INFO` and `SHOW STORAGE INFO` are supported on coordinators, as
-well as `SET DATABASE SETTING` and `RELOAD SSL`.
+well as `SET DATABASE SETTING`, `RELOAD BOLT_SERVER TLS` and
+`RELOAD INTRA_CLUSTER TLS`.
 </Callout>
 
 Since coordinators do not store user data, the following restrictions apply:
@@ -271,6 +272,66 @@ in the cluster to ensure high availability, with timeouts.
 | `SnapshotRpc`              | Main        | Replica        | proportional     |
 | `WalFilesRpc`              | Main        | Replica        | proportional     |
 | `CurrentWalRpc`            | Main        | Replica        | proportional     |
+
+## Intra-cluster TLS
+
+By default, the communication between instances in a high-availability cluster
+is unencrypted. To secure it, Memgraph supports **intra-cluster TLS**, which
+encrypts all internal cluster traffic using mutual TLS (mTLS). When enabled,
+TLS protects the communication on:
+
+- the **management server** (health checks between the leader coordinator and
+  the instances),
+- the **replication server** (data replication between MAIN and REPLICA
+  instances), and
+- the **coordinator server** (synchronization and log replication between
+  coordinators).
+
+<Callout type="info">
+Intra-cluster TLS is independent of [Bolt SSL/TLS](/database-management/ssl-encryption).
+Bolt encryption secures client-to-instance connections and is configured
+separately with the `--bolt-cert-file` and `--bolt-key-file` flags, while
+intra-cluster TLS secures the internal cluster communication described above.
+</Callout>
+
+### Enabling intra-cluster TLS
+
+Intra-cluster TLS is enabled by setting the following three flags on every
+instance (coordinators and data instances) in the cluster:
+
+| Flag                  | Description                                                                                          |
+| --------------------- | ---------------------------------------------------------------------------------------------------- |
+| `--cluster-cert-file` | Certificate file used for intra-cluster TLS communication.                                           |
+| `--cluster-key-file`  | Key file used for intra-cluster TLS communication.                                                   |
+| `--cluster-ca-file`   | File storing the certificate of the Certificate Authority you trust for intra-cluster TLS communication. |
+
+All three flags must be set together. If only some of them are provided, the
+instance refuses to start to avoid running in a partially-configured TLS state.
+When all three are empty, intra-cluster TLS is disabled and communication is
+unencrypted. Because mTLS is used, every instance must present a certificate
+that is trusted by the configured Certificate Authority, and all instances in
+the cluster must be started with the TLS flags.
+
+### Reloading intra-cluster TLS certificates at runtime
+
+You can rotate the intra-cluster TLS certificates without restarting the
+cluster by running the `RELOAD INTRA_CLUSTER TLS` Cypher query. Replace the
+certificate and key files on disk at the paths configured with
+`--cluster-cert-file`, `--cluster-key-file`, and `--cluster-ca-file`, then run:
+
+```cypher
+RELOAD INTRA_CLUSTER TLS;
+```
+
+`RELOAD INTRA_CLUSTER TLS` reloads both the client and server connections, so
+new connections will start using the new certificates.
+
+This is the intra-cluster counterpart of `RELOAD BOLT_SERVER TLS`, which
+reloads the Bolt server certificates. Both queries require the `RELOAD_TLS`
+[privilege](/database-management/authentication-and-authorization/role-based-access-control).
+For more details on reloading certificates, see the
+[SSL encryption](/database-management/ssl-encryption#reload-ssl-certificates-at-runtime)
+page.
 
 ## Automatic failover
 
