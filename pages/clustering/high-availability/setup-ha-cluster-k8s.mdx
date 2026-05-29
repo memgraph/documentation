@@ -527,6 +527,76 @@ When a coordinator has `tls.bolt.enabled: true`, the cluster-setup job
 that registers coordinators and data instances automatically uses
 `--use-ssl` when connecting to coordinator 1.
 
+### Intra-cluster SSL/TLS
+
+Independently of Bolt TLS, each data instance and coordinator can encrypt the
+internal communication between cluster members (coordinator-to-coordinator and
+coordinator-to-data traffic). When `tls.intraCluster.enabled` is `true`, the
+chart mounts a pre-existing Kubernetes Secret containing the certificate,
+private key and CA bundle at `/etc/memgraph/intra_cluster_tls/` and
+auto-appends `--cluster-cert-file=/etc/memgraph/intra_cluster_tls/tls.crt`,
+`--cluster-key-file=/etc/memgraph/intra_cluster_tls/tls.key` and
+`--cluster-ca-file=/etc/memgraph/intra_cluster_tls/ca.crt` to the instance's
+args.
+
+To enable intra-cluster TLS, first create a Kubernetes Secret holding the
+certificate, private key and CA bundle for each instance in the release
+namespace. For example, for `data-0`:
+
+```bash
+kubectl create secret generic intra-tls-data-0-secret \
+  --from-file=tls.crt=path/to/tls.crt \
+  --from-file=tls.key=path/to/tls.key \
+  --from-file=ca.crt=path/to/ca.crt
+```
+
+Then enable `tls.intraCluster` on each instance that should encrypt internal
+traffic:
+
+```yaml
+data:
+  - id: "0"
+    tls:
+      intraCluster:
+        enabled: true
+        secretName: intra-tls-data-0-secret
+        certSecretPath: tls.crt
+        keySecretPath: tls.key
+        caSecretPath: ca.crt
+  - id: "1"
+    tls:
+      intraCluster:
+        enabled: true
+        secretName: intra-tls-data-1-secret
+        certSecretPath: tls.crt
+        keySecretPath: tls.key
+        caSecretPath: ca.crt
+
+coordinators:
+  - id: "1"
+    tls:
+      intraCluster:
+        enabled: true
+        secretName: intra-tls-coord-1-secret
+  - id: "2"
+    tls:
+      intraCluster:
+        enabled: true
+        secretName: intra-tls-coord-2-secret
+  - id: "3"
+    tls:
+      intraCluster:
+        enabled: true
+        secretName: intra-tls-coord-3-secret
+```
+
+`certSecretPath`, `keySecretPath` and `caSecretPath` are the keys inside the
+Secret holding the certificate, private key and CA bundle respectively
+(default `tls.crt`, `tls.key` and `ca.crt`). The chart fails the install if
+`tls.intraCluster.enabled` is `true` but `tls.intraCluster.secretName` is
+empty. Enable it on every instance that participates in encrypted intra-cluster
+communication.
+
 
 ## Setting up the cluster
 
@@ -1064,9 +1134,10 @@ coordinators:
 <Callout type="info">
 The chart auto-appends `--bolt-port`, `--management-port`, `--coordinator-port`,
 `--coordinator-id`, `--coordinator-hostname`, `--data-directory`, `--log-level`,
-`--also-log-to-stderr`, `--log-file`, `--bolt-cert-file` and `--bolt-key-file`
+`--also-log-to-stderr`, `--log-file`, `--bolt-cert-file`, `--bolt-key-file`,
+`--cluster-cert-file`, `--cluster-key-file` and `--cluster-ca-file`
 from `ports.*`, `commonArgs.{data,coordinators}.logging.*` and the per-instance
-`tls.bolt.*` block. Setting any of these in `data[].args` or
+`tls.bolt.*` / `tls.intraCluster.*` blocks. Setting any of these in `data[].args` or
 `coordinators[].args` causes `helm install` to fail with a template error.
 </Callout>
 
@@ -1328,15 +1399,21 @@ following parameters:
 | `tls.bolt.secretName`                       | Name of a pre-existing Kubernetes Secret holding the Bolt TLS certificate and private key. Required when `tls.bolt.enabled=true`. | `bolt-tls-secret`     |
 | `tls.bolt.certSecretPath`                   | Key inside the Secret holding the TLS certificate.                                                  | `tls.crt`                               |
 | `tls.bolt.keySecretPath`                    | Key inside the Secret holding the TLS private key.                                                  | `tls.key`                               |
+| `tls.intraCluster.enabled`                  | Enable TLS on internal cluster communication for this instance. The chart auto-appends `--cluster-cert-file` / `--cluster-key-file` / `--cluster-ca-file` and mounts the certificate Secret at `/etc/memgraph/intra_cluster_tls`. | `false`     |
+| `tls.intraCluster.secretName`               | Name of a pre-existing Kubernetes Secret holding the intra-cluster TLS certificate, private key and CA bundle. Required when `tls.intraCluster.enabled=true`. | `intra-tls-<instance>-secret` |
+| `tls.intraCluster.certSecretPath`           | Key inside the Secret holding the TLS certificate.                                                  | `tls.crt`                               |
+| `tls.intraCluster.keySecretPath`            | Key inside the Secret holding the TLS private key.                                                  | `tls.key`                               |
+| `tls.intraCluster.caSecretPath`             | Key inside the Secret holding the CA bundle.                                                        | `ca.crt`                                |
 | `args`                                      | Per-instance Memgraph CLI flags. Append-only — see the note below for flags the chart manages.       | `["--storage-snapshot-on-exit=false"]` for data, `[]` for coordinators |
 
 The `args` field accepts any Memgraph CLI flag **except** the following, which
 the chart appends automatically and rejects when set per-instance:
 `--bolt-port`, `--management-port`, `--coordinator-port`, `--coordinator-id`,
 `--coordinator-hostname`, `--data-directory`, `--log-level`,
-`--also-log-to-stderr`, `--log-file`, `--bolt-cert-file` and `--bolt-key-file`.
+`--also-log-to-stderr`, `--log-file`, `--bolt-cert-file`, `--bolt-key-file`,
+`--cluster-cert-file`, `--cluster-key-file` and `--cluster-ca-file`.
 Configure those through `ports.*`, `commonArgs.{data,coordinators}.logging.*`
-and the per-instance `tls.bolt.*` block instead.
+and the per-instance `tls.bolt.*` / `tls.intraCluster.*` blocks instead.
 
 For all available database settings, refer to the [configuration settings
 docs](/database-management/configuration).
