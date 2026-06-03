@@ -91,16 +91,16 @@ To get information about all active transactions execute:
 SHOW TRANSACTIONS;
 ```
 
-Each row in the result represents one transaction (or one in-progress snapshot
-creation) and contains seven columns:
+Each row in the result represents one transaction (or an in-progress snapshot
+creation or garbage collection) and contains seven columns:
 
 | Column | Type | Description |
 |---|---|---|
 | `username` | `String` | The user who started the transaction, or `""` if authentication is disabled. |
 | `transaction_id` | `String` | Unique numeric identifier of the transaction. Use this value with `TERMINATE TRANSACTIONS`. |
 | `query` | `List[String]` | Queries executed within the transaction so far. |
-| `status` | `String` | Lifecycle phase of the transaction: `running`, `committing`, or `aborting`. Snapshot rows always show `running`. |
-| `metadata` | `Map` | Metadata supplied by the client when the transaction was opened. For in-progress snapshots this contains progress details (see below). |
+| `status` | `String` | Lifecycle phase of the transaction: `running`, `committing`, or `aborting`. Snapshot and garbage-collection rows always show `running`. |
+| `metadata` | `Map` | Metadata supplied by the client when the transaction was opened. For in-progress snapshots and garbage collection it contains progress details (see below). |
 | `start_time` | `ZonedDateTime` | UTC time at which the transaction started. |
 | `elapsed_ms` | `Integer` | How long the transaction has been running, in milliseconds. |
 
@@ -164,6 +164,43 @@ best-effort estimates rather than exact figures. In particular, `items_done`
 may briefly read as `0` when the phase transitions, and `start_time` may be
 `null` if the snapshot was observed in the brief window before it recorded
 its start.
+</Callout>
+
+#### Garbage collection rows
+
+Storage [garbage collection](/fundamentals/storage-memory-usage) runs
+continuously in the background to reclaim obsolete object versions. While a
+collection is actively running, a synthetic row is included in the result with
+`transaction_id` set to `"gc"` and `query` set to `["GARBAGE COLLECTION"]`.
+This makes a slow, stuck, or blocking collection directly observable; a healthy
+run finishes in well under a millisecond and is rarely caught. The `metadata`
+map for these rows contains:
+
+| Key | Description |
+|---|---|
+| `phase` | Current phase of the cycle: `unlink` (detach obsolete versions no active transaction can still see), `index_cleanup` (remove stale index and constraint entries — usually the most expensive phase), or `delete` (free the unlinked versions). |
+| `trigger` | `periodic` for the background cycle, or `forced` for a `FREE MEMORY` query or a storage-mode switch. |
+| `exclusive_lock` | `true` when the collection holds the storage lock exclusively and is therefore blocking all transactions. |
+| `db_name` | Name of the database whose garbage is being collected. |
+
+The top-level `start_time` and `elapsed_ms` columns reflect when the collection
+started; a large `elapsed_ms` is the clearest signal of a stuck collection. One
+`gc` row appears per database that currently has a collection running.
+
+```copy=false
+memgraph> SHOW TRANSACTIONS;
++----------+----------------+------------------------+-----------+-------------------------------------------------------------------------------------------+-------------------------------+------------+
+| username | transaction_id | query                  | status    | metadata                                                                                  | start_time                    | elapsed_ms |
++----------+----------------+------------------------+-----------+-------------------------------------------------------------------------------------------+-------------------------------+------------+
+| ""       | "gc"           | ["GARBAGE COLLECTION"] | "running" | {db_name: "memgraph", exclusive_lock: true, phase: "index_cleanup", trigger: "periodic"}  | 2026-05-12T14:32:17.881Z[UTC] | 395        |
++----------+----------------+------------------------+-----------+-------------------------------------------------------------------------------------------+-------------------------------+------------+
+```
+
+<Callout type="info">
+Like snapshot rows, garbage-collection values are read from independent atomic
+counters rather than as a single consistent snapshot, so treat them as
+best-effort. During a `FREE MEMORY` query both your own transaction and the
+synthetic `gc` row may appear at once, distinguished by `trigger`.
 </Callout>
 
 <Callout type="warning">
