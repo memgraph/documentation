@@ -41,6 +41,70 @@ To get additional information on the generated query plans, set
 `--debug-query-plans` to `True`, along with `--log-level` set to `DEBUG` or `TRACE`.
 </Callout>
 
+## Slow and failed query logging
+
+Memgraph can emit two operational log streams to the main log, useful for
+spotting latency outliers and errors without enabling full [session
+trace](/database-management/monitoring#session-trace):
+
+- `[slow-query]` at `WARNING` level — one line per successful query whose
+  end-to-end time reaches a configurable threshold, optionally followed by its
+  EXPLAIN plan.
+- `[failed-query]` at `ERROR` level — one line per query that throws.
+
+Both streams are off by default (except that the plan is appended once
+slow-query logging is enabled) and are controlled by these flags:
+
+| Flag                       | Setting name          | Description                                                                                                              | Type      |
+| -------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------- |
+| `--log-min-duration-ms=-1` | `log.min_duration_ms` | Log successful queries whose `parse + plan + execute` time (ms) reaches this threshold. `-1` disables; `0` logs every successful query; `>0` is the threshold in milliseconds. | `[int64]` |
+| `--log-failed-queries=false` | `log.failed_queries` | Log each failed query.                                                                                                   | `[bool]`  |
+| `--log-query-plan=true`    | `log.query_plan`      | Append the query's EXPLAIN plan to its `[slow-query]` line.                                                              | `[bool]`  |
+
+The reported duration is the sum of parsing, planning and execution time; the
+commit phase and `AFTER COMMIT` triggers are excluded.
+
+### Line format
+
+```plaintext
+[slow-query] duration_ms=<N> user=<user> db=<db> query="<query>"
+PLAN:
+  <indented EXPLAIN plan, only when log.query_plan is true>
+[failed-query] user=<user> db=<db> error="<message>" query="<query>"
+```
+
+The `query=` and `error=` fields are quoted and self-delimiting: `"` and `\`
+are escaped, and newlines, carriage returns and tabs become `\n`, `\r` and `\t`
+so a record never spans multiple log lines. Only the slow-query `PLAN:` block
+is intentionally multi-line. `user=` is empty for unauthenticated sessions, and
+`db=<none>` is shown when no database is selected.
+
+<Callout type="info">
+DDL queries (`CREATE INDEX`, `DROP INDEX`, constraints, etc.) do not populate
+execution time, so a long index build reports only parse and plan time and is
+effectively never picked up as slow. The slow-query logger targets the
+read/write Cypher workload, not schema-maintenance operations.
+</Callout>
+
+### Configuring at runtime and per session
+
+The three settings can be changed globally at runtime and persist between runs:
+
+```cypher
+SET DATABASE SETTING "log.min_duration_ms" TO "500";
+```
+
+They can also be overridden for the current session only, which takes
+precedence over the global value:
+
+```cypher
+SET SESSION SETTING "log.min_duration_ms" TO "500";
+RESET SESSION SETTING "log.min_duration_ms";
+```
+
+`SET SESSION SETTING` accepts only the three keys above; any other key raises
+`Setting "<key>" cannot be set per-session`.
+
 ## Access logs
 
 If you installed Memgraph with Linux, logs can be found in the
