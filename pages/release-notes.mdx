@@ -71,6 +71,13 @@ guide.
   destructure results by column index or expect the previous column set must be
   updated.
   [#4153](https://github.com/memgraph/memgraph/pull/4153)
+- `schema.node_type_properties()` and `schema.rel_type_properties()` renamed
+  several `propertyTypes` strings (`Bool` → `Boolean`, `Double` → `Float`,
+  `ZonedDateTime` → `DateTime`, `Point2d`/`Point3d` → `Point`), and `mandatory`
+  now reflects declared existence constraints instead of sample coverage (always
+  `false` for relationships). Update consumers that pattern-matched the old type
+  names or treated sampling-based `mandatory` as ground truth.
+  [#4186](https://github.com/memgraph/memgraph/pull/4186)
 - The JSON metrics endpoint histogram buckets have changed, so p50, p90, and
   p99 latency values may report slightly different numbers compared to 3.10.
   `SHOW METRICS INFO` now returns consistent per-database metrics for the
@@ -84,11 +91,43 @@ guide.
   you wrote custom procedures that relied on the `transaction_id` parameter
   passed by the `cross_database` module, switch to `graph.start_timestamp`.
   [#4167](https://github.com/memgraph/memgraph/pull/4167)
-- `RELOAD BOLT_SERVER TLS` now requires the `RELOAD_TLS` privilege; previously it
-  required no privilege. If you use authorization, grant `RELOAD_TLS` to the
-  users or roles that rotate certificates (`GRANT RELOAD_TLS TO user;`),
-  otherwise the command will fail with an authorization error.
+- `RELOAD BOLT_SERVER TLS` and the new `RELOAD INTRA_CLUSTER TLS` command now
+  require the `RELOAD_TLS` privilege. If you use authorization, grant
+  `RELOAD_TLS` to the users or roles that rotate certificates
+  (`GRANT RELOAD_TLS TO user;`), otherwise the reload will be rejected.
   [#4154](https://github.com/memgraph/memgraph/pull/4154)
+- Session trace no longer writes per-session files under
+  `--query-log-directory`. The flag is removed and startup fails if it is still
+  set. `SET SESSION TRACE ON` now emits tagged events into the main Memgraph log
+  at INFO (when `--log-level` is `info` or lower) instead of a dedicated
+  `{uuid}.log` file per session. Remove `--query-log-directory` from configs and
+  update tooling that parsed per-session log files to filter the main log by
+  `[session=<uuid>]`.
+  [#4149](https://github.com/memgraph/memgraph/pull/4149)
+- Bare `SHOW STORAGE INFO` now returns only instance-level metrics. Per-database
+  fields such as `vertex_count`, `edge_count`, and `storage_mode` moved to
+  `SHOW STORAGE INFO ON CURRENT DATABASE` or `SHOW STORAGE INFO ON DATABASE
+  <name>`. Several global columns were renamed (`global_memory_tracked` →
+  `memory_tracked`, `global_runtime_allocation_limit` → `memory_limit`,
+  `global_license_allocation_limit` → `license_memory_limit`, `global_disk_usage`
+  → `disk_usage`, `storage_mode` → `global_storage_mode`), and
+  `global_isolation_level` / `global_storage_mode` now report startup defaults
+  rather than the active database's runtime values. Update scripts and
+  dashboards that parsed the bare query to use the per-database variant where
+  needed.
+  [#4155](https://github.com/memgraph/memgraph/pull/4155)
+- `text_search.search`, `search_all`, `search_edges`, and `search_all_edges` no
+  longer accept `limit` as a positional argument. Pass `{limit: N}` in the new
+  optional `config` map instead (default remains `1000`). Update any queries that
+  passed a third positional limit argument.
+  [#4191](https://github.com/memgraph/memgraph/pull/4191)
+- `IS NULL`, `IS NOT NULL`, `IN`, `STARTS WITH`, `ENDS WITH`, `CONTAINS`, and
+  `=~` now bind looser than arithmetic (`*`, `/`, `+`, `-`) and tighter than
+  comparisons, matching standard Cypher precedence. Previously these predicates
+  bound tighter than arithmetic — for example `(null + 1) * 1 IS NULL` parsed as
+  `(null + 1) * (1 IS NULL)` instead of `((null + 1) * 1) IS NULL`. Add
+  parentheses if your queries relied on the old binding.
+  [#4240](https://github.com/memgraph/memgraph/pull/4240)
 
 {<h4 className="custom-header">✨ New features</h4>}
 
@@ -98,12 +137,27 @@ guide.
   into your graph. The old `migrate.*` procedure names continue to work as
   aliases.
   [#3832](https://github.com/memgraph/memgraph/pull/3832)
+- Added the `derive(path, options)` aggregate function to build an in-query
+  virtual graph over matched paths, so graph algorithms can run on derived
+  relationships without creating real edges. Supports custom virtual edge types,
+  undirected patterns, and property or label overlays on endpoints.
+  [#3923](https://github.com/memgraph/memgraph/pull/3923)
+- Improved `derive()` so synthetic `sourceNode` and `targetNode` endpoints inherit
+  all labels and properties from the original path nodes when those options are
+  omitted, making derived graphs easier to build without explicit endpoint config.
+  [#4214](https://github.com/memgraph/memgraph/pull/4214)
 - Added native OpenMetrics/Prometheus metrics export with per-database
   granularity. Set `--metrics-format=OpenMetrics` to serve metrics at `/metrics`
   in Prometheus scrape format. Each database gets its own query counters,
   latency histograms, and storage gauges labeled by database name. The JSON
   format remains the default but is deprecated.
   [#3911](https://github.com/memgraph/memgraph/pull/3911)
+- DEB and RPM packages now ship a stripped production binary plus a separate
+  debug-symbol sidecar package instead of distinct `Release` and `RelWithDebInfo`
+  variants. Install both when you need debug symbols (equivalent to the previous
+  `RelWithDebInfo` install). Docker builds expose the same split via `prod` and
+  `debug` flavours.
+  [#4079](https://github.com/memgraph/memgraph/pull/4079)
 - Vector indexes now support multi-label and wildcard filters. Create indexes on
   any combination of labels with `:L1|L2(prop)` (match any), `:L1&L2(prop)`
   (match all), or `(prop)` (wildcard — every entity with the property). Applies
@@ -121,14 +175,21 @@ guide.
   TLS remains independently configured.
   [#4140](https://github.com/memgraph/memgraph/pull/4140)
 - Added the `RELOAD INTRA_CLUSTER TLS` Cypher query to rotate intra-cluster TLS
-  certificates at runtime without restarting the cluster. The new `RELOAD_TLS`
-  privilege now governs both `RELOAD INTRA_CLUSTER TLS` and
-  `RELOAD BOLT_SERVER TLS`.
+  certificates at runtime without restarting the cluster.
   [#4154](https://github.com/memgraph/memgraph/pull/4154)
+- MAIN instances now expose metrics for WAL and snapshot transfer speed,
+  including how long REPLICAs take to load durability files, so you can monitor
+  replication throughput and spot slowdowns during catch-up or after enabling TLS.
+  [#4183](https://github.com/memgraph/memgraph/pull/4183)
 - `SHOW TRANSACTIONS` now includes `start_time` (UTC timestamp) and
   `elapsed_ms` columns, making it easier to identify long-running transactions
   without calculating elapsed time manually.
   [#4136](https://github.com/memgraph/memgraph/pull/4136)
+- Added `SHOW STORAGE INFO ON CURRENT DATABASE` for per-database storage and
+  memory metrics without naming the database explicitly. `SHOW LICENSE INFO` now
+  includes a `memory_limit_policy` row that explains how memory limits apply for
+  your license tier.
+  [#4155](https://github.com/memgraph/memgraph/pull/4155)
 - The OEM license tier is now split into `OEM` (enterprise-equivalent) and
   `OEM_COMMUNITY` (community-tier tracking). Existing OEM license keys continue
   to work and map to the enterprise-equivalent tier on upgrade.
@@ -138,6 +199,16 @@ guide.
   statistics. Stalled snapshots can now be diagnosed from the log without
   guessing which phase they are stuck in.
   [#4164](https://github.com/memgraph/memgraph/pull/4164)
+- Added fuzzy matching to `text_search.search`, `search_all`, `search_edges`,
+  and `search_all_edges` via an optional `config` map (`fuzzy_distance` 0–2,
+  `fuzzy_prefix`, `fuzzy_transpositions`), so typo-tolerant and prefix searches
+  work without regex. Exact-match behavior is unchanged when fuzzy options are
+  omitted.
+  [#4191](https://github.com/memgraph/memgraph/pull/4191)
+- Session trace events now interleave into the main Memgraph log with
+  `[session=]`, `[user=]`, and `[tx=]` tags, so you can follow multiple Bolt
+  sessions in one stream without separate log files per session.
+  [#4149](https://github.com/memgraph/memgraph/pull/4149)
 - The JSON metrics endpoint now has a formally defined contract validated in CI,
   ensuring backward compatibility of metric names and structure across releases.
   [#4143](https://github.com/memgraph/memgraph/pull/4143)
@@ -153,6 +224,52 @@ guide.
   when used with `USING PERIODIC COMMIT`. The procedures now use a stable
   per-query identifier that does not rotate between batches.
   [#4167](https://github.com/memgraph/memgraph/pull/4167)
+- Fixed Memgraph hanging on shutdown when telemetry or license update requests
+  were still in flight. Those requests are now aborted during shutdown, and the
+  shutdown sequence itself times out after 10 seconds.
+  [#4152](https://github.com/memgraph/memgraph/pull/4152)
+- Fixed a bug where switching to `IN_MEMORY_ANALYTICAL` storage mode could
+  deadlock when async index creation (for example from `ENABLE TTL`) was still
+  running. The async indexer now completes before the storage mode lock is taken.
+  [#4169](https://github.com/memgraph/memgraph/pull/4169)
+- Fixed HA data instances reporting incorrect vertex and storage metrics for the
+  default database after joining a cluster. The metrics collector now rebinds the
+  default database UUID on join, so per-database counts use the cluster-assigned
+  identity.
+  [#4172](https://github.com/memgraph/memgraph/pull/4172)
+- Fixed a bug where queries with leading whitespace before `EXPLAIN` or
+  `PROFILE` could crash or fail to parse. Leading whitespace is now trimmed
+  before the keyword is stripped.
+  [#4181](https://github.com/memgraph/memgraph/pull/4181)
+- Fixed NuRaft coordination logs ignoring `--log-retention-days`. HA coordinator
+  log files now rotate and expire using the same retention setting as the main
+  Memgraph log, so disk use stays predictable when you tune log retention.
+  [#4185](https://github.com/memgraph/memgraph/pull/4185)
+- Fixed `schema.node_type_properties()` and `schema.rel_type_properties()`
+  reporting property types the Simba BI connector (Power BI, Tableau) could not
+  map, which forced columns to VARCHAR. Type strings now match what the connector
+  expects so properties surface as Boolean, Float, DateTime, and Point where
+  appropriate.
+  [#4186](https://github.com/memgraph/memgraph/pull/4186)
+- Fixed edge metadata recovery after WAL replay. Edges restored from the WAL are
+  now indexed consistently with snapshot-loaded edges, so deletions and id lookups
+  with `--storage-enable-edges-metadata` no longer crash or return wrong results.
+  [#4189](https://github.com/memgraph/memgraph/pull/4189)
+- Fixed HA data instances incorrectly allowing `IN_MEMORY_ANALYTICAL` storage
+  mode, which replication does not support. Such instances now fail at startup if
+  analytical mode is configured, and runtime `STORAGE MODE IN_MEMORY_ANALYTICAL`
+  returns a clear error instead of entering an unsupported state.
+  [#4206](https://github.com/memgraph/memgraph/pull/4206)
+- Fixed incorrect operator precedence where null checks and string/list
+  predicates bound tighter than arithmetic, so mixed expressions such as
+  `(null + 1) * 1 IS NULL` could evaluate differently than standard Cypher
+  expects.
+  [#4240](https://github.com/memgraph/memgraph/pull/4240)
+- Fixed startup crashes when the process user does not own the storage directory
+  or the configured log file is not writable. Memgraph now exits cleanly with an
+  actionable error message — including which user owns the path and how to fix it
+  — instead of terminating with a segmentation fault.
+  [#4227](https://github.com/memgraph/memgraph/pull/4227)
 
 ## Previous releases
 
