@@ -266,6 +266,61 @@ kubectl delete crd servicemonitors.monitoring.coreos.com
 kubectl delete crd thanosrulers.monitoring.coreos.com
 ```
 
+#### Scrape Memgraph directly (without mg-exporter)
+
+From Memgraph 3.11, Memgraph can serve metrics in Prometheus
+[OpenMetrics](https://prometheus.io/docs/specs/om/open_metrics_spec/) format on its
+HTTP monitoring port, so you can scrape it directly and skip `mg-exporter` entirely.
+
+Set the top-level `scrapeMemgraphDirectly: true` and leave `prometheus.enabled: false`:
+
+```yaml
+# Memgraph serves OpenMetrics and the chart exposes its monitoring port automatically.
+scrapeMemgraphDirectly: true
+
+prometheus:
+  enabled: false       # no mg-exporter is deployed
+  serviceMonitor:
+    enabled: true      # in-cluster: kube-prometheus-stack scrapes Memgraph directly
+```
+
+`scrapeMemgraphDirectly` only selects the metrics *format and target* — on its own it
+does not scrape anything. You still enable a scraper:
+
+- **In-cluster**: `prometheus.serviceMonitor.enabled: true` provisions a `ServiceMonitor`
+  that `kube-prometheus-stack` uses to scrape Memgraph directly.
+- **Remote**: `vmagentRemote.enabled: true` makes vmagent scrape Memgraph directly and
+  remote-write the metrics (see [Remote metrics and logs](#remote-metrics-and-logs)).
+
+The same `scrapeMemgraphDirectly` switch governs both paths. When it is `false`, those
+scrapers read the `mg-exporter` instead, which requires `prometheus.enabled: true`.
+
+<Callout type="info">
+Direct scraping requires Memgraph >= 3.11. When `scrapeMemgraphDirectly: true`, the
+chart runs Memgraph with `--metrics-format=OpenMetrics` and exposes the metrics port
+automatically — you do **not** need to set `service.enableHttpMonitoring`. The endpoint
+is served over plain HTTP. The metric names differ from the legacy JSON exporter, so use
+the bundled **Memgraph OpenMetrics** dashboard (see below).
+</Callout>
+
+##### Grafana dashboard for direct scraping
+
+Set `prometheus.grafanaDashboard.enabled: true` to ship the bundled "Memgraph
+OpenMetrics" Grafana dashboard as a `ConfigMap` (labelled `grafana_dashboard`) for a
+Grafana sidecar (e.g. the one bundled with `kube-prometheus-stack`) to auto-load. The
+dashboard uses a datasource template variable, so it binds to Grafana's default
+Prometheus. The `ConfigMap` must live in a namespace the sidecar watches — set
+`prometheus.grafanaDashboard.namespace` to Grafana's namespace (or run the sidecar with
+`searchNamespace: ALL`).
+
+```yaml
+prometheus:
+  grafanaDashboard:
+    enabled: true
+    namespace: monitoring
+    label: grafana_dashboard
+```
+
 #### Remote metrics and logs
 
 The standalone chart can also ship:
@@ -283,6 +338,11 @@ Prerequisites:
   - `service.enableWebsocketMonitoring: true`
 - when `vectorRemote.enabled: true`, add `--monitoring-port=<service.websocketPortMonitoring>` and `--monitoring-address=0.0.0.0` to `memgraphConfig`
 - if you only need remote shipping and do not want duplicate scraping from kube-prometheus, set `prometheus.serviceMonitor.enabled: false`
+
+To scrape Memgraph directly instead of `mg-exporter`, set `scrapeMemgraphDirectly: true`
+and `prometheus.enabled: false`; vmagent then scrapes Memgraph's OpenMetrics endpoint
+directly (no exporter, and the monitoring port is exposed automatically). See
+[Scrape Memgraph directly](#scrape-memgraph-directly-without-mg-exporter).
 
 Example `values.yaml`:
 
@@ -571,6 +631,7 @@ The following table lists the configurable parameters of the Memgraph standalone
 | `sysctlInitContainer.image.tag`                              | Image tag for the sysctl init container.                                                                                                     | `latest`                                 |
 | `sysctlInitContainer.image.pullPolicy`                       | Image pull policy for the sysctl init container.                                                                                             | `IfNotPresent`                           |
 | `initContainers`                                             | Additional init containers to add to the Memgraph Pod.                                                                                       | `[]`                                     |
+| `scrapeMemgraphDirectly`                                     | Serve metrics in OpenMetrics format and scrape Memgraph directly instead of `mg-exporter` (requires Memgraph >= 3.11). Only selects the format/target — still enable a scraper via `prometheus.serviceMonitor.enabled` and/or `vmagentRemote.enabled`. | `false`                                  |
 | `prometheus.enabled`                                         | Deploy Kubernetes resources for Memgraph's Prometheus exporter.                                                                              | `false`                                  |
 | `prometheus.namespace`                                       | Namespace where the exporter and `kube-prometheus-stack` resources are installed.                                                            | `monitoring`                             |
 | `prometheus.memgraphExporter.port`                           | Port on which Memgraph's Prometheus exporter is exposed.                                                                                     | `9115`                                   |
@@ -580,7 +641,10 @@ The following table lists the configurable parameters of the Memgraph standalone
 | `prometheus.serviceMonitor.enabled`                          | Deploy a `ServiceMonitor` object for Prometheus scraping.                                                                                    | `true`                                   |
 | `prometheus.serviceMonitor.kubePrometheusStackReleaseName`   | Release name under which `kube-prometheus-stack` is installed.                                                                               | `kube-prometheus-stack`                  |
 | `prometheus.serviceMonitor.interval`                         | How often Prometheus pulls data from Memgraph's exporter.                                                                                    | `15s`                                    |
-| `vmagentRemote.enabled`                                      | Deploy a vmagent Deployment that scrapes mg-exporter and remote-writes to a Prometheus-compatible endpoint.                                  | `false`                                  |
+| `prometheus.grafanaDashboard.enabled`                        | Ship the bundled "Memgraph OpenMetrics" Grafana dashboard as a `ConfigMap` for a Grafana sidecar to auto-load.                               | `false`                                  |
+| `prometheus.grafanaDashboard.namespace`                      | Namespace for the dashboard `ConfigMap`; must be one the Grafana sidecar watches. Defaults to `prometheus.namespace`, else release namespace. | `""`                                     |
+| `prometheus.grafanaDashboard.label`                          | Label the Grafana sidecar selects dashboards by.                                                                                            | `grafana_dashboard`                      |
+| `vmagentRemote.enabled`                                      | Deploy a vmagent Deployment that scrapes mg-exporter (or Memgraph directly when `scrapeMemgraphDirectly=true`) and remote-writes to a Prometheus-compatible endpoint. | `false`                                  |
 | `vmagentRemote.namespace`                                    | Namespace for the vmagent Deployment and its resources. Defaults to `prometheus.namespace` when empty.                                       | `""`                                     |
 | `vmagentRemote.image.repository`                             | vmagent image repository.                                                                                                                    | `victoriametrics/vmagent`                |
 | `vmagentRemote.image.tag`                                    | vmagent image tag.                                                                                                                           | `v1.139.0`                               |
