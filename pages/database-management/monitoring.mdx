@@ -7,14 +7,15 @@ import { Callout } from 'nextra/components'
 
 # Monitoring
 
-Monitoring applications and databases is essential to track the load and resources used by the system. 
+Monitoring applications and databases is essential to track the load and resources used by the system.
 
 Memgraph currently supports:
-1. **Real-time logs tracking via WebSocket server**: Log tracking is helpful for debugging purposes and monitoring the database operations. 
+1. **Real-time logs tracking via WebSocket server**: Log tracking is helpful for debugging purposes and monitoring the database operations.
 2. **Metrics tracking via HTTP server (Enterprise Edition)**: In the Enterprise edition, besides log tracking, Memgraph allows tracking information about
 transactions, query latencies, types of queries executed, snapshot recovery latencies, triggers, TTL data, Bolt
 messages, indexes, streams, memory, operators and sessions. There are also many metrics which are trying to describe the state of high availability. These include metrics which
 describe latencies of RPC messages, time needed to perform a failover and counters for events occurring throughout the lifetime of HA Memgraph.
+3. **[Session trace](#session-trace)**: Profile the execution of all queries within a session to identify performance bottlenecks.
 
 <Callout type="info">
 For deeper troubleshooting — including profiling with `perf`, capturing core
@@ -24,7 +25,7 @@ guide](/clustering/high-availability/setup-ha-cluster-k8s) covers init-container
 diagnostics and uploading core dumps to S3.
 </Callout>
 
-## Real-time logs tracking via WebSocket server 
+## Real-time logs tracking via WebSocket server
 
 Connect to Memgraph's logging server via WebSocket to forward logs to all the
 connected clients.
@@ -53,7 +54,7 @@ ws://host:port
 ```
 
 The default host is `0.0.0.0`, but it can be changed using the
-`--monitoring-address=` configuration flag.  
+`--monitoring-address=` configuration flag.
 
 The default port is `7444`, but it can be changed using the `--monitoring-port`
 configuration flag.
@@ -99,7 +100,7 @@ flags](/database-management/configuration#list-of-configuration-flags).
 ### Authentication
 
 When authentication is not used due to no users present in Memgraph, no
-authentication message is expected, and no response will be returned. 
+authentication message is expected, and no response will be returned.
 
 When the authentication is used, Memgraph won't send a message to a certain
 connection until it's authenticated.
@@ -193,127 +194,102 @@ privilege](/database-management/authentication-and-authorization/role-based-acce
 
 In the Enterprise Edition, Memgraph allows tracking information about
 high availability, transactions, query latencies, snapshot recovery latencies, triggers, Bolt
-messages, indexes, streams, memory, operators and sessions, all by using using an HTTP server.
+messages, indexes, constraints, streams, memory, operators and sessions, all by using an HTTP server.
 
 To retrieve data from the HTTP server, [enter a valid Memgraph
-Enterprise license key](/database-management/enabling-memgraph-enterprise).  
+Enterprise license key](/database-management/enabling-memgraph-enterprise).
 
 The default address and port for the metrics server is `0.0.0.0:9091`, and can
 be configured using the `--metrics-address` and `--metrics-port` [configuration
 flags](/database-management/configuration#list-of-configuration-flags).
 
-To retrieve the metrics, send a GET request to the following URL:
+### Metrics format
 
-```plaintext
-http://host:port
-```
+The `--metrics-format` [configuration
+flag](/database-management/configuration#list-of-configuration-flags) controls
+the response format of the HTTP endpoint. The allowed values are:
 
-Here is an example of how to retrieve metrics using Python:
+- **`OpenMetrics`**: Prometheus-compatible
+[OpenMetrics](https://openmetrics.io/) text format
+(`application/openmetrics-text`). Metrics are labeled per-database. Any
+OpenMetrics compatible clients can connect directly to Memgraph to scrape metrics.
+- **`JSON`** (default): A flat JSON object. The `JSON` format is deprecated.
+Using JSON with any OpenMetrics compatible client requires the [Prometheus
+exporter](https://github.com/memgraph/prometheus-exporter) middleware.
 
-```python
-import requests
-import json
+New deployments should use `OpenMetrics`, which enables direct Prometheus
+scraping and provides per-database metric labels.
 
+### Per-database metrics
 
-def fetch_memgraph_metrics():
-    metrics_url = "http://0.0.0.0:9091/metrics"
+Most metrics are tracked per-database. In a
+[multi-tenant](/database-management/multi-tenancy) setup, each database
+maintains its own counters, gauges, and histograms. How per-database metrics are
+exposed depends on the format — see the [OpenMetrics](#openmetrics-monitoring)
+and [JSON](#json-monitoring-deprecated) sections below.
 
-    try:
-    response = requests.get(metrics_url, timeout=5) 
-
-        if response.status_code == 200:
-            try:
-                metrics_data = json.loads(response.text)
-                pretty_metrics = json.dumps(metrics_data, indent=4)
-                print("Memgraph Metrics:\n", pretty_metrics)
-            except json.JSONDecodeError:
-                print("Memgraph Metrics:\n", response.text)
-        else:
-            print(f"Failed to fetch metrics. Status code: {response.status_code}")
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred: {e}")
-
-
-fetch_memgraph_metrics()
-```
-
-The example above will print the metric similar to the [example
-response](#example-response) below.
-
+Session-related metrics (active sessions, Bolt messages) and high-availability
+metrics remain global — they are not scoped to any single database.
 
 ### System metrics
 
 All system metrics measuring different parts of the system can be divided into
 three different types:
-- **Gauge** - a single value of some variable in the system (e.g. memory usage)
-- **Counter (uint64_t)** - a value that can be incremented or decremented (e.g.
- number of active transactions in the system)
-- **Histogram (uint64_t)** - distribution of measured values (e.g. certain
- percentile of query latency on N measured queries)
+- **Gauge** — a single value of some variable in the system (e.g. memory usage, active transaction count)
+- **Counter** — a monotonically increasing value (e.g. total number of committed transactions)
+- **Histogram** — distribution of measured values (e.g. query latency percentiles)
+
+<Callout type="info">
+The metric names in the tables below use the OpenMetrics format. The deprecated
+JSON endpoint and `SHOW METRICS INFO` use different names — see
+[JSON monitoring](#json-monitoring-deprecated) for details.
+</Callout>
 
 #### General metrics
 
- | Name                     | Type      | Description                                                                                  |
- | ------------------------ | --------- | -------------------------------------------------------------------------------------------- |
- | average_degree           | Counter   | Average number of relationships of a single node.                                            |
- | disk_usage               | Gauge     | Amount of disk space used by the [data directory](/fundamentals/data-durability) (in bytes). |
- | edge_count               | Counter   | Number of relationships stored in the system.                                                |
- | memory_usage             | Gauge     | Amount of RAM used reported by the OS (in bytes). This corresponds to `memory_res` in `SHOW STORAGE INFO` and reflects the OS-reported resident set size — **not** the value used for [license enforcement](/database-management/enabling-memgraph-enterprise#upgrading-or-downgrading-the-license). To monitor the license-enforced value, check `memory_tracked` via [`SHOW STORAGE INFO`](/database-management/server-stats#storage-information). |
- | peak_memory_usage        | Gauge     | Peak amount of RAM used reported by the OS (in bytes). Corresponds to `peak_memory_res` in `SHOW STORAGE INFO`.                                       |
- | unreleased_delta_objects | Counter   | Number of unreleased delta objects.                                                          |
- | vertex_count             | Counter   | Number of nodes stored in the system.                                                        |
- | SocketConnect_us_50p     | Histogram | Latency of connecting to the socket, 50th percentile.                                        |
- | SocketConnect_us_90p     | Histogram | Latency of connecting to the socket, 90th percentile.                                        |
- | SocketConnect_us_99p     | Histogram | Latency of connecting to the socket, 99th percentile.                                        |
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_vertex\_count | Gauge | Number of nodes stored in the database. |
+ | memgraph\_edge\_count | Gauge | Number of relationships stored in the database. |
+ | memgraph\_disk\_usage\_bytes | Gauge | Disk space used by the database's [data directory](/fundamentals/data-durability) (in bytes). |
+ | memgraph\_memory\_res\_bytes | Gauge | RAM used by the Memgraph process as reported by the OS (in bytes). Reflects the resident set size, not the value used for [license enforcement](/database-management/enabling-memgraph-enterprise#upgrading-or-downgrading-the-license). |
+ | memgraph\_peak\_memory\_res\_bytes | Gauge | Peak RAM used by the Memgraph process (in bytes). |
 
 #### Index metrics
 
- | Name                          | Type    | Description                                                  |
- | ----------------------------- | ------- | ------------------------------------------------------------ |
- | ActiveLabelIndices            | Counter | Number of active label indices in the system.                |
- | ActiveLabelPropertyIndices    | Counter | Number of active label property indices in the system.       |
- | ActiveEdgeTypeIndices         | Counter | Number of active edge-type indices in the system.            |
- | ActiveEdgeTypePropertyIndices | Counter | Number of active edge-type property indices in the system.   |
- | ActiveEdgePropertyIndices     | Counter | Number of active edge property indices in the system.        |
- | ActivePointIndices            | Counter | Number of active point indices in the system.                |
- | ActiveTextIndices             | Counter | Number of active text indices in the system.                 |
- | ActiveTextEdgeIndices         | Counter | Number of active text edge indices in the system.            |
- | ActiveVectorIndices           | Counter | Number of active vector indices in the system.               |
- | ActiveVectorEdgeIndices       | Counter | Number of active vector edge indices in the system.          |
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_active\_label\_indices | Gauge | Number of active label indexes. |
+ | memgraph\_active\_label\_property\_indices | Gauge | Number of active label-property indexes. |
+ | memgraph\_active\_edge\_type\_indices | Gauge | Number of active edge-type indexes. |
+ | memgraph\_active\_edge\_type\_property\_indices | Gauge | Number of active edge-type-property indexes. |
+ | memgraph\_active\_edge\_property\_indices | Gauge | Number of active edge-property indexes. |
+ | memgraph\_active\_point\_indices | Gauge | Number of active point indexes. |
+ | memgraph\_active\_text\_indices | Gauge | Number of active text indexes on vertices. |
+ | memgraph\_active\_text\_edge\_indices | Gauge | Number of active text indexes on edges. |
+ | memgraph\_active\_vector\_indices | Gauge | Number of active vector indexes on vertices. |
+ | memgraph\_active\_vector\_edge\_indices | Gauge | Number of active vector indexes on edges. |
 
 #### Constraint metrics
 
- | Name                        | Type    | Description                                          |
- | --------------------------- | ------- | ---------------------------------------------------- |
- | ActiveExistenceConstraints  | Counter | Number of active existence constraints in the system. |
- | ActiveUniqueConstraints     | Counter | Number of active unique constraints in the system.    |
- | ActiveTypeConstraints       | Counter | Number of active type constraints in the system.      |
-
-#### Schema info metrics
-
- | Name       | Type    | Description                                            |
- | ---------- | ------- | ------------------------------------------------------ |
- | ShowSchema | Counter | Number of times the user called `SHOW SCHEMA INFO`.    |
-
-#### Storage info metrics
-
- | Name                      | Type    | Description                                                                                          |
- | ------------------------- | ------- | --------------------------------------------------------------------------------------------------- |
- | ShowStorageInfo           | Counter | Number of times the user called the instance-level (no-database) `SHOW STORAGE INFO`.               |
- | ShowStorageInfoOnDatabase | Counter | Number of times the user called the per-database `SHOW STORAGE INFO ON [CURRENT] DATABASE` (summed across all databases). |
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_active\_existence\_constraints | Gauge | Number of active existence constraints. |
+ | memgraph\_active\_unique\_constraints | Gauge | Number of active unique constraints. |
+ | memgraph\_active\_type\_constraints | Gauge | Number of active type constraints. |
 
 #### Memory metrics
 
- | Name                            | Type      | Description                                                        |
- | ------------------------------- | --------- | -------------------------------------------------------------------|
- | UnreleasedDeltaObjects          | Counter   | Total number of unreleased delta objects in memory.                |
- | PeakMemoryRes                   | Gauge     | Peak resident memory in the system.                                |
- | GCLatency_us_50p                | Histogram | GC total cleanup time in microseconds (50th percentile).           |
- | GCLatency_us_90p                | Histogram | GC total cleanup time in microseconds (90th percentile).           |
- | GCLatency_us_99p                | Histogram | GC total cleanup time in microseconds (99th percentile).           |
- | GCSkiplistCleanupLatency_us_50p | Histogram | GC time spent for cleaning skiplists in indexes (50th percentile). |
- | GCSkiplistCleanupLatency_us_90p | Histogram | GC time spent for cleaning skiplists in indexes (90th percentile). |
- | GCSkiplistCleanupLatency_us_99p | Histogram | GC time spent for cleaning skiplists in indexes (99th percentile). |
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_db\_memory\_tracked\_bytes | Gauge | Total tracked memory for the database (in bytes). |
+ | memgraph\_db\_peak\_memory\_tracked\_bytes | Gauge | Peak tracked memory for the database (in bytes). |
+ | memgraph\_db\_storage\_memory\_tracked\_bytes | Gauge | Memory used by graph structures (vertices, edges, properties). |
+ | memgraph\_db\_embedding\_memory\_tracked\_bytes | Gauge | Memory used by vector index embeddings. |
+ | memgraph\_db\_query\_memory\_tracked\_bytes | Gauge | Memory used by query execution. |
+ | memgraph\_unreleased\_delta\_objects | Gauge | Number of unreleased delta objects. |
+ | memgraph\_gc\_latency\_seconds | Histogram | GC total cleanup time. |
+ | memgraph\_gc\_skiplist\_cleanup\_latency\_seconds | Histogram | GC time spent cleaning skiplists in indexes. |
 
 #### Operator metrics
 
@@ -324,253 +300,434 @@ database in order to yield the results for a given query. Every node within a
 plan is known as [a logical operator](/querying/query-plan#query-plan-operators)
 and describes a particular operation.
 
- | Name                                   | Type    | Description                                                         |
- | -------------------------------------  | ------- | ------------------------------------------------------------------  |
- | OnceOperator                           | Counter | Number of times Once operator was used.                             |
- | CreateNodeOperator                     | Counter | Number of times CreateNode operator was used.                       |
- | CreateExpandOperator                   | Counter | Number of times CreateExpand operator was used.                     |
- | ScanAllOperator                        | Counter | Number of times ScanAll operator was used.                          |
- | ScanAllByLabelOperator                 | Counter | Number of times ScanAllByLabel operator was used.                   |
- | ScanAllByLabelPropertiesOperator       | Counter | Number of times ScanAllByLabelProperties operator was used.         |
- | ExpandOperator                         | Counter | Number of times Expand operator was used.                           |
- | ExpandVariableOperator                 | Counter | Number of times ExpandVariable operator was used.                   |
- | ConstructNamedPathOperator             | Counter | Number of times ConstructNamedPath operator was used.               |
- | FilterOperator                         | Counter | Number of times Filter operator was used.                           |
- | ProduceOperator                        | Counter | Number of times Produce operator was used.                          |
- | DeleteOperator                         | Counter | Number of times Delete operator was used.                           |
- | SetPropertyOperator                    | Counter | Number of times SetProperty operator was used.                      |
- | SetPropertiesOperator                  | Counter | Number of times SetProperties operator was used.                    |
- | SetLabelsOperator                      | Counter | Number of times SetLabels operator was used.                        |
- | RemovePropertyOperator                 | Counter | Number of times RemoveProperty operator was used.                   |
- | RemoveLabelsOperator                   | Counter | Number of times RemoveLabels operator was used.                     |
- | EdgeUniquenessFilterOperator           | Counter | Number of times EdgeUniquenessFilter operator was used.             |
- | EmptyResultOperator                    | Counter | Number of times EmptyResult operator was used.                      |
- | AccumulateOperator                     | Counter | Number of times Accumulate operator was used.                       |
- | AggregateOperator                      | Counter | Number of times Aggregate operator was used.                        |
- | SkipOperator                           | Counter | Number of times Skip operator was used.                             |
- | LimitOperator                          | Counter | Number of times Limit operator was used.                            |
- | OrderByOperator                        | Counter | Number of times OrderBy operator was used.                          |
- | MergeOperator                          | Counter | Number of times Merge operator was used.                            |
- | OptionalOperator                       | Counter | Number of times Optional operator was used.                         |
- | UnwindOperator                         | Counter | Number of times Unwind operator was used.                           |
- | DistinctOperator                       | Counter | Number of times Distinct operator was used.                         |
- | UnionOperator                          | Counter | Number of times Union operator was used.                            |
- | CartesianOperator                      | Counter | Number of times Cartesian operator was used.                        |
- | CallProcedureOperator                  | Counter | Number of times CallProcedureOperator operator was used.            |
- | ForeachOperator                        | Counter | Number of times Foreach operator was used.                          |
- | EvaluatePatternFilterOperator          | Counter | Number of times EvaluatePatternFilter operator was used.            |
- | ApplyOperator                          | Counter | Number of times Apply operator was used.                            |
- | HashJoinOperator                       | Counter | Number of times HashJoin operator was used.                         |
- | IndexedJoinOperator                    | Counter | Number of times IndexedJoin operator was used.                      |
- | PeriodicCommitOperator                 | Counter | Number of times PeriodicCommit operator was used.                   |
- | PeriodicSubqueryOperator               | Counter | Number of times PeriodicSubquery operator was used.                 |
- | RollUpApplyOperator                    | Counter | Number of times RollUpApply operator was used.                      |
- | RemoveNestedPropertyOperator           | Counter | Number of times RemoveNestedProperty operator was used.             |
- | SetNestedPropertyOperator              | Counter | Number of times SetNestedProperty operator was used.                |
- | ScanAllByIdOperator                    | Counter | Number of times ScanAllById operator was used.                      |
- | ScanAllByEdgeIdOperator                | Counter | Number of times ScanAllByEdgeId operator was used.                  |
- | ScanAllByEdgeOperator                  | Counter | Number of times ScanAllByEdge operator was used.                    |
- | ScanAllByEdgePropertyOperator          | Counter | Number of times ScanAllByEdgeProperty operator was used.            |
- | ScanAllByEdgePropertyRangeOperator     | Counter | Number of times ScanAllByEdgePropertyRange operator was used.       |
- | ScanAllByEdgePropertyValueOperator     | Counter | Number of times ScanAllByEdgePropertyValue operator was used.       |
- | ScanAllByEdgeTypeOperator              | Counter | Number of times ScanAllByEdgeType operator was used.                |
- | ScanAllByEdgeTypePropertyOperator      | Counter | Number of times ScanAllByEdgeTypeProperty operator was used.        |
- | ScanAllByEdgeTypePropertyRangeOperator | Counter | Number of times ScanAllByEdgeTypePropertyRange operator was used.   |
- | ScanAllByEdgeTypePropertyValueOperator | Counter | Number of times ScanAllByEdgeTypePropertyValue operator was used.   |
- | ScanAllByPointDistanceOperator         | Counter | Number of times ScanAllByPointDistance operator was used.           |
- | ScanAllByPointWithinbboxOperator       | Counter | Number of times ScanAllByPointWithinbbox operator was used.         |
+All operator metrics are counters tracking how many times each operator was
+used.
+
+ | Name | Type |
+ | ---- | ---- |
+ | memgraph\_once\_operator\_total | Counter |
+ | memgraph\_create\_node\_operator\_total | Counter |
+ | memgraph\_create\_expand\_operator\_total | Counter |
+ | memgraph\_scan\_all\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_label\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_label\_properties\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_id\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_edge\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_edge\_type\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_edge\_type\_property\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_edge\_type\_property\_value\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_edge\_type\_property\_range\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_edge\_property\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_edge\_property\_value\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_edge\_property\_range\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_edge\_id\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_point\_distance\_operator\_total | Counter |
+ | memgraph\_scan\_all\_by\_point\_withinbbox\_operator\_total | Counter |
+ | memgraph\_expand\_operator\_total | Counter |
+ | memgraph\_expand\_variable\_operator\_total | Counter |
+ | memgraph\_construct\_named\_path\_operator\_total | Counter |
+ | memgraph\_filter\_operator\_total | Counter |
+ | memgraph\_produce\_operator\_total | Counter |
+ | memgraph\_delete\_operator\_total | Counter |
+ | memgraph\_set\_property\_operator\_total | Counter |
+ | memgraph\_set\_properties\_operator\_total | Counter |
+ | memgraph\_set\_labels\_operator\_total | Counter |
+ | memgraph\_set\_nested\_property\_operator\_total | Counter |
+ | memgraph\_remove\_property\_operator\_total | Counter |
+ | memgraph\_remove\_labels\_operator\_total | Counter |
+ | memgraph\_remove\_nested\_property\_operator\_total | Counter |
+ | memgraph\_edge\_uniqueness\_filter\_operator\_total | Counter |
+ | memgraph\_empty\_result\_operator\_total | Counter |
+ | memgraph\_accumulate\_operator\_total | Counter |
+ | memgraph\_aggregate\_operator\_total | Counter |
+ | memgraph\_skip\_operator\_total | Counter |
+ | memgraph\_limit\_operator\_total | Counter |
+ | memgraph\_order\_by\_operator\_total | Counter |
+ | memgraph\_merge\_operator\_total | Counter |
+ | memgraph\_optional\_operator\_total | Counter |
+ | memgraph\_unwind\_operator\_total | Counter |
+ | memgraph\_distinct\_operator\_total | Counter |
+ | memgraph\_union\_operator\_total | Counter |
+ | memgraph\_cartesian\_operator\_total | Counter |
+ | memgraph\_call\_procedure\_operator\_total | Counter |
+ | memgraph\_foreach\_operator\_total | Counter |
+ | memgraph\_evaluate\_pattern\_filter\_operator\_total | Counter |
+ | memgraph\_apply\_operator\_total | Counter |
+ | memgraph\_indexed\_join\_operator\_total | Counter |
+ | memgraph\_hash\_join\_operator\_total | Counter |
+ | memgraph\_roll\_up\_apply\_operator\_total | Counter |
+ | memgraph\_periodic\_commit\_operator\_total | Counter |
+ | memgraph\_periodic\_subquery\_operator\_total | Counter |
 
 #### Query metrics
 
- | Name                         | Type      | Description                                                |
- | ---------------------------- | --------- | ---------------------------------------------------------- |
- | QueryExecutionLatency_us_50p | Histogram | Query execution latency in microseconds (50th percentile). |
- | QueryExecutionLatency_us_90p | Histogram | Query execution latency in microseconds (90th percentile). |
- | QueryExecutionLatency_us_99p | Histogram | Query execution latency in microseconds (99th percentile). |
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_query\_execution\_latency\_seconds | Histogram | Query execution latency. |
+ | memgraph\_read\_queries\_total | Counter | Number of read-only queries executed. |
+ | memgraph\_write\_queries\_total | Counter | Number of write-only queries executed. |
+ | memgraph\_read\_write\_queries\_total | Counter | Number of read-write queries executed. |
 
-#### Query type metrics
+#### Schema and storage info metrics
 
- | Name           | Type    | Description                            |
- | -------------- | ------- | -------------------------------------- |
- | ReadQuery      | Counter | Number of read-only queries executed.  |
- | WriteQuery     | Counter | Number of write-only queries executed. |
- | ReadWriteQuery | Counter | Number of read-write queries executed. |
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_show\_schema\_total | Counter | Number of times `SHOW SCHEMA INFO` was executed. |
+ | memgraph\_show\_storage\_info\_total | Counter | Number of times `SHOW STORAGE INFO` or `SHOW STORAGE INFO ON DATABASE` was executed. |
 
 #### Session metrics
 
- | Name                    | Type    | Description                             |
- | ----------------------- | ------- | --------------------------------------- |
- | ActiveSessions          | Counter | Number of active connections.           |
- | ActiveBoltSessions      | Counter | Number of active Bolt connections.      |
- | ActiveTCPSessions       | Counter | Number of active TCP connections.       |
- | ActiveSSLSessions       | Counter | Number of active SSL connections.       |
- | ActiveWebSocketSessions | Counter | Number of active websocket connections. |
- | BoltMessages            | Counter | Number of Bolt messages sent.           |
+Session metrics are global; they are not scoped to any individual database.
+
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_active\_sessions | Gauge | Number of active connections. |
+ | memgraph\_active\_bolt\_sessions | Gauge | Number of active Bolt connections. |
+ | memgraph\_active\_tcp\_sessions | Gauge | Number of active TCP connections. |
+ | memgraph\_active\_ssl\_sessions | Gauge | Number of active SSL connections. |
+ | memgraph\_active\_websocket\_sessions | Gauge | Number of active WebSocket connections. |
+ | memgraph\_bolt\_messages\_total | Counter | Number of Bolt messages sent. |
 
 #### Snapshot metrics
 
- | Name                           | Type      | Description                                                  |
- | ------------------------------ | --------- | ------------------------------------------------------------ |
- | SnapshotCreationLatency_us_50p | Histogram | Snapshot creation latency in microseconds (50th percentile). |
- | SnapshotCreationLatency_us_90p | Histogram | Snapshot creation latency in microseconds (90th percentile). |
- | SnapshotCreationLatency_us_99p | Histogram | Snapshot creation latency in microseconds (99th percentile). |
- | SnapshotRecoveryLatency_us_50p | Histogram | Snapshot recovery latency in microseconds (50th percentile). |
- | SnapshotRecoveryLatency_us_90p | Histogram | Snapshot recovery latency in microseconds (90th percentile). |
- | SnapshotRecoveryLatency_us_99p | Histogram | Snapshot recovery latency in microseconds (99th percentile). |
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_snapshot\_creation\_latency\_seconds | Histogram | Snapshot creation latency. |
+ | memgraph\_snapshot\_recovery\_latency\_seconds | Histogram | Snapshot recovery latency. |
 
 #### Stream metrics
 
- | Name             | Type    | Description                           |
- | ---------------- | ------- | ------------------------------------- |
- | StreamsCreated   | Counter | Number of streams created.            |
- | MessagesConsumed | Counter | Number of consumed streamed messages. |
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_streams\_created\_total | Counter | Number of streams created. |
+ | memgraph\_messages\_consumed\_total | Counter | Number of consumed streamed messages. |
 
 #### Transaction metrics
 
- | Name                   | Type    | Description                                                                                                               |
- | ---------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------|
- | ActiveTransactions     | Counter | Number of active transactions.                                                                                            |
- | CommitedTransactions   | Counter | Number of committed transactions.                                                                                         |
- | RollbackedTransactions | Counter | Number of rollbacked transactions.                                                                                        |
- | FailedQuery            | Counter | Number of times executing a query failed (either during parse time or runtime).                                           |
- | FailedPrepare          | Counter | Number of times preparing a query failed.                                                                                 |
- | FailedPull             | Counter | Number of times pulling a query failed.                                                                                   |
- | SuccessfulQuery        | Counter | Number of successful queries.                                                                                             |
- | TransientErrors        | Counter | Number of times a transient error happened. Transient errors are those errors which can be retried.                       |
- | WriteWriteConflicts    | Counter | Number of times a write-write conflict happened (2 transactions performing modification to the same node simultaneously). |
-
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_active\_transactions | Gauge | Number of active transactions. |
+ | memgraph\_committed\_transactions\_total | Counter | Number of committed transactions. |
+ | memgraph\_rolled\_back\_transactions\_total | Counter | Number of rolled-back transactions. |
+ | memgraph\_failed\_queries\_total | Counter | Number of times executing a query failed (during parse time or runtime). |
+ | memgraph\_failed\_prepares\_total | Counter | Number of times preparing a query failed. |
+ | memgraph\_failed\_pulls\_total | Counter | Number of times pulling a query failed. |
+ | memgraph\_successful\_queries\_total | Counter | Number of successful queries. |
+ | memgraph\_transient\_errors\_total | Counter | Number of transient errors (errors which can be retried). |
+ | memgraph\_write\_write\_conflicts\_total | Counter | Number of write-write conflicts (two transactions modifying the same node simultaneously). |
 
 #### Trigger metrics
 
- | Name             | Type    | Description                  |
- | ---------------- | ------- | ---------------------------- |
- | TriggersCreated  | Counter | Number of Triggers created.  |
- | TriggersExecuted | Counter | Number of Triggers executed. |
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_triggers\_created\_total | Counter | Number of triggers created. |
+ | memgraph\_triggers\_executed\_total | Counter | Number of triggers executed. |
 
 #### TTL metrics
 
- | Name         | Type    | Description                  |
- | ------------ | ------- | ---------------------------- |
- | DeletedNodes | Counter | Number of deleted TTL edges. |
- | DeletedEdges | Counter | Number of deleted TTL nodes. |
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_deleted\_nodes\_total | Counter | Number of nodes deleted via TTL. |
+ | memgraph\_deleted\_edges\_total | Counter | Number of edges deleted via TTL. |
 
 #### HA metrics
 
- | Name                              | Type      | Description                                                                                        |
- | --------------------------------- | --------- | -------------------------------------------------------------------------------------------------- |
- | PrepareCommitRpc_us_50p           | Histogram | PrepareCommitRpc latency in microseconds (50th percentile).                                         |
- | PrepareCommitRpc_us_90p           | Histogram | PrepareCommitRpc latency in microseconds (90th percentile).                                         |
- | PrepareCommitRpc_us_99p           | Histogram | PrepareCommitRpc latency in microseconds (99th percentile).                                         |
- | CurrentWalRpc_us_50p              | Histogram | CurrentWalRpc latency in microseconds (50th percentile).                                           |
- | CurrentWalRpc_us_90p              | Histogram | CurrentWalRpc latency in microseconds (90th percentile).                                           |
- | CurrentWalRpc_us_99p              | Histogram | CurrentWalRpc latency in microseconds (99th percentile).                                           |
- | WalFilesRpc_us_50p                | Histogram | WalFilesRpc latency in microseconds (50th percentile).                                             |
- | WalFilesRpc_us_90p                | Histogram | WalFilesRpc latency in microseconds (90th percentile).                                             |
- | WalFilesRpc_us_99p                | Histogram | WalFilesRpc latency in microseconds (99th percentile).                                             |
- | ReplicaStream_us_50p              | Histogram | Time needed to construct PrepareCommitRpc stream (50th percentile).                                 |
- | ReplicaStream_us_90p              | Histogram | Time needed to construct PrepareCommitRpc stream (90th percentile).                                 |
- | ReplicaStream_us_99p              | Histogram | Time needed to construct PrepareCommitRpc stream (99th percentile).                                 |
- | SnapshotRpc_us_50p                | Histogram | SnapshotRpc latency in microseconds (50th percentile).                                             |
- | SnapshotRpc_us_90p                | Histogram | SnapshotRpc latency in microseconds (90th percentile).                                             |
- | SnapshotRpc_us_99p                | Histogram | SnapshotRpc latency in microseconds (99th percentile).                                             |
- | FrequentHeartbeatRpc_us_50p       | Histogram | FrequentHeartbeatRpc latency in microseconds (50th percentile).                                    |
- | FrequentHeartbeatRpc_us_90p       | Histogram | FrequentHeartbeatRpc latency in microseconds (90th percentile).                                    |
- | FrequentHeartbeatRpc_us_99p       | Histogram | FrequentHeartbeatRpc latency in microseconds (99th percentile).                                    |
- | HeartbeatRpc_us_50p               | Histogram | HeartbeatRpc latency in microseconds (50th percentile).                                            |
- | HeartbeatRpc_us_90p               | Histogram | HeartbeatRpc latency in microseconds (90th percentile).                                            |
- | HeartbeatRpc_us_99p               | Histogram | HeartbeatRpc latency in microseconds (99th percentile).                                            |
- | SystemRecoveryRpc_us_50p          | Histogram | SystemRecoveryRpc latency in microseconds (50th percentile).                                       |
- | SystemRecoveryRpc_us_90p          | Histogram | SystemRecoveryRpc latency in microseconds (90th percentile).                                       |
- | SystemRecoveryRpc_us_99p          | Histogram | SystemRecoveryRpc latency in microseconds (99th percentile).                                       |
- | ChooseMostUpToDateInstance_us_50p | Histogram | ChooseMostUpToDateInstance latency in microseconds (50th percentile).                              |
- | ChooseMostUpToDateInstance_us_90p | Histogram | ChooseMostUpToDateInstance latency in microseconds (90th percentile).                              |
- | ChooseMostUpToDateInstance_us_99p | Histogram | ChooseMostUpToDateInstance latency in microseconds (99th percentile).                              |
- | GetHistories_us_50p               | Histogram | GetHistories latency in microseconds (50th percentile).                                            |
- | GetHistories_us_90p               | Histogram | GetHistories latency in microseconds (90th percentile).                                            |
- | GetHistories_us_99p               | Histogram | GetHistories latency in microseconds (99th percentile).                                            |
- | InstanceFailCallback_us_50p       | Histogram | InstanceFailCallback latency in microseconds (50th percentile).                                    |
- | InstanceFailCallback_us_90p       | Histogram | InstanceFailCallback latency in microseconds (90th percentile).                                    |
- | InstanceFailCallback_us_99p       | Histogram | InstanceFailCallback latency in microseconds (99th percentile).                                    |
- | InstanceSuccCallback_us_50p       | Histogram | InstanceSuccCallback latency in microseconds (50th percentile).                                    |
- | InstanceSuccCallback_us_90p       | Histogram | InstanceSuccCallback latency in microseconds (90th percentile).                                    |
- | InstanceSuccCallback_us_99p       | Histogram | InstanceSuccCallback latency in microseconds (99th percentile).                                    |
- | DataFailover_us_50p               | Histogram | DataFailover latency in microseconds (50th percentile).                                            |
- | DataFailover_us_90p               | Histogram | DataFailover latency in microseconds (90th percentile).                                            |
- | DataFailover_us_99p               | Histogram | DataFailover latency in microseconds (99th percentile).                                            |
- | StartTxnReplication_us_50p        | Histogram | StartTxnReplication latency in microseconds (50th percentile).                                     |
- | StartTxnReplication_us_90p        | Histogram | StartTxnReplication latency in microseconds (90th percentile).                                     |
- | StartTxnReplication_us_99p        | Histogram | StartTxnReplication latency in microseconds (99th percentile).                                     |
- | FinalizeTxnReplication_us_50p     | Histogram | FinalizeTxnReplication latency in microseconds (50th percentile).                                  |
- | FinalizeTxnReplication_us_90p     | Histogram | FinalizeTxnReplication latency in microseconds (90th percentile).                                  |
- | FinalizeTxnReplication_us_99p     | Histogram | FinalizeTxnReplication latency in microseconds (99th percentile).                                  |
- | DemoteMainToReplicaRpc_us_50p     | Histogram | DemoteMainToReplicaRpc latency in microseconds (50th percentile).                                  |
- | DemoteMainToReplicaRpc_us_90p     | Histogram | DemoteMainToReplicaRpc latency in microseconds (90th percentile).                                  |
- | DemoteMainToReplicaRpc_us_99p     | Histogram | DemoteMainToReplicaRpc latency in microseconds (99th percentile).                                  |
- | EnableWritingOnMainRpc_us_50p     | Histogram | EnableWritingOnMainRpc latency in microseconds (50th percentile).                                  |
- | EnableWritingOnMainRpc_us_90p     | Histogram | EnableWritingOnMainRpc latency in microseconds (90th percentile).                                  |
- | EnableWritingOnMainRpc_us_99p     | Histogram | EnableWritingOnMainRpc latency in microseconds (99th percentile).                                  |
- | GetDatabaseHistoriesRpc_us_50p    | Histogram | GetDatabaseHistoriesRpc latency in microseconds (50th percentile).                                 |
- | GetDatabaseHistoriesRpc_us_90p    | Histogram | GetDatabaseHistoriesRpc latency in microseconds (90th percentile).                                 |
- | GetDatabaseHistoriesRpc_us_99p    | Histogram | GetDatabaseHistoriesRpc latency in microseconds (99th percentile).                                 |
- | PromoteToMainRpc_us_50p           | Histogram | PromoteToMainRpc latency in microseconds (50th percentile).                                        |
- | PromoteToMainRpc_us_90p           | Histogram | PromoteToMainRpc latency in microseconds (90th percentile).                                        |
- | PromoteToMainRpc_us_99p           | Histogram | PromoteToMainRpc latency in microseconds (99th percentile).                                        |
- | RegisterReplicaOnMainRpc_us_50p   | Histogram | RegisterReplicaOnMainRpc latency in microseconds (50th percentile).                                |
- | RegisterReplicaOnMainRpc_us_90p   | Histogram | RegisterReplicaOnMainRpc latency in microseconds (90th percentile).                                |
- | RegisterReplicaOnMainRpc_us_99p   | Histogram | RegisterReplicaOnMainRpc latency in microseconds (99th percentile).                                |
- | StateCheckRpc_us_50p              | Histogram | StateCheckRpc latency in microseconds (50th percentile).                                           |
- | StateCheckRpc_us_90p              | Histogram | StateCheckRpc latency in microseconds (90th percentile).                                           |
- | StateCheckRpc_us_99p              | Histogram | StateCheckRpc latency in microseconds (99th percentile).                                           |
- | UnregisterReplicaRpc_us_50p       | Histogram | UnregisterReplicaRpc latency in microseconds (50th percentile).                                    |
- | UnregisterReplicaRpc_us_90p       | Histogram | UnregisterReplicaRpc latency in microseconds (90th percentile).                                    |
- | UnregisterReplicaRpc_us_99p       | Histogram | UnregisterReplicaRpc latency in microseconds (99th percentile).                                    |
- | UpdateDataInstanceConfigRpc_us_50p | Histogram | UpdateDataInstanceConfigRpc latency in microseconds (50th percentile).                            |
- | UpdateDataInstanceConfigRpc_us_90p | Histogram | UpdateDataInstanceConfigRpc latency in microseconds (90th percentile).                            |
- | UpdateDataInstanceConfigRpc_us_99p | Histogram | UpdateDataInstanceConfigRpc latency in microseconds (99th percentile).                            |
- | BecomeLeaderSuccess               | Counter   | The number of times coordinators successfully became leaders.                                      |
- | FailedToBecomeLeader              | Counter   | The number of times coordinators failed to become leaders.                                         |
- | SuccessfulFailovers               | Counter   | The number of times failover was done successfully.                                                |
- | RaftFailedFailovers               | Counter   | The number of times failover failed because writing to Raft failed.                                |
- | NoAliveInstanceFailedFailovers    | Counter   | The number of times failover failed because no instance was alive.                                 |
- | ShowInstance                      | Counter   | The number of times `SHOW INSTANCE` query was called.                                              |
- | ShowInstances                     | Counter   | The number of times `SHOW INSTANCES` query was called.                                             |
- | DemoteInstance                    | Counter   | The number of times the user manually demoted instance.                                            |
- | UnregisterReplInstance            | Counter   | The number of times the user tried to unregister replication instance.                             |
- | RemoveCoordInstance               | Counter   | The number of times the user tried to remove coordinator instance.                                 |
- | StateCheckRpcFail                 | Counter   | The number of times coordinators received unsuccessful or no response to StateCheckRpc.            |
- | StateCheckRpcSuccess              | Counter   | The number of times coordinators received successful response to StateCheckRpc.                    |
- | UnregisterReplicaRpcFail          | Counter   | The number of times coordinators received unsuccessful or no response to UnregisterReplicaRpc.     |
- | UnregisterReplicaRpcSuccess       | Counter   | The number of times coordinators received successful response to UnregisterReplicaRpc.             |
- | EnableWritingOnMainRpcFail        | Counter   | The number of times coordinators received unsuccessful or no response to EnableWritingOnMainRpc.   |
- | EnableWritingOnMainRpcSuccess     | Counter   | The number of times coordinators received successful response to EnableWritingOnMainRpc.           |
- | PromoteToMainRpcFail              | Counter   | The number of times coordinators received unsuccessful or no response to PromoteToMainRpc.         |
- | PromoteToMainRpcSuccess           | Counter   | The number of times coordinators received successful response to PromoteToMainRpc.                 |
- | DemoteMainToReplicaRpcFail        | Counter   | The number of times coordinators received unsuccessful or no response to DemoteMainToReplicaRpc.   |
- | DemoteMainToReplicaRpcSuccess     | Counter   | The number of times coordinators received successful response to DemoteMainToReplicaRpc.           |
- | RegisterReplicaOnMainRpcFail      | Counter   | The number of times coordinators received unsuccessful or no response to RegisterReplicaOnMainRpc. |
- | RegisterReplicaOnMainRpcSuccess   | Counter   | The number of times coordinators received successful response to RegisterReplicaOnMainRpc.         |
- | SwapMainUUIDRpcFail               | Counter   | The number of times coordinators received unsuccessful or no response to SwapMainUUIDRpc.          |
- | SwapMainUUIDRpcSuccess            | Counter   | The number of times coordinators received successful response to SwapMainUUIDRpc.                  |
- | GetDatabaseHistoriesRpcFail       | Counter   | The number of times coordinators received unsuccessful or no response to GetDatabaseHistoriesRpc.  |
- | GetDatabaseHistoriesRpcSuccess    | Counter   | The number of times coordinators received successful response to GetDatabaseHistoriesRpc.          |
- | UpdateDataInstanceConfigRpcFail   | Counter   | The number of times coordinators received unsuccessful or no response to UpdateDataInstanceConfigRpc. |
- | UpdateDataInstanceConfigRpcSuccess | Counter   | The number of times coordinators received successful response to UpdateDataInstanceConfigRpc.     |
- | ReplicaRecoverySuccess            | Counter   | The number of times the replica recovery process finished successfully.                            |
- | ReplicaRecoveryFail               | Counter   | The number of times the replica recovery process finished unsuccessfully.                          |
- | ReplicaRecoverySkip               | Counter   | The number of times the replica recovery task was skipped.                                         |
+HA metrics are global; they are not scoped to any individual database.
 
+##### Latency histograms
+
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_socket\_connect\_seconds | Histogram | Socket connect latency. |
+ | memgraph\_prepare\_commit\_rpc\_seconds | Histogram | PrepareCommitRpc latency. |
+ | memgraph\_current\_wal\_rpc\_seconds | Histogram | CurrentWalRpc latency. |
+ | memgraph\_wal\_files\_rpc\_seconds | Histogram | WalFilesRpc latency. |
+ | memgraph\_replica\_stream\_seconds | Histogram | Time to construct PrepareCommitRpc stream. |
+ | memgraph\_snapshot\_rpc\_seconds | Histogram | SnapshotRpc latency. |
+ | memgraph\_frequent\_heartbeat\_rpc\_seconds | Histogram | FrequentHeartbeatRpc latency. |
+ | memgraph\_heartbeat\_rpc\_seconds | Histogram | HeartbeatRpc latency. |
+ | memgraph\_system\_recovery\_rpc\_seconds | Histogram | SystemRecoveryRpc latency. |
+ | memgraph\_choose\_most\_up\_to\_date\_instance\_seconds | Histogram | Latency of choosing the next main instance. |
+ | memgraph\_get\_histories\_seconds | Histogram | Latency of retrieving instance histories. |
+ | memgraph\_instance\_fail\_callback\_seconds | Histogram | Instance failure callback latency. |
+ | memgraph\_instance\_succ\_callback\_seconds | Histogram | Instance success callback latency. |
+ | memgraph\_data\_failover\_seconds | Histogram | Failover procedure latency. |
+ | memgraph\_start\_txn\_replication\_seconds | Histogram | Latency of starting transaction replication. |
+ | memgraph\_finalize\_txn\_replication\_seconds | Histogram | Latency of finishing transaction replication. |
+ | memgraph\_demote\_main\_to\_replica\_rpc\_seconds | Histogram | DemoteMainToReplicaRpc latency. |
+ | memgraph\_enable\_writing\_on\_main\_rpc\_seconds | Histogram | EnableWritingOnMainRpc latency. |
+ | memgraph\_get\_database\_histories\_rpc\_seconds | Histogram | GetDatabaseHistoriesRpc latency. |
+ | memgraph\_promote\_to\_main\_rpc\_seconds | Histogram | PromoteToMainRpc latency. |
+ | memgraph\_register\_replica\_on\_main\_rpc\_seconds | Histogram | RegisterReplicaOnMainRpc latency. |
+ | memgraph\_state\_check\_rpc\_seconds | Histogram | StateCheckRpc latency. |
+ | memgraph\_unregister\_replica\_rpc\_seconds | Histogram | UnregisterReplicaRpc latency. |
+ | memgraph\_update\_data\_instance\_config\_rpc\_seconds | Histogram | UpdateDataInstanceConfigRpc latency. |
+
+##### Throughput histograms
+
+Throughput metrics are labeled per replica with an `mg_instance` label.
+
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_snapshot\_throughput\_bytes\_per\_second | Histogram | Snapshot replication throughput to a replica (bytes/second). |
+ | memgraph\_wal\_throughput\_bytes\_per\_second | Histogram | WAL replication throughput to a replica (bytes/second). |
+
+##### Counters
+
+ | Name | Type | Description |
+ | ---- | ---- | ----------- |
+ | memgraph\_successful\_failovers\_total | Counter | Successful failovers. |
+ | memgraph\_raft\_failed\_failovers\_total | Counter | Failovers that failed because writing to Raft failed. |
+ | memgraph\_no\_alive\_instance\_failed\_failovers\_total | Counter | Failovers that failed because no instance was alive. |
+ | memgraph\_become\_leader\_success\_total | Counter | Times a coordinator successfully became leader. |
+ | memgraph\_failed\_to\_become\_leader\_total | Counter | Times a coordinator failed to become leader. |
+ | memgraph\_show\_instance\_total | Counter | Times `SHOW INSTANCE` was called. |
+ | memgraph\_show\_instances\_total | Counter | Times `SHOW INSTANCES` was called. |
+ | memgraph\_demote\_instance\_total | Counter | Times the user manually demoted an instance. |
+ | memgraph\_unregister\_repl\_instance\_total | Counter | Times the user tried to unregister a replication instance. |
+ | memgraph\_remove\_coord\_instance\_total | Counter | Times the user tried to remove a coordinator instance. |
+ | memgraph\_state\_check\_rpc\_success\_total | Counter | Successful StateCheckRpc responses. |
+ | memgraph\_state\_check\_rpc\_fail\_total | Counter | Failed or missing StateCheckRpc responses. |
+ | memgraph\_unregister\_replica\_rpc\_success\_total | Counter | Successful UnregisterReplicaRpc responses. |
+ | memgraph\_unregister\_replica\_rpc\_fail\_total | Counter | Failed or missing UnregisterReplicaRpc responses. |
+ | memgraph\_enable\_writing\_on\_main\_rpc\_success\_total | Counter | Successful EnableWritingOnMainRpc responses. |
+ | memgraph\_enable\_writing\_on\_main\_rpc\_fail\_total | Counter | Failed or missing EnableWritingOnMainRpc responses. |
+ | memgraph\_promote\_to\_main\_rpc\_success\_total | Counter | Successful PromoteToMainRpc responses. |
+ | memgraph\_promote\_to\_main\_rpc\_fail\_total | Counter | Failed or missing PromoteToMainRpc responses. |
+ | memgraph\_demote\_main\_to\_replica\_rpc\_success\_total | Counter | Successful DemoteMainToReplicaRpc responses. |
+ | memgraph\_demote\_main\_to\_replica\_rpc\_fail\_total | Counter | Failed or missing DemoteMainToReplicaRpc responses. |
+ | memgraph\_register\_replica\_on\_main\_rpc\_success\_total | Counter | Successful RegisterReplicaOnMainRpc responses. |
+ | memgraph\_register\_replica\_on\_main\_rpc\_fail\_total | Counter | Failed or missing RegisterReplicaOnMainRpc responses. |
+ | memgraph\_swap\_main\_uuid\_rpc\_success\_total | Counter | Successful SwapMainUUIDRpc responses. |
+ | memgraph\_swap\_main\_uuid\_rpc\_fail\_total | Counter | Failed or missing SwapMainUUIDRpc responses. |
+ | memgraph\_get\_database\_histories\_rpc\_success\_total | Counter | Successful GetDatabaseHistoriesRpc responses. |
+ | memgraph\_get\_database\_histories\_rpc\_fail\_total | Counter | Failed or missing GetDatabaseHistoriesRpc responses. |
+ | memgraph\_update\_data\_instance\_config\_rpc\_success\_total | Counter | Successful UpdateDataInstanceConfigRpc responses. |
+ | memgraph\_update\_data\_instance\_config\_rpc\_fail\_total | Counter | Failed or missing UpdateDataInstanceConfigRpc responses. |
+ | memgraph\_replica\_recovery\_success\_total | Counter | Successful replica recovery processes. |
+ | memgraph\_replica\_recovery\_fail\_total | Counter | Failed replica recovery processes. |
+ | memgraph\_replica\_recovery\_skip\_total | Counter | Skipped replica recovery tasks. |
+
+### OpenMetrics monitoring
+
+Set [`--metrics-format=OpenMetrics`](/database-management/configuration#metrics-format)
+to enable the OpenMetrics endpoint. The response uses
+[OpenMetrics](https://openmetrics.io/) text format
+(`application/openmetrics-text`), which any Prometheus-compatible client can
+scrape directly.
+
+The metrics are served at `http://host:port/metrics` (or `http://host:port/`).
+See [Prometheus scrape configuration](#prometheus-scrape-configuration) for how
+to set up scraping.
+
+#### Per-database labels
+
+Per-database metrics carry `database` and `uuid` labels identifying which
+database they belong to. Global metrics (such as sessions, HA) have no database
+label.
+
+```
+# TYPE memgraph_vertex_count gauge
+memgraph_vertex_count{database="memgraph",uuid="abc-123"} 42254
+memgraph_vertex_count{database="analytics",uuid="def-456"} 1000
+# TYPE memgraph_active_sessions gauge
+memgraph_active_sessions 3
+```
+
+#### Instance status gauges
+
+The following per-instance gauges are exposed for each registered HA instance.
+Each metric carries an `mg_instance` label identifying the instance by name.
+
+All instances expose `instance_up` and `instance_last_response_seconds`.
+Coordinator instances additionally expose `instance_is_leader`, while data
+instances expose `instance_is_main`.
+
+ | Name                                     | Type  | Applies to    | Description                                                      |
+ | ---------------------------------------- | ----- | ------------- | ---------------------------------------------------------------- |
+ | memgraph\_instance\_up                   | Gauge | All           | `1` if the instance is up, `0` if down.                         |
+ | memgraph\_instance\_last\_response\_seconds | Gauge | All        | Seconds since the last successful response from the instance.   |
+ | memgraph\_instance\_is\_leader           | Gauge | Coordinators  | `1` if the coordinator is the leader, `0` if follower.          |
+ | memgraph\_instance\_is\_main             | Gauge | Data instances | `1` if the data instance is the main, `0` if replica.          |
+
+#### Prometheus scrape configuration
+
+Add Memgraph as a scrape target in your `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: "memgraph"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["memgraph-host:9091"]
+```
+
+### JSON monitoring (deprecated)
+
+Set `--metrics-format=JSON` (the current default) to enable the JSON endpoint.
+This format is deprecated and will be removed in a future release.
+
+To retrieve the metrics, send a GET request to `http://host:port/metrics`
+or `http://host:port/`:
+
+```python
+import json
+import requests
+
+
+def fetch_memgraph_metrics():
+    metrics_url = "http://0.0.0.0:9091/metrics"
+
+    try:
+        response = requests.get(metrics_url, timeout=5)
+
+        if response.status_code == 200:
+            metrics_data = json.loads(response.text)
+            print("Memgraph Metrics:\n", json.dumps(metrics_data, indent=4))
+        else:
+            print(f"Failed to fetch metrics. Status code: {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred: {e}")
+
+
+fetch_memgraph_metrics()
+```
+
+#### Response format
+
+The endpoint returns a JSON object grouped by metric category. Each category
+contains key-value pairs of metric names and their values:
+
+```json
+{
+  "General": {
+    "vertex_count": 42254,
+    "edge_count": 871978,
+    "average_degree": 41.2732,
+    "disk_usage": 81508835,
+    "memory_usage": 339640320,
+    "peak_memory_usage": 339775488,
+    "unreleased_delta_objects": 0,
+    "SocketConnect_us_50p": 0,
+    "SocketConnect_us_90p": 0,
+    "SocketConnect_us_99p": 0
+  },
+  "Index": {
+    "ActiveLabelIndices": 6,
+    "ActiveLabelPropertyIndices": 18
+  },
+  "Transaction": {
+    "ActiveTransactions": 1,
+    "CommitedTransactions": 0,
+    "RollbackedTransactions": 0
+  }
+}
+```
+
+#### Metric naming
+
+The JSON endpoint uses different metric names from the OpenMetrics tables
+above, and groups metrics into categories. Histogram values are reported in
+**microseconds** with `_us_50p`, `_us_90p`, `_us_99p` suffixes rather than as
+native Prometheus histograms in seconds.
+
+Some notable name differences:
+
+| OpenMetrics name | JSON name | JSON category |
+| ---------------- | --------- | ------------- |
+| memgraph\_vertex\_count | vertex\_count | General |
+| memgraph\_edge\_count | edge\_count | General |
+| memgraph\_memory\_res\_bytes | memory\_usage | General |
+| memgraph\_peak\_memory\_res\_bytes | peak\_memory\_usage | General |
+| memgraph\_disk\_usage\_bytes | disk\_usage | General |
+| memgraph\_rolled\_back\_transactions\_total | RollbackedTransactions | Transaction |
+| memgraph\_query\_execution\_latency\_seconds | QueryExecutionLatency\_us\_50p/90p/99p | Query |
+| memgraph\_active\_label\_indices | ActiveLabelIndices | Index |
+
+The full set of JSON names can be seen in the `SHOW METRICS INFO` output
+documented on the [server stats](/database-management/server-stats#metrics-information) page.
+
+#### Aggregated metrics
+
+The JSON format **aggregates** per-database metrics into global totals; it
+does not expose per-database breakdowns. For per-database visibility, use
+`--metrics-format=OpenMetrics` or the `SHOW METRICS INFO` Cypher query.
+
+#### HA counter reset behaviour
 
 All HA metrics with type `Counter` are aggregated for all coordinators. That makes it easier for users to track what is going on since they don't need to aggregate
-by their own metrics specific to each coordinators. Also, after every pull, HA metrics with type `Counter` are in Memgraph reset to 0. This makes it possible to use `Gauge` on 
+by their own metrics specific to each coordinators. Also, after every pull, HA metrics with type `Counter` are in Memgraph reset to 0. This makes it possible to use `Gauge` on
 the client side without worrying that on restart we will lose all data.
 
+The `ReplicaRecoverySuccess`, `ReplicaRecoveryFail`, and `ReplicaRecoverySkip`
+counters are excluded from this behaviour and report cumulative totals.
 
-## Prometheus exporter
+#### `mg-exporter`
 
-Memgraph also supports exporting metrics in the
-[Prometheus](https://prometheus.io/) format. For more information on how to set
-up the Prometheus exporter, refer to the [Prometheus
-exporter](https://github.com/memgraph/prometheus-exporter) repository.
+OpenMetrics compatible clients cannot scrape the JSON endpoint directly. Use the
+separate [Prometheus exporter](https://github.com/memgraph/prometheus-exporter)
+middleware, which reads the JSON endpoint and re-exposes metrics in a
+Prometheus-compatible format.
+
+## Migrating from JSON to OpenMetrics
+
+If you are currently using the deprecated JSON metrics endpoint, follow these
+steps to switch to OpenMetrics.
+
+### Configuration change
+
+Set [`--metrics-format=OpenMetrics`](/database-management/configuration#metrics-format)
+instead of `JSON`. The endpoint address and port remain the same.
+
+If you were using [`mg-exporter`](https://github.com/memgraph/prometheus-exporter)
+to bridge the JSON endpoint to Prometheus, you can remove it: Prometheus can
+now scrape the OpenMetrics endpoint directly.
+
+### Metric name changes
+
+OpenMetrics uses `memgraph_` prefixed, snake\_case names (e.g.
+`memgraph_vertex_count`) instead of the JSON CamelCase names (e.g.
+`vertex_count`). See the [metric naming table](#metric-naming) in the JSON
+section for a summary of notable differences. You will need to update any
+dashboard queries or alerting rules that reference the old names.
+
+### Histogram format change
+
+<Callout type="warning">
+
+The OpenMetrics endpoint uses different histogram bucket boundaries from the
+JSON endpoint. As a result, computed percentiles (p50, p90, p99) may differ
+slightly from values previously reported by the JSON format for the same
+workload.
+
+</Callout>
+
+JSON reported histograms as three fixed percentile values in **microseconds**
+with `_us_50p`, `_us_90p`, `_us_99p` suffixes. OpenMetrics exposes native
+Prometheus histograms in **seconds** with configurable bucket boundaries. Update
+any dashboard panels that reference histogram metrics to use Prometheus
+`histogram_quantile()` functions and adjust for the unit change.
+
+### Per-database labels
+
+The JSON endpoint aggregated all database metrics into global totals. The
+OpenMetrics endpoint exposes metrics **per database**, using `database` and
+`uuid` labels. Existing dashboard queries that expect flat, unlabelled metrics
+will need to be updated — either by filtering on a specific database label or by
+aggregating with `sum()`.
+
+### HA counter semantics
+
+In the JSON endpoint, most HA counter metrics use delta semantics: they reset
+to zero after each scrape. In OpenMetrics, all counters are **cumulative** (as
+per the Prometheus data model). If your alerting rules relied on the delta
+behaviour, switch to using `rate()` or `increase()` functions in your queries.
+
+### New metrics
+
+The OpenMetrics endpoint exposes [instance status gauges](#instance-status-gauges)
+for each registered HA instance (e.g. `memgraph_instance_is_alive`,
+`memgraph_instance_is_main`). These are not available in the JSON format.
 
 ## Session trace
 
