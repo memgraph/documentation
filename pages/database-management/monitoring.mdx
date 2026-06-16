@@ -575,70 +575,77 @@ exporter](https://github.com/memgraph/prometheus-exporter) repository.
 ## Session trace
 
 A session refers to a temporary, interactive connection from a client (either a user or an application) to the database
-server. It used to execute a series of transactions and queries.  Session trace is a feature in Memgraph that allows you
-to profile the execution of all queries within a session, providing detailed information on query planning and
+server, used to execute a series of transactions and queries. Session trace is a feature in Memgraph that allows you
+to profile the execution of all queries within a session, providing detailed information on query parsing, planning and
 execution. This can be invaluable for understanding performance bottlenecks and optimizing database interactions.
 
-Before enabling session trace, you need to define a directory where the session logs will be stored. This is done using
-the `--query-log-directory` [configuration flag](/database-management/configuration#query), which can be set either at
-Memgraph startup via the command line, or during an active session. By default, `--query-log-directory` is set to `/var/log/memgraph/session_trace`.
+Session trace events are emitted into the main Memgraph [log](/database-management/logs) at the `INFO` level, tagged with
+the session that produced them. There is no separate per-session log file — every traced session interleaves into the
+same log stream and is told apart by its `[session=<uuid>]` tag.
 
-To set the query log directory while launching from the command line using Docker, do the following:
-```shell
-docker run -p 7687:7687 -p 7444:7444 --name memgraph memgraph/memgraph --query-log-directory {directory}
-```
+<Callout type="info">
+Session trace events are written at the `INFO` level, so they are only visible when
+[`--log-level`](/database-management/configuration#other) is set to `INFO`, `DEBUG` or `TRACE`. If you enable session
+trace while the log level filters `INFO` out, Memgraph logs a warning and no trace events appear. Lower the level at
+startup, or during runtime with `SET DATABASE SETTING "log.level" TO "INFO";`.
+</Callout>
 
-To set the query log directory interactively, use the following command:
-```cypher
-SET DATABASE SETTING "query-log-directory" TO "{directory}";
-```
+#### Enabling session trace
 
-Replace `{directory}` with the desired path inside the Memgraph environment, either native or within a container.
-
-If this directory is not set, you will receive the following error when attempting to enable session trace:
-
-```
-The flag --query-log-directory has to be present in order to enable session trace.
-```
-
-Once the query log directory is configured, you can enable session trace for your current session using the following command:
+Enable session trace for your current session using the following command:
 
 ```cypher
 SET SESSION TRACE ON;
 ```
 
-This command initiates logging for the session, and the result will include the unique session UUID being tracked:
+The command returns the unique UUID of the session being traced:
 
 | session uuid                           |
 | -------------------------------------- |
 | "de9c907b-6675-40bd-bf09-d4ce7b24f22d" |
 
-This UUID is used to identify the session log file.
+Use this UUID to find the session's events in the log. From this point on, every query executed in the session emits
+tagged trace events until tracing is turned off.
 
-#### Understanding the Session Trace Log
+#### Reading the trace
 
-The session trace log captures detailed information for every query executed during the session, including:
+Each trace event is a line in the main log prefixed with the session tag, the user (when authenticated) and the current
+transaction id:
 
-- **Session UUID**: Unique identifier for the session.
-- **Transaction ID**: ID of the current query transaction.
-- **User Name**: The user executing the query.
-- **Query Name and Explain Plan**: The name and execution plan of the query.
-- **Query Planning and Execution Timings**: Start and end timestamps, as well as execution times for query planning and execution.
-- **Commit Timings**: Start and end timestamps, and execution time for query commit.
-- **Profile Plan and Metadata**: Detailed profiling information and metadata for the query.
+```plaintext
+[session=<uuid>] [user=<user>] [tx=<id>] <event>
+```
 
-This detailed logging helps in profiling the entire session workload, increasing visibility into potential
-performance bottlenecks without congesting the system log.
+To isolate a single session's trace, filter the main log by its UUID:
 
-#### Accessing the Log File
+```bash
+grep -F '[session=de9c907b-6675-40bd-bf09-d4ce7b24f22d]' /var/log/memgraph/<memgraph_date>.log
+```
 
-The session trace log is stored at `{--query-log-directory}/{session uuid}.log`, where `--query-log-directory` 
-is the directory you defined earlier, and `session uuid` is the UUID obtained when session trace was enabled.
+The trace captures detailed information for every query executed during the session, including:
 
-To stop logging additional information for the current session, use the following command:
+- **Session UUID, user and transaction ID**: carried on every tagged line.
+- **Accepted query**: the query text as received.
+- **Parsing, planning and execution timings**: start and end markers and durations for each phase.
+- **Explain and profile plans**: the query's plan and, after execution, its profiling statistics and execution counters.
+- **Commit timings**: start and end markers for the commit phase.
+- **Failed queries**: the error message when a query throws.
+
+This detailed logging helps in profiling the entire session workload, increasing visibility into potential performance
+bottlenecks without enabling trace-level logging globally.
+
+<Callout type="info">
+Trace coverage is bounded to the connection's own thread. Work that Memgraph hands off to background threads (for
+example parallel index creation, replication, garbage collection or Raft) is not attributed to the session and does not
+appear in its trace.
+</Callout>
+
+#### Disabling session trace
+
+To stop emitting trace events for the current session, use the following command:
 
 ```cypher
 SET SESSION TRACE OFF;
 ```
 
-After executing this command, no further data will be written to the session trace log for the active session.
+After executing this command, no further trace events are written for the active session.
