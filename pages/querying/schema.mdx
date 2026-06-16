@@ -377,8 +377,16 @@ This procedure is also exposed as `apoc.meta.nodeTypeProperties` and
 - `nodeType: string` ➡ Concatenated node labels separated by a `:`.
 - `nodeLabels: List[string]` ➡ A list of node labels.
 - `propertyName: string` ➡ Property name.
-- `propertyTypes: List[string]` ➡ Property types observed for this property on nodes of this type.
-- `mandatory: boolean` ➡  Returns `True` if every node with a given node type (defined by nodeType or nodeLabels) possesses the listed property (propertyName), and `False` otherwise.
+- `propertyTypes: List[string]` ➡ Property types observed for this property on
+  nodes of this type. The type strings are tuned to match the BI connector
+  recognised set: `Boolean`, `Int`, `Float`, `String`, `List[Any]`, `Map[Any]`,
+  `Date`, `LocalTime`, `LocalDateTime`, `DateTime`, `Duration`, `Point`, `Enum`,
+  plus graph types (`Vertex`, `Edge`, `Path`).
+- `mandatory: boolean` ➡ Returns `True` if any of the node's labels has an
+  existence constraint defined on this property (`CREATE CONSTRAINT ON (n:Label)
+  ASSERT EXISTS (n.prop);`), and `False` otherwise. The value reflects the
+  declared schema, not whether the property happens to be present on every
+  sampled node.
 - `propertyObservations: integer` ➡ Number of nodes of this type that carried this property.
 - `totalObservations: integer` ➡ Total number of nodes of this type that were examined (bounded by the `sample` config option).
 
@@ -428,8 +436,11 @@ This procedure is also exposed as `apoc.meta.relTypeProperties` and
 - `sourceNodeLabels: List[string]` ➡ Labels on the start node of relationships in this partition.
 - `targetNodeLabels: List[string]` ➡ Labels on the end node of relationships in this partition.
 - `propertyName: string` ➡ Property name.
-- `propertyTypes: List[string]` ➡ Property types observed for this property on relationships in this partition.
-- `mandatory: boolean` ➡ Returns `True` if every relationship in this partition possesses the listed property, and `False` otherwise.
+- `propertyTypes: List[string]` ➡ Property types observed for this property on
+  relationships in this partition. See `node_type_properties` above for the
+  full list of type strings.
+- `mandatory: boolean` ➡ Always `False` for relationships, because Memgraph does
+  not support existence constraints on relationship types.
 - `propertyObservations: integer` ➡ Number of relationships in this partition that carried this property.
 - `totalObservations: integer` ➡ Total number of relationships in this partition that were examined.
 
@@ -575,14 +586,19 @@ Result:
 | ":`Bird`"          | ["Bird"]           | ""           | []             | false     | 0                    | 1                  |
 | ":`Dog`"           | ["Dog"]            | "age"        | ["Int"]        | false     | 1                    | 2                  |
 | ":`Dog`"           | ["Dog"]            | "name"       | ["String"]     | false     | 1                    | 2                  |
-| ":`Human`:`Owner`" | ["Human", "Owner"] | "age"        | ["Int"]        | true      | 1                    | 1                  |
-| ":`Human`:`Owner`" | ["Human", "Owner"] | "name"       | ["String"]     | true      | 1                    | 1                  |
+| ":`Human`:`Owner`" | ["Human", "Owner"] | "age"        | ["Int"]        | false     | 1                    | 1                  |
+| ":`Human`:`Owner`" | ["Human", "Owner"] | "name"       | ["String"]     | false     | 1                    | 1                  |
 | ":`Park`"          | ["Park"]           | ""           | []             | false     | 0                    | 1                  |
 | ":`Sky`"           | ["Sky"]            | ""           | []             | false     | 0                    | 1                  |
 +--------------------+--------------------+--------------+----------------+-----------+----------------------+--------------------+
 ```
 
-Of the two `:Dog` nodes, only one carries `name` and `age` — hence `propertyObservations = 1`, `totalObservations = 2`, and `mandatory = false`. The single `:Human:Owner` node has both properties, so they are marked mandatory.
+Of the two `:Dog` nodes, only one carries `name` and `age` — hence
+`propertyObservations = 1` and `totalObservations = 2`. `mandatory` is `false`
+for every row because no existence constraints have been declared. Adding
+`CREATE CONSTRAINT ON (n:Dog) ASSERT EXISTS (n.name);` and re-running the
+procedure would flip `mandatory` to `true` for the `:Dog` / `name` row,
+independent of whether every observed node carries the property.
 
 Call the procedure to get information about the relationships:
 
@@ -598,9 +614,9 @@ Results:
 | relType                | sourceNodeLabels | targetNodeLabels   | propertyName | propertyTypes  | mandatory | propertyObservations | totalObservations  |
 +------------------------+------------------+--------------------+--------------+----------------+-----------+----------------------+--------------------+
 | ":`FLIES_TO`"          | ["Bird"]         | ["Sky"]            | ""           | []             | false     | 0                    | 1                  |
-| ":`LOVES`"             | ["Dog"]          | ["Human", "Owner"] | "how_much"   | ["String"]     | true      | 1                    | 1                  |
-| ":`RUNS_AND_PLAYS_IN`" | ["Dog"]          | ["Park"]           | "duration"   | ["String"]     | true      | 1                    | 1                  |
-| ":`RUNS_AND_PLAYS_IN`" | ["Dog"]          | ["Park"]           | "speed"      | ["Int"]        | true      | 1                    | 1                  |
+| ":`LOVES`"             | ["Dog"]          | ["Human", "Owner"] | "how_much"   | ["String"]     | false     | 1                    | 1                  |
+| ":`RUNS_AND_PLAYS_IN`" | ["Dog"]          | ["Park"]           | "duration"   | ["String"]     | false     | 1                    | 1                  |
+| ":`RUNS_AND_PLAYS_IN`" | ["Dog"]          | ["Park"]           | "speed"      | ["Int"]        | false     | 1                    | 1                  |
 +------------------------+------------------+--------------------+--------------+----------------+-----------+----------------------+--------------------+
 ```
 
