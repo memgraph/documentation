@@ -1043,6 +1043,62 @@ prometheus:
       caSecretKey: ca.crt
 ```
 
+### Scrape Memgraph directly (without mg-exporter)
+
+From Memgraph 3.11, Memgraph can serve metrics in Prometheus
+[OpenMetrics](https://prometheus.io/docs/specs/om/open_metrics_spec/) format on its
+HTTP monitoring port, so the cluster can be scraped directly and `mg-exporter` can be
+skipped entirely.
+
+Set the top-level `scrapeMemgraphDirectly: true` and leave `prometheus.enabled: false`:
+
+```yaml
+# Every coordinator and data instance serves OpenMetrics; the chart exposes their
+# monitoring ports automatically.
+scrapeMemgraphDirectly: true
+
+prometheus:
+  enabled: false       # no mg-exporter is deployed
+  serviceMonitor:
+    enabled: true      # in-cluster: kube-prometheus-stack scrapes each instance directly
+```
+
+`scrapeMemgraphDirectly` only selects the metrics *format and target* — on its own it
+does not scrape anything. You still enable a scraper:
+
+- **In-cluster**: `prometheus.serviceMonitor.enabled: true` provisions a `ServiceMonitor`
+  that `kube-prometheus-stack` uses to scrape each Memgraph instance directly.
+- **Remote**: `vmagentRemote.enabled: true` makes vmagent scrape the instances directly
+  and remote-write the metrics (see [Remote metrics and logs](#remote-metrics-and-logs)).
+
+The same switch governs both paths. When it is `false`, those scrapers read the
+`mg-exporter` instead, which requires `prometheus.enabled: true`.
+
+<Callout type="info">
+Direct scraping requires Memgraph >= 3.11. When `scrapeMemgraphDirectly: true`, the
+chart runs every coordinator and data instance with `--metrics-format=OpenMetrics` and
+exposes their monitoring ports automatically. The metric names differ from the legacy
+JSON exporter, so use the bundled **Memgraph OpenMetrics** dashboard.
+</Callout>
+
+#### Grafana dashboard for direct scraping
+
+Set `prometheus.grafanaDashboard.enabled: true` to ship the bundled "Memgraph
+OpenMetrics" Grafana dashboard as a `ConfigMap` (labelled `grafana_dashboard`) for a
+Grafana sidecar (e.g. the one bundled with `kube-prometheus-stack`) to auto-load. The
+dashboard uses a datasource template variable, so it binds to Grafana's default
+Prometheus. The `ConfigMap` must live in a namespace the sidecar watches — set
+`prometheus.grafanaDashboard.namespace` to Grafana's namespace (or run the sidecar with
+`searchNamespace: ALL`).
+
+```yaml
+prometheus:
+  grafanaDashboard:
+    enabled: true
+    namespace: monitoring
+    label: grafana_dashboard
+```
+
 ### Uninstall kube-prometheus-stack
 
 ```bash
@@ -1074,7 +1130,7 @@ The HA chart supports optional remote observability:
 
 Prerequisites:
 
-- keep `prometheus.enabled: true` so `mg-exporter` is deployed
+- keep `prometheus.enabled: true` so `mg-exporter` is deployed — or set `scrapeMemgraphDirectly: true` with `prometheus.enabled: false` to have vmagent scrape Memgraph's OpenMetrics endpoint directly (no exporter; see [Scrape Memgraph directly](#scrape-memgraph-directly-without-mg-exporter))
 - if you only need remote shipping and not local scraping, set `prometheus.serviceMonitor.enabled: false` to avoid duplicate scraping
 - configure `vectorRemote.data` and/or `vectorRemote.coordinators` depending on which pod roles should ship logs
 - when `vectorRemote.enabled: true`, add `--monitoring-port=<vectorRemote.websocketPort>` and `--monitoring-address=0.0.0.0` to each instance `args`
@@ -1321,6 +1377,7 @@ and their default values.
 | `secrets.organizationKey`                                  | Key in the Secret whose value is exposed as `MEMGRAPH_ORGANIZATION_NAME` to data and coordinator pods.        | `MEMGRAPH_ORGANIZATION_NAME`   |
 | `resources.coordinators`                                   | CPU/Memory resource requests/limits for coordinators. Left empty by default.                                 | `{}`                           |
 | `resources.data`                                           | CPU/Memory resource requests/limits for data instances. Left empty by default.                               | `{}`                           |
+| `scrapeMemgraphDirectly`                                   | Serve metrics in OpenMetrics format and scrape Memgraph directly instead of `mg-exporter` (requires Memgraph >= 3.11). Only selects the format/target — still enable a scraper via `prometheus.serviceMonitor.enabled` and/or `vmagentRemote.enabled`. | `false`                        |
 | `prometheus.enabled`                                       | If set to `true`, K8s resources representing Memgraph's Prometheus exporter will be deployed.                | `false`                        |
 | `prometheus.namespace`                                     | Namespace in which `kube-prometheus-stack` and Memgraph's Prometheus exporter are installed. When empty, the release namespace is used. | `""`         |
 | `prometheus.memgraphExporter.port`                         | The port on which Memgraph's Prometheus exporter is available.                                               | `9115`                         |
@@ -1335,7 +1392,10 @@ and their default values.
 | `prometheus.serviceMonitor.enabled`                        | If enabled, a `ServiceMonitor` object will be deployed.                                                      | `false`                        |
 | `prometheus.serviceMonitor.kubePrometheusStackReleaseName` | The release name under which `kube-prometheus-stack` chart is installed.                                     | `kube-prometheus-stack`        |
 | `prometheus.serviceMonitor.interval`                       | How often will Prometheus pull data from Memgraph's Prometheus exporter.                                     | `15s`                          |
-| `vmagentRemote.enabled`                                    | Deploy a vmagent Deployment that scrapes mg-exporter and remote-writes to a Prometheus-compatible endpoint.  | `false`                        |
+| `prometheus.grafanaDashboard.enabled`                      | Ship the bundled "Memgraph OpenMetrics" Grafana dashboard as a `ConfigMap` for a Grafana sidecar to auto-load. | `false`                      |
+| `prometheus.grafanaDashboard.namespace`                    | Namespace for the dashboard `ConfigMap`; must be one the Grafana sidecar watches. Defaults to `prometheus.namespace`, else release namespace. | `""`           |
+| `prometheus.grafanaDashboard.label`                        | Label the Grafana sidecar selects dashboards by.                                                             | `grafana_dashboard`            |
+| `vmagentRemote.enabled`                                    | Deploy a vmagent Deployment that scrapes mg-exporter (or Memgraph directly when `scrapeMemgraphDirectly=true`) and remote-writes to a Prometheus-compatible endpoint.  | `false`                        |
 | `vmagentRemote.namespace`                                  | Namespace for the vmagent Deployment and its resources. Defaults to `prometheus.namespace` when empty.       | `""`                           |
 | `vmagentRemote.image.repository`                           | vmagent image repository.                                                                                    | `victoriametrics/vmagent`      |
 | `vmagentRemote.image.tag`                                  | vmagent image tag.                                                                                           | `v1.139.0`                     |
