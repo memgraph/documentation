@@ -30,12 +30,14 @@ CALL module.procedure([optional parameter], arg1, "string_argument", ...) YIELD 
 ```
 
 Every procedure has a first optional parameter and the rest of them depend on
-the procedure you are trying to call. The optional parameter must be result of
-the aggregation function
-[`project()`](/querying/functions#aggregation-functions). If such a
-parameter is provided, **all** operations will be executed on a projected graph,
-i.e., [a subgraph](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph). Otherwise, you will work on the whole
-graph stored inside Memgraph. 
+the procedure you are trying to call. The optional parameter must be the result
+of the aggregation function
+[`project()`](/querying/functions#graph-projection-functions) or
+[`derive()`](/querying/functions#graph-projection-functions). If such a
+parameter is provided, **all** operations will be executed on a
+[projected subgraph](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph)
+or a [virtual graph](/advanced-algorithms/run-algorithms#run-procedures-on-a-virtual-graph)
+respectively. Otherwise, you will work on the whole graph stored inside Memgraph. 
 
 Each procedure returns zero or more records, where each record contains named
 fields. The `YIELD` clause is used to select fields you are interested in or all
@@ -244,6 +246,156 @@ ORDER BY rank DESC;
 ```
 
 ![](/pages/advanced-algorithms/run-algorithms/world-cup-subgraph.png)
+
+## Run procedures on a virtual graph
+
+A **virtual graph** (also called a derived graph) is an in-query graph that
+exists only while the query runs. Like a subgraph created with
+[`project()`](#available-graph-projections), it is never written to the database,
+but unlike a projection it does not have to mirror the stored data. Instead of
+keeping the matched nodes and relationships as they are, a virtual graph lets you
+**synthesize new relationships from paths**: each matched path is collapsed into a
+single virtual relationship that connects the path's endpoints.
+
+You can then run any MAGE procedure over these derived relationships without ever
+materializing them in the database. This is useful when:
+
+- the relationship you want to analyze is *implied* by a multi-hop pattern rather
+  than stored as a single edge (for example, two issues that are connected through
+  a chain of dependencies "relate to" each other),
+- you want to reshape the graph for an algorithm (override node labels and
+  properties, or attach edge weights) without touching the stored data,
+- you want an algorithm to treat directed relationships as undirected.
+
+Virtual graphs are created with the
+[`derive()`](/querying/functions#graph-projection-functions) aggregation function.
+
+### Creating a virtual graph with derive()
+
+`derive()` is an aggregation function, so just like `project()` it accumulates
+**all** the rows produced by the `MATCH` (or `UNWIND`) clause into a single graph:
+
+```cypher
+MATCH p=(n)-[r]->(m)
+WITH derive(p, {virtualEdgeType: 'RELATES_TO'}) AS virtual_graph
+RETURN virtual_graph;
+```
+
+The function takes two arguments:
+
+- a **path** (`p` in the example above), which defines the source and target nodes
+  of each virtual relationship,
+- an **options** map that configures the virtual relationship and its endpoints.
+
+For every matched path, `derive()` creates one virtual relationship that goes from
+the path's **start node** to its **end node**, collapsing any intermediate hops.
+Endpoints that appear in more than one path are deduplicated, so accumulating many
+paths produces a single overlay graph.
+
+The options map must contain the `virtualEdgeType` key. The supported options are:
+
+| Option                   | Type             | Description                                                                                                                                                                                                 |
+| ------------------------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `virtualEdgeType`        | string           | **Required.** Type of the virtual relationship. Set it dynamically per path with `type(r)` to carry the original relationship type over.                                                                     |
+| `relationshipProperties` | map              | Properties set on every virtual relationship, for example a `weight` used by a weighted algorithm.                                                                                                           |
+| `sourceNodeLabels`       | list of strings  | Labels for the source (start) virtual node. If omitted, the source node inherits all labels from the original path's start node.                                                                             |
+| `sourceNodeProperties`   | map              | Properties for the source virtual node. If omitted, the source node inherits all properties from the original path's start node.                                                                             |
+| `targetNodeLabels`       | list of strings  | Labels for the target (end) virtual node. If omitted, the target node inherits all labels from the original path's end node.                                                                                 |
+| `targetNodeProperties`   | map              | Properties for the target virtual node. If omitted, the target node inherits all properties from the original path's end node.                                                                               |
+| `undirectedEdgeTypes`    | list of strings  | Virtual edge types that should be treated as undirected. For each listed type, a reverse virtual relationship is also created between distinct endpoints. Use `['*']` to apply this to every virtual edge type. |
+
+<Callout type="info">
+
+Node inheritance is applied **per key**. If you provide `sourceNodeLabels` but not
+`sourceNodeProperties`, the source node uses the labels you specified while still
+inheriting the properties from the original node, and vice versa.
+
+</Callout>
+
+### Running a procedure on a virtual graph
+
+A virtual graph is used exactly like a projected subgraph: pass it as the first
+argument of the procedure. The procedure then iterates the virtual nodes and
+relationships instead of the stored ones.
+
+The following example detects communities of issues that are connected through any
+chain of relationships, treating each chain as a single `RELATES_TO` link:
+
+```cypher
+MATCH p=(a:Issue)-[*]-(b:Issue)
+WHERE id(a) < id(b)
+WITH derive(p, {
+  virtualEdgeType: 'RELATES_TO',
+  relationshipProperties: {weight: 1}
+}) AS virtual_graph
+CALL community_detection.get(virtual_graph) YIELD node, community_id
+RETURN node.name, community_id;
+```
+
+If the optional graph argument is omitted, the procedure runs on the whole stored
+graph instead.
+
+### Accessing virtual nodes and relationships directly
+
+The value returned by `derive()` exposes its virtual nodes and relationships
+through the `nodes` and `edges` fields, which you can `UNWIND` and inspect. Virtual
+relationships support the usual relationship functions, such as
+[`type()`](/querying/functions#scalar-functions),
+[`startNode()`](/querying/functions#scalar-functions) and
+[`endNode()`](/querying/functions#scalar-functions):
+
+```cypher
+MATCH p=(:Issue {name: 'A'})-[*]->(:Issue {name: 'C'})
+WITH derive(p, {virtualEdgeType: 'RELATES_TO', relationshipProperties: {weight: 5}}) AS virtual_graph
+UNWIND virtual_graph.edges AS e
+RETURN startNode(e).name AS source, type(e) AS rel_type, e.weight AS weight, endNode(e).name AS target;
+```
+
+### Setting node labels and properties
+
+By default the virtual endpoints copy the labels and properties of the original
+path endpoints. You can override either endpoint by providing the corresponding
+options. The query below relabels the endpoints and attaches custom properties
+while leaving the stored nodes untouched:
+
+```cypher
+MATCH p=(:Person {name: 'Alice'})-[:KNOWS]->(:Person {name: 'Bob'})
+WITH derive(p, {
+  virtualEdgeType: 'CONNECTED',
+  sourceNodeLabels: ['Expert'],
+  sourceNodeProperties: {score: 99},
+  targetNodeLabels: ['Target'],
+  targetNodeProperties: {rank: 7}
+}) AS virtual_graph
+UNWIND virtual_graph.edges AS e
+RETURN labels(startNode(e)) AS source_labels, startNode(e).score AS score,
+       labels(endNode(e)) AS target_labels, endNode(e).rank AS rank;
+```
+
+### Treating virtual relationships as undirected
+
+Some algorithms expect undirected relationships. List the relevant virtual edge
+types in `undirectedEdgeTypes` and `derive()` creates a reverse relationship for
+each one between distinct endpoints (self-loops are left as a single relationship).
+Use the `'*'` wildcard to apply this to every virtual edge type:
+
+```cypher
+MATCH p=(:Person)-[r]->(:Person)
+WITH derive(p, {virtualEdgeType: type(r), undirectedEdgeTypes: ['*']}) AS virtual_graph
+RETURN size(virtual_graph.nodes) AS nodes, size(virtual_graph.edges) AS edges;
+```
+
+Here `virtualEdgeType: type(r)` carries each original relationship type into the
+virtual graph, so a single `derive()` call can accumulate relationships of several
+types at once.
+
+<Callout type="info">
+
+`derive()` requires exactly two arguments and the first one must be a path. The
+options map must contain the `virtualEdgeType` key, and `undirectedEdgeTypes`, when
+provided, must be a list of strings. Queries that break these rules raise an error.
+
+</Callout>
 
 ## Mapping custom procedure names to existing query procedures
 
