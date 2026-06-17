@@ -53,9 +53,9 @@ following rules:
   permission
 - **Database Access**: If any role grants access to a database, the user has
   access
-- **Fine-grained Permissions**: Label-based and edge type permissions are merged
-using grant/deny logic. See [Label-based access control](#label-based-access-control)
-below for details on how fine-grained permissions work and are combined.
+- **Fine-grained Permissions**: Label-based, edge type, and property permissions
+are merged using grant/deny logic. See [Fine-grained access control](#fine-grained-access-control)
+below for details on how these permissions work and are combined.
 
 <Callout type="info">
 Users and roles are in separate namespaces and can share the same name. For
@@ -176,11 +176,11 @@ assignments first.
 On Memgraph Enterprise, three built-in roles are created automatically when the
 first user is created, provided no roles exist yet:
 
-| Role | Privileges | Fine-grained access | Database access |
-|------|-----------|---------------------|-----------------|
-| `admin` | All privileges | Full read/write on all labels and edge types | All databases |
-| `readwrite` | `MATCH`, `CREATE`, `MERGE`, `DELETE`, `SET`, `REMOVE`, `INDEX` | Full read/write on all labels and edge types | Default `"memgraph"` database only |
-| `readonly` | `MATCH`, `STATS` | Read-only on all labels and edge types | Default `"memgraph"` database only |
+| Role | Privileges | Fine-grained access | Property access | Database access |
+|------|-----------|---------------------|-----------------|-----------------|
+| `admin` | All privileges | Full read/write on all labels and edge types | `READ`, `SET PROPERTY` on all properties | All databases |
+| `readwrite` | `MATCH`, `CREATE`, `MERGE`, `DELETE`, `SET`, `REMOVE`, `INDEX` | Full read/write on all labels and edge types | `READ`, `SET PROPERTY` on all properties | Default `"memgraph"` database only |
+| `readonly` | `MATCH`, `STATS` | Read-only on all labels and edge types | `READ` on all properties | Default `"memgraph"` database only |
 
 Built-in roles are created only once and are marked with `builtin: true` in
 `SHOW ROLES`. They behave like regular roles and can be assigned to users, but
@@ -477,8 +477,9 @@ SHOW PRIVILEGES FOR [USER | ROLE] user_or_role ON CURRENT;
 SHOW PRIVILEGES FOR [USER | ROLE] user_or_role ON DATABASE database_name;
 ```
 
-These commands return the aggregated privileges (including label-based
-permissions) for the user or role in the specified database context.
+These commands return the aggregated privileges (including label-based and
+property-based permissions) for the user or role in the specified database
+context.
 
 **Note**:
 - For **users**: In multi-tenant environments, you must specify the database
@@ -496,14 +497,19 @@ can be confidential and must be restricted from viewing and manipulating by
 multiple users. Also, disabling users from executing certain commands is
 sometimes too restrictive.
 
-In response to the need for such authorization, Memgraph has added [label-based
-access
-control](/database-management/authentication-and-authorization/role-based-access-control#label-based-access-control)
-(LBAC) as a more fine-grained access control to enable authorization on node
-labels and relationship edge types. By applying authorization to graph's first
-class citizens, a database administrator can now keep all the data in one
-database while keeping any private data secure from those who don't have
-adequate permission.
+In response to the need for such authorization, Memgraph offers two levels of
+fine-grained access control:
+
+- [Label-based access control](#label-based-access-control) (LBAC) enables
+authorization on node labels and relationship edge types, controlling which
+nodes and relationships a user can see and manipulate.
+- [Property-based access control](#property-based-access-control) (PBAC)
+enables authorization on individual properties, controlling which properties
+a user can read or write on visible nodes and relationships.
+
+By applying authorization to the graph's first-class citizens, a database
+administrator can keep all the data in one database while keeping any private
+data secure from those who don't have adequate permission.
 
 ### Label-based access control
 
@@ -857,8 +863,9 @@ SHOW PRIVILEGES FOR [USER | ROLE] user_or_role ON CURRENT;
 SHOW PRIVILEGES FOR [USER | ROLE] user_or_role ON DATABASE database_name;
 ```
 
-These commands return the aggregated privileges (including label-based
-permissions) for the user or role in the specified database context.
+These commands return the aggregated privileges (including label-based and
+property-based permissions) for the user or role in the specified database
+context.
 
 **Note**:
 - For **users**: In multi-tenant environments, you must specify the database
@@ -866,6 +873,170 @@ permissions) for the user or role in the specified database context.
 - For **roles**: This command does not require database specification, even in
   multi-tenant environments. In which case, it will show the role's privileges
   without filtering for database.
+
+### Property-based access control
+
+Property-based access control (PBAC) adds a second layer of fine-grained
+authorization on top of [label-based access control](#label-based-access-control).
+While LBAC controls which nodes and relationships a user can see and manipulate,
+PBAC controls which individual properties on those nodes and relationships a user
+can read or write.
+
+PBAC uses the same `GRANT`, `DENY`, and `REVOKE` commands as LBAC, with the
+same precedence rules: `DENY` overrides `GRANT`, and if no rule matches a
+property, access is denied by default (silent deny).
+
+The available permissions are:
+
+| Permission | Description |
+| ---------- | ----------- |
+| `READ` | Permission to see the value of a property in query results |
+| `SET PROPERTY` | Permission to create, update, or remove a property value |
+
+Both permissions apply to properties on nodes and on relationships.
+
+<Callout type="info">
+
+When upgrading from Memgraph v3.11 or earlier, existing users and roles are
+automatically migrated with global access to all properties (`READ` and `SET
+PROPERTY` on `{*}`). This means existing deployments will continue to work
+without any changes after the upgrade.
+
+</Callout>
+
+#### Node property permissions
+
+Property permissions on nodes are granted using the following syntax:
+
+```cypher
+GRANT permission_list {property_list} ON NODES CONTAINING LABELS label_list [MATCHING ANY | MATCHING EXACTLY] TO user_or_role;
+```
+
+where:
+- `permission_list` is a comma-separated list containing `READ`, `SET PROPERTY`,
+or both
+- `property_list` is either a comma-separated list of property names inside
+curly braces (e.g. `{name, email}`), or `{*}` as a wildcard for all properties
+- `label_list`, `MATCHING` clauses, and `user_or_role` follow the same rules as
+[label-based node permissions](#node-permissions)
+
+For example, granting `READ` permission on the `name` and `email` properties of
+`:Employee` nodes to user `charlie`:
+
+```cypher
+GRANT READ {name, email} ON NODES CONTAINING LABELS :Employee TO charlie;
+```
+
+Multiple permissions can be granted in a single statement:
+
+```cypher
+GRANT READ, SET PROPERTY {name, email} ON NODES CONTAINING LABELS :Employee TO charlie;
+```
+
+Global property permissions for all labels use `*` in place of the label list:
+
+```cypher
+GRANT READ {*} ON NODES CONTAINING LABELS * TO charlie;
+```
+
+To deny read access to a specific property:
+
+```cypher
+DENY READ {ssn} ON NODES CONTAINING LABELS :Employee TO charlie;
+```
+
+`DENY` supports the same `MATCHING ANY` / `MATCHING EXACTLY` clauses as `GRANT`.
+
+To revoke property permissions:
+
+```cypher
+REVOKE READ {ssn} ON NODES CONTAINING LABELS :Employee FROM charlie;
+```
+
+As with label-based permissions, revoking is not the same as denying. `REVOKE`
+removes existing grants or denies for the property specification; `DENY` sets an
+explicit deny rule.
+
+#### Relationship property permissions
+
+Property permissions on relationships follow a similar syntax:
+
+```cypher
+GRANT permission_list {property_list} ON EDGES OF TYPE edge_type_list TO user_or_role;
+```
+
+where:
+- `permission_list` is a comma-separated list containing `READ`, `SET PROPERTY`,
+or both
+- `property_list` is either a comma-separated list of property names inside
+curly braces, or `{*}` as a wildcard for all properties
+- `edge_type_list` and `user_or_role` follow the same rules as
+[label-based relationship permissions](#relationship-permissions)
+
+For example, granting `READ` on the `start_date` property of `:WORKS_AT`
+relationships:
+
+```cypher
+GRANT READ {start_date} ON EDGES OF TYPE :WORKS_AT TO charlie;
+```
+
+Denying write access to a property on all edge types:
+
+```cypher
+DENY SET PROPERTY {secret_code} ON EDGES OF TYPE * TO charlie;
+```
+
+Revoking property permissions on relationships:
+
+```cypher
+REVOKE READ {start_date} ON EDGES OF TYPE :WORKS_AT FROM charlie;
+```
+
+#### How denied properties behave
+
+When a user does not have `READ` permission on a property, the property value is
+hidden from query results. The exact behavior depends on the context:
+
+| Context | Behavior |
+| ------- | -------- |
+| Direct property access (`n.prop`) | Returns `NULL` |
+| `WHERE` clause filtering (`WHERE n.prop = value`) | Property evaluates to `NULL`, so the condition is not satisfied and the node is not returned |
+| `properties(n)` | Key is present in the returned map, but its value is `NULL` |
+| `keys(n)` | Key is omitted from the returned list |
+| `values(n)` | Value is omitted from the returned list |
+| `DUMP DATABASE` | Property is omitted from generated `CREATE` statements |
+| `SHOW SCHEMA INFO` | Property is omitted from the schema listing |
+
+When a user does not have `SET PROPERTY` permission on a property, any attempt
+to write that property (via `SET`, `REMOVE`, `CREATE`, or `MERGE`) will fail
+with an error and the transaction will be rolled back.
+
+#### Merging property permissions
+
+Property permissions follow the same merging rules as label-based permissions.
+When a user has multiple roles, or both role-based and user-specific property
+permissions, the permissions are combined:
+
+- If any role or the user grants a property permission, the user has that
+permission
+- If any role or the user denies a property permission, the user is denied
+that access, overriding any grants
+
+For example, if a user has Role A granting `READ {salary}` on `:Employee` and
+Role B denying `READ {salary}` on `:Employee`, the deny takes precedence and the
+user cannot see the `salary` property.
+
+Global property permissions (granted on `{*}`) act as a per-property fallback.
+For each property access check, the resolution order is:
+
+1. Check all entity-specific rules that match the node's labels (or the edge's
+type). If any matching rule covers the property being checked (either by name
+or via `{*}` within that rule), use that result.
+2. If no matching rule covers the property, fall through to the global rules.
+
+This means that having a property rule on `:Employee` for one property (e.g.
+`ssn`) does not affect the resolution of other properties (e.g. `salary`) on
+the same label - those still fall through to global rules independently.
 
 ### Templates for granting privileges
 
@@ -885,6 +1056,8 @@ GRANT ALL PRIVILEGES TO admin;
 GRANT DATABASE * to admin;
 GRANT CREATE, READ, UPDATE, DELETE ON NODES CONTAINING LABELS * TO admin;
 GRANT CREATE, READ, UPDATE, DELETE ON EDGES OF TYPE * TO admin;
+GRANT READ, SET PROPERTY {*} ON NODES CONTAINING LABELS * TO admin;
+GRANT READ, SET PROPERTY {*} ON EDGES OF TYPE * TO admin;
 ```
 
 To grant all read and write privileges:
@@ -894,6 +1067,8 @@ DENY ALL PRIVILEGES TO readWrite;
 GRANT CREATE, DELETE, MERGE, SET, REMOVE, INDEX, MATCH, STATS TO readWrite;
 GRANT CREATE, READ, UPDATE, DELETE ON NODES CONTAINING LABELS * TO readWrite;
 GRANT CREATE, READ, UPDATE, DELETE ON EDGES OF TYPE * TO readWrite;
+GRANT READ, SET PROPERTY {*} ON NODES CONTAINING LABELS * TO readWrite;
+GRANT READ, SET PROPERTY {*} ON EDGES OF TYPE * TO readWrite;
 ```
 
 To grant read only privileges:
@@ -903,6 +1078,8 @@ DENY ALL PRIVILEGES TO readonly;
 GRANT MATCH, STATS TO readonly;
 GRANT READ ON NODES CONTAINING LABELS * TO readonly;
 GRANT READ ON EDGES OF TYPE * TO readonly;
+GRANT READ {*} ON NODES CONTAINING LABELS * TO readonly;
+GRANT READ {*} ON EDGES OF TYPE * TO readonly;
 ```
 
 ### Examples
