@@ -5,6 +5,79 @@ description: MemGQL release notes
 
 # MemGQL Changelog
 
+## MemGQL v0.6.2 - June 7th, 2026
+
+### ✨ New features & Improvements
+
+- **Typed projections on every SQL backend.** `RETURN p` now returns a
+  structured Bolt **Node** and `RETURN r` a typed Bolt **Relationship** on
+  every SQL connector (PostgreSQL, MySQL, DuckDB, ClickHouse, Iceberg, Pinot,
+  Oracle) — previously SQL backends returned the underlying column values and a
+  map projection (`RETURN p {.id, .name}`) was required. Nodes carry their
+  label and mapped properties; relationships carry their type and mapped
+  properties. Mixing scalar and whole-element projections in one `RETURN`
+  (`RETURN p.name, p`) works too.
+- **Connection-less queries (liveness check).** `RETURN 1`, `RETURN 1 + 2 AS x`
+  and `WITH 1 AS x RETURN x` now evaluate locally with no connector configured
+  and no backend reachable — useful as a Bolt-level health probe.
+- **`ORDER BY` by `RETURN` alias in cross-backend queries.** A sort key can
+  reference a projected alias (`RETURN fact.tx_count AS tx_count … ORDER BY
+  tx_count`), including when the alias is nested inside an arithmetic
+  expression (`ORDER BY tx_count + 1`). The post-join sort rewrites the alias
+  back to its underlying expression.
+- **Delimited (quoted) identifiers** in GQL queries now parse.
+
+### 🐞 Bug fixes
+
+- **PostgreSQL `NUMERIC` columns** now deserialize correctly — whole and
+  fractional values arrive at the Bolt driver as Float and `NULL` is
+  preserved. Previously `NUMERIC`-typed columns were unsupported.
+
+## MemGQL v0.6.1 - May 31st, 2026
+
+### ✨ New features & Improvements
+
+- **Cross-backend joins (phase 1).** Queries that `USE` two or more
+  different graphs in a single statement now execute as a federated
+  left-deep hash-join chain inside the Bolt server. `LinearQuery`
+  carries `parts: Vec<FocusedPart>`; a multi-`USE` query lowers to a
+  `CrossGraphJoin` chain of per-part `RemoteScan`s.
+  `dispatch_cross_backend` peels `Limit > Sort > Distinct > Project >
+  Filter` into a `FederationPipeline`, dispatches each part via the
+  per-backend `BoltHandler::run_plan`, materializes rows to canonical
+  scalars, and folds via hash-join (SQL 3VL — `NULL` keys dropped) or
+  Cartesian product when there's no equi-predicate. Per-side
+  materialization is capped at 1,000,000 rows.
+  - **Verified end-to-end:** Memgraph, MySQL, PostgreSQL, DuckDB.
+  - **Wired but not yet verified end-to-end:** Neo4j, Oracle, ClickHouse,
+    Iceberg, Pinot — the integration is mechanically identical and
+    awaits a broader live-backend test harness.
+  - Composite (multi-column) equi-joins are supported.
+  - Post-join `Filter` / `Sort` / `Limit` / `Distinct` and a federation
+    expression evaluator run over the joined wide row, including
+    cross-part arithmetic, string functions (`toUpper`, `toLower`,
+    `length`, `size`, `trim`), and residual filters (`STARTS WITH`,
+    comparisons).
+  - Three-backend left-deep chains with skip-level predicates are
+    supported.
+  - Unsupported shapes return a typed error with an actionable
+    headline: whole-node returns across the federation boundary,
+    non-literal `LIMIT`/`SKIP`, unrecognized plan nodes above the
+    join (`Aggregate`, `Union`), unsupported functions, etc.
+
+### 🚧 Known limitations
+
+- Whole-node `RETURN m` across federation is rejected;
+  `CanonicalScalar::Node` modeling is deferred. Reference individual
+  properties instead (`m.name`).
+- Scalar functions reach the GQL parser catch-all today (the
+  evaluator supports them — covered by unit tests — but the e2e path
+  waits on a parser extension; aggregates and `COALESCE` / `NULLIF`
+  go through the normal `FnCall` path).
+- No output-cardinality cap (only per-side input cap of 1,000,000
+  rows). Per-side dispatch is sequential; parallel fan-out is a
+  follow-up.
+
 ## MemGQL v0.6.0 - May 23rd, 2026
 
 ### ⚠️ Breaking changes
