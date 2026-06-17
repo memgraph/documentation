@@ -58,6 +58,61 @@ To create a vector index on edges, use:
 CREATE VECTOR EDGE INDEX vector_index_name ON :EDGE_TYPE(embedding) WITH CONFIG {"dimension": 256, "capacity": 1000};
 ```
 
+### Index on multiple labels or edge types
+
+By default, a vector index targets a single label (for nodes) or a single edge
+type (for edges). You can also index a combination of labels or edge types, or
+every entity that has the property regardless of its labels. The matching mode is
+determined by the shape of the `ON` clause:
+
+| Syntax                       | Mode     | Applies to       | Semantics                                                                                  |
+| ---------------------------- | -------- | ---------------- | ------------------------------------------------------------------------------------------ |
+| `:Label(property)`           | single   | nodes and edges  | The default. Indexes entities that have exactly that one label or edge type.               |
+| `:Label1\|Label2(property)`  | any      | nodes and edges  | Indexes entities that have **any** of the listed labels or edge types.                     |
+| `:Label1&Label2(property)`   | all      | nodes only       | Indexes nodes that have **all** of the listed labels. Not supported for edges (see below). |
+| `(property)`                 | wildcard | nodes and edges  | Indexes **every** entity that has the property, with no label or edge-type filter.         |
+
+The colon before each name after the first one is optional, so `:Label1|Label2`
+and `:Label1|:Label2` are equivalent.
+
+For nodes, all four shapes are available:
+
+```cypher
+// any of the listed labels
+CREATE VECTOR INDEX or_index ON :Article|Blog(embedding) WITH CONFIG {"dimension": 256, "capacity": 1000};
+
+// all of the listed labels
+CREATE VECTOR INDEX and_index ON :Article&Published(embedding) WITH CONFIG {"dimension": 256, "capacity": 1000};
+
+// every node that has the property
+CREATE VECTOR INDEX wildcard_index ON (embedding) WITH CONFIG {"dimension": 256, "capacity": 1000};
+```
+
+For edges, the single, any (`|`) and wildcard shapes work the same way, but the
+all (`&`) shape is rejected with an error, because an edge always has exactly one
+type and could never match more than one:
+
+```cypher
+CREATE VECTOR EDGE INDEX or_edge_index ON :KNOWS|LIKES(embedding) WITH CONFIG {"dimension": 256, "capacity": 1000};
+CREATE VECTOR EDGE INDEX wildcard_edge_index ON (embedding) WITH CONFIG {"dimension": 256, "capacity": 1000};
+```
+
+A node or edge can match several overlapping indexes at once (for example, a
+wildcard index and a label-specific index on the same property). Such an entity is
+kept in every matching index, and inserts, updates and deletes are propagated to
+all of them. When a node loses one of several labels that qualified it for an
+`any` index, it remains in the index as long as it still has another matching
+label.
+
+<Callout type="info">
+
+In the output of `SHOW INDEX INFO` and [`SHOW VECTOR INDEX INFO`](#show-vector-indices),
+the `label` column shows the index filter: `*` for a wildcard index, `:Label` for
+a single label or edge type, `:Label1|Label2` for an `any` index, and
+`:Label1&Label2` for an `all` index.
+
+</Callout>
+
 ### Configuration parameters
 
 The following options apply to vector indexes on both nodes and edges:
@@ -140,7 +195,7 @@ Additionally, the same information can be retrieved with the `SHOW VECTOR INDEX 
 {<h3 className="custom-header"> Output: </h3>}
 
 - `index_name: string` ➡ The name of the vector index.
-- `label: string` ➡ The name of the label (or edge type) on which the vector index is defined.
+- `label: string` ➡ The label (or edge type) filter the vector index is defined on. For [multi-label, edge-type or wildcard indexes](#index-on-multiple-labels-or-edge-types) this shows the filter shape: `*` (wildcard), `:Label` (single), `:Label1|Label2` (any), or `:Label1&Label2` (all).
 - `property: string` ➡ The name of the property on which the vector index is indexed.
 - `dimension: int` ➡ The dimension of vectors in the index.
 - `capacity: int` ➡ The capacity of the vector index.
@@ -260,15 +315,17 @@ Memgraph tracks vector index memory separately from the rest of the graph data. 
 SHOW STORAGE INFO;
 ```
 
-Two fields are relevant:
+Two instance-level fields are relevant:
 
-- `graph_memory_tracked` — memory used by graph structures (vertices, edges, properties).
-- `vector_index_memory_tracked` — memory used by vector index embeddings stored in the index backend.
+- `query+graph_memory_tracked` — process-wide memory used by graph structures (vertices, edges, properties) and query execution.
+- `vector_index_memory_tracked` — process-wide memory used by vector index embeddings stored in the index backend.
 
 Together, these two fields sum to `memory_tracked` (the total tracked allocation). The instance-level `--memory-limit` applies to the combined total: if inserting a vector would exceed the limit, Memgraph throws a `Memory limit exceeded` error.
 
+To inspect the same split for a single database, use `SHOW STORAGE INFO ON CURRENT DATABASE` (or `ON DATABASE <name>`) and read its per-database `graph_memory_tracked`, `query_memory_tracked` and `vector_index_memory_tracked` fields.
+
 <Callout type="info">
-With the [AI Platform license](/database-management/enabling-memgraph-enterprise#license-types), the license-imposed memory limit gates only `graph_memory_tracked`. Vector index memory grows up to the system `--memory-limit`, so embedding storage does not consume the licensed graph capacity.
+With the [AI Platform license](/database-management/enabling-memgraph-enterprise#license-types), the license-imposed memory limit gates only graph and query memory (`query+graph_memory_tracked`). Vector index memory grows up to the system `--memory-limit`, so embedding storage does not consume the licensed graph capacity.
 </Callout>
 
 <Callout type="warning">
@@ -335,11 +392,11 @@ SHOW VECTOR INDEX INFO;
 The above query will result with:
 
 ```
-+----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
-| capacity | dimension | index_name  | label  | property | size | scalar_kind | index_type              |
-+----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
-| 2048     | 2         | "index_name"| "Node" | "vector" | 0    | "f16"       | "label+property_vector" |
-+----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
++----------+-----------+-------------+---------+----------+------+-------------+-------------------------+
+| capacity | dimension | index_name  | label   | property | size | scalar_kind | index_type              |
++----------+-----------+-------------+---------+----------+------+-------------+-------------------------+
+| 2048     | 2         | "index_name"| ":Node" | "vector" | 0    | "f16"       | "label+property_vector" |
++----------+-----------+-------------+---------+----------+------+-------------+-------------------------+
 ```
 
 {<h3 className="custom-header"> Create a node </h3>}
@@ -360,11 +417,11 @@ CALL vector_search.show_index_info() YIELD * RETURN *;
 The above query results in:
 
 ```
-+----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
-| capacity | dimension | index_name  | label  | property | size | scalar_kind | index_type              |
-+----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
-| 2048     | 2         | "index_name"| "Node" | "vector" | 1    | "f16"       | "label+property_vector" |
-+----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
++----------+-----------+-------------+---------+----------+------+-------------+-------------------------+
+| capacity | dimension | index_name  | label   | property | size | scalar_kind | index_type              |
++----------+-----------+-------------+---------+----------+------+-------------+-------------------------+
+| 2048     | 2         | "index_name"| ":Node" | "vector" | 1    | "f16"       | "label+property_vector" |
++----------+-----------+-------------+---------+----------+------+-------------+-------------------------+
 ```
 
 We can see the size of the index changed, due to one new node.
@@ -408,11 +465,11 @@ CALL vector_search.show_index_info() YIELD * RETURN *;
 
 The size is now 5, due to 4 additional nodes:
 ```
-+----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
-| capacity | dimension | index_name  | label  | property | size | scalar_kind | index_type              |
-+----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
-| 2048     | 2         | "index_name"| "Node" | "vector" | 5    | "f16"       | "label+property_vector" |
-+----------+-----------+-------------+--------+----------+------+-------------+-------------------------+
++----------+-----------+-------------+---------+----------+------+-------------+-------------------------+
+| capacity | dimension | index_name  | label   | property | size | scalar_kind | index_type              |
++----------+-----------+-------------+---------+----------+------+-------------+-------------------------+
+| 2048     | 2         | "index_name"| ":Node" | "vector" | 5    | "f16"       | "label+property_vector" |
++----------+-----------+-------------+---------+----------+------+-------------+-------------------------+
 ```
 
 Let's again search for the top five similar nodes to the vector [2.0, 2.0] (to compare it to all nodes we have):

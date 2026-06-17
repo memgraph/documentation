@@ -3,6 +3,8 @@ title: Server stats
 description: Monitor the performance and health of your Memgraph server with confidence. Head over to Memgraph's documentation page to gain more insights into server stats.
 ---
 
+import { Callout } from 'nextra/components'
+
 # Server stats
 
 Memgraph supports multiple queries to get information about the instance that is
@@ -18,52 +20,92 @@ SHOW VERSION;
 
 ## Storage information
 
-Running the following query will return certain information about the storage of
-the current instance:
+`SHOW STORAGE INFO` comes in two flavors:
+
+- The unscoped `SHOW STORAGE INFO` query returns **instance-level** (process-wide)
+  metrics only.
+- The `ON DATABASE <name>` and `ON CURRENT DATABASE` variants return
+  **per-database** metrics. See [Per-database storage information](#per-database-storage-information).
+
+<Callout type="warning">
+
+**Breaking change (Memgraph 3.11):** The unscoped `SHOW STORAGE INFO` no longer
+returns database-level metrics. Columns such as `name`, `database_uuid`,
+`vertex_count`, `edge_count`, `average_degree`, `unreleased_delta_objects`,
+`db_memory_tracked`, `db_storage_memory_tracked`, `db_embedding_memory_tracked`
+and `db_query_memory_tracked` are no longer part of its result set. Use
+`SHOW STORAGE INFO ON CURRENT DATABASE` (or `ON DATABASE <name>`) to obtain
+those per-database metrics.
+
+Several instance-level fields were also renamed:
+
+| Old name                          | New name                       |
+|-----------------------------------|--------------------------------|
+| `global_memory_tracked`           | `memory_tracked`               |
+| `global_runtime_allocation_limit` | `memory_limit`                 |
+| `global_license_allocation_limit` | `license_memory_limit`         |
+| `global_disk_usage`               | `disk_usage`                   |
+| `storage_mode`                    | `global_storage_mode`          |
+
+`global_isolation_level` keeps its name but its semantics changed: it now reports
+the startup-default isolation level (the [`--isolation-level`](/database-management/configuration)
+flag) instead of the current database's runtime isolation level. The same applies
+to `global_storage_mode` (renamed from `storage_mode`), which now reflects the
+startup-default [`--storage-mode`](/database-management/configuration). To observe
+runtime changes made via `SET GLOBAL TRANSACTION ISOLATION LEVEL` or
+`STORAGE MODE …`, query `SHOW STORAGE INFO ON CURRENT DATABASE` and read
+`storage_isolation_level` / `storage_mode`.
+
+</Callout>
+
+Running the following query returns instance-level (process-wide) information
+about the storage of the current instance:
 
 ```cypher
 SHOW STORAGE INFO;
 ```
 
-The result will contain the following fields:
+The result contains the following fields, all scoped to the entire Memgraph
+process (across all databases):
 
-> **Instance-wide vs. per-database fields:** The memory-related fields (`memory_res`, `peak_memory_res`, `global_memory_tracked`) are **instance-wide** — they reflect the total memory used by the entire Memgraph process across all databases.
-> The `disk_usage` field, `vertex_count`, `edge_count` and `average_degree` refer to a database (**per-database**), scoped to the database you are currently connected to.
-
-| Field                             | Description                                                                                                                                                                                                                                                                                             |
-|-----------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| name                              | Name of the current database.                                                                                                                                                                                                                                                                           |
-| database_uuid                     | Unique UUID of the database.                                                                                                                                                                                                                                                                            |
-| vertex_count                      | The number of stored nodes (vertices) in the current database.                                                                                                                                                                                                                                          |
-| edge_count                        | The number of stored relationships (edges) in the current database.                                                                                                                                                                                                                                     |
-| average_degree                    | The average number of relationships of a single node in the current database.                                                                                                                                                                                                                           |
-| vm_max_map_count                  | The number of memory-mapped areas that the kernel allows a process to have. If it is unknown, returns -1.<br/>For more info, check out the [virtual memory section](/fundamentals/storage-memory-usage#virtual-memory).                                                                                 |
-| memory_res                        | The non-swapped physical RAM memory used by the whole Memgraph process, as reported by the OS (in B, KiB, MiB, GiB or TiB).                                                                                                                                                                             |
-| peak_memory_res                   | Peak RAM memory usage of the Memgraph process during the whole run (instance-wide).                                                                                                                                                                                                                     |
-| unreleased_delta_objects          | The current number of still allocated objects with the information about the changes that write transactions have made, called Delta objects. Refer to allocation and deallocation of Delta objects [on this page](/fundamentals/storage-memory-usage#in-memory-transactional-storage-mode-default).    |
-| global_disk_usage                 | The amount of disk space used by the data directory (in B, KiB, MiB, GiB or TiB).                                                                                                                                                                                                                       |
-| global_memory_tracked             | The total amount of RAM allocated across the instance and tracked by Memgraph (in B, KiB, MiB, GiB or TiB).<br/>For more info, check out [memory control](/fundamentals/storage-memory-usage).                                                                                                          |
-| global_runtime_allocation_limit   | The instance-level memory limit, taken from the [`--memory-limit`](/database-management/configuration) flag (in B, KiB, MiB, GiB or TiB).                                                                                                                                                               |
-| global_license_allocation_limit   | The memory limit imposed by the active license, or `"unlimited"` if no license is active. With an `enterprise` license this gates total tracked memory; with an `ai_platform` license it gates only graph memory. See [License types](/database-management/enabling-memgraph-enterprise#license-types). |
-| db_memory_tracked                 | RAM tracked for the **current database** (sum of `db_storage_memory_tracked`, `db_embedding_memory_tracked`, and `db_query_memory_tracked`).                                                                                                                                                            |
-| db_storage_memory_tracked         | The portion of `db_memory_tracked` used by graph structures (vertices, edges, properties) of the current database.                                                                                                                                                                                      |
-| db_embedding_memory_tracked       | The portion of `db_memory_tracked` used by vector index embeddings of the current database.                                                                                                                                                                                                             |
-| db_query_memory_tracked           | The portion of `db_memory_tracked` used by query execution against the current database.                                                                                                                                                                                                                |
-| global_isolation_level            | The current `global` isolation level.<br/>For more info, check out [isolation levels](/fundamentals/transactions#isolation-levels).                                                                                                                                                                     |
-| session_isolation_level           | The current `session` isolation level.                                                                                                                                                                                                                                                                  |
-| next_session_isolation_level      | The current `next` isolation level.                                                                                                                                                                                                                                                                     |
-| storage_mode                      | The current storage mode.<br/>For more info, check out [storage modes](/fundamentals/storage-memory-usage#storage-modes).                                                                                                                                                                               |
+| Field                          | Description                                                                                                                                                                                                                                                                                          |
+|--------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| vm_max_map_count               | The number of memory-mapped areas that the kernel allows a process to have. If it is unknown, returns -1.<br/>For more info, check out the [virtual memory section](/fundamentals/storage-memory-usage#virtual-memory).                                                                              |
+| memory_res                     | The non-swapped physical RAM memory (RSS) used by the whole Memgraph process, as reported by the OS (in B, KiB, MiB, GiB or TiB).                                                                                                                                                                   |
+| peak_memory_res                | Peak RAM memory (RSS) usage of the Memgraph process during the whole run.                                                                                                                                                                                                                           |
+| disk_usage                     | The amount of disk space used by the data directory ([`--data-directory`](/database-management/configuration), in B, KiB, MiB, GiB or TiB).                                                                                                                                                          |
+| memory_tracked                 | The total amount of RAM allocated across the instance and tracked by Memgraph (in B, KiB, MiB, GiB or TiB).<br/>For more info, check out [memory control](/fundamentals/storage-memory-usage).                                                                                                       |
+| memory_limit                   | The active instance-level runtime memory limit, taken from the [`--memory-limit`](/database-management/configuration) flag (in B, KiB, MiB, GiB or TiB).                                                                                                                                             |
+| license_memory_limit           | The memory limit imposed by the active license, or `"unlimited"` if no license is active. With an `enterprise` license this gates total tracked memory; with an `ai_platform` license it gates only graph and query memory. See [License types](/database-management/enabling-memgraph-enterprise#license-types). |
+| query+graph_memory_tracked     | The process-wide graph-arena tracked memory. Captures all default `new` allocations across the instance — both graph data and query-execution heap allocations.                                                                                                                                      |
+| vector_index_memory_tracked    | The process-wide memory tracked for vector indices and embeddings across the instance.                                                                                                                                                                                                              |
+| global_isolation_level         | The **startup-default** isolation level (the [`--isolation-level`](/database-management/configuration) flag). It does **not** reflect runtime `SET GLOBAL TRANSACTION ISOLATION LEVEL` changes — read `storage_isolation_level` from the per-database variant for those.<br/>For more info, check out [isolation levels](/fundamentals/transactions#isolation-levels). |
+| session_isolation_level        | The current `session` isolation level.                                                                                                                                                                                                                                                              |
+| next_session_isolation_level   | The current `next` isolation level.                                                                                                                                                                                                                                                                 |
+| global_storage_mode            | The **startup-default** storage mode (the [`--storage-mode`](/database-management/configuration) flag). It does **not** reflect runtime `STORAGE MODE …` changes — read `storage_mode` from the per-database variant for those.<br/>For more info, check out [storage modes](/fundamentals/storage-memory-usage#storage-modes). |
 
 ### Per-database storage information
 
-To get storage information for a specific database, use the `ON DATABASE` variant.
-This is available only in Memgraph Enterprise Edition and requires the `STATS` privilege.
+To get storage information for a specific database, use the `ON CURRENT DATABASE`
+or `ON DATABASE <name>` variant. Both return the same per-database field set.
+
+```cypher
+SHOW STORAGE INFO ON CURRENT DATABASE;
+```
+
+`ON CURRENT DATABASE` targets the database the session is currently using.
 
 ```cypher
 SHOW STORAGE INFO ON DATABASE mydb;
 ```
 
-This variant returns its own field set, scoped to the named database. Process-wide fields such as `vm_max_map_count`, `memory_res`, `peak_memory_res`, and the `global_*` allocation limits are **not** included — those are only available from the unscoped `SHOW STORAGE INFO`.
+`ON DATABASE <name>` targets a named database. Accessing a **non-default**
+database this way requires Memgraph Enterprise Edition; the default database is
+available in all editions. Both variants require the `STATS` privilege.
+
+Process-wide fields such as `vm_max_map_count`, `memory_res`, `peak_memory_res`,
+`memory_tracked` and the license/runtime memory limits are **not** included —
+those are only available from the unscoped `SHOW STORAGE INFO`.
 
 | Field                         | Description                                                                                                                                                  |
 |-------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -116,10 +158,24 @@ SHOW LICENSE INFO;
 | organization_name | Organization name for the enterprise license.                                                        |
 | license_key       | Encoded license key.                                                                                 |
 | is_valid          | Whether the license is currently valid. Uses the same validation logic as enterprise feature checks. |
-| license_type      | `enterprise` / `ai_platform` / `oem`                                                                  |
+| license_type      | `enterprise` / `ai_platform` / `oem` / `oem_community`                                                |
 | valid_until       | Date when the license expires, or `FOREVER` for non-expiring licenses.                               |
-| memory_limit      | The maximum `global_memory_tracked` value allowed by this license (in GiB). When `global_memory_tracked` (from `SHOW STORAGE INFO`) reaches this limit, write queries are blocked. |
+| memory_limit      | The maximum tracked-memory value allowed by this license (in GiB), or `UNLIMITED` if the license sets no limit. When tracked memory reaches this limit, write queries are blocked. |
 | status            | Descriptive status of the license validity.                                                          |
+| memory_limit_policy | A human-readable description of how the license's `memory_limit` is enforced (see the table below). |
+
+The value of `memory_limit_policy` depends on the `license_type` **and** whether
+the license carries a non-zero `memory_limit`:
+
+| License type                       | `memory_limit` | `memory_limit_policy`                                                            |
+|------------------------------------|----------------|----------------------------------------------------------------------------------|
+| `ai_platform`                      | `> 0`          | `"Graph and query memory are limited. Vector index memory is not limited."`      |
+| `enterprise` / `oem` / other       | `> 0`          | `"All memory usage is limited."`                                                 |
+| Any license type (incl. `ai_platform`) | `== 0`     | `"Memory usage is not limited."`                                                 |
+| No / invalid license               | n/a            | `"Memory usage is not limited."`                                                 |
+
+An `ai_platform` license with `memory_limit == 0` reports the unlimited string,
+not the AI Platform policy string.
 
 If no license has been provided, `is_valid` is `false` and `status` reads
 `"You have not provided any license!"`.
@@ -128,138 +184,57 @@ If no license has been provided, `is_valid` is `false` and `status` reads
 
 ## Metrics information
 
-Running this query will show the system metrics. Same metrics can be provided from the HTTP endpoint at default
-port 9091. This is a query that only works with the Memgraph Enterprise License. For the information about the metrics,
-please see the [information about monitoring via HTTP server](/database-management/monitoring#monitoring-via-http-server-enterprise).
+Running this query will show the system metrics for the current database,
+combined with global metrics.  Same metrics can be provided from the HTTP
+endpoint at default port 9091.  This is a query that only works with the
+Memgraph Enterprise License. For the information about the metrics, please see
+the [information about monitoring via HTTP
+server](/database-management/monitoring#metrics-tracking-via-http-server-enterprise-edition).
 
 ```cypher
 SHOW METRICS INFO;
 ```
 
-users can also use the following query to get the same information:
+Users can also use the following query to get the same information:
 
 ```cypher
 SHOW METRICS;
 ```
 
+The output includes per-database metrics (scoped to the database you are
+connected to) and global metrics (sessions, high availability). Histogram values
+are reported in microseconds.
+
 ```copy=false
 +------------------------------------------+---------------------+-------------+------------+
 | name                                     | type                | metric type | value      |
 +------------------------------------------+---------------------+-------------+------------+
+| "ActiveExistenceConstraints"             | "Constraint"        | "Gauge"     | 0          |
+| "ActiveTypeConstraints"                  | "Constraint"        | "Gauge"     | 0          |
+| "ActiveUniqueConstraints"                | "Constraint"        | "Gauge"     | 0          |
 | "AverageDegree"                          | "General"           | "Gauge"     | 41.2732    |
 | "EdgeCount"                              | "General"           | "Gauge"     | 871978     |
 | "VertexCount"                            | "General"           | "Gauge"     | 42254      |
-| "SocketConnect_us_50p"                   | "General"           | "Histogram" | 0          |
-| "SocketConnect_us_90p"                   | "General"           | "Histogram" | 0          |
-| "SocketConnect_us_99p"                   | "General"           | "Histogram" | 0          |
-| "BecomeLeaderSuccess"                    | "HighAvailability"  | "Counter"   | 0          |
-| "DemoteInstance"                         | "HighAvailability"  | "Counter"   | 0          |
-| "DemoteMainToReplicaRpcFail"             | "HighAvailability"  | "Counter"   | 0          |
-| "DemoteMainToReplicaRpcSuccess"          | "HighAvailability"  | "Counter"   | 0          |
-| "EnableWritingOnMainRpcFail"             | "HighAvailability"  | "Counter"   | 0          |
-| "EnableWritingOnMainRpcSuccess"          | "HighAvailability"  | "Counter"   | 0          |
-| "FailedToBecomeLeader"                   | "HighAvailability"  | "Counter"   | 0          |
-| "GetDatabaseHistoriesRpcFail"            | "HighAvailability"  | "Counter"   | 0          |
-| "GetDatabaseHistoriesRpcSuccess"         | "HighAvailability"  | "Counter"   | 0          |
-| "NoAliveInstanceFailedFailovers"         | "HighAvailability"  | "Counter"   | 0          |
-| "PromoteToMainRpcFail"                   | "HighAvailability"  | "Counter"   | 0          |
-| "PromoteToMainRpcSuccess"                | "HighAvailability"  | "Counter"   | 0          |
-| "RaftFailedFailovers"                    | "HighAvailability"  | "Counter"   | 0          |
-| "RegisterReplicaOnMainRpcFail"           | "HighAvailability"  | "Counter"   | 0          |
-| "RegisterReplicaOnMainRpcSuccess"        | "HighAvailability"  | "Counter"   | 0          |
-| "RemoveCoordInstance"                    | "HighAvailability"  | "Counter"   | 0          |
-| "ReplicaRecoveryFail"                    | "HighAvailability"  | "Counter"   | 0          |
-| "ReplicaRecoverySkip"                    | "HighAvailability"  | "Counter"   | 0          |
-| "ReplicaRecoverySuccess"                 | "HighAvailability"  | "Counter"   | 0          |
-| "ShowInstance"                           | "HighAvailability"  | "Counter"   | 0          |
-| "ShowInstances"                          | "HighAvailability"  | "Counter"   | 0          |
-| "StateCheckRpcFail"                      | "HighAvailability"  | "Counter"   | 0          |
-| "StateCheckRpcSuccess"                   | "HighAvailability"  | "Counter"   | 0          |
-| "SuccessfulFailovers"                    | "HighAvailability"  | "Counter"   | 0          |
-| "SwapMainUUIDRpcFail"                    | "HighAvailability"  | "Counter"   | 0          |
-| "SwapMainUUIDRpcSuccess"                 | "HighAvailability"  | "Counter"   | 0          |
-| "UnregisterReplInstance"                 | "HighAvailability"  | "Counter"   | 0          |
-| "UnregisterReplicaRpcFail"               | "HighAvailability"  | "Counter"   | 0          |
-| "UnregisterReplicaRpcSuccess"            | "HighAvailability"  | "Counter"   | 0          |
-| "ChooseMostUpToDateInstance_us_50p"      | "HighAvailability"  | "Histogram" | 0          |
-| "ChooseMostUpToDateInstance_us_90p"      | "HighAvailability"  | "Histogram" | 0          |
-| "ChooseMostUpToDateInstance_us_99p"      | "HighAvailability"  | "Histogram" | 0          |
-| "CurrentWalRpc_us_50p"                   | "HighAvailability"  | "Histogram" | 0          |
-| "CurrentWalRpc_us_90p"                   | "HighAvailability"  | "Histogram" | 0          |
-| "CurrentWalRpc_us_99p"                   | "HighAvailability"  | "Histogram" | 0          |
-| "DataFailover_us_50p"                    | "HighAvailability"  | "Histogram" | 0          |
-| "DataFailover_us_90p"                    | "HighAvailability"  | "Histogram" | 0          |
-| "DataFailover_us_99p"                    | "HighAvailability"  | "Histogram" | 0          |
-| "DemoteMainToReplicaRpc_us_50p"          | "HighAvailability"  | "Histogram" | 0          |
-| "DemoteMainToReplicaRpc_us_90p"          | "HighAvailability"  | "Histogram" | 0          |
-| "DemoteMainToReplicaRpc_us_99p"          | "HighAvailability"  | "Histogram" | 0          |
-| "EnableWritingOnMainRpc_us_50p"          | "HighAvailability"  | "Histogram" | 0          |
-| "EnableWritingOnMainRpc_us_90p"          | "HighAvailability"  | "Histogram" | 0          |
-| "EnableWritingOnMainRpc_us_99p"          | "HighAvailability"  | "Histogram" | 0          |
-| "FinalizeTxnReplication_us_50p"          | "HighAvailability"  | "Histogram" | 0          |
-| "FinalizeTxnReplication_us_90p"          | "HighAvailability"  | "Histogram" | 0          |
-| "FinalizeTxnReplication_us_99p"          | "HighAvailability"  | "Histogram" | 0          |
-| "FrequentHeartbeatRpc_us_50p"            | "HighAvailability"  | "Histogram" | 0          |
-| "FrequentHeartbeatRpc_us_90p"            | "HighAvailability"  | "Histogram" | 0          |
-| "FrequentHeartbeatRpc_us_99p"            | "HighAvailability"  | "Histogram" | 0          |
-| "GetDatabaseHistoriesRpc_us_50p"         | "HighAvailability"  | "Histogram" | 0          |
-| "GetDatabaseHistoriesRpc_us_90p"         | "HighAvailability"  | "Histogram" | 0          |
-| "GetDatabaseHistoriesRpc_us_99p"         | "HighAvailability"  | "Histogram" | 0          |
-| "GetHistories_us_50p"                    | "HighAvailability"  | "Histogram" | 0          |
-| "GetHistories_us_90p"                    | "HighAvailability"  | "Histogram" | 0          |
-| "GetHistories_us_99p"                    | "HighAvailability"  | "Histogram" | 0          |
-| "HeartbeatRpc_us_50p"                    | "HighAvailability"  | "Histogram" | 0          |
-| "HeartbeatRpc_us_90p"                    | "HighAvailability"  | "Histogram" | 0          |
-| "HeartbeatRpc_us_99p"                    | "HighAvailability"  | "Histogram" | 0          |
-| "InstanceFailCallback_us_50p"            | "HighAvailability"  | "Histogram" | 0          |
-| "InstanceFailCallback_us_90p"            | "HighAvailability"  | "Histogram" | 0          |
-| "InstanceFailCallback_us_99p"            | "HighAvailability"  | "Histogram" | 0          |
-| "InstanceSuccCallback_us_50p"            | "HighAvailability"  | "Histogram" | 0          |
-| "InstanceSuccCallback_us_90p"            | "HighAvailability"  | "Histogram" | 0          |
-| "InstanceSuccCallback_us_99p"            | "HighAvailability"  | "Histogram" | 0          |
-| "PrepareCommitRpc_us_50p"                | "HighAvailability"  | "Histogram" | 0          |
-| "PrepareCommitRpc_us_90p"                | "HighAvailability"  | "Histogram" | 0          |
-| "PrepareCommitRpc_us_99p"                | "HighAvailability"  | "Histogram" | 0          |
-| "PromoteToMainRpc_us_50p"                | "HighAvailability"  | "Histogram" | 0          |
-| "PromoteToMainRpc_us_90p"                | "HighAvailability"  | "Histogram" | 0          |
-| "PromoteToMainRpc_us_99p"                | "HighAvailability"  | "Histogram" | 0          |
-| "RegisterReplicaOnMainRpc_us_50p"        | "HighAvailability"  | "Histogram" | 0          |
-| "RegisterReplicaOnMainRpc_us_90p"        | "HighAvailability"  | "Histogram" | 0          |
-| "RegisterReplicaOnMainRpc_us_99p"        | "HighAvailability"  | "Histogram" | 0          |
-| "ReplicaStream_us_50p"                   | "HighAvailability"  | "Histogram" | 0          |
-| "ReplicaStream_us_90p"                   | "HighAvailability"  | "Histogram" | 0          |
-| "ReplicaStream_us_99p"                   | "HighAvailability"  | "Histogram" | 0          |
-| "SnapshotRpc_us_50p"                     | "HighAvailability"  | "Histogram" | 0          |
-| "SnapshotRpc_us_90p"                     | "HighAvailability"  | "Histogram" | 0          |
-| "SnapshotRpc_us_99p"                     | "HighAvailability"  | "Histogram" | 0          |
-| "StartTxnReplication_us_50p"             | "HighAvailability"  | "Histogram" | 0          |
-| "StartTxnReplication_us_90p"             | "HighAvailability"  | "Histogram" | 0          |
-| "StartTxnReplication_us_99p"             | "HighAvailability"  | "Histogram" | 0          |
-| "StateCheckRpc_us_50p"                   | "HighAvailability"  | "Histogram" | 0          |
-| "StateCheckRpc_us_90p"                   | "HighAvailability"  | "Histogram" | 0          |
-| "StateCheckRpc_us_99p"                   | "HighAvailability"  | "Histogram" | 0          |
-| "SystemRecoveryRpc_us_50p"               | "HighAvailability"  | "Histogram" | 0          |
-| "SystemRecoveryRpc_us_90p"               | "HighAvailability"  | "Histogram" | 0          |
-| "SystemRecoveryRpc_us_99p"               | "HighAvailability"  | "Histogram" | 0          |
-| "UnregisterReplicaRpc_us_50p"            | "HighAvailability"  | "Histogram" | 0          |
-| "UnregisterReplicaRpc_us_90p"            | "HighAvailability"  | "Histogram" | 0          |
-| "UnregisterReplicaRpc_us_99p"            | "HighAvailability"  | "Histogram" | 0          |
-| "WalFilesRpc_us_50p"                     | "HighAvailability"  | "Histogram" | 0          |
-| "WalFilesRpc_us_90p"                     | "HighAvailability"  | "Histogram" | 0          |
-| "WalFilesRpc_us_99p"                     | "HighAvailability"  | "Histogram" | 0          |
-| "ActiveEdgePropertyIndices"              | "Index"             | "Counter"   | 0          |
-| "ActiveEdgeTypeIndices"                  | "Index"             | "Counter"   | 0          |
-| "ActiveEdgeTypePropertyIndices"          | "Index"             | "Counter"   | 0          |
-| "ActiveLabelIndices"                     | "Index"             | "Counter"   | 6          |
-| "ActiveLabelPropertyIndices"             | "Index"             | "Counter"   | 18         |
-| "ActivePointIndices"                     | "Index"             | "Counter"   | 0          |
-| "ActiveTextIndices"                      | "Index"             | "Counter"   | 0          |
-| "ActiveVectorEdgeIndices"                | "Index"             | "Counter"   | 0          |
-| "ActiveVectorIndices"                    | "Index"             | "Counter"   | 0          |
-| "UnreleasedDeltaObjects"                 | "Memory"            | "Counter"   | 0          |
+| ...                                      | "HighAvailability"  | ...         | ...        |
+| "ActiveEdgePropertyIndices"              | "Index"             | "Gauge"     | 0          |
+| "ActiveEdgeTypeIndices"                  | "Index"             | "Gauge"     | 0          |
+| "ActiveEdgeTypePropertyIndices"          | "Index"             | "Gauge"     | 0          |
+| "ActiveLabelIndices"                     | "Index"             | "Gauge"     | 6          |
+| "ActiveLabelPropertyIndices"             | "Index"             | "Gauge"     | 18         |
+| "ActivePointIndices"                     | "Index"             | "Gauge"     | 0          |
+| "ActiveTextIndices"                      | "Index"             | "Gauge"     | 0          |
+| "ActiveTextEdgeIndices"                  | "Index"             | "Gauge"     | 0          |
+| "ActiveVectorEdgeIndices"                | "Index"             | "Gauge"     | 0          |
+| "ActiveVectorIndices"                    | "Index"             | "Gauge"     | 0          |
+| "DbEmbeddingMemoryTracked"              | "Memory"            | "Gauge"     | 0          |
+| "DbMemoryTracked"                        | "Memory"            | "Gauge"     | 81508835   |
+| "DbPeakMemoryTracked"                    | "Memory"            | "Gauge"     | 81508835   |
+| "DbQueryMemoryTracked"                   | "Memory"            | "Gauge"     | 0          |
+| "DbStorageMemoryTracked"                 | "Memory"            | "Gauge"     | 81508835   |
 | "DiskUsage"                              | "Memory"            | "Gauge"     | 81508835   |
 | "MemoryRes"                              | "Memory"            | "Gauge"     | 339640320  |
 | "PeakMemoryRes"                          | "Memory"            | "Gauge"     | 339775488  |
+| "UnreleasedDeltaObjects"                 | "Memory"            | "Gauge"     | 0          |
 | "GCLatency_us_50p"                       | "Memory"            | "Histogram" | 1000       |
 | "GCLatency_us_90p"                       | "Memory"            | "Histogram" | 1000       |
 | "GCLatency_us_99p"                       | "Memory"            | "Histogram" | 1000       |
@@ -294,6 +269,7 @@ SHOW METRICS;
 | "PeriodicSubqueryOperator"               | "Operator"          | "Counter"   | 0          |
 | "ProduceOperator"                        | "Operator"          | "Counter"   | 0          |
 | "RemoveLabelsOperator"                   | "Operator"          | "Counter"   | 0          |
+| "RemoveNestedPropertyOperator"           | "Operator"          | "Counter"   | 0          |
 | "RemovePropertyOperator"                 | "Operator"          | "Counter"   | 0          |
 | "RollUpApplyOperator"                    | "Operator"          | "Counter"   | 0          |
 | "ScanAllByEdgeIdOperator"                | "Operator"          | "Counter"   | 0          |
@@ -312,6 +288,7 @@ SHOW METRICS;
 | "ScanAllByPointWithinbboxOperator"       | "Operator"          | "Counter"   | 0          |
 | "ScanAllOperator"                        | "Operator"          | "Counter"   | 0          |
 | "SetLabelsOperator"                      | "Operator"          | "Counter"   | 0          |
+| "SetNestedPropertyOperator"              | "Operator"          | "Counter"   | 0          |
 | "SetPropertiesOperator"                  | "Operator"          | "Counter"   | 0          |
 | "SetPropertyOperator"                    | "Operator"          | "Counter"   | 0          |
 | "SkipOperator"                           | "Operator"          | "Counter"   | 0          |
@@ -324,11 +301,11 @@ SHOW METRICS;
 | "ReadWriteQuery"                         | "QueryType"         | "Counter"   | 0          |
 | "WriteQuery"                             | "QueryType"         | "Counter"   | 0          |
 | "ShowSchema"                             | "SchemaInfo"        | "Counter"   | 0          |
-| "ActiveBoltSessions"                     | "Session"           | "Counter"   | 1          |
-| "ActiveSSLSessions"                      | "Session"           | "Counter"   | 0          |
-| "ActiveSessions"                         | "Session"           | "Counter"   | 1          |
-| "ActiveTCPSessions"                      | "Session"           | "Counter"   | 1          |
-| "ActiveWebSocketSessions"                | "Session"           | "Counter"   | 0          |
+| "ActiveBoltSessions"                     | "Session"           | "Gauge"     | 1          |
+| "ActiveSSLSessions"                      | "Session"           | "Gauge"     | 0          |
+| "ActiveSessions"                         | "Session"           | "Gauge"     | 1          |
+| "ActiveTCPSessions"                      | "Session"           | "Gauge"     | 1          |
+| "ActiveWebSocketSessions"                | "Session"           | "Gauge"     | 0          |
 | "BoltMessages"                           | "Session"           | "Counter"   | 4          |
 | "SnapshotCreationLatency_us_50p"         | "Snapshot"          | "Histogram" | 0          |
 | "SnapshotCreationLatency_us_90p"         | "Snapshot"          | "Histogram" | 0          |
@@ -336,16 +313,18 @@ SHOW METRICS;
 | "SnapshotRecoveryLatency_us_50p"         | "Snapshot"          | "Histogram" | 10924534   |
 | "SnapshotRecoveryLatency_us_90p"         | "Snapshot"          | "Histogram" | 10924534   |
 | "SnapshotRecoveryLatency_us_99p"         | "Snapshot"          | "Histogram" | 10924534   |
+| "ShowStorageInfo"                        | "StorageInfo"       | "Counter"   | 0          |
+| "ShowStorageInfoOnDatabase"              | "StorageInfo"       | "Counter"   | 0          |
 | "MessagesConsumed"                       | "Stream"            | "Counter"   | 0          |
 | "StreamsCreated"                         | "Stream"            | "Counter"   | 0          |
 | "DeletedEdges"                           | "TTL"               | "Counter"   | 0          |
 | "DeletedNodes"                           | "TTL"               | "Counter"   | 0          |
-| "ActiveTransactions"                     | "Transaction"       | "Counter"   | 1          |
+| "ActiveTransactions"                     | "Transaction"       | "Gauge"     | 1          |
 | "CommitedTransactions"                   | "Transaction"       | "Counter"   | 0          |
 | "FailedPrepare"                          | "Transaction"       | "Counter"   | 0          |
 | "FailedPull"                             | "Transaction"       | "Counter"   | 0          |
 | "FailedQuery"                            | "Transaction"       | "Counter"   | 0          |
-| "RollbackedTransactions"                 | "Transaction"       | "Counter"   | 0          |
+| "RolledBackTransactions"                 | "Transaction"       | "Counter"   | 0          |
 | "SuccessfulQuery"                        | "Transaction"       | "Counter"   | 1          |
 | "TransientErrors"                        | "Transaction"       | "Counter"   | 0          |
 | "WriteWriteConflicts"                    | "Transaction"       | "Counter"   | 0          |

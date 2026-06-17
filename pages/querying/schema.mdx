@@ -376,9 +376,19 @@ This procedure is also exposed as `apoc.meta.nodeTypeProperties` and
 
 - `nodeType: string` ➡ Concatenated node labels separated by a `:`.
 - `nodeLabels: List[string]` ➡ A list of node labels.
-- `mandatory: boolean` ➡  Returns `True` if every node with a given node type (defined by nodeType or nodeLabels) possesses the listed property (propertyName), and `False` otherwise.
-- `propertyName: string` ➡  Property name.
-- `propertyTypes: string` ➡ Property type.
+- `propertyName: string` ➡ Property name.
+- `propertyTypes: List[string]` ➡ Property types observed for this property on
+  nodes of this type. The type strings are tuned to match the BI connector
+  recognised set: `Boolean`, `Int`, `Float`, `String`, `List[Any]`, `Map[Any]`,
+  `Date`, `LocalTime`, `LocalDateTime`, `DateTime`, `Duration`, `Point`, `Enum`,
+  plus graph types (`Vertex`, `Edge`, `Path`).
+- `mandatory: boolean` ➡ Returns `True` if any of the node's labels has an
+  existence constraint defined on this property (`CREATE CONSTRAINT ON (n:Label)
+  ASSERT EXISTS (n.prop);`), and `False` otherwise. The value reflects the
+  declared schema, not whether the property happens to be present on every
+  sampled node.
+- `propertyObservations: integer` ➡ Number of nodes of this type that carried this property.
+- `totalObservations: integer` ➡ Total number of nodes of this type that were examined (bounded by the `sample` config option).
 
 {<h3 className="custom-header"> Usage: </h3>}
 
@@ -386,14 +396,14 @@ To get the information about nodes and properties, run the following query:
 
 ```cypher
 CALL schema.node_type_properties()
-YIELD nodeType, nodeLabels, mandatory, propertyName, propertyTypes;
+YIELD nodeType, nodeLabels, propertyName, propertyTypes, mandatory, propertyObservations, totalObservations;
 ```
 
 To restrict the scan to a subset of labels, pass a `config` map:
 
 ```cypher
 CALL schema.node_type_properties({includeLabels: ["Dog"]})
-YIELD nodeType, nodeLabels, mandatory, propertyName, propertyTypes;
+YIELD nodeType, nodeLabels, propertyName, propertyTypes, mandatory, propertyObservations, totalObservations;
 ```
 
 ### rel_type_properties()
@@ -423,9 +433,18 @@ This procedure is also exposed as `apoc.meta.relTypeProperties` and
 {<h3 className="custom-header"> Output: </h3>}
 
 - `relType: string` ➡ The type of the relationship.
-- `mandatory: boolean` ➡ Returns `True` if every relationship with a given relationship type (defined by relType) possesses the listed property (propertyName), and `False` otherwise.
+- `sourceNodeLabels: List[string]` ➡ Labels on the start node of relationships in this partition.
+- `targetNodeLabels: List[string]` ➡ Labels on the end node of relationships in this partition.
 - `propertyName: string` ➡ Property name.
-- `propertyTypes: string` ➡ Property type.
+- `propertyTypes: List[string]` ➡ Property types observed for this property on
+  relationships in this partition. See `node_type_properties` above for the
+  full list of type strings.
+- `mandatory: boolean` ➡ Always `False` for relationships, because Memgraph does
+  not support existence constraints on relationship types.
+- `propertyObservations: integer` ➡ Number of relationships in this partition that carried this property.
+- `totalObservations: integer` ➡ Total number of relationships in this partition that were examined.
+
+One row is emitted per `(relType, sourceNodeLabels, targetNodeLabels, propertyName)` combination. The same relationship type connecting different label sets (for example `(:Dog)-[:LOVES]->(:Activity)` vs `(:Cat)-[:LOVES]->(:Place)`) produces separate rows, so each partition can be characterised independently.
 
 {<h3 className="custom-header"> Usage: </h3>}
 
@@ -434,14 +453,14 @@ To get the information about relationships and properties, run the following que
 
 ```cypher
 CALL schema.rel_type_properties()
-YIELD relType, mandatory, propertyName, propertyTypes;
+YIELD relType, sourceNodeLabels, targetNodeLabels, propertyName, propertyTypes, mandatory, propertyObservations, totalObservations;
 ```
 
 To restrict the scan to a subset of relationship types, pass a `config` map:
 
 ```cypher
 CALL schema.rel_type_properties({includeRels: ["LOVES"]})
-YIELD relType, mandatory, propertyName, propertyTypes;
+YIELD relType, sourceNodeLabels, targetNodeLabels, propertyName, propertyTypes, mandatory, propertyObservations, totalObservations;
 ```
 
 ### assert()
@@ -517,7 +536,7 @@ Results:
 +-----------------------------------------------------------------------------+
 | "Created"  | "[name, surname]" | ["name", "surname"] | "Person"    | true   |
 +-----------------------------------------------------------------------------+
-| "Kept"     | "id"              | ["id"]              | "Person"    | true   |
+| "Kept"     | "[id]"            | ["id"]              | "Person"    | true   |
 +-----------------------------------------------------------------------------+
 ```
 
@@ -555,41 +574,50 @@ Call the procedure to get information about the nodes:
 
 ```cypher
 CALL schema.node_type_properties()
-YIELD nodeType, nodeLabels, mandatory, propertyName, propertyTypes;
+YIELD nodeType, nodeLabels, propertyName, propertyTypes, mandatory, propertyObservations, totalObservations;
 ```
 
 Result:
 
 ```plaintext
-+--------------------+--------------------+--------------------+--------------------+--------------------+
-| nodeType           | nodeLabels         | mandatory          | propertyName       | propertyTypes      |
-+--------------------+--------------------+--------------------+--------------------+--------------------+
-| ":`Sky`"           | ["Sky"]            | false              | ""                 | ""                 |
-| ":`Park`"          | ["Park"]           | false              | ""                 | ""                 |
-| ":`Human`:`Owner`" | ["Human", "Owner"] | false              | "age"              | "Int"              |
-| ":`Human`:`Owner`" | ["Human", "Owner"] | false              | "name"             | "String"           |
-| ":`Bird`"          | ["Bird"]           | false              | ""                 | ""                 |
-| ":`Dog`"           | ["Dog"]            | false              | "age"              | "Int"              |
-| ":`Dog`"           | ["Dog"]            | false              | "name"             | "String"           |
-+--------------------+--------------------+--------------------+--------------------+--------------------+
++--------------------+--------------------+--------------+----------------+-----------+----------------------+--------------------+
+| nodeType           | nodeLabels         | propertyName | propertyTypes  | mandatory | propertyObservations | totalObservations  |
++--------------------+--------------------+--------------+----------------+-----------+----------------------+--------------------+
+| ":`Bird`"          | ["Bird"]           | ""           | []             | false     | 0                    | 1                  |
+| ":`Dog`"           | ["Dog"]            | "age"        | ["Int"]        | false     | 1                    | 2                  |
+| ":`Dog`"           | ["Dog"]            | "name"       | ["String"]     | false     | 1                    | 2                  |
+| ":`Human`:`Owner`" | ["Human", "Owner"] | "age"        | ["Int"]        | false     | 1                    | 1                  |
+| ":`Human`:`Owner`" | ["Human", "Owner"] | "name"       | ["String"]     | false     | 1                    | 1                  |
+| ":`Park`"          | ["Park"]           | ""           | []             | false     | 0                    | 1                  |
+| ":`Sky`"           | ["Sky"]            | ""           | []             | false     | 0                    | 1                  |
++--------------------+--------------------+--------------+----------------+-----------+----------------------+--------------------+
 ```
+
+Of the two `:Dog` nodes, only one carries `name` and `age` — hence
+`propertyObservations = 1` and `totalObservations = 2`. `mandatory` is `false`
+for every row because no existence constraints have been declared. Adding
+`CREATE CONSTRAINT ON (n:Dog) ASSERT EXISTS (n.name);` and re-running the
+procedure would flip `mandatory` to `true` for the `:Dog` / `name` row,
+independent of whether every observed node carries the property.
 
 Call the procedure to get information about the relationships:
 
 ```cypher
 CALL schema.rel_type_properties()
-YIELD relType, mandatory, propertyName, propertyTypes;
+YIELD relType, sourceNodeLabels, targetNodeLabels, propertyName, propertyTypes, mandatory, propertyObservations, totalObservations;
 ```
 
 Results:
 
 ```plaintext
-+------------------------+------------------------+------------------------+------------------------+
-| relType                | mandatory              | propertyName           | propertyTypes          |
-+------------------------+------------------------+------------------------+------------------------+
-| ":`FLIES_TO`"          | false                  | ""                     | ""                     |
-| ":`RUNS_AND_PLAYS_IN`" | false                  | "duration"             | "String"               |
-| ":`RUNS_AND_PLAYS_IN`" | false                  | "speed"                | "Int"                  |
-| ":`LOVES`"             | true                   | "how_much"             | "String"               |
-+------------------------+------------------------+------------------------+------------------------+
++------------------------+------------------+--------------------+--------------+----------------+-----------+----------------------+--------------------+
+| relType                | sourceNodeLabels | targetNodeLabels   | propertyName | propertyTypes  | mandatory | propertyObservations | totalObservations  |
++------------------------+------------------+--------------------+--------------+----------------+-----------+----------------------+--------------------+
+| ":`FLIES_TO`"          | ["Bird"]         | ["Sky"]            | ""           | []             | false     | 0                    | 1                  |
+| ":`LOVES`"             | ["Dog"]          | ["Human", "Owner"] | "how_much"   | ["String"]     | false     | 1                    | 1                  |
+| ":`RUNS_AND_PLAYS_IN`" | ["Dog"]          | ["Park"]           | "duration"   | ["String"]     | false     | 1                    | 1                  |
+| ":`RUNS_AND_PLAYS_IN`" | ["Dog"]          | ["Park"]           | "speed"      | ["Int"]        | false     | 1                    | 1                  |
++------------------------+------------------+--------------------+--------------+----------------+-----------+----------------------+--------------------+
 ```
+
+Each row is keyed by the relationship type *together with* the labels on the start and end nodes. If the dataset had another `:LOVES` relationship between different label sets (for example `(:Cat)-[:LOVES]->(:Activity)`), it would appear on its own row rather than being merged into the existing `:LOVES` partition.

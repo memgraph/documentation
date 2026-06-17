@@ -97,11 +97,16 @@ storage mode even upon restart.
 
 ### Check storage mode
 
-You can check the current storage mode using the following query:
+You can check the current (runtime) storage mode of the database you are
+connected to using the following query and reading the `storage_mode` field:
 
 ```cypher
-SHOW STORAGE INFO;
+SHOW STORAGE INFO ON CURRENT DATABASE;
 ```
+
+The unscoped `SHOW STORAGE INFO` only reports `global_storage_mode`, which is the
+**startup-default** storage mode (the [`--storage-mode`](/database-management/configuration)
+flag) and does **not** reflect runtime `STORAGE MODE …` changes.
 
 ### In-memory transactional storage mode (default)
 
@@ -683,7 +688,7 @@ memory limit is exceeded, only the queries that don't require additional memory
 are allowed. If the memory limit is exceeded while a query is running, the query
 is aborted and its transaction becomes invalid.
 
-The effective allocation limit (shown as `global_runtime_allocation_limit` in
+The effective allocation limit (shown as `memory_limit` in
 `SHOW STORAGE INFO`) is set to the **lower** of the `--memory-limit`
 configuration flag and the [Enterprise license memory
 limit](/database-management/enabling-memgraph-enterprise#upgrading-or-downgrading-the-license).
@@ -757,9 +762,8 @@ CALL example.procedure(arg1, arg2, ...) PROCEDURE MEMORY UNLIMITED YIELD result;
 
 ### Inspect memory usage
 
-Run the following query to get information about the currently
-used storage mode, memory usage, disk usage, allocated memory and the allocation
-limit:
+Run the following query to get instance-level (process-wide) information about
+memory usage, disk usage, tracked memory and the allocation limit:
 
 ```plaintext
 SHOW STORAGE INFO;
@@ -769,26 +773,26 @@ SHOW STORAGE INFO;
 +--------------------------------+----------------------------------------+
 | storage info                   | value                                  |
 +--------------------------------+----------------------------------------+
-| "name"                         | "memgraph"                             |
-| "database_uuid"                | "99f743e8-5b98-4b78-8384-f96862b7f01b" |
-| "vertex_count"                 | 0                                      |
-| "edge_count"                   | 0                                      |
-| "average_degree"               | 0                                      |
 | "vm_max_map_count"             | 453125                                 |
 | "memory_res"                   | "43.16MiB"                             |
 | "peak_memory_res"              | "43.16MiB"                             |
-| "unreleased_delta_objects"     | 0                                      |
 | "disk_usage"                   | "104.46KiB"                            |
 | "memory_tracked"               | "8.52MiB"                              |
-| "graph_memory_tracked"         | "6.14MiB"                              |
+| "memory_limit"                 | "58.55GiB"                             |
+| "license_memory_limit"         | "unlimited"                            |
+| "query+graph_memory_tracked"   | "6.14MiB"                              |
 | "vector_index_memory_tracked"  | "2.38MiB"                              |
-| "allocation_limit"             | "58.55GiB"                             |
 | "global_isolation_level"       | "SNAPSHOT_ISOLATION"                   |
 | "session_isolation_level"      | ""                                     |
 | "next_session_isolation_level" | ""                                     |
-| "storage_mode"                 | "IN_MEMORY_TRANSACTIONAL"              |
+| "global_storage_mode"          | "IN_MEMORY_TRANSACTIONAL"              |
 +--------------------------------+----------------------------------------+
 ```
+
+The unscoped `SHOW STORAGE INFO` returns only instance-level fields. For
+per-database metrics (such as `vertex_count`, `edge_count`, the live
+`storage_mode` and per-database memory trackers), use
+`SHOW STORAGE INFO ON CURRENT DATABASE` or `SHOW STORAGE INFO ON DATABASE <name>`.
 
 Find out more about `SHOW STORAGE INFO` query on [Server
 stats](/database-management/server-stats).
@@ -804,14 +808,22 @@ Storage, query execution, and vector index allocations are all attributed to the
 database that originated them, giving a complete picture of per-database memory
 usage.
 
-Per-database tracking enables several new queries:
+Per-database storage and memory metrics are exposed through these queries
+(`SHOW STORAGE INFO ON CURRENT DATABASE` is new in Memgraph 3.11; the other two
+already existed):
 
 ```cypher
+SHOW STORAGE INFO ON CURRENT DATABASE;
 SHOW STORAGE INFO ON DATABASE mydb;
 SHOW MEMORY INFO;
 ```
 
-`SHOW STORAGE INFO ON DATABASE` returns per-database storage and memory fields:
+Their editions and privileges differ — see the availability note below.
+
+`ON CURRENT DATABASE` targets the session's currently-selected database, while
+`ON DATABASE <name>` targets a named database. Both return the full per-database
+field set (storage stats, isolation level, storage mode and the memory trackers).
+The memory-related fields are:
 
 | Field                         | Description                                               |
 |-------------------------------|-----------------------------------------------------------|
@@ -822,6 +834,11 @@ SHOW MEMORY INFO;
 | `tenant_peak_memory_tracked`  | Peak memory tracked                                       |
 | `tenant_memory_limit`         | Limit from the tenant profile, or `"unlimited"`           |
 
+For the complete list of per-database fields (including `name`, `database_uuid`,
+`storage_mode`, `vertex_count`, `edge_count`, `average_degree`,
+`unreleased_delta_objects`, `disk_usage` and `storage_isolation_level`), see
+[Per-database storage information](/database-management/server-stats#per-database-storage-information).
+
 `SHOW MEMORY INFO` lists all databases with their profile and current usage:
 
 | Field                   | Description                                                 |
@@ -831,9 +848,12 @@ SHOW MEMORY INFO;
 | `profile`               | Tenant profile name, or `null`                              |
 | `tenant_memory_limit`   | Configured limit, or `"unlimited"`                          |
 
-`SHOW STORAGE INFO ON DATABASE` requires the `STATS` privilege.
-`SHOW MEMORY INFO` requires no privilege beyond a valid Enterprise license.
-Both queries are available only in the Memgraph Enterprise Edition.
+Both per-database `SHOW STORAGE INFO` variants require the `STATS` privilege.
+`SHOW STORAGE INFO ON CURRENT DATABASE` and `SHOW STORAGE INFO ON DATABASE` for
+the **default** database work in all editions; targeting a **non-default**
+database via `ON DATABASE <name>` requires the Memgraph Enterprise Edition.
+`SHOW MEMORY INFO` requires no privilege beyond a valid Enterprise license and is
+available only in the Memgraph Enterprise Edition.
 
 ### How the memory fields relate
 
@@ -852,12 +872,11 @@ Per-database fields also include:
   tenant_memory_limit          cap from tenant profile, or "unlimited"
 
 Global relationship:
-  graph_memory_tracked       (per-DB)  ──sum──▶  graph_memory_tracked       (global)
+  graph_memory_tracked       (per-DB)  ──┐
+  query_memory_tracked        (per-DB)  ──┴▶  query+graph_memory_tracked (global)
+                               (the global graph arena tracks all default-new
+                               allocations — both graph data and query heap)
   vector_index_memory_tracked (per-DB)  ──sum──▶  vector_index_memory_tracked (global)
-  query_memory_tracked        (per-DB)  counts only against the per-DB total;
-                               at the global level it is accounted via
-                               the global graph tracker's arena hooks,
-                               not double-counted under graph or vector.
 ```
 
 <Callout type="info">

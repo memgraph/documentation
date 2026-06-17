@@ -15,6 +15,10 @@ Run this check before every release to audit docs labels on every merged PR, fin
 
 ## Assumptions
 
+- **PR list order:** Whenever you present a list of PRs to the user (gaps, backlog,
+  docs tracking, changelog queue, audit findings, canvas tables, etc.), sort by PR
+  number **ascending** (smallest → largest). Apply the same order when listing
+  documentation PRs linked to memgraph PRs, unless the user asks for a different sort.
 - Memgraph PRs that need docs are labeled **"Docs needed"** or **"Docs - changelog only"**.
 - Only consider **merged** PRs (i.e. `merged_at != null`). PRs that are closed without merging must be ignored entirely — no changelog entry, no doc page, not in the tracking list.
 - The release documentation PR (in `memgraph/documentation`) uses the following **Docs Integration Tracking** format (three plain checklist sections — no tables):
@@ -64,8 +68,8 @@ Rules for this format:
      ```
    - Produce a **canvas** (read and follow `~/.cursor/skills-cursor/canvas/SKILL.md`) showing:
      - Summary stats: total merged, count per label, count needing attention.
-     - An "Issues requiring action" section listing PRs with missing or questionable labels, with a recommended label and a one-line reason.
-     - A filterable table of all merged PRs with their current docs label highlighted.
+     - An "Issues requiring action" section listing PRs with missing or questionable labels, with a recommended label and a one-line reason (**sorted by PR # ascending**).
+     - A filterable table of all merged PRs with their current docs label highlighted (**default sort: PR # ascending**).
    - **Fix or flag:** For PRs missing a label, recommend the correct one. For questionable ones, surface them to the reviewer — do not change the label unilaterally unless it is obviously wrong (e.g. no docs label at all on a pure test PR).
 
 2. **Identify versions**
@@ -87,7 +91,7 @@ Rules for this format:
    - Optionally cross-check the memgraph milestone: merged PRs with user-visible work (e.g. **Docs needed**, **Docs - changelog only**) that are absent from that release section should also be treated as **missing from changelog**, even if they were never added to **Release Notes Required** on the docs PR.
    - List any **missing from changelog** with PR numbers (and titles if known).
 
-   **If anything is missing from the changelog:** follow **`skills/write-changelog-item/SKILL.md`** end-to-end for each gap. That skill defines how to write the item (benefit-focused bullet, markdown, PR link, breaking vs non-breaking) and requires updating `pages/release-notes.mdx` plus keeping the open documentation release PR description aligned. When updating the docs PR body, use the **Docs Integration Tracking** checklist format described in the Assumptions section — tick `[x]` on the relevant **Changelog** line and, if the PR is also "Docs needed", on the **Docs needed** line once a doc PR exists. Do not use a different format or skip the release PR body update.
+   **If anything is missing from the changelog:** follow **`skills/write-changelog-item/SKILL.md`** end-to-end for each gap. That skill defines how to write the item (benefit-focused bullet, markdown, PR link, breaking vs non-breaking), where to place it in `pages/release-notes.mdx` (correct section, ascending PR # within the section), and requires updating `pages/release-notes.mdx` plus keeping the open documentation release PR description aligned. When updating the docs PR body, use the **Docs Integration Tracking** checklist format described in the Assumptions section — tick `[x]` on the relevant **Changelog** line and, if the PR is also "Docs needed", on the **Docs needed** line once a doc PR exists. Do not use a different format or skip the release PR body update.
 
    **One item at a time:** When proposing or drafting changelog text, handle **a single PR / single bullet** per turn. Give the full proposed entry (wording, PR link, breaking vs non-breaking if relevant) and any file or release-PR body edits that go with that one item, then **stop and wait for reviewer feedback** before moving to the next missing item. Do not batch multiple proposed changelog bullets or multiple PR remediations in one message — the reviewer must be able to approve, edit, or reject each entry on its own.
 
@@ -124,6 +128,7 @@ Rules for this format:
    - After user approval, apply the edits directly.
 
 8. **Report**
+   - Sort every PR list in the report by PR number ascending (smallest → largest).
    - **Docs label issues:** list every merged PR with a missing or questionable label, the recommended label, and a one-line reason. The canvas from step 1 serves as the primary deliverable for this section.
    - **Not in changelog:** summarize all gaps (PR numbers and titles). When remediating, apply the **one item at a time** rule from step 4. For each gap, state that remediation follows **`write_changelog_item`** per `skills/write-changelog-item/SKILL.md` (unless the user asked for report-only). Include PRs found only via milestone cross-check.
    - **Docs page missing:** list merged memgraph PRs labeled "Docs needed" with no doc PR on the tracking list; briefly note what's missing (e.g. "TLS .pem-only behavior").
