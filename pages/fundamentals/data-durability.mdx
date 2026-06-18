@@ -95,6 +95,39 @@ via `--storage-snapshot-retention-count`.
 enforces periodic snapshots when WAL is enabled and will fail to start if WAL is
 enabled with snapshot interval set to zero.
 
+<h4 className="custom-header">WAL data integrity</h4>
+
+<Callout type="info">
+Per-transaction WAL checksums were introduced in Memgraph v3.12.
+
+WAL files written by older versions do not contain checksums and are recovered
+without integrity verification. Checksum verification applies only to WAL files
+written by Memgraph v3.12 or newer.
+</Callout>
+
+To guard against silent on-disk corruption, Memgraph protects WAL files with
+[CRC32](https://en.wikipedia.org/wiki/Cyclic_redundancy_check) checksums:
+
+- The **WAL file header** (offsets and metadata such as the UUID, epoch ID and
+  sequence number) is protected by its own checksum.
+- **Each transaction** is protected by a 4-byte checksum covering the
+  transaction's bytes (transaction start, deltas and transaction end).
+
+Checksums are verified automatically during recovery. If a transaction's stored
+checksum does not match the recomputed value, the WAL is considered corrupted at
+that point and recovery stops, so corrupted data is never applied to the
+database. A mismatch in the WAL header causes recovery from that file to fail.
+
+The same checksums protect WAL files that are buffered on disk on a replica
+before being applied, so corruption introduced between the main and the replica
+is detected before the data is committed. Deltas streamed during the commit
+(`PrepareCommitRpc`) are not checksummed because the TCP transport already
+provides integrity guarantees.
+
+<Callout type="info">
+Snapshots are not yet protected by checksums.
+</Callout>
+
 ### Snapshots
 Snapshots provide a faster way to restore the states of your database. Snapshots
 are created periodically based on the value defined with the
