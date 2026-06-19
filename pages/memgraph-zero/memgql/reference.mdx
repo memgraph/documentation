@@ -1,334 +1,42 @@
 ---
 title: Reference
-description: All the details about syntax and various configs
+description: GQL feature support, statements, configuration, and licensing.
 ---
 
-## Supported GQL Query Features
+# Reference
 
-What works today, split by backend category. "Cypher backends" means
-Memgraph and Neo4j (translation is largely passthrough); "SQL backends"
-means PostgreSQL, MySQL and DuckDB.
+- **GQL feature support** — what works, by backend (below).
+- **[Statements & catalog](/memgraph-zero/memgql/reference/statements)** — management statements and catalog grammar.
+- **[Configuration & env vars](/memgraph-zero/memgql/reference/configuration)** — environment variables and logging.
+- **[Licensing](/memgraph-zero/memgql/reference/licensing)** — terms of use.
+- **[Changelog](/memgraph-zero/memgql/reference/changelog)** — release notes.
 
-ClickHouse, Apache Iceberg, and Apache Pinot are also supported as
-connectors but with a narrower verified surface. See each connector's page for the exact list of features each one
-supports.
+## GQL feature support
 
-| Feature                                                            | Cypher backends | SQL backends |
-|--------------------------------------------------------------------|-----------------|--------------|
-| `MATCH` / `WHERE` / `RETURN`                                       | ✓               | ✓            |
-| Pattern-level `WHERE` (`MATCH (n WHERE …)`)                        | ✓               | ✓            |
-| Multiple `MATCH` clauses in one query                              | ✓               | ✓            |
-| `OPTIONAL MATCH` (keep left side when no match found)              | ✓               | ✓            |
-| `WITH` clause (chain query steps)                                  | ✓               | ✓            |
-| `WITH DISTINCT` / `WITH … ORDER BY … LIMIT N`                      | ✓               | ✓            |
-| Multiple chained `WITH` steps in one query                         | ✓               | ✓            |
-| Pass a whole node through `WITH n` to a later step                 | ✓               | ✓            |
-| `MATCH (n)-[r:R]->(m)` typed edge expansion                        | ✓               | ✓            |
-| Untyped edge `()-[]->(b)` (union over types)                       | ✓               | ✗            |
-| `UNION` / `UNION ALL` / `UNION DISTINCT`                           | ✓               | ✓            |
-| `INTERSECT` / `EXCEPT`                                             | ✗               | ✗            |
-| Quantified path `(){m,n}` — bounded                                | ✓               | ✓            |
-| Quantified path `(){m,}` — unbounded                               | ✓               | ✗            |
-| Shortest-path (`ALL SHORTEST` / `ANY SHORTEST` / `SHORTEST k`) | ✓ | ✗               | ✗            |
-| Whole-node `RETURN n` / whole-relationship `RETURN r`              | ✓               | ✓            |
-| Map projections `RETURN n {.id, .title}`                           | ✓               | ✓            |
-| Connection-less `RETURN 1` / `RETURN 1 + 2` (liveness)            | ✓               | ✓            |
-| `IN` list membership `WHERE x IN […]`                              | ✓               | ✓            |
-| `STARTS WITH` / `ENDS WITH` / `CONTAINS`                           | ✓               | ✓            |
-| `collect()` / `collect_list()` (aggregate)                         | ✓               | ✓            |
-| `count`, `sum`, `avg`, `min`, `max`                                | ✓               | ✓            |
-| `COUNT(DISTINCT …)`                                                | ✓               | ✓            |
-| Arithmetic `+ - * / %`                                             | ✓               | ✓            |
-| `CASE WHEN … THEN … ELSE … END`                                    | ✓               | ✓            |
-| `COALESCE`, `NULLIF`                                               | ✓               | ✓            |
-| Temporals (`date`, `datetime`, `localTime`, …)                     | ✓               | ✗            |
-| `INSERT (a {…}) RETURN a.x`                                        | ✓               | ✓            |
-| `DELETE`                                                           | ✓               | ✓            |
-| `DETACH DELETE`                                                    | ✓               | ✗            |
-| `SET` (property update)                                            | ✓               | ✗            |
-| `REMOVE` (property delete)                                         | ✓               | ✗            |
+The exact, per-backend support table lives on the
+**[Connectors](/memgraph-zero/memgql/connectors#feature-support)** page — it's the
+single source of truth, grouped by backend tier (Graph / Relational / Analytical) with
+a `✓`/`✗`/read-only legend.
 
-### Known limitations
+At a glance: **Cypher backends** (Memgraph, Neo4j) support the full surface. **SQL
+backends** (PostgreSQL, MySQL, Oracle, DuckDB) support reads, writes, bounded paths,
+and aggregations, but not untyped edges, unbounded/shortest paths, temporals, `SET` /
+`REMOVE`, or `DETACH DELETE`. **Analytical backends** (ClickHouse, Iceberg, Pinot) are
+read-oriented with a narrower verified surface; Pinot is read-only.
 
-- **Unbounded variable-length paths on SQL backends** (`()-[*]->()`)
-  return an actionable error.
-- **Untyped edge traversal on SQL backends** (`MATCH ()-[]->(b)` with
-  no rel-type) returns an actionable error pointing users at declaring
-  the edge type or running on a Cypher backend. The form is still
-  accepted natively on Cypher backends.
-- **`FOR x IN [...]` (UNWIND-style) on SQL backends** returns an
-  actionable error pointing users at running the query on a Cypher
-  backend. The form is still accepted natively on Cypher backends.
-- **Path variables on variable-length patterns** —
-  `MATCH p = (a){1,3}(b) RETURN p` is not yet supported on SQL backends.
-  Drop the `p =` binding (or query a Cypher backend) and `RETURN` the
-  individual nodes / edges instead.
+### Known limitations on SQL backends
 
-## Graph Management Query Syntax
+- **Unbounded variable-length paths** (`()-[*]->()`) return an actionable error —
+  bound the depth (`{1,5}`) or use a Cypher backend.
+- **Untyped edge traversal** (`MATCH ()-[]->(b)` with no rel-type) returns an
+  actionable error pointing at declaring the edge type or using a Cypher backend.
+  The form is accepted natively on Cypher backends.
+- **`FOR x IN [...]` (UNWIND-style)** returns an actionable error pointing at a Cypher
+  backend, which handles the syntax natively.
+- **Path variables on variable-length patterns** — `MATCH p = (a){1,3}(b) RETURN p`
+  is not yet supported. Drop the `p =` binding (or use a Cypher backend) and `RETURN`
+  the individual nodes / edges instead.
 
-```
-ADD GRAPH <name> ON CONNECTOR <connector>
-    [GRAPH <remote_name>]
-    [MAPPING <mapping_name>]
-    [READ ONLY];
-
-CREATE GRAPH <name>
-    [{ <gql_schema_body> } | ANY]
-    ON CONNECTOR <connector>;
-
-UNADD GRAPH [IF EXISTS] <name>;
-DROP GRAPH [IF EXISTS] <name>;
-
-ALTER GRAPH <name> SET READ ONLY;
-ALTER GRAPH <name> SET READ WRITE;
-ALTER GRAPH <name> SET CONNECTOR <connector>;
-ALTER GRAPH <name> SET GRAPH <remote_name>;
-ALTER GRAPH <name> SET MAPPING <mapping_name>;
-ALTER GRAPH <name> REMOVE MAPPING;
-```
-
-```
--- Single graph
-USE <graph> <query>;
-
--- Composite
-USE <graph1> <query>
-UNION | UNION ALL | INTERSECT | INTERSECT ALL | EXCEPT | EXCEPT ALL
-USE <graph2> <query>;
-```
-
-## Configuration Reference
-
-### General
-
-| Variable           | Default             | Description                          |
-|--------------------|---------------------|--------------------------------------|
-| `CONNECTOR_TYPE`   | `memgraph`          | Connector to use (see table below)   |
-| `CONNECTION_TYPE`  | _(none)_            | Alias for `CONNECTOR_TYPE`           |
-| `BOLT_LISTEN_ADDR` | `127.0.0.1:7688`    | Address the Bolt server binds to     |
-
-### Logging
-
-MemGQL writes log lines to the console (stdout/stderr) and, in parallel, to a
-log file. Both destinations are configured via CLI flags on the Bolt server
-binary.
-
-#### CLI Flags
-
-| Flag                   | Default            | Description                                                  |
-|------------------------|--------------------|--------------------------------------------------------------|
-| `--log-level=<LEVEL>`  | `info`             | Console logging verbosity (see levels below)                 |
-| `--log-file=<PATH>`    | `bolt_server.log`  | File to mirror all log output to (always written, regardless of `--log-level`) |
-
-#### Log Levels
-
-| Level                | Console output                                                                  |
-|----------------------|---------------------------------------------------------------------------------|
-| `info`               | Full logging: connections, incoming queries, transpiled output, results, state changes |
-| `info-queries-only`  | Only the incoming GQL query and its transpiled output (Cypher / SQL)            |
-
-`info` is the most verbose level today. There is no `debug` or `trace`. The
-`RUST_LOG` environment variable is not consulted.
-
-The log file always receives every log line — including queries, errors, and
-state changes — independent of the console `--log-level`. To silence the
-console while keeping a full file record, use `--log-level=info-queries-only`
-and tail the log file separately.
-
-### Enterprise License
-
-| Variable                      | Default | Description                              |
-|-------------------------------|---------|------------------------------------------|
-| `MEMGQL_ENTERPRISE_LICENSE`   | _(none)_ | License key (`mglk-...`)                |
-| `MEMGQL_ORGANIZATION_NAME`   | _(none)_ | Organization name to verify against license |
-
-When set, the license is decoded and verified against the organization name at
-startup. A valid enterprise license removes connector and connection limits.
-Without a license, community mode allows up to 2 connectors and 2 simultaneous
-connections.
-
-### Connector Types
-
-| Connector      | Translation        | Backend                          |
-|----------------|--------------------|----------------------------------|
-| `memgraph`     | None (passthrough) | Memgraph                         |
-| `memgraph-gql` | GQL -> Cypher      | Memgraph                         |
-| `neo4j`        | None (passthrough) | Neo4j                            |
-| `neo4j-gql`    | GQL -> Cypher      | Neo4j                            |
-| `postgres`     | GQL -> SQL         | PostgreSQL                       |
-| `mysql`        | GQL -> SQL         | MySQL 8.0+                       |
-| `oracle`       | GQL -> SQL         | Oracle 19c+ (incl. Free 23ai)    |
-| `duckdb`       | GQL -> SQL         | DuckDB (embedded)                |
-| `clickhouse`   | GQL -> SQL         | ClickHouse                       |
-| `iceberg`      | GQL -> SQL         | Iceberg via Trino                |
-| `pinot`        | GQL -> SQL         | Apache Pinot                     |
-| `multi`        | Per-connector      | Multiple backends simultaneously |
-
-
-#### Memgraph (`memgraph`, `memgraph-gql`)
-
-| Variable        | Default          | Description    |
-|-----------------|------------------|----------------|
-| `MEMGRAPH_URI`  | `127.0.0.1:7687` | Connection URI |
-| `MEMGRAPH_USER` | `user`           | Username       |
-| `MEMGRAPH_PASS` | `pass`           | Password       |
-| `MEMGRAPH_DB`   | `memgraph`       | Database name  |
-
-#### Neo4j (`neo4j`, `neo4j-gql`)
-
-| Variable     | Default          | Description    |
-|--------------|------------------|----------------|
-| `NEO4J_URI`  | `127.0.0.1:7687` | Connection URI |
-| `NEO4J_USER` | `neo4j`          | Username       |
-| `NEO4J_PASS` | `password`       | Password       |
-| `NEO4J_DB`   | `neo4j`          | Database name  |
-
-#### PostgreSQL (`postgres`)
-
-| Variable       | Default                                                         | Description               |
-|----------------|-----------------------------------------------------------------|---------------------------|
-| `POSTGRES_URL` | `host=localhost user=postgres password=postgres dbname=postgres` | libpq connection string   |
-| `MAPPING_FILE` | _(none, uses built-in default)_                                 | Path to JSON mapping file |
-
-#### MySQL (`mysql`)
-
-| Variable       | Default                                       | Description                              |
-|----------------|-----------------------------------------------|------------------------------------------|
-| `MYSQL_URL`    | `mysql://root:mysql@localhost:3306/test`      | MySQL connection URL (`mysql://user:pass@host:port/database`) |
-| `MAPPING_FILE` | _(none, uses built-in default)_               | Path to JSON mapping file                |
-
-#### Oracle (`oracle`)
-
-| Variable        | Default                                                  | Description                              |
-|-----------------|----------------------------------------------------------|------------------------------------------|
-| `ORACLE_URL`    | `oracle://system:oracle@localhost:1521/FREEPDB1`         | Easy Connect URL (`oracle://user:pass@host:port/service_name`). The default targets [Oracle Database Free 23ai](https://www.oracle.com/database/free/) (service `FREEPDB1`). |
-| `MAPPING_FILE`  | _(none, uses built-in default)_                          | Path to JSON mapping file (same format as Postgres) |
-
-The Oracle connector uses [oracle-rs](https://crates.io/crates/oracle-rs), a
-pure-Rust implementation of Oracle's TNS wire protocol, pooled via
-[deadpool-oracle](https://crates.io/crates/deadpool-oracle). No OCI / ODPI-C
-/ Instant Client is required at build or runtime — the bundled Docker image
-ships only the bolt server binary plus TLS roots, and local builds work on
-macOS, Linux, and Windows without any extra system packages.
-
-#### DuckDB (`duckdb`)
-
-| Variable       | Default                         | Description               |
-|----------------|---------------------------------|---------------------------|
-| `DUCKDB_PATH`  | `:memory:`                      | Path to DuckDB file       |
-| `MAPPING_FILE` | _(none, uses built-in default)_ | Path to JSON mapping file |
-
-#### ClickHouse (`clickhouse`)
-
-| Variable          | Default                   | Description               |
-|-------------------|---------------------------|---------------------------|
-| `CLICKHOUSE_URL`  | `http://localhost:8123`   | ClickHouse HTTP API URL   |
-| `CLICKHOUSE_USER` | `default`                 | ClickHouse user           |
-| `CLICKHOUSE_PASS` | _(none)_                  | ClickHouse password       |
-| `CLICKHOUSE_DB`   | `default`                 | ClickHouse database       |
-| `MAPPING_FILE`    | _(none, uses built-in default)_ | Path to JSON mapping file |
-
-#### Apache Pinot (`pinot`)
-
-| Variable              | Default                    | Description                                      |
-|-----------------------|----------------------------|--------------------------------------------------|
-| `PINOT_URL`           | `http://localhost:8099`    | Pinot broker base URL or full SQL endpoint       |
-| `PINOT_QUERY_OPTIONS` | `useMultistageEngine=true` | Query options sent with broker SQL requests      |
-| `MAPPING_FILE`        | _(none, uses built-in default)_ | Path to JSON mapping file                   |
-
-#### Iceberg (`iceberg`)
-
-| Variable        | Default                 | Description               |
-|-----------------|-------------------------|---------------------------|
-| `TRINO_URL`     | `http://localhost:8080` | Trino REST API URL        |
-| `TRINO_USER`    | `trino`                 | Trino user                |
-| `TRINO_CATALOG` | `iceberg`               | Trino catalog             |
-| `TRINO_SCHEMA`  | `default`               | Trino schema              |
-| `MAPPING_FILE`  | _(none, uses built-in default)_ | Path to JSON mapping file |
-
-## Mapping Schema
-
-The graph mapping file is a JSON document with two top-level arrays:
-`nodes` and `edges`. MemGQL loads it either from the path in `MAPPING_FILE`
-at startup or via the `ADD MAPPING <name> FROM '<path>'` statement at
-runtime — both paths apply the same validation. A mapping with any
-required field missing is rejected before the server begins serving
-queries against it.
-
-```json
-{
-  "nodes": [ /* NodeMapping objects */ ],
-  "edges": [ /* EdgeMapping objects */ ]
-}
-```
-
-### Node mapping fields
-
-| Field        | Type                    | Required | Description |
-|--------------|-------------------------|----------|-------------|
-| `label`      | string                  | yes      | GQL node label (e.g. `"Person"`). Looked up case-insensitively. |
-| `table`      | string                  | yes      | Backend table or view name backing this label. |
-| `id_column`  | string                  | yes      | Primary key column. Surfaces as GQL `id(n)` and is used to join across edges. |
-| `properties` | object (string→string)  | no       | Map from GQL property name → backend column name. Properties not listed here pass through with the same name (`p.name` → column `name`). |
-
-Connector-specific fields:
-
-- **Iceberg** also accepts `catalog` and `schema_name` to fully qualify the
-  table reference (defaults: `"iceberg"`, `"default"`).
-- **ClickHouse** also accepts `database` (default: `"default"`).
-
-### Edge mapping fields
-
-| Field            | Type                    | Required | Description |
-|------------------|-------------------------|----------|-------------|
-| `rel_type`       | string                  | yes      | GQL relationship type (e.g. `"KNOWS"`). Looked up case-insensitively. |
-| `table`          | string                  | yes      | Junction or association table backing this edge type. |
-| `id_column`      | string                  | yes      | Per-edge primary key. **Required since v0.6.** Carried through the recursive CTE's visited-edge set to enforce trail semantics on variable-length traversal. |
-| `source_column`  | string                  | yes      | FK column pointing to the source node's `id_column`. |
-| `target_column`  | string                  | yes      | FK column pointing to the target node's `id_column`. |
-| `source_label`   | string                  | yes      | Label of the source node (must match a `label` declared in `nodes`). |
-| `target_label`   | string                  | yes      | Label of the target node. |
-| `properties`     | object (string→string)  | no       | Map from GQL property name → column name on the edge table. |
-
-Connector-specific fields are the same as for nodes (`catalog` / `schema_name`
-for Iceberg; `database` for ClickHouse).
-
-### Example
-
-```json
-{
-  "nodes": [
-    {
-      "label": "Person",
-      "table": "persons",
-      "id_column": "id",
-      "properties": { "name": "full_name", "age": "age" }
-    },
-    {
-      "label": "Company",
-      "table": "companies",
-      "id_column": "id"
-    }
-  ],
-  "edges": [
-    {
-      "rel_type": "KNOWS",
-      "table": "knows",
-      "id_column": "id",
-      "source_column": "from_id",
-      "target_column": "to_id",
-      "source_label": "Person",
-      "target_label": "Person"
-    },
-    {
-      "rel_type": "WORKS_AT",
-      "table": "works_at",
-      "id_column": "id",
-      "source_column": "person_id",
-      "target_column": "company_id",
-      "source_label": "Person",
-      "target_label": "Company"
-    }
-  ]
-}
-```
+For the mapping file format see [Mapping data to a
+graph](/memgraph-zero/memgql/guides/mapping); for routing across backends see
+[Querying across backends](/memgraph-zero/memgql/guides/querying-across-backends).

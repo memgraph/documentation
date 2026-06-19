@@ -19,6 +19,57 @@ export default withNextra({
   reactStrictMode: true,
   async redirects() {
     return [
+      // MemGQL docs restructure (Idea-B sections)
+      {
+        source: '/memgraph-zero/memgql/quick-start',
+        destination: '/memgraph-zero/memgql/get-started/quick-start',
+        permanent: true
+      },
+      {
+        source: '/memgraph-zero/memgql/complete',
+        destination: '/memgraph-zero/memgql/get-started/docker-compose',
+        permanent: true
+      },
+      {
+        source: '/memgraph-zero/memgql/use-cases',
+        destination: '/memgraph-zero/memgql/overview/use-cases',
+        permanent: true
+      },
+      {
+        source: '/memgraph-zero/memgql/use-cases/:path*',
+        destination: '/memgraph-zero/memgql/overview/use-cases/:path*',
+        permanent: true
+      },
+      {
+        source: '/memgraph-zero/memgql/features',
+        destination: '/memgraph-zero/memgql/overview/editions',
+        permanent: true
+      },
+      {
+        source: '/memgraph-zero/memgql/connect',
+        destination: '/memgraph-zero/memgql/connectors',
+        permanent: true
+      },
+      {
+        source: '/memgraph-zero/memgql/connect/:path*',
+        destination: '/memgraph-zero/memgql/connectors/:path*',
+        permanent: true
+      },
+      {
+        source: '/memgraph-zero/memgql/multiple-graphs',
+        destination: '/memgraph-zero/memgql/guides/querying-across-backends',
+        permanent: true
+      },
+      {
+        source: '/memgraph-zero/memgql/licensing',
+        destination: '/memgraph-zero/memgql/reference/licensing',
+        permanent: true
+      },
+      {
+        source: '/memgraph-zero/memgql/changelog',
+        destination: '/memgraph-zero/memgql/reference/changelog',
+        permanent: true
+      },
       {
         source: '/cypher-manual/graph-algorithms',
         destination: '/advanced-algorithms',

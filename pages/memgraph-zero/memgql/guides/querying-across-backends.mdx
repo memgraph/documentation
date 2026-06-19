@@ -1,0 +1,196 @@
+---
+title: Querying across backends
+description: Federate GQL queries over multiple backends — automatic schema routing, explicit USE, and composite queries.
+---
+
+# Querying across backends
+
+When MemGQL is connected to more than one backend, a query can target one of them or
+span several. There are two ways the target is chosen:
+
+- **Automatic routing** (the default) — MemGQL infers the backend from the labels,
+  relationship types, and properties the query mentions. No `USE` needed.
+- **Explicit `USE`** — you name the graph. This always wins and is the escape hatch
+  when a query is ambiguous or targets a backend automatic routing can't resolve.
+
+Both require [`multi` mode](#setting-up-multi-mode), where you register backends as a
+**graph catalog** and manage them at runtime.
+
+## Setting up multi mode
+
+Start MemGQL with `CONNECTOR_TYPE=multi`, then register connectors and graphs:
+
+```gql
+ADD CONNECTOR neo4j_prod TYPE neo4j URI 'bolt://neo4j:7687' USER 'neo4j' PASSWORD 'secret';
+ADD CONNECTOR pg_warehouse TYPE postgres URI 'postgresql://pg:5432/dw';
+
+-- A graph is a friendly name bound to a connector (and optional remote db + mapping)
+ADD GRAPH social ON CONNECTOR neo4j_prod GRAPH neo4j;
+ADD GRAPH warehouse ON CONNECTOR pg_warehouse MAPPING company_mapping READ ONLY;
+```
+
+See the [Statements reference](/memgraph-zero/memgql/reference/statements) for the full
+catalog grammar.
+
+## Automatic routing (USE-free)
+
+Once backends are registered, just query — MemGQL routes by what the query mentions.
+In a catalog where `Person` lives on both a Postgres `transactional` graph and a
+Memgraph `social` graph, but `name` is only a Postgres column and `FRIEND_OF` is only
+a Memgraph relationship:
+
+```gql
+-- property narrows to Postgres (only it has `name`)
+MATCH (p:Person) RETURN p.name;
+
+-- relationship type narrows to Memgraph (only it has FRIEND_OF)
+MATCH (me:Person {id: 1})-[:FRIEND_OF]->(f:Person) RETURN f.id;
+```
+
+A single query can also **span** backends. MemGQL splits it at the `MATCH` boundary,
+runs each part on its backend, and hash-joins the results in memory:
+
+```gql
+-- USE-free federated join
+MATCH (me:Person {id: 1})-[:FRIEND_OF]->(f:Person)
+MATCH (fp:Person)-[:ORDERED]->(prod:`Product`) WHERE fp.id = f.id
+RETURN fp.name AS friend, prod.name AS item;
+```
+
+`UNION` branches route independently, too:
+
+```gql
+MATCH (p:Person)-[:ORDERED]->(prod:`Product`) WHERE p.id = 1 RETURN prod.id
+UNION
+MATCH (:`Product` {id: 1})-[:SIMILAR_TO]->(s:`Product`) RETURN s.id;
+```
+
+### How routing decides
+
+MemGQL builds a **global schema index** — labels, relationship types, and properties
+per source — from relational [mappings](/memgraph-zero/memgql/guides/mapping) and from
+live introspection of Cypher backends. For each query it intersects the signals the
+query mentions against that index:
+
+- **Exactly one** candidate source → routes there.
+- **Two or more** candidates → returns an error naming the candidates and how to
+  disambiguate (session defaults never break the tie).
+- **Zero** candidates → returns an error naming the unknown label / type / property.
+- **No signals** (e.g. `MATCH (n)`, `RETURN 1`) → not routed; the session default
+  applies.
+
+### When you still need `USE`
+
+| Situation | What happens | Fix |
+|---|---|---|
+| Same label on two backends, nothing else narrows | Ambiguous — error lists candidates | Add a distinguishing property to the query, or name the graph with `USE` |
+| `MATCH (n)` with no label | Not routed (no signal); on SQL backends a label-less match errors | Add a label, or `USE` a graph |
+| Backend not in the index (multi-tenant remote db, introspection failed) | Not routed | `USE` the graph explicitly |
+| One `MATCH` pattern spanning two backends | Error asking you to split it | Split into one `MATCH` per backend (as in the federated-join example above) |
+
+### Make routing reliable
+
+Routing is only as good as the schema index. To get clean, unambiguous routing:
+
+- **Declare distinguishing properties** in relational mappings — a property that
+  exists on only one backend lets MemGQL narrow to it. (SQL schema comes entirely from
+  the mapping; undeclared columns can't narrow.)
+- **Keep labels and relationship types distinct** across backends where you can.
+- **Run `REFRESH SCHEMA`** after a backend's schema changes, so introspection picks up
+  new labels and properties.
+
+### Inspect the schema index
+
+`SHOW SCHEMA` prints what MemGQL knows per source — the labels, properties, and
+relationship types it routes on. It's the first thing to run when routing doesn't go
+where you expected, and it's the discoverability surface agents use to learn the
+catalog.
+
+```gql
+SHOW SCHEMA;
+SHOW SCHEMA FOR social;
+REFRESH SCHEMA;
+```
+
+## Explicit `USE` and composite queries
+
+Naming the graph bypasses inference. Use it for ambiguous queries, multi-tenant
+backends, or just for explicitness:
+
+```gql
+USE social MATCH (p:Person) RETURN p.name;
+USE warehouse MATCH (c:Company) WHERE c.revenue > 1000000 RETURN c.name;
+```
+
+A focused multi-graph query chains `USE` clauses; variables bind across parts:
+
+```gql
+USE social
+MATCH (p:Person)-[:WORKS_AT]->(c:Company)
+USE warehouse
+MATCH (co:Company)
+WHERE co.name = c.name AND co.revenue > 1000000
+RETURN p.name AS person, c.name AS company, co.revenue AS revenue;
+```
+
+The GQL standard composite operators combine query branches, and each branch can target
+a different graph:
+
+```gql
+-- UNION: people from both environments
+USE social MATCH (p:Person) RETURN p.email AS email
+UNION
+USE dev MATCH (p:Person) RETURN p.email AS email;
+
+-- INTERSECT: people present in both
+USE social MATCH (p:Person) RETURN p.email AS email
+INTERSECT
+USE dev MATCH (p:Person) RETURN p.email AS email;
+
+-- EXCEPT: in production but not yet in dev
+USE social MATCH (p:Person) RETURN p.email AS email
+EXCEPT
+USE dev MATCH (p:Person) RETURN p.email AS email;
+```
+
+## Cross-graph rules
+
+1. **No pushed joins across backends.** Cross-graph joins always materialize both
+   sides locally and hash-join; the engine never pushes a join across backends.
+2. **Property-based join keys.** Join keys must use node/edge properties — internal
+   IDs are backend-specific and not comparable across connectors.
+3. **Whole-node returns don't cross the boundary.** Return individual properties
+   (`m.name`), not the whole node `m`, across a federated join.
+4. **Single-graph writes.** A mutation in a multi-graph query must target one graph;
+   writes spanning backends are rejected.
+5. **Compatible columns.** All branches of a composite query must produce the same
+   number of columns, in the same order, with compatible types.
+
+See the [cross-backend join status](/memgraph-zero/memgql/connectors#cross-backend-joins)
+for which backends are verified end-to-end today.
+
+## Managing the catalog
+
+```gql
+SHOW GRAPHS;                          -- list registered graphs
+SHOW GRAPHS ON CONNECTOR neo4j_prod;  -- filter by connector
+SHOW GRAPH social;                    -- details for one graph
+
+ALTER GRAPH social SET READ ONLY;     -- change access mode
+ALTER GRAPH social SET CONNECTOR neo4j_staging;  -- rebind (e.g. failover)
+ALTER GRAPH knowledge SET MAPPING updated_mapping;
+
+UNADD GRAPH social;                   -- remove from catalog only
+DROP GRAPH analytics;                 -- remove from catalog AND drop on backend
+```
+
+`CREATE GRAPH` both registers a graph and creates it on the backend:
+
+```gql
+CREATE GRAPH analytics ON CONNECTOR memgraph_dev;
+
+CREATE GRAPH typed_graph {
+    NODE Person ({name STRING, age INT}),
+    EDGE KNOWS ()-[]->()
+} ON CONNECTOR neo4j_prod;
+```

@@ -1,0 +1,79 @@
+---
+title: How it works
+description: The MemGQL architecture — translation, mappings, connectors, and routing.
+---
+
+# How it works
+
+MemGQL is a federated query engine that speaks the [Bolt
+protocol](https://en.wikipedia.org/wiki/Bolt_(network_protocol)) on port 7688.
+Any Bolt-compatible client (mgconsole, a driver, Memgraph Lab) connects to it as
+if it were a single graph database. MemGQL itself stores no data — it translates
+each GQL query into a backend's native language, runs it on the backend, and
+returns the result.
+
+```
+Bolt client ──GQL──▶ MemGQL ──┬──Cypher──▶ Memgraph / Neo4j
+                              └──SQL─────▶ PostgreSQL / MySQL / Oracle / DuckDB /
+                                           ClickHouse / Iceberg / Pinot
+```
+
+## Translation
+
+What MemGQL emits depends on the connector:
+
+- **Cypher backends (Memgraph, Neo4j).** GQL is translated to Cypher (`-gql`
+  connectors), or forwarded unchanged in passthrough mode.
+- **SQL backends.** GQL graph patterns are translated to SQL — node labels become
+  table scans and relationship patterns become `JOIN`s — in each backend's dialect.
+
+Because the same GQL runs everywhere, the surface of supported features differs by
+backend. The [Connectors](/memgraph-zero/memgql/connectors) page has the exact
+support matrix.
+
+## Mappings
+
+A graph database already knows what a node and a relationship are. A relational
+backend does not — so MemGQL needs a **mapping** that says which table backs a
+node label, which table backs a relationship type, and which columns are the join
+keys. With a mapping in place, `MATCH (p:Person)-[:WORKS_AT]->(c:Company)` becomes
+a SQL join across the `persons`, `works_at`, and `companies` tables.
+
+Mappings are required for every relational connector. See
+[Mapping data to a graph](/memgraph-zero/memgql/guides/mapping) for the full
+format.
+
+## Connectors, connections, and graphs
+
+Three concepts describe how MemGQL reaches a backend:
+
+- **Connector** — a registered backend definition (type + address + credentials +,
+  for relational backends, a mapping).
+- **Connection** — a live, named session opened against a connector.
+- **Graph** — a catalog entry that gives a connector (and optional remote
+  database + mapping) a friendly name you can `USE` in queries.
+
+In single-backend modes (`memgraph-gql`, `postgres`, …) the one backend is
+configured via environment variables and these concepts stay implicit. In
+[`multi` mode](/memgraph-zero/memgql/guides/querying-across-backends) you manage
+them at runtime with statements like `ADD CONNECTOR`, `CONNECT`, and `ADD GRAPH`.
+
+## Routing
+
+When more than one backend is registered, MemGQL decides where each query runs:
+
+- **Automatic (schema-based) routing.** A query with no `USE` clause is routed by
+  matching the labels, relationship types, and properties it mentions against a
+  global schema index (built from relational mappings and from live introspection
+  of Cypher backends). If exactly one backend can satisfy the query, it routes
+  there. If two or more can, or none can, MemGQL returns an error naming the
+  candidates and how to disambiguate.
+- **Explicit `USE`.** Naming the graph (`USE social MATCH …`) always wins and
+  bypasses inference — the escape hatch when a query is ambiguous or targets a
+  backend the index can't see.
+
+A single query can also span backends: MemGQL splits it at the right boundary,
+runs each part on its backend, and joins the results in memory. See
+[Querying across backends](/memgraph-zero/memgql/guides/querying-across-backends)
+for how routing decides, when you still need `USE`, and how to make routing
+reliable.
