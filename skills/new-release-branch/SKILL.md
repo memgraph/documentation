@@ -96,6 +96,11 @@ The result should look like:
 **Important:** If there are multiple Memgraph patch releases under Latest
 (e.g. v3.8.1 and v3.8.0), move *all* of them together with the Lab entry.
 
+**Implementation tip:** Do both changes in one `StrReplace` call by matching
+from `## 🚀 Latest release` through `## Previous releases` and rewriting the
+entire block at once. This avoids error-prone multi-step edits where
+`## Previous releases` can end up in the wrong place.
+
 ## Step 4 — Commit and push
 
 ```bash

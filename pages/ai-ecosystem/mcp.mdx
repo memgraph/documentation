@@ -224,6 +224,114 @@ language.
 
 </Steps>
 
+### Multi-tenant authentication (OIDC / JWT)
+
+The MCP server can optionally enforce **OIDC / JWT authentication** on the
+streamable-HTTP transport and route each authenticated session to a different
+Memgraph logical database based on JWT claims. This is disabled by default —
+when off, the server behaves exactly as documented in the sections above.
+
+Enable it when you want to:
+
+- Serve different users different Memgraph databases on the same MCP
+  deployment.
+- Place MCP behind an OIDC provider (Keycloak, Auth0, Okta, Entra ID, …).
+- Capture per-user audit trails on tool calls.
+
+<h4 className="custom-header">Auth-only tools</h4>
+
+When `MCP_AUTH_ENABLED=true`, the server exposes two additional tools:
+
+| Tool                   | Description                                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list_databases()`     | Returns the databases the calling user is authorized to access (the intersection of their JWT `tenants` claim and `MCP_TENANT_CATALOG`). Flags the currently-active database. |
+| `use_database(name)`   | Switches the active database for the current MCP session. `name` must be in the caller's allowed set — the tool cannot expand authorization beyond what the JWT grants. |
+
+<h4 className="custom-header">Environment variables</h4>
+
+All of these are no-ops when `MCP_AUTH_ENABLED=false` (the default). When auth
+is enabled, the server **fails fast at startup** if any of the three required
+variables are missing.
+
+| Variable                          | Default                                              | Required | Purpose                                                                                                                          |
+| --------------------------------- | ---------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `MCP_AUTH_ENABLED`                | `false`                                              | —        | Master switch.                                                                                                                   |
+| `MCP_AUTH_ISSUER`                 | —                                                    | ✓        | OIDC issuer URL, e.g. `https://auth.example.com/realms/memgraph`.                                                                |
+| `MCP_AUTH_AUDIENCE`               | —                                                    | ✓        | Expected `aud` claim on accepted JWTs.                                                                                            |
+| `MCP_TENANT_CATALOG`              | —                                                    | ✓        | Comma-separated tenants this MCP deployment serves. Names must match both JWT `tenants` claim values and Memgraph database names. |
+| `MCP_AUTH_JWKS_URL`               | derived: `<issuer>/protocol/openid-connect/certs`    | —        | Override the JWKS endpoint (rarely needed).                                                                                       |
+| `MCP_AUTH_TENANTS_CLAIM`          | `tenants`                                            | —        | Claim holding the user's allowed tenant list (must be an array of strings).                                                       |
+| `MCP_AUTH_DEFAULT_TENANT_CLAIM`   | `default_tenant`                                     | —        | Optional claim selecting the user's preferred initial tenant; if absent, the server picks the alphabetically-first allowed one.   |
+| `MCP_AUTH_REQUIRED_SCOPE`         | `mcp:tools`                                          | —        | Scope the JWT must carry.                                                                                                         |
+| `MCP_AUTH_STATIC_CLIENT_ID`       | —                                                    | —        | Opt-in DCR intercept — see [DCR intercept](#dcr-intercept-workaround-for-claude-code) below.                                      |
+
+<h4 className="custom-header">How it works</h4>
+
+1. Every request to `/mcp` must carry `Authorization: Bearer <JWT>`.
+2. The middleware validates the JWT signature against the IdP's JWKS (cached
+   in-process and auto-refreshed when an unknown `kid` arrives).
+3. It verifies `iss`, `aud`, `exp`, and the required scope.
+4. It reads the `tenants` array claim, intersects it with `MCP_TENANT_CATALOG`,
+   and builds a per-session `SessionAuth` keyed by `Mcp-Session-Id`.
+5. The session's `current_tenant` defaults to the JWT's `default_tenant` claim
+   (when present and allowed), otherwise the first allowed tenant.
+6. Each tool call routes to the Memgraph database with the same name as
+   `current_tenant`.
+
+Within a session, users can switch among their allowed databases with the
+`use_database` tool, and discover them with `list_databases`.
+
+<h4 className="custom-header">Discovery endpoints exposed when auth is enabled</h4>
+
+| Path                                            | Purpose                                                                                                  |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `GET /.well-known/oauth-protected-resource`     | RFC 9728 PRM telling MCP clients which authorization server to use.                                       |
+| `GET /.well-known/oauth-authorization-server`   | RFC 8414 AS metadata (proxied from the upstream IdP).                                                     |
+| `GET /.well-known/openid-configuration`         | OIDC discovery (proxied from the upstream IdP).                                                           |
+| `POST /register`                                | DCR intercept — only present when `MCP_AUTH_STATIC_CLIENT_ID` is set.                                     |
+
+The discovery document fetched from the upstream IdP is cached in-process and
+re-fetched on the next request if the cache is empty (e.g., the IdP was down
+on the first attempt).
+
+<h4 className="custom-header">DCR intercept (workaround for Claude Code)</h4>
+
+Some MCP clients — notably current Claude Code (see
+[anthropics/claude-code#26675](https://github.com/anthropics/claude-code/issues/26675))
+— force Dynamic Client Registration even when a pre-registered `clientId` is
+configured. Setting `MCP_AUTH_STATIC_CLIENT_ID=<your-public-client-id>` makes
+the MCP server return the same pre-registered client ID for every DCR request,
+sidestepping the bug.
+
+When that variable is set, the PRM document also advertises the MCP server
+itself as the `authorization_server` so DCR requests come back to the MCP
+server instead of going directly to the IdP. All other OAuth flows
+(authorize, token, JWKS) still happen against the real IdP.
+
+<Callout type="info">
+  Leave `MCP_AUTH_STATIC_CLIENT_ID` unset for production deployments whose
+  clients respect pre-configured `clientId` values.
+</Callout>
+
+<h4 className="custom-header">What you need on the IdP side</h4>
+
+In any OIDC provider, roughly:
+
+1. A public client with PKCE enabled, with redirect URI patterns matching the
+   IDEs you'll use (e.g., `http://localhost:*`, `vscode://*`, `cursor://*`,
+   `claude://*`).
+2. A `tenants` claim mapper that emits a JSON-array claim of the user's tenant
+   memberships (in Keycloak: a Group Membership mapper; in Auth0/Okta: a
+   custom rule reading group or role attributes).
+3. An audience claim mapper baking your `MCP_AUTH_AUDIENCE` value into issued
+   tokens.
+4. A scope (default: `mcp:tools`) attached to the client.
+5. For each tenant in `MCP_TENANT_CATALOG`, a corresponding Memgraph logical
+   database created via `CREATE DATABASE <name>`.
+
+A complete Keycloak example (single-pod, dev-mode) is available in the
+[`keycloak-k8s`](https://github.com/memgraph/keycloak-k8s) reference setup.
+
 ### Run Memgraph MCP server on Kubernetes
 
 A dedicated [`memgraph-mcp` Helm

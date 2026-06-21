@@ -17,25 +17,82 @@ replicate.
 To help with this, our containers come equipped with user-friendly debugging
 tools, empowering you to identify and report problems more effectively.
 
-## Chose the right debug image
+## Choose the right debug image or package
 
-Memgraph provides Docker images built in `RelWithDebInfo` mode, including tools
-like `perf`, `gdb` and `pgrep`. This image is about 10% slower but enables
-detailed debugging. 
+<Callout type="info">
 
-To pull a debug image:
+**What changed in version 3.11**
+
+Before version 3.11, Memgraph shipped two separate builds: a `Release` build (fast,
+no debug symbols) and a `RelWithDebInfo` build (with debug symbols, slightly
+slower). You had to choose one up front.
+
+As of version 3.11, there is a single stripped `RelWithDebInfo` build that is
+performance-equivalent to the old `Release` build, and its debug symbols are
+shipped separately. For Docker this is the `-relwithdebinfo` image; for Linux
+packages it is the `memgraph-debuginfo` sidecar package. You install the symbols
+on top of the same binary only when you need them, so there is no longer a
+performance trade-off between the production and debug variants.
+
+</Callout>
+
+Debug symbols are distributed in two ways:
+
+- **Docker**: dedicated `-relwithdebinfo` images bundle the debug symbols together
+  with debugging tools like `perf`, `gdb` and `pgrep`. Because the debug image
+  reuses the same binary as the production image, it runs at essentially the same
+  performance — the symbols are simply added on top.
+- **Native (Linux package) installations**: a separate `memgraph-debuginfo`
+  sidecar package (and `memgraph-mage-debuginfo` for MAGE) ships the debug symbols
+  for the matching main package. See [Installing debug symbols on native
+  installations](#installing-debug-symbols-on-native-installations) below.
+
+To pull a debug Docker image:
 
 ```
-docker image pull <memgraph_version>-relwithdebinfo
+docker image pull memgraph/memgraph:<memgraph_version>-relwithdebinfo
 ```
 For Memgraph MAGE:
 
 ```bash
-docker image pull <MAGE_version>-memgraph-<memgraph_version>-relwithdebinfo
+docker image pull memgraph/memgraph-mage:<MAGE_version>-relwithdebinfo
 ```
 
 All the images in the `RelWithDebInfo` build mode have the suffix
 `-relwithdebinfo`.
+
+## Installing debug symbols on native installations
+
+If you installed Memgraph from a Linux package (`.deb` or `.rpm`) instead of
+Docker, the default package contains a stripped binary. To debug it with `gdb`, or
+to analyze a core dump with full symbol information, install the matching
+`memgraph-debuginfo` sidecar package next to the one you already have. The
+debuginfo package is published alongside the main package for the same version and
+architecture.
+
+For Debian/Ubuntu:
+
+```bash
+sudo dpkg -i memgraph-debuginfo_<version>-1_amd64.deb
+```
+
+For RPM-based distributions (CentOS, Fedora, RHEL, Rocky):
+
+```bash
+sudo rpm -i memgraph-debuginfo-<version>_1-1.x86_64.rpm
+```
+
+If you also use MAGE, install the `memgraph-mage-debuginfo` package in the same
+way to get debug symbols for the MAGE query modules.
+
+The debug symbols are installed side by side with the binaries they originate
+from — for example, `memgraph.debug` is placed next to the `memgraph` binary in
+`/usr/lib/memgraph`, and the MAGE query module sidecars are placed next to their
+modules. Each binary embeds a `.gnu_debuglink` pointing at its sidecar, so `gdb`
+and `lldb` pick the symbols up automatically — no extra configuration required.
+You can then attach to a running instance or load a core dump exactly as described
+in the [Using GDB](#using-gdb) and [Generating a core
+dump](#generating-core-dump-via-docker) sections.
 
 ## Run Memgraph in debug mode
 

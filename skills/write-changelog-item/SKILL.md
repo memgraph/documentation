@@ -5,6 +5,12 @@ description: Create/write the changelog item / release note for a given Github P
 
 For a given Github PR write a changelog item.
 
+## Listing PRs
+
+When you present more than one PR to the user (missing changelog queue, docs
+gaps, suggested next item with alternatives, etc.), always sort by PR number
+**ascending** (smallest → largest).
+
 ## Writing the changelog item
 
 The changelog item should be benefit focused (highlight the why). The changelog
@@ -21,6 +27,16 @@ If the PR introduces a breaking change, write 2 items: one for the "regular"
 sections (Features, Improvements, Bug Fixes) and one for the Breaking section.
 The item under the Breaking section should be in the format: "What happened?
 What the end-user should do about it?".
+
+## Placing the item in `pages/release-notes.mdx`
+
+1. Put the bullet in the correct section/block for the release (for example
+   Breaking changes, New features, Bug fixes).
+2. Within that section, insert in **ascending memgraph PR number** order
+   (smallest → largest). Find the right position by PR # — do not append at the
+   end unless this PR is the highest number already in that section.
+3. Do not re-sort an in-progress release to fix historical ordering unless the
+   user explicitly asks.
 
 ## Updating the docs release PR description
 

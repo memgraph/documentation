@@ -78,6 +78,16 @@ the cluster.
 the `latest` tag can lead to unexpected behavior if pods restart and pull newer,
 incompatible images. </Callout>
 
+### Install Memgraph HA with `kind`
+
+For local development, we suggest using `kind`. Running:
+
+```
+kind create cluster
+```
+
+gives you a fully initialized environment that is sufficient for running the HA chart.
+
 ### Install Memgraph HA with `minikube`
 
 If you are installing Memgraph HA chart locally with `minikube`, we are strongly
@@ -190,10 +200,13 @@ All Memgraph HA instances run as Kubernetes `StatefulSet` workloads, each with a
 single pod. Depending on configuration, the pod contains two or three
 containers:
 - **memgraph-coordinator** - runs the Memgraph binary.
-- **Optional init container** - enabled when `sysctlInitContainer.enabled` is set.
+- **Optional sysctl init container** - enabled when `sysctlInitContainer.enabled` is set.
+- **Optional fix-ownership init container** - enabled when `fixOwnershipInitContainer.enabled` is set. See [Manual ownership fix](#manual-ownership-fix).
 
 Memgraph processes run as the non-root **memgraph** user with **no Linux capabilities
-and no privilege escalation**.
+and no privilege escalation**. The security context is especially important when deploying the HA chart to Red Hat OpenShift. In a
+sandboxed environment, you will have to disable the `init-sysctl` init container. You will most likely also need to change `memgraphUserId`
+and `memgraphGroupId` so that they fall within OpenShift's allowed UID/GID range.
 
 
 ### High availability storage
@@ -399,6 +412,36 @@ high-memory workloads, such as increasing:
 - [`vm.max_map_count`](/database-management/system-configuration#increasing-memory-map-areas)
 
 
+### Manual ownership fix
+
+Some storage drivers (notably `rancher.io/local-path`) do not honor pod-level
+`fsGroup`, leaving the volume root owned by `root:root`. Because Memgraph runs
+as a non-root user, its storage directory ownership assertion (process euid ==
+data directory owner uid) fails on startup.
+
+When `fixOwnershipInitContainer.enabled` is set to `true`, an init container
+runs as root before Memgraph starts and `chown`s the lib, log, and core-dumps
+mount points to `memgraphUserId:memgraphGroupId`. The container drops all Linux
+capabilities except `CHOWN`, uses a read-only root filesystem, and disables
+privilege escalation.
+
+To enable it:
+
+```yaml
+fixOwnershipInitContainer:
+  enabled: true
+  image:
+    repository: docker.io/library/busybox
+    tag: 1.37.0
+    pullPolicy: IfNotPresent
+```
+
+The container only chowns the mount paths that exist for the role — `/var/log/memgraph`
+is included when `storage.<role>.createLogStorageClaim` is `true`, and
+`storage.<role>.coreDumpsMountPath` is included when `storage.<role>.createCoreDumpsClaim`
+is `true`.
+
+
 ### Authentication
 
 By default, Memgraph HA starts **without authentication** enabled.
@@ -421,6 +464,150 @@ CREATE USER memgraph IDENTIFIED BY 'memgraph';
 
 Run the same statements on every data instance you want the user to exist on.
 Coordinators run without authentication and do not need user setup.
+
+
+### Bolt SSL/TLS
+
+Each data instance and coordinator can independently terminate Bolt
+connections over TLS. When enabled, the chart mounts a pre-existing
+Kubernetes Secret containing the certificate and private key at
+`/etc/memgraph/ssl/` and auto-appends `--bolt-cert-file=/etc/memgraph/ssl/tls.crt`
+and `--bolt-key-file=/etc/memgraph/ssl/tls.key` to the instance's args.
+
+<Callout type="warning">
+**Breaking change in HA chart version with TLS config**: The previous way of
+enabling Bolt TLS — passing `--bolt-cert-file` / `--bolt-key-file` through
+`data[].args` / `coordinators[].args` and mounting the certificate Secret
+through `storage.{data,coordinators}.extraVolumes` / `extraVolumeMounts` — is
+no longer supported. Setting `--bolt-cert-file` or `--bolt-key-file` in `args`
+now causes `helm install` to fail with a template error. Migrate to the
+`tls.bolt` block on each instance instead.
+</Callout>
+
+To enable Bolt TLS, first create a Kubernetes Secret holding the certificate
+and private key in the release namespace:
+
+```bash
+kubectl create secret tls bolt-tls-secret \
+  --cert=path/to/tls.crt \
+  --key=path/to/tls.key
+```
+
+Then enable `tls.bolt` on each instance that should terminate TLS:
+
+```yaml
+data:
+  - id: "0"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+        certSecretPath: tls.crt
+        keySecretPath: tls.key
+  - id: "1"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+        certSecretPath: tls.crt
+        keySecretPath: tls.key
+
+coordinators:
+  - id: "1"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+  - id: "2"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+  - id: "3"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+```
+
+`certSecretPath` and `keySecretPath` are the keys inside the Secret holding
+the certificate and key respectively (default `tls.crt` and `tls.key`).
+The chart fails the install if `tls.bolt.enabled` is `true` but
+`tls.bolt.secretName` is empty.
+
+When a coordinator has `tls.bolt.enabled: true`, the cluster-setup job
+that registers coordinators and data instances automatically uses
+`--use-ssl` when connecting to coordinator 1.
+
+### Intra-cluster SSL/TLS
+
+Independently of Bolt TLS, each data instance and coordinator can encrypt the
+internal communication between cluster members (coordinator-to-coordinator and
+coordinator-to-data traffic). When `tls.intraCluster.enabled` is `true`, the
+chart mounts a pre-existing Kubernetes Secret containing the certificate,
+private key and CA bundle at `/etc/memgraph/intra_cluster_tls/` and
+auto-appends `--cluster-cert-file=/etc/memgraph/intra_cluster_tls/tls.crt`,
+`--cluster-key-file=/etc/memgraph/intra_cluster_tls/tls.key` and
+`--cluster-ca-file=/etc/memgraph/intra_cluster_tls/ca.crt` to the instance's
+args.
+
+To enable intra-cluster TLS, first create a Kubernetes Secret holding the
+certificate, private key and CA bundle for each instance in the release
+namespace. For example, for `data-0`:
+
+```bash
+kubectl create secret generic intra-tls-data-0-secret \
+  --from-file=tls.crt=path/to/tls.crt \
+  --from-file=tls.key=path/to/tls.key \
+  --from-file=ca.crt=path/to/ca.crt
+```
+
+Then enable `tls.intraCluster` on each instance that should encrypt internal
+traffic:
+
+```yaml
+data:
+  - id: "0"
+    tls:
+      intraCluster:
+        enabled: true
+        secretName: intra-tls-data-0-secret
+        certSecretPath: tls.crt
+        keySecretPath: tls.key
+        caSecretPath: ca.crt
+  - id: "1"
+    tls:
+      intraCluster:
+        enabled: true
+        secretName: intra-tls-data-1-secret
+        certSecretPath: tls.crt
+        keySecretPath: tls.key
+        caSecretPath: ca.crt
+
+coordinators:
+  - id: "1"
+    tls:
+      intraCluster:
+        enabled: true
+        secretName: intra-tls-coord-1-secret
+  - id: "2"
+    tls:
+      intraCluster:
+        enabled: true
+        secretName: intra-tls-coord-2-secret
+  - id: "3"
+    tls:
+      intraCluster:
+        enabled: true
+        secretName: intra-tls-coord-3-secret
+```
+
+`certSecretPath`, `keySecretPath` and `caSecretPath` are the keys inside the
+Secret holding the certificate, private key and CA bundle respectively
+(default `tls.crt`, `tls.key` and `ca.crt`). The chart fails the install if
+`tls.intraCluster.enabled` is `true` but `tls.intraCluster.secretName` is
+empty. Enable it on every instance that participates in encrypted intra-cluster
+communication.
 
 
 ## Setting up the cluster
@@ -672,10 +859,11 @@ concern, first set `commonArgs.data.logging.also_log_to_stderr` and
 to files is cheaper. If you're still unhappy with the performance overhead of
 logging, set `commonArgs.{data,coordinators}.logging.log_level` to `DEBUG`
 (higher log levels like `INFO` or `CRITICAL` are also fine) and keep
-`also_log_to_stderr: true`. These settings replace the `--log-level` and
-`--also-log-to-stderr` flags that the chart now appends to instance args
-automatically — setting them directly in `data[].args` or
-`coordinators[].args` is rejected.
+`also_log_to_stderr: true`. These settings replace the `--log-level`,
+`--also-log-to-stderr`, `--log-file` and `--log-retention-days` flags that the
+chart now appends to instance args automatically — setting them directly in
+`data[].args` or `coordinators[].args` is rejected. Configure log retention via
+`commonArgs.{data,coordinators}.logging.log_retention_days` (defaults to `35`).
 
 By default, the chart provisions a dedicated log PVC for every data and
 coordinator pod. If you only log to stderr and don't need a persistent log
@@ -799,8 +987,9 @@ prometheus:
     port: 9115
     pullFrequencySeconds: 5
     repository: memgraph/mg-exporter
-    tag: 0.2.1
+    tag: 0.2.3
   serviceMonitor:
+    enabled: true
     kubePrometheusStackReleaseName: kube-prometheus-stack
     interval: 15s
 ```
@@ -809,8 +998,106 @@ If you set `prometheus.enabled` to `false`, resources from
 `charts/memgraph-high-availability/templates/mg-exporter.yaml` will still be
 installed into the `monitoring` namespace.
 
+`prometheus.serviceMonitor.enabled` defaults to `false`; set it to `true` only
+when you have `kube-prometheus-stack` (or another Prometheus Operator) in the
+cluster to consume the `ServiceMonitor` resource.
+
 Refer to the configuration table later in the document for details on all
 parameters.
+
+#### mg-exporter TLS
+
+When any data instance or coordinator has `tls.bolt.enabled: true`, the
+chart automatically configures the mg-exporter to scrape that instance over
+`https://` instead of `http://`. Each instance entry in the exporter config
+also gets `skip_tls_verify` and (optionally) `ca_file` derived from
+`prometheus.memgraphExporter.tls`:
+
+```yaml
+prometheus:
+  memgraphExporter:
+    tls:
+      skipVerify: true
+      caSecretName: ""
+      caSecretKey: ca.crt
+```
+
+- `skipVerify` — when `true` (default), the exporter does not verify the
+  Memgraph server certificate. Convenient for self-signed certs but not
+  suitable for production.
+- `caSecretName` — name of a pre-created Secret holding the CA bundle that
+  signed Memgraph's certificate. When set and `skipVerify` is `false`, the
+  chart mounts the Secret at `/etc/mg-exporter/ssl` and passes
+  `ca_file=/etc/mg-exporter/ssl/<caSecretKey>` to the exporter.
+- `caSecretKey` — key inside the Secret holding the CA certificate
+  (default `ca.crt`).
+
+Example with strict CA verification:
+
+```yaml
+prometheus:
+  memgraphExporter:
+    tls:
+      skipVerify: false
+      caSecretName: bolt-ca-bundle
+      caSecretKey: ca.crt
+```
+
+### Scrape Memgraph directly (without mg-exporter)
+
+From Memgraph 3.11, Memgraph can serve metrics in Prometheus
+[OpenMetrics](https://prometheus.io/docs/specs/om/open_metrics_spec/) format on its
+HTTP monitoring port, so the cluster can be scraped directly and `mg-exporter` can be
+skipped entirely.
+
+Set the top-level `scrapeMemgraphDirectly: true` and leave `prometheus.enabled: false`:
+
+```yaml
+# Every coordinator and data instance serves OpenMetrics; the chart exposes their
+# monitoring ports automatically.
+scrapeMemgraphDirectly: true
+
+prometheus:
+  enabled: false       # no mg-exporter is deployed
+  serviceMonitor:
+    enabled: true      # in-cluster: kube-prometheus-stack scrapes each instance directly
+```
+
+`scrapeMemgraphDirectly` only selects the metrics *format and target* — on its own it
+does not scrape anything. You still enable a scraper:
+
+- **In-cluster**: `prometheus.serviceMonitor.enabled: true` provisions a `ServiceMonitor`
+  that `kube-prometheus-stack` uses to scrape each Memgraph instance directly.
+- **Remote**: `vmagentRemote.enabled: true` makes vmagent scrape the instances directly
+  and remote-write the metrics (see [Remote metrics and logs](#remote-metrics-and-logs)).
+
+The same switch governs both paths. When it is `false`, those scrapers read the
+`mg-exporter` instead, which requires `prometheus.enabled: true`.
+
+<Callout type="info">
+Direct scraping requires Memgraph >= 3.11. When `scrapeMemgraphDirectly: true`, the
+chart runs every coordinator and data instance with `--metrics-format=OpenMetrics` and
+exposes their monitoring ports automatically. The metric names differ from the legacy
+JSON exporter, so use the bundled **Memgraph OpenMetrics** dashboard.
+</Callout>
+
+#### Grafana dashboard for direct scraping
+
+Set `prometheus.grafanaDashboard.enabled: true` to ship the bundled "Memgraph
+OpenMetrics" Grafana dashboard as a `ConfigMap` (labelled `grafana_dashboard`) for a
+Grafana sidecar (e.g. the one bundled with `kube-prometheus-stack`) to auto-load. The
+dashboard uses a datasource template variable, so it binds to Grafana's default
+Prometheus. The `ConfigMap` must live in a namespace the sidecar watches — set
+`prometheus.grafanaDashboard.namespace` to Grafana's namespace (or run the sidecar with
+`searchNamespace: ALL`).
+
+```yaml
+prometheus:
+  grafanaDashboard:
+    enabled: true
+    namespace: monitoring
+    label: grafana_dashboard
+```
 
 ### Uninstall kube-prometheus-stack
 
@@ -843,7 +1130,7 @@ The HA chart supports optional remote observability:
 
 Prerequisites:
 
-- keep `prometheus.enabled: true` so `mg-exporter` is deployed
+- keep `prometheus.enabled: true` so `mg-exporter` is deployed — or set `scrapeMemgraphDirectly: true` with `prometheus.enabled: false` to have vmagent scrape Memgraph's OpenMetrics endpoint directly (no exporter; see [Scrape Memgraph directly](#scrape-memgraph-directly-without-mg-exporter))
 - if you only need remote shipping and not local scraping, set `prometheus.serviceMonitor.enabled: false` to avoid duplicate scraping
 - configure `vectorRemote.data` and/or `vectorRemote.coordinators` depending on which pod roles should ship logs
 - when `vectorRemote.enabled: true`, add `--monitoring-port=<vectorRemote.websocketPort>` and `--monitoring-address=0.0.0.0` to each instance `args`
@@ -916,10 +1203,11 @@ coordinators:
 <Callout type="info">
 The chart auto-appends `--bolt-port`, `--management-port`, `--coordinator-port`,
 `--coordinator-id`, `--coordinator-hostname`, `--data-directory`, `--log-level`,
-`--also-log-to-stderr` and `--log-file` from `ports.*` and
-`commonArgs.{data,coordinators}.logging.*`. Setting any of these in
-`data[].args` or `coordinators[].args` causes `helm install` to fail with a
-template error.
+`--also-log-to-stderr`, `--log-file`, `--bolt-cert-file`, `--bolt-key-file`,
+`--cluster-cert-file`, `--cluster-key-file` and `--cluster-ca-file`
+from `ports.*`, `commonArgs.{data,coordinators}.logging.*` and the per-instance
+`tls.bolt.*` / `tls.intraCluster.*` blocks. Setting any of these in `data[].args` or
+`coordinators[].args` causes `helm install` to fail with a template error.
 </Callout>
 
 Create credentials secret in the namespace where vmagent runs (usually `monitoring`):
@@ -1008,7 +1296,7 @@ and their default values.
 | `storage.data.coreDumpsStorageSize`                        | Size of the core dumps PVC on data instances                                                                 | `10Gi`                         |
 | `storage.data.coreDumpsMountPath`                          | Mount path for core dumps on data instances                                                                  | `/var/core/memgraph`           |
 | `storage.data.coreDumpsImage.repository`                   | Image repository for the data instance core-dumps init container.                                            | `docker.io/library/busybox`    |
-| `storage.data.coreDumpsImage.tag`                          | Image tag for the data instance core-dumps init container.                                                   | `latest`                       |
+| `storage.data.coreDumpsImage.tag`                          | Image tag for the data instance core-dumps init container.                                                   | `1.37.0`                       |
 | `storage.data.coreDumpsImage.pullPolicy`                   | Image pull policy for the data instance core-dumps init container.                                           | `IfNotPresent`                 |
 | `storage.data.extraVolumes`                                | Additional volumes to add to data instance pods                                                              | `[]`                           |
 | `storage.data.extraVolumeMounts`                           | Additional volume mounts to add to data instance containers                                                  | `[]`                           |
@@ -1024,7 +1312,7 @@ and their default values.
 | `storage.coordinators.coreDumpsStorageSize`                | Size of the core dumps PVC on coordinators                                                                   | `10Gi`                         |
 | `storage.coordinators.coreDumpsMountPath`                  | Mount path for core dumps on coordinators                                                                    | `/var/core/memgraph`           |
 | `storage.coordinators.coreDumpsImage.repository`           | Image repository for the coordinator core-dumps init container.                                              | `docker.io/library/busybox`    |
-| `storage.coordinators.coreDumpsImage.tag`                  | Image tag for the coordinator core-dumps init container.                                                     | `latest`                       |
+| `storage.coordinators.coreDumpsImage.tag`                  | Image tag for the coordinator core-dumps init container.                                                     | `1.37.0`                       |
 | `storage.coordinators.coreDumpsImage.pullPolicy`           | Image pull policy for the coordinator core-dumps init container.                                             | `IfNotPresent`                 |
 | `storage.coordinators.extraVolumes`                        | Additional volumes to add to coordinator pods                                                                | `[]`                           |
 | `storage.coordinators.extraVolumeMounts`                   | Additional volume mounts to add to coordinator containers                                                    | `[]`                           |
@@ -1078,25 +1366,36 @@ and their default values.
 | `sysctlInitContainer.enabled`                              | Enable the init container to set sysctl parameters                                                           | `true`                         |
 | `sysctlInitContainer.maxMapCount`                          | Value for `vm.max_map_count` to be set by the init container                                                 | `524288`                       |
 | `sysctlInitContainer.image.repository`                     | Image repository for the sysctl init container                                                               | `library/busybox`              |
-| `sysctlInitContainer.image.tag`                            | Image tag for the sysctl init container                                                                      | `latest`                       |
+| `sysctlInitContainer.image.tag`                            | Image tag for the sysctl init container                                                                      | `1.37.0`                       |
 | `sysctlInitContainer.image.pullPolicy`                     | Image pull policy for the sysctl init container                                                              | `IfNotPresent`                 |
+| `fixOwnershipInitContainer.enabled`                        | Enable the init container that `chown`s lib/log/core-dump mounts to `memgraphUserId:memgraphGroupId` before Memgraph starts. Use when the storage driver does not honor `fsGroup`. | `false`                        |
+| `fixOwnershipInitContainer.image.repository`               | Image repository for the fix-ownership init container.                                                       | `docker.io/library/busybox`    |
+| `fixOwnershipInitContainer.image.tag`                      | Image tag for the fix-ownership init container.                                                              | `1.37.0`                       |
+| `fixOwnershipInitContainer.image.pullPolicy`               | Image pull policy for the fix-ownership init container.                                                      | `IfNotPresent`                 |
 | `secrets.name`                                             | Name of the Kubernetes Secret holding the Memgraph Enterprise license and organization name. Must exist before `helm install`. | `memgraph-secrets`     |
 | `secrets.licenseKey`                                       | Key in the Secret whose value is exposed as `MEMGRAPH_ENTERPRISE_LICENSE` to data and coordinator pods.       | `MEMGRAPH_ENTERPRISE_LICENSE`  |
 | `secrets.organizationKey`                                  | Key in the Secret whose value is exposed as `MEMGRAPH_ORGANIZATION_NAME` to data and coordinator pods.        | `MEMGRAPH_ORGANIZATION_NAME`   |
 | `resources.coordinators`                                   | CPU/Memory resource requests/limits for coordinators. Left empty by default.                                 | `{}`                           |
 | `resources.data`                                           | CPU/Memory resource requests/limits for data instances. Left empty by default.                               | `{}`                           |
+| `scrapeMemgraphDirectly`                                   | Serve metrics in OpenMetrics format and scrape Memgraph directly instead of `mg-exporter` (requires Memgraph >= 3.11). Only selects the format/target — still enable a scraper via `prometheus.serviceMonitor.enabled` and/or `vmagentRemote.enabled`. | `false`                        |
 | `prometheus.enabled`                                       | If set to `true`, K8s resources representing Memgraph's Prometheus exporter will be deployed.                | `false`                        |
 | `prometheus.namespace`                                     | Namespace in which `kube-prometheus-stack` and Memgraph's Prometheus exporter are installed. When empty, the release namespace is used. | `""`         |
 | `prometheus.memgraphExporter.port`                         | The port on which Memgraph's Prometheus exporter is available.                                               | `9115`                         |
 | `prometheus.memgraphExporter.pullFrequencySeconds`         | How often will Memgraph's Prometheus exporter pull data from Memgraph instances.                             | `5`                            |
 | `prometheus.memgraphExporter.repository`                   | The repository where Memgraph's Prometheus exporter image is available.                                      | `docker.io/memgraph/prometheus-exporter` |                      
-| `prometheus.memgraphExporter.tag`                          | The tag of Memgraph's Prometheus exporter image.                                                             | `0.2.1`                        |                      
+| `prometheus.memgraphExporter.tag`                          | The tag of Memgraph's Prometheus exporter image.                                                             | `0.2.3`                        |                      
+| `prometheus.memgraphExporter.tls.skipVerify`               | When `true`, mg-exporter does not verify Memgraph's server certificate. Only applied when scraping instances with `tls.bolt.enabled=true`. | `true`         |
+| `prometheus.memgraphExporter.tls.caSecretName`             | Name of a pre-created Secret containing the CA bundle. When set (and `skipVerify=false`), the chart mounts it at `/etc/mg-exporter/ssl`.   | `""`           |
+| `prometheus.memgraphExporter.tls.caSecretKey`              | Key inside the Secret holding the CA certificate.                                                            | `ca.crt`                       |
 | `prometheus.memgraphExporter.extraVolumes`                 | Additional volumes mounted on the `mg-exporter` Deployment (e.g. ConfigMaps with custom exporter configs).   | `[]`                           |
 | `prometheus.memgraphExporter.extraVolumeMounts`            | Additional volume mounts for the `mg-exporter` container.                                                    | `[]`                           |
-| `prometheus.serviceMonitor.enabled`                        | If enabled, a `ServiceMonitor` object will be deployed.                                                      | `true`                         |
+| `prometheus.serviceMonitor.enabled`                        | If enabled, a `ServiceMonitor` object will be deployed.                                                      | `false`                        |
 | `prometheus.serviceMonitor.kubePrometheusStackReleaseName` | The release name under which `kube-prometheus-stack` chart is installed.                                     | `kube-prometheus-stack`        |
 | `prometheus.serviceMonitor.interval`                       | How often will Prometheus pull data from Memgraph's Prometheus exporter.                                     | `15s`                          |
-| `vmagentRemote.enabled`                                    | Deploy a vmagent Deployment that scrapes mg-exporter and remote-writes to a Prometheus-compatible endpoint.  | `false`                        |
+| `prometheus.grafanaDashboard.enabled`                      | Ship the bundled "Memgraph OpenMetrics" Grafana dashboard as a `ConfigMap` for a Grafana sidecar to auto-load. | `false`                      |
+| `prometheus.grafanaDashboard.namespace`                    | Namespace for the dashboard `ConfigMap`; must be one the Grafana sidecar watches. Defaults to `prometheus.namespace`, else release namespace. | `""`           |
+| `prometheus.grafanaDashboard.label`                        | Label the Grafana sidecar selects dashboards by.                                                             | `grafana_dashboard`            |
+| `vmagentRemote.enabled`                                    | Deploy a vmagent Deployment that scrapes mg-exporter (or Memgraph directly when `scrapeMemgraphDirectly=true`) and remote-writes to a Prometheus-compatible endpoint.  | `false`                        |
 | `vmagentRemote.namespace`                                  | Namespace for the vmagent Deployment and its resources. Defaults to `prometheus.namespace` when empty.       | `""`                           |
 | `vmagentRemote.image.repository`                           | vmagent image repository.                                                                                    | `victoriametrics/vmagent`      |
 | `vmagentRemote.image.tag`                                  | vmagent image tag.                                                                                           | `v1.139.0`                     |
@@ -1140,9 +1439,11 @@ and their default values.
 | `commonArgs.data.logging.log_level`                        | Log level applied to every data instance via `--log-level`. Must not be empty.                               | `TRACE`                        |
 | `commonArgs.data.logging.also_log_to_stderr`               | When `true`, appends `--also-log-to-stderr` to every data instance. Must be a boolean.                       | `true`                         |
 | `commonArgs.data.logging.log_file`                         | Log-file path applied to every data instance via `--log-file`. Empty disables file logging.                  | `/var/log/memgraph/memgraph.log` |
+| `commonArgs.data.logging.log_retention_days`               | Number of days to retain log files on every data instance via `--log-retention-days`.                        | `35`                           |
 | `commonArgs.coordinators.logging.log_level`                | Log level applied to every coordinator via `--log-level`. Must not be empty.                                 | `TRACE`                        |
 | `commonArgs.coordinators.logging.also_log_to_stderr`       | When `true`, appends `--also-log-to-stderr` to every coordinator. Must be a boolean.                         | `true`                         |
 | `commonArgs.coordinators.logging.log_file`                 | Log-file path applied to every coordinator via `--log-file`. Empty disables file logging.                    | `/var/log/memgraph/memgraph.log` |
+| `commonArgs.coordinators.logging.log_retention_days`       | Number of days to retain log files on every coordinator via `--log-retention-days`.                          | `35`                           |
 | `userContainers.data`                                      | Additional sidecar containers for data instance pods                                                         | `[]`                           |
 | `userContainers.coordinators`                              | Additional sidecar containers for coordinator pods                                                           | `[]`                           |
 | `tolerations.data`                                         | Tolerations for data instance pods                                                                           | `[]`                           |
@@ -1169,14 +1470,25 @@ following parameters:
 | `id`                                        | ID of the instance                                                                                  | `0` for data, `1` for coordinators      |
 | `internalAccessAnnotations`                 | Per-instance annotations for the internal ClusterIP Service.                                        | `{}`                                    |
 | `externalAccessAnnotations`                 | Per-instance annotations for the external access Service, merged with global annotations.           | `{}`                                    |
+| `tls.bolt.enabled`                          | Enable Bolt TLS termination on this instance. The chart auto-appends `--bolt-cert-file` / `--bolt-key-file` and mounts the certificate Secret at `/etc/memgraph/ssl`. | `false`                  |
+| `tls.bolt.secretName`                       | Name of a pre-existing Kubernetes Secret holding the Bolt TLS certificate and private key. Required when `tls.bolt.enabled=true`. | `bolt-tls-secret`     |
+| `tls.bolt.certSecretPath`                   | Key inside the Secret holding the TLS certificate.                                                  | `tls.crt`                               |
+| `tls.bolt.keySecretPath`                    | Key inside the Secret holding the TLS private key.                                                  | `tls.key`                               |
+| `tls.intraCluster.enabled`                  | Enable TLS on internal cluster communication for this instance. The chart auto-appends `--cluster-cert-file` / `--cluster-key-file` / `--cluster-ca-file` and mounts the certificate Secret at `/etc/memgraph/intra_cluster_tls`. | `false`     |
+| `tls.intraCluster.secretName`               | Name of a pre-existing Kubernetes Secret holding the intra-cluster TLS certificate, private key and CA bundle. Required when `tls.intraCluster.enabled=true`. | `intra-tls-<instance>-secret` |
+| `tls.intraCluster.certSecretPath`           | Key inside the Secret holding the TLS certificate.                                                  | `tls.crt`                               |
+| `tls.intraCluster.keySecretPath`            | Key inside the Secret holding the TLS private key.                                                  | `tls.key`                               |
+| `tls.intraCluster.caSecretPath`             | Key inside the Secret holding the CA bundle.                                                        | `ca.crt`                                |
 | `args`                                      | Per-instance Memgraph CLI flags. Append-only — see the note below for flags the chart manages.       | `["--storage-snapshot-on-exit=false"]` for data, `[]` for coordinators |
 
 The `args` field accepts any Memgraph CLI flag **except** the following, which
 the chart appends automatically and rejects when set per-instance:
 `--bolt-port`, `--management-port`, `--coordinator-port`, `--coordinator-id`,
 `--coordinator-hostname`, `--data-directory`, `--log-level`,
-`--also-log-to-stderr`, and `--log-file`. Configure those through `ports.*`
-and `commonArgs.{data,coordinators}.logging.*` instead.
+`--also-log-to-stderr`, `--log-file`, `--bolt-cert-file`, `--bolt-key-file`,
+`--cluster-cert-file`, `--cluster-key-file` and `--cluster-ca-file`.
+Configure those through `ports.*`, `commonArgs.{data,coordinators}.logging.*`
+and the per-instance `tls.bolt.*` / `tls.intraCluster.*` blocks instead.
 
 For all available database settings, refer to the [configuration settings
 docs](/database-management/configuration).

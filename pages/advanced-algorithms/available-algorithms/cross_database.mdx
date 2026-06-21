@@ -1,0 +1,462 @@
+---
+title: cross_database
+description: Query other databases (Memgraph, Neo4j, PostgreSQL, MySQL, Oracle, SQL Server, S3, Arrow Flight, DuckDB, ServiceNow) directly from Memgraph and stream their rows into your graph.
+---
+
+import { Cards } from 'nextra/components'
+import GitHub from '/components/icons/GitHub'
+import { Callout } from 'nextra/components';
+
+# cross_database
+
+The `cross_database` module lets you reach into another database from a running Cypher query and stream
+its rows into Memgraph. Use it to migrate data, build hybrid OLTP/graph pipelines, or join graph data
+with rows fetched on-demand from a relational/Bolt/object-store source.
+
+<Callout type="warning">
+**The `migrate` module is deprecated as of Memgraph 3.11** and has been replaced by `cross_database`.
+Existing `migrate.*` calls keep working via the [aliases](#backwards-compatibility-with-migrate) shipped
+with Memgraph, but new code should call `cross_database.*` directly. The previous `migrate.memgraph()`
+procedure has been replaced by the more general [`cross_database.bolt()`](#bolt).
+</Callout>
+
+<Cards>
+  <Cards.Card
+    icon={<GitHub />}
+    title="Source code"
+    href="https://github.com/memgraph/memgraph/blob/master/mage/python/cross_database.py"
+  />
+</Cards>
+
+| Trait               | Value      |
+| ------------------- | ---------- |
+| **Module type**     | util       |
+| **Implementation**  | Python     |
+| **Parallelism**     | sequential |
+
+<Callout type="info">
+When running multiple cross-database calls against the same source, avoid repeating the `config` map in every call.
+Use [server-side parameters](/database-management/server-side-parameters) to store the connection config once
+and reference it as `$config` across all your queries:
+
+```cypher
+SET GLOBAL PARAMETER pg_config = {user: 'memgraph', password: 'password', host: 'localhost', database: 'demo_db'};
+
+CALL cross_database.postgresql('users', $pg_config) YIELD row CREATE (u:User {id: row.id});
+CALL cross_database.postgresql('orders', $pg_config) YIELD row CREATE (o:Order {id: row.id});
+```
+</Callout>
+
+## Backwards compatibility with `migrate`
+
+Every procedure listed below has a `migrate.*` alias preserved from earlier versions, so existing queries
+keep working unchanged. The aliases are wired up through Memgraph's callable-mapping mechanism
+(`/etc/memgraph/apoc_compatibility_mappings.json`, enabled by default), so no configuration is required.
+
+| Pre-3.11 name              | New name                          |
+| -------------------------- | --------------------------------- |
+| `migrate.memgraph`         | `cross_database.bolt`             |
+| `migrate.neo4j`            | `cross_database.neo4j`            |
+| `migrate.mysql`            | `cross_database.mysql`            |
+| `migrate.postgresql`       | `cross_database.postgresql`       |
+| `migrate.sql_server`       | `cross_database.sql_server`       |
+| `migrate.oracle_db`        | `cross_database.oracle_db`        |
+| `migrate.s3`               | `cross_database.s3`               |
+| `migrate.arrow_flight`     | `cross_database.arrow_flight`     |
+| `migrate.duckdb`           | `cross_database.duckdb`           |
+| `migrate.servicenow`       | `cross_database.servicenow`       |
+
+If you mix old and new names within the same transaction, treat them as the same procedure — calling
+`migrate.postgresql` and `cross_database.postgresql` with identical arguments will trigger the
+[same-parameters guard](#same-parameters-guard).
+
+You can inspect the active mapping at runtime with:
+
+```cypher
+SHOW QUERY CALLABLE MAPPINGS;
+```
+
+## Type conversion
+
+For Bolt-based sources (`bolt`, `neo4j`), primitives (`Boolean`, `Integer`, `Float`, `String`, `Null`),
+lists, maps, the calendar-aware temporal types (`Date`, `LocalTime`, `LocalDateTime`, `DateTime`), and
+spatial points (`Point2d`, `Point3d`, with their `srid` preserved) pass through cleanly. The cases worth
+knowing about:
+
+| Source type                  | Result        | Notes                                                                                                                                                                  |
+| ---------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Duration` with `months > 0` | flattened     | Months are coerced to 30 days each. **This differs from native Neo4j behavior**, where months are preserved and `date + P1M` stays calendar-aware. See the warning below. |
+| `Time` (zoned)               | *unsupported* | Memgraph has no zoned-time type. Convert to `LocalTime` on the source side, or carry the offset as a separate column.                                                  |
+| Enum                         | *unsupported* | Memgraph enums can't cross the Bolt boundary — the call raises an error.                                                                                                |
+| Node / Relationship / Path   | *unsupported* | Streaming raw graph objects is not supported. Return their `properties()` / `labels()` instead.                                                                         |
+
+<Callout type="warning">
+The 30-days-per-month flattening means a duration like `P1M` becomes `30 days` on the Memgraph side, and
+`P1Y` becomes `360 days`. Native Neo4j keeps months separate from days, so `date + duration('P1M')` stays
+calendar-aware there; after crossing the Bolt boundary into Memgraph that calendar information is gone.
+If you need exact calendar arithmetic, fetch the months and days components as separate columns and
+reconstruct them on the Memgraph side.
+</Callout>
+
+## Same-parameters guard
+
+`cross_database` deliberately rejects two concurrent calls with the same `(query, config, params)` inside
+a single transaction. Doing so would race on the underlying connection and yield duplicate rows. The error
+message is:
+
+```
+Cross database module with these parameters is already running.
+Please wait for it to finish before starting a new one.
+```
+
+If you intentionally need two reads from the same source in one transaction, vary the query (for example
+add a different `LIMIT`, alias, or comment) so the cache key differs.
+
+---
+
+## Procedures
+
+### `bolt()`
+
+`cross_database.bolt()` queries any Bolt-compatible database — Memgraph itself, another Memgraph instance,
+or Neo4j — and streams the rows back. This replaces the old `migrate.memgraph()` procedure and is the
+recommended way to read from any Bolt source.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `label_or_rel_or_query: str` ➡ A label name (`(:Label)`), a relationship type (`[:REL_TYPE]`), or a plain
+  Cypher query. When a label/relationship shorthand is used, `cross_database.bolt()` synthesizes the
+  matching `MATCH … RETURN labels/properties …` query for you.
+- `config: mgp.Map` ➡ Connection parameters. Notable keys: `host` (default `localhost`), `port`
+  (default `7687`), `username`, `password`, `database`, `uri_scheme` (default `bolt`).
+- `config_path: str` (optional) ➡ Path to a JSON file containing connection parameters; values in the
+  file override values in `config`.
+- `params: mgp.Nullable[mgp.Any]` (optional, default `None`) ➡ A `Map` of Cypher parameters passed to
+  the remote query (e.g. `{val: 42}` for a query using `$val`).
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ The result table as a stream of rows.
+  - When fetching with the `(:Label)` syntax, each row has `labels` and `properties`.
+  - When fetching with the `[:REL_TYPE]` syntax, each row has `from_labels`, `to_labels`,
+    `from_properties`, `to_properties`, and `edge_properties`.
+  - When passing a plain Cypher query, row keys match the columns the remote query returns.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+#### Retrieve nodes of a certain label and recreate them locally
+```cypher
+CALL cross_database.bolt('(:Person)', {host: 'localhost', port: 7687})
+YIELD row
+WITH row.labels AS labels, row.properties AS props
+CREATE (n:labels) SET n += props;
+```
+
+#### Pass query parameters
+```cypher
+CALL cross_database.bolt(
+    'MATCH (u:User) WHERE u.id = $id RETURN u.name AS name',
+    {host: 'localhost', port: 7687},
+    '',
+    {id: 42}
+)
+YIELD row
+RETURN row.name AS name;
+```
+
+#### Connect to Neo4j with explicit credentials
+```cypher
+CALL cross_database.bolt(
+    'MATCH (n) RETURN count(n) AS cnt',
+    {host: 'neo4j-host', port: 7687, username: 'neo4j', password: 'secret'}
+)
+YIELD row
+RETURN row.cnt AS cnt;
+```
+
+---
+
+### `neo4j()`
+
+`cross_database.neo4j()` is a thin convenience wrapper around [`bolt()`](#bolt) that defaults the
+credentials to Neo4j's stock `neo4j` / `password`. Use it when you only need to override the host/port.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+Same as [`bolt()`](#bolt). If `username` / `password` are missing from `config`, they default to
+`neo4j` / `password`.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+Same as [`bolt()`](#bolt).
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+CALL cross_database.neo4j('(:Person)', {host: 'neo4j-host', port: 7687})
+YIELD row
+WITH row.labels AS labels, row.properties AS props
+CREATE (n:labels) SET n += props;
+```
+
+---
+
+### `mysql()`
+
+Query MySQL and stream rows back. The result table is converted into a stream that can be used to create
+graph structures.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `table_or_sql: str` ➡ A table name (a single word — automatically expanded to `SELECT * FROM <name>`)
+  or a full SQL query.
+- `config: mgp.Map` ➡ Connection parameters (as in `mysql.connector.connect`).
+- `config_path: str` (optional) ➡ Path to a JSON file with connection parameters.
+- `params: mgp.Nullable[mgp.Any]` (optional, default `None`) ➡ Query parameters. Accepts a `List` for
+  `%s`-style placeholders or a `Map` for `%(name)s`-style placeholders (both supported by
+  `mysql.connector`).
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ The result table as a stream of rows.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+#### Retrieve and inspect data
+```cypher
+CALL cross_database.mysql('example_table', {user: 'memgraph',
+        password: 'password',
+        host: 'localhost',
+        database: 'demo_db'})
+YIELD row
+RETURN row
+LIMIT 5000;
+```
+
+#### Create nodes from migrated data
+```cypher
+CALL cross_database.mysql('SELECT id, name, age FROM users', {user: 'memgraph',
+        password: 'password',
+        host: 'localhost',
+        database: 'demo_db'})
+YIELD row
+CREATE (u:User {id: row.id, name: row.name, age: row.age});
+```
+
+---
+
+### `postgresql()`
+
+Query PostgreSQL and stream rows back.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `table_or_sql: str` ➡ Table name or SQL query.
+- `config: mgp.Map` ➡ Connection parameters (as in `psycopg2.connect`).
+- `config_path: str` (optional) ➡ Path to a JSON file with connection parameters.
+- `params: mgp.Nullable[mgp.Any]` (optional, default `None`) ➡ Query parameters as a `List`
+  (psycopg2 uses positional `%s` placeholders). Passing a `Map` raises a `TypeError`.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ The result table as a stream of rows.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+#### Retrieve and inspect data
+```cypher
+CALL cross_database.postgresql('example_table', {user: 'memgraph',
+        password: 'password',
+        host: 'localhost',
+        database: 'demo_db'})
+YIELD row
+RETURN row
+LIMIT 5000;
+```
+
+#### Establish relationships between orders and customers
+```cypher
+CALL cross_database.postgresql('SELECT order_id, customer_id FROM orders', {user: 'memgraph',
+        password: 'password',
+        host: 'localhost',
+        database: 'retail_db'})
+YIELD row
+MATCH (o:Order {id: row.order_id}), (c:Customer {id: row.customer_id})
+CREATE (c)-[:PLACED]->(o);
+```
+
+---
+
+### `sql_server()`
+
+Query SQL Server and stream rows back.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `table_or_sql: str` ➡ Table name or SQL query.
+- `config: mgp.Map` ➡ Connection parameters (as in `pyodbc.connect`).
+- `config_path: str` (optional) ➡ Path to a JSON file with connection parameters.
+- `params: mgp.Nullable[mgp.Any]` (optional, default `None`) ➡ Query parameters as a `List`.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ The result table as a stream of rows.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+CALL cross_database.sql_server('SELECT id, name, role FROM employees', {user: 'memgraph',
+        password: 'password',
+        host: 'localhost',
+        database: 'company_db'})
+YIELD row
+CREATE (e:Employee {id: row.id, name: row.name, role: row.role});
+```
+
+---
+
+### `oracle_db()`
+
+Query Oracle DB and stream rows back.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `table_or_sql: str` ➡ Table name or SQL query.
+- `config: mgp.Map` ➡ Connection parameters (as in `oracledb.connect`).
+- `config_path: str` (optional) ➡ Path to a JSON file with connection parameters.
+- `params: mgp.Nullable[mgp.Any]` (optional, default `None`) ➡ Query parameters. Accepts a `List` for
+  positional placeholders or a `Map` for `:name`-style named placeholders (both supported by `oracledb`).
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ The result table as a stream of rows.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+CALL cross_database.oracle_db('SELECT id, name FROM companies', {user: 'memgraph',
+        password: 'password',
+        host: 'localhost',
+        database: 'business_db'})
+YIELD row
+MERGE (c:Company {id: row.id})
+SET c.name = row.name;
+```
+
+---
+
+### `s3()`
+
+Read a CSV file directly from AWS S3 and stream its rows into Memgraph.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `file_path: str` ➡ S3 path in the form `s3://bucket-name/path/to/file.csv`.
+- `config: mgp.Map` ➡ AWS credentials; all keys optional. Missing keys fall back to the corresponding
+  environment variables:
+  - `aws_access_key_id` (env: `AWS_ACCESS_KEY_ID`)
+  - `aws_secret_access_key` (env: `AWS_SECRET_ACCESS_KEY`)
+  - `region_name` (env: `AWS_REGION`)
+  - `aws_session_token` (env: `AWS_SESSION_TOKEN`)
+- `config_path: str` (optional) ➡ Path to a JSON file with AWS credentials.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ Each CSV row as a `{column_name: value}` map.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+CALL cross_database.s3('s3://my-bucket/employees.csv', {aws_access_key_id: 'your-key',
+        aws_secret_access_key: 'your-secret',
+        region_name: 'eu-central-1'})
+YIELD row
+CREATE (e:Employee {id: row.id, name: row.name, position: row.position});
+```
+
+---
+
+### `arrow_flight()`
+
+Connect to any data source that speaks the [Arrow Flight RPC protocol](https://arrow.apache.org/docs/format/Flight.html)
+(for example, [Dremio](https://www.dremio.com/)) and stream rows in.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `query: str` ➡ Query against the data source.
+- `config: mgp.Map` ➡ Connection parameters (as in `pyarrow.flight.connect`). Notable keys: `host`,
+  `port`, `username`, `password`.
+- `config_path: str` (optional) ➡ Path to a JSON file with connection parameters.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ The result table as a stream of rows.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+CALL cross_database.arrow_flight('SELECT id, name, age FROM users', {username: 'memgraph',
+        password: 'password',
+        host: 'localhost',
+        port: '12345'})
+YIELD row
+CREATE (u:User {id: row.id, name: row.name, age: row.age});
+```
+
+---
+
+### `duckdb()`
+
+Connect to DuckDB and use it as a proxy to query the [data sources DuckDB
+supports](https://duckdb.org/docs/stable/data/data_sources.html). DuckDB is run in-memory with no
+persistence — it's only used to proxy to underlying sources.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `query: str` ➡ Table name or SQL query.
+- `setup_queries: mgp.Nullable[List[str]]` (optional) ➡ Queries executed before `query`, used to attach
+  or configure the source DuckDB will proxy to (e.g. `INSTALL httpfs; LOAD httpfs;`).
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ The result table as a stream of rows.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+CALL cross_database.duckdb(
+    'SELECT * FROM read_csv_auto(''s3://my-bucket/users.csv'')',
+    ['INSTALL httpfs;', 'LOAD httpfs;']
+)
+YIELD row
+CREATE (u:User {id: row.id, name: row.name});
+```
+
+---
+
+### `servicenow()`
+
+Pull data from the [ServiceNow REST API](https://developer.servicenow.com/dev.do#!/reference/api/xanadu/rest/).
+The endpoint must return JSON of the form `{"results": [...]}`.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `endpoint: str` ➡ The full ServiceNow URL, including any query parameters.
+- `config: mgp.Map` ➡ Connection parameters. Notable keys: `username`, `password` (passed through to
+  `requests.get`).
+- `config_path: str` (optional) ➡ Path to a JSON file with connection parameters.
+- `params: mgp.Nullable[mgp.Any]` (optional, default `None`) ➡ Additional URL query parameters,
+  forwarded to `requests.get(endpoint, params=...)`. Unlike the SQL backends, these are HTTP query
+  string parameters, not SQL placeholders.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `row: mgp.Map` ➡ Each element of `results` as a structured dictionary.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+CALL cross_database.servicenow('http://my_endpoint/api/data', {})
+YIELD row
+CREATE (e:Employee {id: row.id, name: row.name, position: row.position});
+```
