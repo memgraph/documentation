@@ -621,6 +621,49 @@ Although many configuration options exist, especially for networking, the workfl
 5. Install auxiliary components for external access, such as `ingress-nginx` (optional).
 6. Update Bolt server addresses if clients will connect from outside the cluster (optional).
 
+### Customize the cluster-setup Job
+
+After `helm install`, the chart runs a `cluster-setup` Job as a Helm
+`post-install` hook. This Job registers all coordinators and data instances via
+`mgconsole`, producing a fully connected cluster.
+
+You can customize the labels and security context applied to this Job through
+the `clusterSetup` block:
+
+- `clusterSetup.labels` - custom labels applied to both the Job and its pod
+  template. Useful for matching network policies, cost-allocation, or
+  observability selectors that target the setup Job.
+- `clusterSetup.podSecurityContext` - pod-level security context for the
+  `cluster-setup` pod.
+- `clusterSetup.containerSecurityContext` - container-level security context for
+  the `cluster-setup` container.
+
+By default the Job runs hardened: as the non-root `memgraph` user
+(`runAsUser: 101`, `runAsGroup: 103`), with a read-only root filesystem, all
+Linux capabilities dropped, no privilege escalation, and the `RuntimeDefault`
+seccomp profile. Override these values when deploying to a restricted
+environment such as Red Hat OpenShift, where the allowed UID/GID range differs:
+
+```yaml
+clusterSetup:
+  labels:
+    app.kubernetes.io/component: cluster-setup
+  podSecurityContext:
+    runAsUser: 1000680000
+    runAsGroup: 1000680000
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+```
+
 ### Update bolt server
 
 This step is required only when:
@@ -1434,6 +1477,9 @@ and their default values.
 | `labels.data.podLabels`                                    | Enables you to set labels on a pod level for data instances.                                                 | `{}`                           |
 | `labels.data.statefulSetLabels`                            | Enables you to set labels on a stateful set level for data instances.                                        | `{}`                           |
 | `labels.data.serviceLabels`                                | Enables you to set labels on a service level for data instances.                                             | `{}`                           |
+| `clusterSetup.labels`                                      | Custom labels applied to both the post-install `cluster-setup` Job and its pod template.                     | `{}`                           |
+| `clusterSetup.podSecurityContext`                          | Pod-level security context for the `cluster-setup` Job pod. See [Customize the cluster-setup Job](#customize-the-cluster-setup-job). | `runAsUser: 101`, `runAsGroup: 103`, `runAsNonRoot: true`, `seccompProfile.type: RuntimeDefault` |
+| `clusterSetup.containerSecurityContext`                    | Container-level security context for the `cluster-setup` container. See [Customize the cluster-setup Job](#customize-the-cluster-setup-job). | `allowPrivilegeEscalation: false`, `capabilities.drop: ["ALL"]`, `readOnlyRootFilesystem: true`, `runAsNonRoot: true`, `seccompProfile.type: RuntimeDefault` |
 | `updateStrategy.type`                                      | Update strategy for StatefulSets. Possible values are `RollingUpdate` and `OnDelete`                         | `RollingUpdate`                |
 | `extraEnv.data`                                            | Env variables that users can define and are applied to data instances                                        | `[]`                           |
 | `extraEnv.coordinators`                                    | Env variables that users can define and are applied to coordinators                                          | `[]`                           |
