@@ -9,8 +9,8 @@ What works today, split by backend category. "Cypher backends" means
 Memgraph and Neo4j (translation is largely passthrough); "SQL backends"
 means PostgreSQL, MySQL and DuckDB.
 
-ClickHouse, Apache Iceberg, and Apache Pinot are also supported as
-connectors but with a narrower verified surface. See each connector's page for the exact list of features each one
+SQL Server, ClickHouse, Apache Iceberg, and Apache Pinot are also supported
+as connectors but with a narrower verified surface. See each connector's page for the exact list of features each one
 supports.
 
 | Feature                                                            | Cypher backends | SQL backends |
@@ -26,10 +26,10 @@ supports.
 | `MATCH (n)-[r:R]->(m)` typed edge expansion                        | ✓               | ✓            |
 | Untyped edge `()-[]->(b)` (union over types)                       | ✓               | ✗            |
 | `UNION` / `UNION ALL` / `UNION DISTINCT`                           | ✓               | ✓            |
-| `INTERSECT` / `EXCEPT`                                             | ✗               | ✗            |
+| `INTERSECT` / `EXCEPT`                                             | ✓               | ✓            |
 | Quantified path `(){m,n}` — bounded                                | ✓               | ✓            |
 | Quantified path `(){m,}` — unbounded                               | ✓               | ✗            |
-| Shortest-path (`ALL SHORTEST` / `ANY SHORTEST` / `SHORTEST k`) | ✓ | ✗               | ✗            |
+| Shortest-path (`ALL SHORTEST` / `ANY SHORTEST` / `SHORTEST k`)    | ✓               | ✗            |
 | Whole-node `RETURN n` / whole-relationship `RETURN r`              | ✓               | ✓            |
 | Map projections `RETURN n {.id, .title}`                           | ✓               | ✓            |
 | Connection-less `RETURN 1` / `RETURN 1 + 2` (liveness)            | ✓               | ✓            |
@@ -59,6 +59,9 @@ supports.
 - **`FOR x IN [...]` (UNWIND-style) on SQL backends** returns an
   actionable error pointing users at running the query on a Cypher
   backend. The form is still accepted natively on Cypher backends.
+- **`DETACH DELETE` on SQL backends** currently executes as a plain `DELETE` —
+  relationship rows are not detached. It deletes a node that has no relationship
+  rows and otherwise surfaces the backend's constraint error; don't rely on it.
 - **Path variables on variable-length patterns** —
   `MATCH p = (a){1,3}(b) RETURN p` is not yet supported on SQL backends.
   Drop the `p =` binding (or query a Cypher backend) and `RETURN` the
@@ -67,7 +70,7 @@ supports.
 ## Graph Management Query Syntax
 
 ```
-ADD GRAPH <name> ON CONNECTOR <connector>
+ADD GRAPH [IF NOT EXISTS] <name> ON CONNECTOR <connector>
     [GRAPH <remote_name>]
     [MAPPING <mapping_name>]
     [READ ONLY];
@@ -86,6 +89,10 @@ ALTER GRAPH <name> SET GRAPH <remote_name>;
 ALTER GRAPH <name> SET MAPPING <mapping_name>;
 ALTER GRAPH <name> REMOVE MAPPING;
 ```
+
+`ADD GRAPH IF NOT EXISTS` succeeds as a no-op when the name is already
+registered — for re-runnable setup scripts; plain `ADD GRAPH` errors on a
+duplicate name.
 
 ```
 SHOW SCHEMA [FOR <graph>];   -- unified routing index: labels, rel-types, properties
@@ -125,31 +132,40 @@ for property-level introspection. See
 
 ### Logging
 
-MemGQL writes log lines to the console (stdout/stderr) and, in parallel, to a
-log file. Both destinations are configured via CLI flags on the Bolt server
-binary.
+MemGQL writes log lines to the console (stdout for most levels, stderr for
+`ERROR` and `CRITICAL`) and, in parallel, to a log file. Both destinations
+receive the same stream, filtered by `--log-level`. Both are configured via
+CLI flags on the Bolt server binary.
 
 #### CLI Flags
 
-| Flag                   | Default            | Description                                                  |
-|------------------------|--------------------|--------------------------------------------------------------|
-| `--log-level=<LEVEL>`  | `info`             | Console logging verbosity (see levels below)                 |
-| `--log-file=<PATH>`    | `bolt_server.log`  | File to mirror all log output to (always written, regardless of `--log-level`) |
+| Flag                   | Default            | Description                                          |
+|------------------------|--------------------|------------------------------------------------------|
+| `--log-level=<LEVEL>`  | `INFO`             | Logging verbosity for console and file (see below)   |
+| `--log-file=<PATH>`    | `bolt_server.log`  | File to mirror the (level-filtered) log output to    |
 
 #### Log Levels
 
-| Level                | Console output                                                                  |
-|----------------------|---------------------------------------------------------------------------------|
-| `info`               | Full logging: connections, incoming queries, transpiled output, results, state changes |
-| `info-queries-only`  | Only the incoming GQL query and its transpiled output (Cypher / SQL)            |
+Levels form a severity ladder — picking a level also emits everything more
+severe. Values are case-insensitive (`--log-level=debug` and
+`--log-level=DEBUG` are the same; `WARN` is accepted for `WARNING`).
 
-`info` is the most verbose level today. There is no `debug` or `trace`. The
-`RUST_LOG` environment variable is not consulted.
+| Level      | What it adds                                                          |
+|------------|-----------------------------------------------------------------------|
+| `CRITICAL` | Critical failures only                                                |
+| `ERROR`    | + errors                                                              |
+| `WARNING`  | + warnings                                                            |
+| `INFO`     | + connections, state changes, lifecycle events (**default**)          |
+| `DEBUG`    | + incoming queries and their transpiled Cypher / SQL                  |
+| `TRACE`    | + plan and per-row execution detail                                   |
 
-The log file always receives every log line — including queries, errors, and
-state changes — independent of the console `--log-level`. To silence the
-console while keeping a full file record, use `--log-level=info-queries-only`
-and tail the log file separately.
+An unknown level fails at startup with an actionable error listing the valid
+values. The `RUST_LOG` environment variable is not consulted.
+
+To see query traffic and what MemGQL translates it into, run with
+`--log-level=DEBUG`. The `info-queries-only` value from earlier releases was
+removed in v0.6.4 — see the
+[changelog](/memgraph-zero/memgql/changelog).
 
 ### Enterprise License
 
@@ -174,6 +190,7 @@ connections.
 | `postgres`     | GQL -> SQL         | PostgreSQL                       |
 | `mysql`        | GQL -> SQL         | MySQL 8.0+                       |
 | `oracle`       | GQL -> SQL         | Oracle 19c+ (incl. Free 23ai)    |
+| `sqlserver`    | GQL -> SQL         | Microsoft SQL Server (multi mode only) |
 | `duckdb`       | GQL -> SQL         | DuckDB (embedded)                |
 | `clickhouse`   | GQL -> SQL         | ClickHouse                       |
 | `iceberg`        | GQL -> SQL                | Iceberg via Trino              |
@@ -227,6 +244,22 @@ pure-Rust implementation of Oracle's TNS wire protocol, pooled via
 / Instant Client is required at build or runtime — the bundled Docker image
 ships only the bolt server binary plus TLS roots, and local builds work on
 macOS, Linux, and Windows without any extra system packages.
+
+#### SQL Server (`sqlserver`)
+
+SQL Server has no standalone environment-variable mode — `CONNECTOR_TYPE=sqlserver`
+is not supported. Register it at runtime in
+[`multi` mode](/memgraph-zero/memgql/multiple-graphs) with an ADO-style
+connection string:
+
+```gql
+ADD CONNECTOR mssql TYPE sqlserver
+    URI 'Server=localhost,1433;Database=test;User Id=sa;Password=YourPassword;TrustServerCertificate=true'
+    MAPPING <mapping>;
+```
+
+`mssql`, `sql_server`, and `sql-server` are accepted aliases for the `sqlserver`
+type. See the [SQL Server connector page](/memgraph-zero/memgql/connect/sqlserver).
 
 #### DuckDB (`duckdb`)
 
@@ -301,7 +334,7 @@ queries against it.
 
 | Field        | Type                    | Required | Description |
 |--------------|-------------------------|----------|-------------|
-| `label`      | string                  | yes      | GQL node label (e.g. `"Person"`). Looked up case-insensitively. |
+| `label`      | string                  | yes      | GQL node label (e.g. `"Person"`). Matched exactly (case-sensitive). |
 | `table`      | string                  | yes      | Backend table or view name backing this label. |
 | `id_column`  | string                  | yes      | Primary key column. Surfaces as GQL `id(n)` and is used to join across edges. |
 | `properties` | object (string→string)  | no       | Map from GQL property name → backend column name. Properties not listed here pass through with the same name (`p.name` → column `name`). |
@@ -316,7 +349,7 @@ Connector-specific fields:
 
 | Field            | Type                    | Required | Description |
 |------------------|-------------------------|----------|-------------|
-| `rel_type`       | string                  | yes      | GQL relationship type (e.g. `"KNOWS"`). Looked up case-insensitively. |
+| `rel_type`       | string                  | yes      | GQL relationship type (e.g. `"KNOWS"`). Matched exactly (case-sensitive). |
 | `table`          | string                  | yes      | Junction or association table backing this edge type. |
 | `id_column`      | string                  | yes      | Per-edge primary key. **Required since v0.6.** Carried through the recursive CTE's visited-edge set to enforce trail semantics on variable-length traversal. |
 | `source_column`  | string                  | yes      | FK column pointing to the source node's `id_column`. |
