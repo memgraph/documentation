@@ -238,7 +238,7 @@ RETURN friend.email AS email, e.item AS item, e.amount AS amount;
 
 ### Piping: fetching only what joins
 
-Since v0.6.4, when one side of a two-backend query is selective — it carries a
+Since v0.7.0, when one side of a two-backend query is selective — it carries a
 literal property filter, a `LIMIT`, or a bounded `CALL` — MemGQL runs that side
 first and uses its join keys to fetch only the matching rows from the other
 backend, instead of pulling the whole table:
@@ -416,9 +416,67 @@ DROP GRAPH analytics;
 DROP GRAPH IF EXISTS analytics;
 ```
 
+## Caching a graph in Memgraph
+
+Since v0.7.0, a graph can be **cached in a Memgraph instance**. This is aimed at
+data-warehouse connectors (Iceberg first) where a table is too large to
+materialize wholesale and every federated query otherwise re-scans it from
+object storage. The cache is **query-driven**: it is populated by execution
+itself (populate-on-read), so only the subgraph your queries actually touch
+lands in Memgraph.
+
+Register a Memgraph connector to hold the cached data, then mark a graph
+cache-enabled with a `CACHE CONNECTOR` clause:
+
+```gql
+-- A Memgraph instance (storage mode IN_MEMORY_ANALYTICAL) holds the cache
+ADD CONNECTOR mg TYPE memgraph URI 'memgraph:7687';
+
+-- Cache the warehouse graph in `mg`, with optional bounds
+ADD GRAPH events ON CONNECTOR ice MAPPING warehouse READ ONLY
+    CACHE CONNECTOR mg TTL 3600 MAX_BYTES 8G;
+
+-- Or enable/disable caching on an already-registered graph
+ALTER GRAPH events SET CACHE CONNECTOR mg TTL 3600 MAX_BYTES 8G;
+ALTER GRAPH events REMOVE CACHE;
+```
+
+`TTL` is in seconds; `MAX_BYTES` accepts a plain byte count or a `K`/`M`/`G`/`T`
+binary suffix (`8G` = 8 × 1024³ bytes).
+
+How it behaves per `USE` part:
+
+- **First read (cache MISS)** — the query runs on the source and the engine
+  *tees* the scanned labels and edge types into the Memgraph cache, recording
+  which scopes it cached.
+- **Later covered read (cache HIT)** — a query whose scans are covered by
+  existing cached scopes is served entirely from Memgraph, with no source I/O.
+- **Capability upgrade** — because cached data is a real graph in Memgraph,
+  queries over cached scopes can use Memgraph's full capability profile
+  (variable-length paths, quantified patterns, graph algorithms) even when the
+  source connector cannot express them:
+
+  ```gql
+  -- iceberg-direct cannot execute a variable-length expand; against the
+  -- Memgraph-resident cache of the same data it just works
+  USE events MATCH (a:Event) (-[:SPAWNED]->())+ (b:Event)
+  RETURN a.event_id, b.event_id;
+  ```
+
+In a cross-connector (multi-`USE`) query, each cache-enabled part is served
+from its cache independently while the other parts run on their own sources.
+
+Inspect what is cached with `SHOW GRAPH CACHES` (returns each cache-enabled
+graph, its cache connector, `TTL`, `MAX_BYTES`, and the number of cached
+fragments). Cache activity is logged at `DEBUG` as `[CACHE] MISS … teeing …`
+and `[CACHE] HIT … serving from cache connector …`.
+
+> **Note:** The query-driven cache is currently validated with Iceberg sources;
+> the mechanism generalizes to the other warehouse connectors.
+
 ## Cross-Graph Query Rules
 
-1. **No pushed joins across backends**: The join itself always executes locally; the engine never pushes join operations across different backends. (Since v0.6.4, [piping](#piping-fetching-only-what-joins) may push the selective side's join keys as a filter so the other side materializes only matching rows.)
+1. **No pushed joins across backends**: The join itself always executes locally; the engine never pushes join operations across different backends. (Since v0.7.0, [piping](#piping-fetching-only-what-joins) may push the selective side's join keys as a filter so the other side materializes only matching rows.)
 
 2. **Property-based join keys**: Join keys must use node/edge properties. Internal IDs are backend-specific and not comparable across connectors.
 
