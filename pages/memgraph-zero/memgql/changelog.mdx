@@ -5,6 +5,90 @@ description: MemGQL release notes
 
 # MemGQL Changelog
 
+## MemGQL v0.7.0 - July 5th, 2026
+
+### ⚠️ Behavior changes
+
+- **The `info-queries-only` log level is removed.** `--log-level=info-queries-only`
+  now fails at startup with the list of valid levels. Use `--log-level=DEBUG` to see
+  queries and their transpiled output; plain `INFO` no longer logs query traffic.
+- **The log file now honors `--log-level`.** Previously the `--log-file` mirror
+  received every line regardless of the console level; now both destinations get the
+  same threshold-filtered stream.
+
+### ✨ New features & Improvements
+
+- **Memgraph as a query-driven cache.** A catalog graph can now be cached in a
+  Memgraph instance — aimed at data-warehouse connectors (Iceberg first) where a
+  table is too large to materialize wholesale and every federated query otherwise
+  re-scans it from object storage. Enable it per graph with a `CACHE CONNECTOR`
+  clause:
+  ```gql
+  ADD CONNECTOR mg TYPE memgraph URI 'memgraph:7687';
+  ADD GRAPH events ON CONNECTOR ice MAPPING warehouse READ ONLY
+      CACHE CONNECTOR mg TTL 3600 MAX_BYTES 8G;
+  ```
+  The cache is **populated by query execution itself** (populate-on-read): the
+  first read of a scope tees it into Memgraph (cache MISS), and later queries whose
+  scans are covered are served entirely from Memgraph (cache HIT) with no source
+  I/O. Because the cached data is a real graph in Memgraph, queries over cached
+  scopes gain Memgraph's full capability profile — variable-length expand,
+  quantified patterns, graph algorithms — even when the source connector can't
+  express them. Toggle at runtime with `ALTER GRAPH <g> SET CACHE CONNECTOR …` /
+  `ALTER GRAPH <g> REMOVE CACHE`, and inspect with `SHOW GRAPH CACHES`. `TTL` is in
+  seconds; `MAX_BYTES` accepts a `K`/`M`/`G`/`T` binary suffix. Currently validated
+  with Iceberg sources; the mechanism generalizes to the other warehouse
+  connectors. See
+  [Multiple Graphs → Caching](/memgraph-zero/memgql/multiple-graphs#caching-a-graph-in-memgraph).
+- **Cross-backend piping.** Federated queries move far less data. When one side of a
+  two-backend query is selective — it carries a literal property filter
+  (`{name: 'Memgraph'}`), a `LIMIT`, or a bounded `CALL` — MemGQL runs that side
+  first and uses its join keys to fetch only the matching rows from the other
+  backend, instead of pulling the whole table and joining locally. Results are
+  identical; queries that join a small, filtered set against a large remote table
+  get faster. If the selective side matches nothing, the other backend isn't queried
+  at all. Piping applies to backends registered as catalog graphs (`ADD GRAPH`) and
+  falls back to the previous behavior whenever it can't apply. See
+  [Multiple Graphs](/memgraph-zero/memgql/multiple-graphs#piping-fetching-only-what-joins).
+- **Inline-map references across backends.** A property inside a node's inline map can
+  now reference a binding from another `MATCH` part — and it pipes:
+  ```gql
+  MATCH (e:Employee)
+  MATCH (i:Invoice {employee_id: e.id})
+  RETURN e.name, i.total;
+  ```
+  Previously this join had to be spelled as `WHERE i.employee_id = e.id`. Works
+  USE-free (each part routes by its own labels) and with multiple keys
+  (`{country: o.country, city: o.city}`).
+- **SQL Server connector.** New `sqlserver` connector type (aliases: `mssql`,
+  `sql_server`, `sql-server`) translates GQL to T-SQL. The driver is
+  [tiberius](https://crates.io/crates/tiberius), a pure-Rust TDS
+  implementation: no ODBC or driver install needed. It uses the same
+  [mapping](/memgraph-zero/memgql/reference#mapping-schema) format as every other
+  SQL backend and is registered in
+  [`multi` mode](/memgraph-zero/memgql/multiple-graphs) with an ADO-style
+  connection string:
+  ```gql
+  ADD CONNECTOR mssql TYPE sqlserver
+      URI 'Server=localhost,1433;Database=test;User Id=sa;Password=…;TrustServerCertificate=true'
+      MAPPING social;
+  ```
+  There is no standalone `CONNECTOR_TYPE=sqlserver` environment mode yet — SQL Server
+  is multi-mode only. Works today: matching and filters, aggregates
+  (incl. `COUNT(DISTINCT …)`), arithmetic, `CASE`, `COALESCE` / `NULLIF`, string
+  predicates, `IN`, `OPTIONAL MATCH`, `WITH` pipelines (incl. whole-node carry-through),
+  `UNION`, and typed whole-node / whole-relationship projections. See the
+  [SQL Server connector page](/memgraph-zero/memgql/connect/sqlserver) for setup and
+  for what's not there yet (variable-length paths, `collect()`, map projections).
+- **`ADD GRAPH IF NOT EXISTS`.** Re-registering an existing graph with the new
+  `IF NOT EXISTS` clause succeeds as a no-op instead of erroring — for re-runnable
+  setup scripts. Plain `ADD GRAPH` still errors on a duplicate name.
+- **Log levels.** `--log-level` now accepts the standard severity ladder:
+  `CRITICAL`, `ERROR`, `WARNING`, `INFO` (default), `DEBUG`, `TRACE`
+  (case-insensitive). A level also emits everything more severe. Incoming queries and
+  the generated Cypher / SQL are logged at `DEBUG`. See
+  [Reference](/memgraph-zero/memgql/reference#logging).
+
 ## MemGQL v0.6.3 - June 21st, 2026
 
 ### ✨ New features & Improvements
