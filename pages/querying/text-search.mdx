@@ -110,9 +110,10 @@ To list all text indices in Memgraph, use the `SHOW INDEX INFO`
 ### Search configuration
 
 The `text_search.search`, `text_search.search_edges`, `text_search.search_all`,
-`text_search.search_all_edges`, `text_search.regex_search` and
-`text_search.regex_search_edges` procedures accept an optional `config` map as
-their last argument. All keys are optional:
+`text_search.search_all_edges`, `text_search.regex_search`,
+`text_search.regex_search_edges`, `text_search.fuzzy_phrase_search` and
+`text_search.fuzzy_phrase_search_edges` procedures accept an optional `config` map
+as their last argument. All keys are optional:
 
 | Key                    | Type    | Default | Description                                                                                                                                                                          |
 | ---------------------- | ------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -209,6 +210,89 @@ CALL text_search.search('complianceDocuments', 'data.title:mem', {fuzzy_distance
 
 // fuzzy matching over all indexed properties
 CALL text_search.search_all('complianceDocuments', 'memgrahp', {fuzzy_distance: 1}) YIELD node RETURN node;
+```
+
+### Fuzzy phrase search
+
+The `text_search.fuzzy_phrase_search` and `text_search.fuzzy_phrase_search_edges`
+procedures match an **ordered, adjacent** sequence of terms on a single property,
+where the **last term is treated as a prefix**. This is useful for typo-tolerant
+"search-as-you-type" over a multi-word phrase, for example matching `big bad wolf`
+while the user is still typing `big bad wo`.
+
+They behave differently from the [`fuzzy_prefix` option](#search-configuration) of
+`text_search.search`, which applies a separate fuzzy prefix to every term
+independently. Fuzzy phrase search instead requires the terms to appear next to
+each other, in the same order, and shares a single edit budget across the whole
+phrase.
+
+{<h3 className="custom-header"> Input: </h3>}
+
+- `index_name: string` ➡ The text index to search.
+- `search_query: string` ➡ A single-property query of the form `data.<property>:<terms>`. Any other form (multiple properties, no property, boolean or regex syntax) is rejected.
+- `config: Map (optional)` ➡ The [search configuration](#search-configuration). Supports `limit`, `fuzzy_distance` and `fuzzy_transpositions`. The last term is always a prefix, so `fuzzy_prefix` is implicitly `true` and passing `fuzzy_prefix: false` is rejected.
+
+{<h3 className="custom-header"> Output: </h3>}
+
+When the index is defined on nodes:
+
+- `node: Node` ➡ A node in the text index matching the given phrase.
+- `score: double` ➡ The relevance score of the match. Higher scores indicate more relevant results.
+
+When the index is defined on edges:
+
+- `edge: Relationship` ➡ An edge in the text index matching the given phrase.
+- `score: double` ➡ The relevance score of the match. Higher scores indicate more relevant results.
+
+<Callout type="info">
+
+`fuzzy_distance` (`0`–`2`) is a single edit budget shared across the **whole**
+phrase, not a per-term allowance. For example, at `fuzzy_distance: 1` the query
+`big bad wo` matches `big bd wolf` (one edit total) but not `bg bd wolf` (two
+edits total).
+
+</Callout>
+
+{<h4 className="custom-header">Example</h4>}
+
+```cypher
+CREATE TEXT INDEX docIndex ON :Doc;
+CREATE (:Doc {title: 'big bad wolf', n: 1});
+CREATE (:Doc {title: 'big bad world', n: 2});
+CREATE (:Doc {title: 'the big bad wolf returns', n: 3});
+CREATE (:Doc {title: 'bad big wolf', n: 4});
+CREATE (:Doc {title: 'big wolf', n: 5});
+
+// ordered, adjacent phrase with a prefix on the last term
+CALL text_search.fuzzy_phrase_search('docIndex', 'data.title:big bad wo')
+YIELD node
+RETURN node.title AS title, node.n AS n
+ORDER BY n ASC;
+```
+
+Result:
+```
++----------------------------+-----+
+| title                      | n   |
++----------------------------+-----+
+| "big bad wolf"             | 1   |
+| "big bad world"            | 2   |
+| "the big bad wolf returns" | 3   |
++----------------------------+-----+
+```
+
+`bad big wolf` (n=4) is excluded because the term order differs, and `big wolf`
+(n=5) is excluded because the terms are not adjacent.
+
+To tolerate typos, pass `fuzzy_distance` (a swapped pair of adjacent characters
+counts as a single edit unless `fuzzy_transpositions` is `false`):
+
+```cypher
+// 'bd' -> 'bad' is a single edit, so this still matches 'big bad wolf'
+CALL text_search.fuzzy_phrase_search('docIndex', 'data.title:big bd wo', {fuzzy_distance: 1})
+YIELD node
+RETURN node.title AS title
+ORDER BY title ASC;
 ```
 
 ### Boolean expressions
