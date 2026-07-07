@@ -115,6 +115,86 @@ image tags you can use to install Memgraph with.
 
 
 
+## Verify image signatures and attestations
+
+<Callout type="info">
+Image signing and supply-chain attestations are available for the
+`memgraph/memgraph` and `memgraph/memgraph-mage` images from version **3.12.0**
+onwards. Earlier releases are not signed, so `cosign verify` will report no
+signatures for them.
+</Callout>
+
+From 3.12.0, Memgraph publishes its Docker images with
+[Sigstore](https://www.sigstore.dev/) `cosign` signatures and attaches two
+supply-chain attestations to each image:
+
+- a **CycloneDX SBOM** (software bill of materials), and
+- **SLSA build provenance**.
+
+Signing is *keyless*, so verification checks *who* signed — Memgraph's release
+workflow running in GitHub Actions — rather than a static public key.
+
+{<h3 className="custom-header">Install cosign</h3>}
+
+Follow the [cosign installation
+guide](https://docs.sigstore.dev/cosign/system_config/installation/). For
+example, on Linux (amd64):
+
+```bash
+curl -fsSL -o cosign https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64
+chmod +x cosign && sudo mv cosign /usr/local/bin/
+```
+
+{<h3 className="custom-header">Verify the image signature</h3>}
+
+Replace `<version>` with the tag you are verifying (for example `3.12.0`). Use
+`memgraph/memgraph-mage` in place of `memgraph/memgraph` to verify the MAGE
+image:
+
+```bash
+cosign verify \
+  --certificate-identity-regexp '^https://github\.com/memgraph/memgraph/\.github/workflows/promote_rc_release\.yml@' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  memgraph/memgraph:<version>
+```
+
+A successful run prints a report confirming that the cosign claims, the
+transparency-log entry, and the code-signing certificate were all validated. If
+the image is unsigned or the signing identity does not match, cosign exits with
+an error such as `no matching signatures`.
+
+The two `--certificate-*` flags are the trust anchor: they require the signature
+to come from Memgraph's release workflow (`promote_rc_release.yml` in the
+`memgraph/memgraph` repository) running in GitHub Actions.
+
+{<h3 className="custom-header">Inspect the SBOM and provenance</h3>}
+
+The following commands verify the attestation *and* extract its contents; they
+pipe through [`jq`](https://jqlang.github.io/jq/) and `base64`.
+
+Verify and save the CycloneDX SBOM to a file:
+
+```bash
+cosign verify-attestation --type cyclonedx \
+  --certificate-identity-regexp '^https://github\.com/memgraph/memgraph/\.github/workflows/promote_rc_release\.yml@' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  memgraph/memgraph:<version> \
+  | jq -r '.payload' | base64 -d | jq '.predicate' > sbom.cdx.json
+```
+
+Verify the SLSA build provenance:
+
+```bash
+cosign verify-attestation --type slsaprovenance \
+  --certificate-identity-regexp '^https://github\.com/memgraph/memgraph/\.github/workflows/promote_rc_release\.yml@' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  memgraph/memgraph:<version>
+```
+
+<Callout type="info">
+Verification is keyless, so `cosign` needs network access to Sigstore's Fulcio
+and Rekor services.
+</Callout>
 
 ## Using Docker Compose 
 
