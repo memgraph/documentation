@@ -60,6 +60,36 @@ guide.
   — re-apply any non-default settings after upgrade.
   [#4310](https://github.com/memgraph/memgraph/pull/4310)
 
+{<h4 className="custom-header">✨ New features</h4>}
+
+- Added property-based access control for nodes and relationships. `GRANT`,
+  `DENY`, and `REVOKE` now accept a property list (`{prop, ...}` or `{*}` for all
+  properties) alongside existing label and permission rules, so you can
+  restrict which properties a user or role can read or write on matching nodes.
+  [#4156](https://github.com/memgraph/memgraph/pull/4156)
+- Added `SUSPEND DATABASE` and `RESUME DATABASE` for multi-tenant Enterprise
+  deployments. Suspend tears down a tenant's in-memory storage to a durable COLD
+  shell to free RAM while keeping its data on disk; resume rebuilds it HOT with
+  all data intact. Operations replicate across the cluster like `CREATE`/`DROP
+  DATABASE`.
+  [#4280](https://github.com/memgraph/memgraph/pull/4280)
+- MAGE is now available as prebuilt RPM packages on CentOS 9 and CentOS 10, so
+  you can install the graph algorithm library with your package manager instead
+  of building from source. Install the matching `memgraph` package first, then
+  the `memgraph-mage` RPM.
+  [#4289](https://github.com/memgraph/memgraph/pull/4289)
+- Added `text_search.fuzzy_phrase_search` and
+  `text_search.fuzzy_phrase_search_edges` for typo-tolerant phrase matching on a
+  single property. Queries use `data.<property>:<terms>` with ordered, adjacent
+  terms and prefix matching on the last term, so `data.title:big bad wo` can
+  match `big bad wolf` or `big bad world` when `fuzzy_distance` allows a few
+  edits across the phrase.
+  [#4304](https://github.com/memgraph/memgraph/pull/4304)
+- Added a cluster-wide coordinator read-only setting synced across coordinators,
+  so operators can enable global read-only mode from any coordinator in the
+  cluster.
+  [#4330](https://github.com/memgraph/memgraph/pull/4330)
+
 {<h4 className="custom-header">🛠️ Improvements</h4>}
 
 - WAL files are now protected with CRC32 checksums. The WAL header and each
@@ -73,39 +103,53 @@ guide.
   is reached instead of scanning every match, so broad patterns on large indexes
   complete much sooner.
   [#4286](https://github.com/memgraph/memgraph/pull/4286)
-
-{<h4 className="custom-header">✨ New features</h4>}
-
-- MAGE is now available as prebuilt RPM packages on CentOS 9 and CentOS 10, so
-  you can install the graph algorithm library with your package manager instead
-  of building from source. Install the matching `memgraph` package first, then
-  the `memgraph-mage` RPM.
-  [#4289](https://github.com/memgraph/memgraph/pull/4289)
-- Added `text_search.fuzzy_phrase_search` and
-  `text_search.fuzzy_phrase_search_edges` for typo-tolerant phrase matching on a
-  single property. Queries use `data.<property>:<terms>` with ordered, adjacent
-  terms and prefix matching on the last term, so `data.title:big bad wo` can
-  match `big bad wolf` or `big bad world` when `fuzzy_distance` allows a few
-  edits across the phrase.
-  [#4304](https://github.com/memgraph/memgraph/pull/4304)
+- `MATCH (n) WHERE id(n) IN <list>` and label property `IN <list>` filters now
+  use indexed scans when the list is a parameter or expression, instead of
+  scanning the full graph. Bulk id lookups and parameterized membership filters
+  run much faster on large databases.
+  [#4299](https://github.com/memgraph/memgraph/pull/4299)
+- Label-property indexes for one or two properties now store entries inline
+  instead of allocating a separate heap buffer per entry, reducing memory
+  overhead for the most common index configurations.
+  [#4308](https://github.com/memgraph/memgraph/pull/4308)
 
 {<h4 className="custom-header">🐞 Bug fixes</h4>}
 
-- Fixed `replace()` causing an infinite loop and OOM when the search string is empty. Empty search now inserts the replacement at every character boundary with bounded allocation, so queries such as `replace("abc", "", "-")` return `"-a-b-c-"` instead of crashing the server. [#4269](https://github.com/memgraph/memgraph/pull/4269)
+- Fixed `replace()` causing an infinite loop and OOM when the search string is
+  empty. Empty search now inserts the replacement at every character boundary
+  with bounded allocation, so queries such as `replace("abc", "", "-")` return
+  `"-a-b-c-"` instead of crashing the server.
+  [#4269](https://github.com/memgraph/memgraph/pull/4269)
 - Fixed Bolt 4.4 clients receiving routing tables from data instances and
   incorrectly defaulting the target database. Data instances now reject routing
   requests, and database selection over Bolt 4.4 works as expected.
   [#4270](https://github.com/memgraph/memgraph/pull/4270)
+- Fixed duplicated coordinator entries in the routing table when re-adding a
+  coordinator that was the current leader.
+  [#4311](https://github.com/memgraph/memgraph/pull/4311)
 - Fixed MAIN instances hanging on shutdown while snapshot or WAL replication is
   still in progress. Shutdown now aborts the replication client so the instance
   stops immediately instead of waiting for replication to finish.
   [#4314](https://github.com/memgraph/memgraph/pull/4314)
+- Fixed replication failures during WAL recovery when file-bearing RPC messages
+  were split across network reads. Consumed message data is now dropped from the
+  buffer so files are not parsed twice.
+  [#4317](https://github.com/memgraph/memgraph/pull/4317)
 - Fixed a rare server crash under heavy concurrent write load caused by a
   heap-use-after-free between transaction commit and storage garbage collection.
   Committed deltas are now registered before the commit is marked finished, so
   fast-discard and GC no longer free memory still referenced by in-flight
   transactions.
   [#4323](https://github.com/memgraph/memgraph/pull/4323)
+- Fixed edge property index scans scaling linearly with index size for bounded
+  lookups. Scans now seek directly to the lower bound instead of walking from
+  the head of the skiplist.
+  [#4326](https://github.com/memgraph/memgraph/pull/4326)
+- Fixed several planner bugs that caused wrong or missing rows for edge
+  `id(e) IN [...]`, edge property `IN` lists with duplicates, `ORDER BY` over
+  unwind-fed index scans, composite-index nullable ordering, and nested edge
+  property filters.
+  [#4336](https://github.com/memgraph/memgraph/pull/4336)
 
 ### Lab v3.12.0 - July 29th, 2026
 
