@@ -102,6 +102,65 @@ Unlike other index types, the query planner currently does not utilize text indi
 
 </Callout>
 
+### How text search matching works
+
+Text search does not match raw substrings the way `LIKE` or a regular property
+comparison would. When a property is indexed, [Tantivy](https://github.com/quickwit-oss/tantivy)
+breaks its value into **tokens** using its `default` tokenizer, which:
+
+1. splits the text on whitespace and punctuation (any non-alphanumeric character),
+2. drops very long tokens (more than 40 characters),
+3. lowercases every token.
+
+There is no stemming, so `running` and `run` remain different tokens. A search
+matches when your query terms match these stored tokens. Three consequences trip
+people up most often:
+
+- **Matching is case-insensitive.** `data.title:rules2024` matches a stored value
+  of `Rules2024`.
+- **A term matches a whole token, not a substring.** `data.title:Rules` does **not**
+  match `Rules2024`, because that value is the single token `rules2024`. To match
+  partial terms, use [fuzzy or prefix matching](#fuzzy-search) or
+  [regex search](#regex-search).
+- **Multi-word values are split into separate tokens.** `Annual Compliance Report`
+  is indexed as `annual`, `compliance` and `report`, so `data.body:compliance`
+  matches it.
+
+Besides strings, `Integer`, `Float` and `Boolean` properties are indexed too, so
+you can query them as terms, for example `data.version:2` or `data.active:true`.
+
+<Callout type="warning">
+
+In `text_search.search`, `text_search.fuzzy_phrase_search` and
+`text_search.aggregate`, property names in the query **must** be prefixed with
+`data.` — write `data.title:Rules2024`, not `title:Rules2024`. Memgraph stores each
+entity's properties under a JSON object named `data`, and Tantivy addresses them by
+that path. Omitting the prefix raises an error (`Field does not exist: 'title'`, or
+`No default field declared...` for a bare term). The `search_all` and `regex_search`
+procedures search every property, so they take a plain term with no property name
+and no `data.` prefix.
+
+</Callout>
+
+### Which procedure should I use?
+
+All matching is done through `text_search` procedures. Pick one based on what you
+want to match:
+
+| What you want to do                                             | Procedure                                                      | What it searches           | Property name in the query |
+| --------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------- | -------------------------- |
+| Match on specific properties, with boolean operators            | [`text_search.search`](#query-text-index)                      | the properties you name    | yes, prefixed with `data.` |
+| Match a term anywhere across all indexed properties             | [`text_search.search_all`](#search-over-all-indexed-properties)| every indexed property     | no — just the term         |
+| Match all properties against a regular expression               | [`text_search.regex_search`](#regex-search)                    | every indexed property     | no — just the regex        |
+| Typo-tolerant, multi-word "search-as-you-type" on one property  | [`text_search.fuzzy_phrase_search`](#fuzzy-phrase-search)      | one named property         | yes, prefixed with `data.` |
+| Summaries and counts (count, min, max, …) over matches          | [`text_search.aggregate`](#aggregations)                       | the properties you name    | yes, prefixed with `data.` |
+
+Every procedure has an `_edges` counterpart (`search_edges`, `search_all_edges`,
+`regex_search_edges`, `fuzzy_phrase_search_edges`, `aggregate_edges`) that does the
+same over an edge text index. Typo tolerance (`fuzzy_distance`) is available on
+`search`, `search_all` and `fuzzy_phrase_search` through the
+[search configuration](#search-configuration).
+
 ### Show text indices
 
 To list all text indices in Memgraph, use the `SHOW INDEX INFO`
@@ -119,7 +178,7 @@ as their last argument. All keys are optional:
 | ---------------------- | ------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `limit`                | integer | `1000`  | The maximum number of results to return.                                                                                                                                           |
 | `fuzzy_distance`       | integer | `0`     | The maximum number of single-character edits (Levenshtein distance) a term may differ from the query and still match. Allowed values are `0`, `1` and `2` (`0` is exact matching); a higher value is rejected. |
-| `fuzzy_prefix`         | boolean | `false` | When `true` and `fuzzy_distance` is greater than `0`, every query term is matched as a prefix: it matches indexed terms that start with the term, tolerating up to `fuzzy_distance` edits. Has no effect when `fuzzy_distance` is `0`. |
+| `fuzzy_prefix`         | boolean | `false` | When `true` and `fuzzy_distance` is greater than `0`, **each** query term is matched as a prefix (matching indexed tokens that start with it, within `fuzzy_distance` edits). Terms are matched independently and in any order, not as a phrase, see [Fuzzy search](#fuzzy-search). Has no effect when `fuzzy_distance` is `0`. |
 | `fuzzy_transpositions` | boolean | `true`  | When `true`, swapping two adjacent characters counts as a single edit; when `false`, it counts as two.                                                                             |
 
 ### Query text index
@@ -211,6 +270,26 @@ CALL text_search.search('complianceDocuments', 'data.title:mem', {fuzzy_distance
 // fuzzy matching over all indexed properties
 CALL text_search.search_all('complianceDocuments', 'memgrahp', {fuzzy_distance: 1}) YIELD node RETURN node;
 ```
+
+{<h4 className="custom-header">How `fuzzy_prefix` handles multiple terms</h4>}
+
+`fuzzy_prefix` turns **each** query term into an independent fuzzy prefix. The
+terms are combined as a boolean query, so a match only requires the terms to appear
+**somewhere** in the property, **in any order and not necessarily next to each
+other**. It does not treat the query as a phrase.
+
+For example, with names `lucky luke`, `lucky lucy`, `lucy lucky` and `unlucky lu`,
+the query `data.name:lucky` + `data.name:lu` with `{fuzzy_distance: 1, fuzzy_prefix: true}`
+matches **all** of them, because every value contains a token that starts with
+`lucky` or `lu`. Order and adjacency are ignored.
+
+<Callout type="info">
+
+If you want behavior where only the **last** term treated as a prefix (so `lucky lu` matches
+`lucky luke` and `lucky lucy`, but not `lucy lucky` or `unlucky lu`) — use
+[`text_search.fuzzy_phrase_search`](#fuzzy-phrase-search) instead of `fuzzy_prefix`.
+
+</Callout>
 
 ### Fuzzy phrase search
 
