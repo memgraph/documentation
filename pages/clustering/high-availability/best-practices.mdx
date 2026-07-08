@@ -303,6 +303,54 @@ will be sending in-progress messages to the MAIN more often.
 SET COORDINATOR SETTING 'deltas_batch_progress_size' TO '50000';
 ```
 
+### `global_read_only`
+
+Puts the **entire cluster** into a read-only state. When enabled, the current
+MAIN stops accepting write queries while it continues to serve reads and
+replicate existing data to REPLICAs. The main use case is performing
+**no-downtime upgrades**: disable writes across the cluster while you upgrade,
+without shutting the cluster down. It is also useful for freezing the dataset
+during a maintenance window, taking a consistent backup without racing new
+writes, or investigating an issue.
+
+```
+SET COORDINATOR SETTING 'global_read_only' TO 'true' ;
+```
+
+To return the cluster to normal read/write operation:
+
+```
+SET COORDINATOR SETTING 'global_read_only' TO 'false' ;
+```
+
+**Default:** `false`
+
+The value is persisted in the coordinator's Raft-replicated cluster state, so it
+survives coordinator restarts and leader re-elections, and is honored across
+failovers: a newly promoted MAIN comes up read-only when the cluster is in
+read-only mode, instead of silently accepting writes.
+
+No privilege is required to run this query on the coordinators.
+
+<Callout type="info">
+Enabling read-only mode blocks **all write sources** on the MAIN — user Cypher
+writes, [TTL](/querying/time-to-live) background expiry, and
+[stream-](/data-streams) and [trigger-](/fundamentals/triggers)driven writes.
+Reads, replication, and `CREATE SNAPSHOT` keep working, so you can still capture
+a consistent backup of the frozen dataset.
+
+Enabling or disabling read-only mode takes effect online, within a
+reconciliation cycle — no restart or re-promotion is needed. Write queries
+rejected while the cluster is read-only fail with a clear error message.
+</Callout>
+
+<Callout type="warning">
+During a version-by-version (rolling) upgrade of a cluster, read-only mode is
+best-effort while nodes run mixed versions: older instances behave as before and
+the setting is honored best-effort until every node is upgraded, after which the
+cluster self-heals to the requested state.
+</Callout>
+
 ## Observability
 
 Monitoring cluster health is essential. Key metrics include:
