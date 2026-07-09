@@ -295,6 +295,183 @@ test, remove the file.
 You can also monitor real-time disk utilization during snapshot creation using
 tools like `iostat`, `iotop`, or `dstat`.
 
+## Recovery failure handling
+
+By default, if a database fails durability recovery on startup — because of a
+truncated WAL, a corrupt snapshot, a missing prefix WAL file, or any other
+malformed durability file — the **entire Memgraph process refuses to boot**.
+Recovery hits a fatal error deep in the durability layer and the process exits.
+In a [multi-tenant](/database-management/multi-tenancy) deployment, a single
+corrupt tenant therefore takes down every other (healthy) tenant on the
+instance, and in a [clustered](/clustering/high-availability) deployment it
+takes down that instance's role in the cluster. The only recourse is to manually
+restore the whole data directory from a backup before the process will start at
+all.
+
+Setting the [`--storage-allow-recovery-failure`](/database-management/configuration)
+flag to `true` changes this: a database that fails recovery no longer crashes the
+process. Instead it comes up in a **broken** state — an empty, inert in-memory
+placeholder whose on-disk durability files are left byte-for-byte untouched. The
+instance boots, all healthy databases work normally, and the operator can
+inspect which database is broken and recover it online.
+
+The flag defaults to `false`, so upgrading Memgraph does not silently change how
+corruption is handled — you keep the existing fail-stop-on-corruption guarantee
+unless you deliberately opt into availability over it.
+
+<Callout type="info">
+
+Recovery failure handling applies to **in-memory** storage
+(`IN_MEMORY_TRANSACTIONAL` and `IN_MEMORY_ANALYTICAL`) only. On-disk
+(`ON_DISK_TRANSACTIONAL`) storage keeps the fatal crash-on-recovery-failure
+behavior; the flag has no effect there.
+
+</Callout>
+
+<h3 className="custom-header">Broken database behavior</h3>
+
+A broken database:
+
+- comes up **empty** — it holds no data, and its on-disk `snapshots/` and `wal/`
+  files are left exactly as they were, so no recovery option is lost;
+- **rejects every query that touches its data** with a clear, actionable error
+  (see below), so you are never served silently wrong (empty) results from a
+  database that failed to load;
+- suppresses background durability while broken — periodic snapshots and the
+  on-exit snapshot are skipped and no WAL is written, so an empty placeholder can
+  never overwrite your corrupt durability files with an empty snapshot;
+- is re-derived on every startup. The broken state is **never persisted** — if
+  you fix the underlying files out-of-band, the database simply recovers normally
+  on the next restart.
+
+Any query that operates on a broken database's data (Cypher reads and writes,
+DDL, `CREATE SNAPSHOT`, `SHOW INDEX INFO` / `SHOW CONSTRAINT INFO` and other
+graph-metadata `SHOW ... INFO` variants) is rejected with:
+
+```
+Database is in the broken state because the recovery process failed. Please recover your database using the RECOVER SNAPSHOT query. If you have a backup of the whole data directory, please replace the current data directory with the backup one and restart the process.
+```
+
+Meta and admin queries that operate on instance-level or system state rather
+than the database graph remain available so you can diagnose and recover — for
+example `USE DATABASE`, `SHOW DATABASES`, `SHOW STORAGE INFO`, `SHOW CONFIG`,
+`RECOVER SNAPSHOT`, authentication and replication queries, `LOCK`/`UNLOCK DATA
+DIRECTORY`, and `FREE MEMORY`.
+
+<h3 className="custom-header">Identifying a broken database</h3>
+
+Two operator-facing queries report each database's health as `ready` or
+`broken`:
+
+- [`SHOW DATABASES`](/database-management/multi-tenancy) has a `Health` column
+  (alongside `Name` and `State`), so you can immediately see which database did
+  not load:
+
+  ```
+  +------------+-------+---------+
+  | Name       | State | Health  |
+  +------------+-------+---------+
+  | memgraph   | HOT   | ready   |
+  | mydb       | HOT   | broken  |
+  +------------+-------+---------+
+  ```
+
+- [`SHOW STORAGE INFO ON CURRENT DATABASE`](/database-management/server-stats#per-database-storage-information)
+  (and `ON DATABASE <name>`) includes a `health` row with the value `ready` or
+  `broken`.
+
+<h3 className="custom-header">Restoration paths</h3>
+
+Once a database is broken, you have several ways to restore it. Choose based on
+whether you have a good snapshot, whether you are running in a cluster, and
+whether you want to keep the database's data at all.
+
+<h4 className="custom-header">Recover in place with RECOVER SNAPSHOT</h4>
+
+The primary cure is [`RECOVER SNAPSHOT`](/database-management/backup-and-restore#restore-data),
+which loads a known-good snapshot into the broken placeholder. On a broken
+current database (switch to it first with `USE DATABASE <name>` in Enterprise
+multi-tenant deployments; in Community the default `memgraph` database is
+recovered directly):
+
+```cypher
+RECOVER SNAPSHOT "/path/to/good.snapshot";
+```
+
+On success, Memgraph clears the broken flag and the database resumes normal
+operation and background durability. The existing `RECOVER SNAPSHOT` behavior
+moves all prior/corrupt snapshots and WAL files to the `.old` directory (or
+deletes them when [`--storage-enable-backup-dir`](/database-management/configuration)
+is off), leaving a clean single-snapshot directory. As a result, the database **recovers cleanly on the
+next restart and does not re-enter the broken state**.
+
+`RECOVER SNAPSHOT` is available in both Community and Enterprise editions, so
+single-tenant deployments can recover a corrupt default database.
+
+<h4 className="custom-header">Restore the whole data directory from a backup</h4>
+
+If you do not have a usable snapshot to load with `RECOVER SNAPSHOT`, replace the
+instance's data directory with a backup copy of the whole data directory and
+restart the process. Because the broken placeholder never wrote to the corrupt
+files, the original durability files are still intact if you prefer to recover
+them out-of-band before restarting.
+
+<h4 className="custom-header">Replica self-heal (High Availability)</h4>
+
+In a [clustered (HA)](/clustering/high-availability) deployment, a broken
+**replica** database heals automatically. Because the broken placeholder comes
+up empty with a fresh epoch, the main detects that the replica is not caught up,
+drives it into recovery, and sends a full snapshot (plus WAL). Loading that
+snapshot clears the broken state, after which the database resumes normal
+replication and serves reads. No operator intervention is required on replicas,
+and a broken database on one instance does not disrupt replication of the other
+healthy databases.
+
+<h4 className="custom-header">Broken main and failover (High Availability)</h4>
+
+A **main** that is broken for one database but otherwise healthy **remains
+main** — the cluster does **not** automatically fail over based on per-database
+broken state, so it never thrashes over a single corrupt tenant. Meanwhile,
+replicas keep serving reads of their healthy copy of that database, so read
+availability survives main-side corruption.
+
+Recovery of a broken main is operator-driven, and you have two options:
+
+- **Cure it in place** with `RECOVER SNAPSHOT` (as above), after which the
+  recovered database participates in replication normally and the cluster
+  returns to a fully healthy state.
+- **Fail over to a healthy replica.** If a replica holds a good copy of the
+  broken database, promote it with a
+  [manual failover](/clustering/high-availability/ha-commands-reference) —
+  `DEMOTE INSTANCE` the old main, then `SET INSTANCE ... TO MAIN` on the
+  replica. The demoted old main rejoins as a replica, and its broken database
+  then self-heals from the new main through the replica self-heal path
+  described above.
+
+<h4 className="custom-header">Drop and recreate the database</h4>
+
+If you want to abandon a broken database rather than recover its data, you can
+[`DROP DATABASE`](/database-management/multi-tenancy#drop-database-with-force) it
+and create it again:
+
+```cypher
+DROP DATABASE mydb;
+CREATE DATABASE mydb;
+```
+
+`DROP DATABASE` works on a broken database like any other and also removes its
+corrupt on-disk files, reclaiming the disk. It does not affect other databases.
+
+<Callout type="warning">
+
+Dropping and recreating a database **loses the fine-grained access privileges**
+that were granted on it. User-role-to-database mappings and grants are not
+preserved across a drop, so after recreating the database you must re-grant
+access to the users and roles that need it. See
+[user privileges and database access](/database-management/multi-tenancy#user-privileges-and-database-access).
+
+</Callout>
+
 ## Storage modes
 
 Memgraph has the option to work in `IN_MEMORY_ANALYTICAL`,
