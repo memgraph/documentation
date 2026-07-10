@@ -152,7 +152,10 @@ Users interact with multi-tenant features through specialized Cypher queries:
    database is currently in use. You can also use `SHOW CURRENT DATABASE` for
    the same functionality. This command does not require any special privileges.
 
-5. `SHOW DATABASES`: Shows only the existing set of multitenant databases.
+5. `SHOW DATABASES`: Shows the existing set of multitenant databases. The result
+   has a `Name` column and a `state` column that reports whether each database is
+   `HOT` (resident in memory) or `COLD` (suspended). Suspended databases are still
+   listed.
 6. `USE DATABASE name`: Switches focus to a specific database (disabled during
    transactions).
 7. `GRANT DATABASE name TO user_or_role`: Grants a user or role access to a
@@ -163,6 +166,12 @@ Users interact with multi-tenant features through specialized Cypher queries:
    user's or role's database access list.
 10. `SET MAIN DATABASE name FOR user`: Sets a user's default (landing) database.
 11. `SHOW DATABASE PRIVILEGES FOR user`: Lists a user's database access rights.
+12. `SUSPEND DATABASE name`: Tears a tenant's in-memory storage down to a durable
+    COLD shell to free RAM, keeping its data on disk. See
+    [Suspending and resuming databases](#suspending-and-resuming-databases-enterprise).
+13. `RESUME DATABASE name`: Rebuilds a suspended (COLD) tenant back to HOT with all
+    data intact. See
+    [Suspending and resuming databases](#suspending-and-resuming-databases-enterprise).
 
 ### Removing database access: DENY vs REVOKE
 
@@ -260,6 +269,146 @@ unindented access to databases.
 - This operation cannot be undone once completed.
 - All active connections to the database will continue to work seamlessly with
   the new name.
+
+
+### Suspending and resuming databases <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+In a multi-tenant instance, every **HOT** tenant keeps its full graph in RAM.
+When most tenants are idle at any given moment, this caps how many tenants fit on
+a node. Suspending a tenant tears down its in-memory storage — reclaiming that
+RAM — while leaving a lightweight, durable **COLD** shell on disk. Resuming
+rebuilds the tenant HOT from disk with all data intact.
+
+<Callout type="info">
+
+**Cold is a memory state, not a data state.** Suspending a database never deletes
+or loses data; it only drops the in-memory copy. The on-disk snapshot and WAL are
+left untouched, and resuming recovers the tenant to exactly where it was.
+
+</Callout>
+
+{<h4 className="custom-header"> Syntax </h4>}
+
+```cypher
+SUSPEND DATABASE database_name;   -- HOT → COLD, frees RAM
+RESUME DATABASE database_name;    -- COLD → HOT, rebuilds from disk
+```
+
+A successful `SUSPEND DATABASE mydb` returns `Successfully suspended database
+mydb`; a successful `RESUME DATABASE mydb` returns `Successfully resumed database
+mydb`. Resuming a database that is already HOT is an idempotent success and
+returns `Database mydb is already resumed (HOT).`
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+-- Free the RAM held by an idle tenant.
+SUSPEND DATABASE mydb;
+
+-- Confirm it is now COLD (its data is still on disk).
+SHOW DATABASES;
+-- Name    state
+-- memgraph  HOT
+-- mydb      COLD
+
+-- Bring it back into memory before querying it again.
+RESUME DATABASE mydb;
+
+-- mydb is HOT again, with all data intact.
+USE DATABASE mydb;
+MATCH (n) RETURN count(n);
+```
+
+{<h4 className="custom-header"> Privileges required </h4>}
+
+`SUSPEND DATABASE` and `RESUME DATABASE` require the `MULTI_DATABASE_EDIT`
+privilege and access to the `memgraph` database — the same requirements as
+`CREATE`/`DROP`/`RENAME DATABASE`. Both are **Enterprise-only**; without a valid
+enterprise license the query is rejected with `Access to multi-tenancy requires an
+enterprise, ai_platform, or oem license.`
+
+{<h4 className="custom-header"> Requirements and restrictions </h4>}
+
+A database can be suspended only when all of the following hold:
+
+- **It is not the default `memgraph` database.** Attempting to suspend it fails
+  with `Cannot suspend the default database.`
+- **It uses the in-memory transactional storage mode.** On-disk and in-memory
+  analytical databases cannot be suspended (analytical mode suppresses the WAL),
+  and the query fails with `Database <name> is not in-memory mode; only in-memory
+  databases can be suspended.`
+- **Periodic snapshots and WAL are enabled** for the database, so a suspended
+  tenant is recoverable. Otherwise the query fails with `Database <name> does not
+  have periodic snapshot+WAL durability enabled; cannot suspend safely.`
+- **No client is using it.** Suspend does not terminate in-flight work; it waits
+  briefly for the tenant to become idle and, if connections or transactions are
+  still active, returns the retriable `Database <name> has active connections;
+  cannot suspend while in use.` Disconnect the clients (or wait for their
+  transactions to finish) and re-issue the query.
+
+Suspending a non-existent or already-suspended database returns `Database <name>
+does not exist or is already cold.`
+
+If a resume fails to rebuild the storage (for example, under memory pressure), the
+tenant is left **COLD** and the query returns `Database <name> failed to recover
+while resuming; it remains suspended (cold) and the resume can be retried.` No
+data is lost — retry the resume. Resuming a database that is not suspended returns
+`Database <name> does not exist or is not suspended.`
+
+{<h4 className="custom-header"> Working with a suspended database </h4>}
+
+A COLD database is not queryable until it is resumed. The behavior of other
+commands on a suspended tenant is:
+
+- **`USE DATABASE <cold>`** (or the first query on a session pointed at a cold
+  tenant) fails with `Database "<name>" is suspended (cold); run RESUME DATABASE
+  <name> before using it.` Run `RESUME DATABASE` first, then use it. (Resume is
+  not automatic on access.)
+- **`SHOW DATABASES`** lists the tenant with its `state` shown as `COLD`.
+- **`SHOW STORAGE INFO ON DATABASE <cold>`** succeeds and returns the tenant's
+  statistics as of the moment it was suspended (its `state` field reads `COLD`).
+  Fields that only exist for a running database — such as `query_memory_tracked`,
+  `vector_index_memory_tracked` and `tenant_memory_tracked` — read `0 B`, and
+  `tenant_memory_limit` reads `unlimited`. See
+  [Server stats](/database-management/server-stats#per-database-storage-information).
+- **`DROP DATABASE <cold>`** drops the tenant directly, without resuming it; the
+  name becomes immediately reusable.
+- **`RENAME DATABASE <cold>`** is rejected with `Cannot rename database <old_name>:
+  it is suspended (cold). RESUME it first.`
+- **Metadata-only commands do not resume the tenant.** `GRANT`/`DENY`/`REVOKE
+  DATABASE`, `SET MAIN DATABASE`, `SHOW DATABASES` and tenant-profile operations
+  all operate on a cold tenant without bringing it back into memory.
+
+{<h4 className="custom-header"> Durability and snapshots </h4>}
+
+`SUSPEND DATABASE` does **not** take a proactive snapshot. Durability at suspend
+time is whatever the tenant's periodic snapshot and WAL already provide, plus — if
+[`--storage-snapshot-on-exit`](/database-management/configuration) is enabled — the
+snapshot the storage writes during its normal teardown. Because `RESUME` recovers
+from the latest snapshot plus WAL replay, data is intact either way; enabling
+`--storage-snapshot-on-exit` mainly makes the subsequent resume faster by reducing
+the amount of WAL to replay.
+
+The COLD state is persisted, so **suspended databases survive a restart**: on
+recovery a COLD tenant is restored as a durable shell (no RAM is used until you
+resume it), and HOT tenants are recovered normally.
+
+{<h4 className="custom-header"> Replication </h4>}
+
+`SUSPEND`/`RESUME DATABASE` are system-replicated, exactly like `CREATE`/`DROP
+DATABASE`. Issue them on the **MAIN**; each registered replica applies the same
+transition and converges to MAIN's authoritative HOT/COLD set — including
+replicas that were disconnected, lagging, or restarted while the transition
+happened. You do **not** (and cannot) suspend or resume on a replica: these
+queries are rejected there with `Query forbidden on the replica!`.
+
+{<h4 className="custom-header"> Observability </h4>}
+
+Suspend/resume activity is exported through Prometheus metrics:
+`memgraph_database_suspends_total`, `memgraph_database_resumes_total`, the
+`memgraph_cold_databases` gauge (current number of suspended databases), and the
+`memgraph_database_suspend_latency_seconds` / `memgraph_database_resume_latency_seconds`
+histograms. See [Monitoring](/database-management/monitoring).
 
 
 ### User's main database
