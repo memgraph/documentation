@@ -1711,6 +1711,30 @@ achieve zero-downtime upgrade without any data loss, either:
 can use any replication mode. Read queries should however work without any
 issues independently from the replica type you are using.
 
+The recommended way to pause writes across the whole cluster is the
+[`global_read_only`](/clustering/high-availability/ha-commands-reference#global_read_only)
+coordinator setting. Connect to the coordinator leader and run:
+
+```cypher
+SET COORDINATOR SETTING 'global_read_only' TO 'true';
+```
+
+When enabled, the current MAIN stops accepting write queries while it keeps
+serving reads and replicating existing data to REPLICAs. The setting blocks
+**all write sources** on the MAIN — user Cypher writes,
+[TTL](/querying/time-to-live) background expiry, and [stream-](/data-streams) and
+[trigger-](/fundamentals/triggers)driven writes — so the dataset stays frozen
+while replicas catch up and you swap binaries. The value is persisted in the
+coordinator's Raft-replicated cluster state, so it survives coordinator restarts
+and leader re-elections, and is honored across failovers: a newly promoted MAIN
+comes up read-only instead of silently accepting writes.
+
+<Callout type="warning">
+While the cluster runs mixed versions during the rolling upgrade, read-only mode
+is honored best-effort: older instances behave as before until every node is
+upgraded, after which the cluster self-heals to the requested state.
+</Callout>
+
 Upgrade the main pod:
 
 ```bash
@@ -1746,6 +1770,13 @@ SHOW VERSION;
 ```
 
 It should show you the new Memgraph version.
+
+If you paused writes with `global_read_only` before the upgrade, return the
+cluster to normal read/write operation once all nodes are upgraded and healthy:
+
+```cypher
+SET COORDINATOR SETTING 'global_read_only' TO 'false';
+```
 
 
 {<h3 className="custom-header"> Rollback </h3>} 
