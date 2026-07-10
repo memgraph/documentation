@@ -88,7 +88,10 @@ services:
       - -c
       - |
         echo "ADD CONNECTOR mg TYPE memgraph URI 'memgraph:7687' GRAPH memgraph;" | mgconsole --host memgql --port 7688 &&
-        echo "ADD CONNECTOR pg TYPE postgres URI 'host=postgres user=postgres password=postgres dbname=postgres';" | mgconsole --host memgql --port 7688 &&
+        echo "CONNECT mg AS mg_conn;" | mgconsole --host memgql --port 7688 &&
+        echo "ADD MAPPING pg_social FROM '/mappings/pg_mapping.json';" | mgconsole --host memgql --port 7688 &&
+        echo "ADD CONNECTOR pg TYPE postgres URI 'host=postgres user=postgres password=postgres dbname=postgres' MAPPING pg_social;" | mgconsole --host memgql --port 7688 &&
+        echo "CONNECT pg AS pg_conn;" | mgconsole --host memgql --port 7688 &&
         echo "MemGQL bootstrap complete."
     depends_on:
       memgql:
@@ -156,14 +159,27 @@ Tell MemGQL how the relational tables map to graph labels:
 ```bash
 cat > pg_mapping.json << 'EOF'
 {
-  "vertices": [
-    { "label": "User",
-      "mappedTableSource": { "connector": "pg", "table": "users", "metaFields": { "id": "id" } },
-      "attributes": [ { "name": "name" }, { "name": "email" } ] }
+  "nodes": [
+    {
+      "label": "User",
+      "table": "users",
+      "id_column": "id",
+      "properties": {
+        "name": "name",
+        "email": "email"
+      }
+    }
   ],
   "edges": [
-    { "label": "FRIEND_OF", "from": "User", "to": "User",
-      "mappedTableSource": { "connector": "pg", "table": "friend_of", "metaFields": { "id": "id", "from": "user_id", "to": "friend_id" } } }
+    {
+      "rel_type": "FRIEND_OF",
+      "table": "friend_of",
+      "id_column": "id",
+      "source_column": "user_id",
+      "target_column": "friend_id",
+      "source_label": "User",
+      "target_label": "User"
+    }
   ]
 }
 EOF
@@ -197,16 +213,8 @@ SHOW CONNECTIONS;
 Register graphs in the catalog so they can be referenced by name in composite queries:
 
 ```gql
-CREATE GRAPH public FROM '{
-  "vertices": [
-    { "label": "Product",  "mappedGraphSource": { "connector": "mg" } },
-    { "label": "Category", "mappedGraphSource": { "connector": "mg" } }
-  ],
-  "edges": [
-    { "label": "IN_CATEGORY", "from": "Product", "to": "Category", "mappedGraphSource": { "connector": "mg" } }
-  ]
-}';
-CREATE GRAPH private FROM FILE '/mappings/pg_mapping.json';
+ADD GRAPH public ON CONNECTOR mg GRAPH memgraph;
+ADD GRAPH private ON CONNECTOR pg MAPPING pg_social;
 ```
 
 Verify the graphs:
@@ -217,7 +225,11 @@ SHOW GRAPHS;
 
 ## 7. Seed public data in Memgraph
 
-Insert a public product catalog — the `Product` / `Category` labels route to `public`:
+Insert a public product catalog:
+
+```gql
+SET DEFAULT CONNECTION mg_conn;
+```
 
 ```gql
 INSERT
@@ -243,7 +255,11 @@ MATCH (p:`Product`)-[:IN_CATEGORY]->(c:Category) RETURN p.name, c.name;
 
 ## 8. Seed private data in PostgreSQL
 
-Insert customer profiles — the `User` label routes to `private`:
+Switch to the private backend and insert customer profiles:
+
+```gql
+SET DEFAULT CONNECTION pg_conn;
+```
 
 ```gql
 INSERT (alice:User {name: "Alice", email: "alice@acme.com"});
@@ -298,18 +314,23 @@ locally. Standard GQL composite operators (`UNION`, `UNION ALL`, `INTERSECT`,
 
 ## Cleanup
 
-Clear the seeded data (through the graphs, before dropping them):
-
-```gql
-USE public  MATCH (n) DETACH DELETE n;
-USE private MATCH (n) DETACH DELETE n;
-```
-
 Remove the graph catalog entries:
 
 ```gql
-DROP GRAPH public;
-DROP GRAPH private;
+UNADD GRAPH public;
+UNADD GRAPH private;
+```
+
+Clear the public data:
+
+```gql
+USE CONNECTION mg_conn MATCH (n) DETACH DELETE n;
+```
+
+Clear the private data:
+
+```gql
+USE CONNECTION pg_conn MATCH (n) DETACH DELETE n;
 ```
 
 Stop and remove the stack:
