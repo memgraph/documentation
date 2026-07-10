@@ -149,48 +149,40 @@ environment variables and connector-specific settings.
 ## Mapping File
 
 Relational connectors (PostgreSQL, MySQL, Oracle, DuckDB, ClickHouse, Iceberg, and
-Apache Pinot) and multi-connection mode require a JSON mapping file that defines
-how graph patterns map to relational tables. Node labels map to tables and edge types map to association tables,
-allowing GQL patterns like `MATCH (p:Person)-[:WORKS_AT]->(c:Company)` to be
-translated into SQL JOINs.
+Apache Pinot) use a JSON mapping that defines how graph patterns map to
+relational tables: node labels map to tables (`vertices`) and edge types to
+association tables (`edges`), so a pattern like
+`MATCH (p:Person)-[:WORKS_AT]->(c:Company)` translates into SQL joins. In
+single-connector mode the mapping is a bare `{ "vertices": …, "edges": … }` body
+— the connector comes from the environment, so `mappedTableSource` omits it. See
+the [Schema File](/memgraph-zero/memgql/schema-file) page for the full field
+reference.
 
 Create a mapping file:
 
 ```bash
 cat > mapping.json << 'EOF'
 {
-  "nodes": [
+  "vertices": [
     {
       "label": "Person",
-      "table": "persons",
-      "id_column": "id",
-      "properties": { "name": "name", "age": "age" }
+      "mappedTableSource": { "table": "persons", "metaFields": { "id": "id" } },
+      "attributes": [ { "name": "name" }, { "name": "age", "type": "Int" } ]
     },
     {
       "label": "Company",
-      "table": "companies",
-      "id_column": "id",
-      "properties": { "name": "name" }
+      "mappedTableSource": { "table": "companies", "metaFields": { "id": "id" } },
+      "attributes": [ { "name": "name" } ]
     }
   ],
   "edges": [
     {
-      "rel_type": "KNOWS",
-      "table": "knows",
-      "id_column": "id",
-      "source_column": "from_id",
-      "target_column": "to_id",
-      "source_label": "Person",
-      "target_label": "Person"
+      "label": "KNOWS", "from": "Person", "to": "Person",
+      "mappedTableSource": { "table": "knows", "metaFields": { "id": "id", "from": "from_id", "to": "to_id" } }
     },
     {
-      "rel_type": "WORKS_AT",
-      "table": "works_at",
-      "id_column": "id",
-      "source_column": "person_id",
-      "target_column": "company_id",
-      "source_label": "Person",
-      "target_label": "Company"
+      "label": "WORKS_AT", "from": "Person", "to": "Company",
+      "mappedTableSource": { "table": "works_at", "metaFields": { "id": "id", "from": "person_id", "to": "company_id" } }
     }
   ]
 }
@@ -220,52 +212,55 @@ docker run --rm \
     memgraph/memgql:latest
 ```
 
-### 2. Connect and manage backends
+### 2. Register connectors and graphs
 
 ```bash
 mgconsole --port 7688
 ```
 
-Add connectors and establish connections:
+A connector is a connection; a graph is a mapping laid over connectors:
 
 ```gql
-ADD CONNECTOR mg TYPE memgraph URI 'memgraph-dev:7687' GRAPH memgraph;
-CONNECT mg AS mg_conn;
+-- connectors (GRAPH selects the Cypher database on Memgraph / Neo4j)
+ADD CONNECTOR mg  TYPE memgraph URI 'memgraph-dev:7687' GRAPH memgraph;
+ADD CONNECTOR neo TYPE neo4j    URI 'neo4j-dev:7687'    GRAPH neo4j;
 
-ADD CONNECTOR neo TYPE neo4j URI 'neo4j-dev:7687' GRAPH neo4j;
-CONNECT neo AS neo_conn;
+-- a graph over a connector (mapping body from a file, or inline JSON)
+CREATE GRAPH knowledge FROM FILE '/data/knowledge.graph.json';
 ```
 
-### 3. Route queries to specific connections
+### 3. Query graphs by name
 
 ```gql
-USE CONNECTION mg_conn MATCH (n) RETURN n.name LIMIT 5;
-USE CONNECTION neo_conn MATCH (n) RETURN n.name LIMIT 5;
+-- pin the query to a graph
+USE knowledge MATCH (n:Person) RETURN n.name LIMIT 5;
+
+-- or USE-free: routing picks the graph by the labels the query mentions
+MATCH (n:Person) RETURN n.name LIMIT 5;
 ```
 
 ### 4. Introspection
 
 ```gql
 SHOW CONNECTORS;
-SHOW CONNECTIONS;
+SHOW GRAPHS;
 SHOW MAPPINGS;
-PING mg_conn;
+SHOW SCHEMA;
+PING mg;
 ```
 
 ### 5. Adding relational backends
 
 Relational connectors (PostgreSQL, MySQL, Oracle, DuckDB, ClickHouse, Iceberg, and
-Apache Pinot) require a mapping that defines how graph patterns map to tables:
+Apache Pinot) map tables into a graph via the [mapping file](#mapping-file):
 
 ```gql
-ADD MAPPING social FROM '/data/mapping.json';
-ADD CONNECTOR pg TYPE postgres USER 'postgres' PASSWORD 'postgres' DATABASE 'postgres' MAPPING social;
-CONNECT pg AS pg_conn;
-USE CONNECTION pg_conn MATCH (n:Person) RETURN n.name LIMIT 5;
+ADD CONNECTOR pg TYPE postgres URI 'postgresql://postgres:postgres@postgres-dev:5432/postgres';
+CREATE GRAPH store FROM FILE '/data/mapping.json';
+USE store MATCH (n:Person) RETURN n.name LIMIT 5;
 ```
 
-Pinot can also run as a single backend with the alias requested by deployment
-environments that use connection naming:
+Pinot can also run as a single backend via the `CONNECTION_TYPE` alias:
 
 ```bash
 CONNECTION_TYPE=pinot PINOT_URL=http://localhost:8099 cargo run --bin bolt_server
@@ -274,25 +269,24 @@ CONNECTION_TYPE=pinot PINOT_URL=http://localhost:8099 cargo run --bin bolt_serve
 ### 6. Cleanup
 
 ```gql
-DISCONNECT pg_conn;
+DROP GRAPH store;
 DROP CONNECTOR pg;
-DROP MAPPING social;
 ```
 
 ### MemGQL Statements Reference
 
-| Statement                                          | Description                           |
-|----------------------------------------------------|---------------------------------------|
-| `ADD MAPPING <name> FROM '<file>'`                 | Load a graph mapping from a JSON file |
-| `DROP MAPPING <name>`                              | Remove a mapping                      |
-| `ADD CONNECTOR <name> TYPE <type> [options...]`    | Register a backend connector          |
-| `DROP CONNECTOR <name>`                            | Remove a connector                    |
-| `CONNECT <connector> AS <name> [DEFAULT]`          | Establish a named connection          |
-| `DISCONNECT <name>`                                | Close a connection                    |
-| `PING <connection>`                                | Test a connection is alive            |
-| `USE CONNECTION <name> <query>`                    | Route a query to a specific connection|
-| `SET DEFAULT CONNECTOR <name>`                     | Set session default connector         |
-| `SET DEFAULT CONNECTION <name>`                    | Set session default connection        |
-| `SHOW CONNECTORS`                                  | List registered connectors            |
-| `SHOW CONNECTIONS`                                 | List active connections               |
-| `SHOW MAPPINGS`                                    | List loaded mappings                  |
+| Statement                                                | Description                              |
+|----------------------------------------------------------|------------------------------------------|
+| `ADD CONNECTOR <name> TYPE <type> [options...]`          | Register a backend connector (connection)|
+| `DROP CONNECTOR <name>`                                  | Remove a connector                       |
+| `CREATE GRAPH <name> FROM '<json>' \| FROM FILE '<path>'`| Define a graph (mapping) over connectors |
+| `DROP GRAPH [IF EXISTS] <name>`                          | Remove a graph                           |
+| `ALTER GRAPH <name> SET READ ONLY \| READ WRITE`         | Toggle a graph's access mode             |
+| `ALTER GRAPH <name> SET CACHE CONNECTOR <mg> [...]`      | Cache a graph in Memgraph                |
+| `USE <graph> <query>`                                    | Route a query to a named graph           |
+| `PING <connector>`                                       | Test a connector is alive                |
+| `SHOW CONNECTORS` / `SHOW CONNECTIONS`                   | List connectors / live connections       |
+| `SHOW GRAPHS` / `SHOW GRAPH <name>`                      | List graphs / one graph's details        |
+| `SHOW MAPPINGS`                                          | List per-graph mappings                  |
+| `SHOW SCHEMA` / `REFRESH SCHEMA`                         | Routing index / re-introspect            |
+| `EXPORT SCHEMA [TO '<path>']`                            | Export the catalog as JSON               |
