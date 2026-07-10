@@ -11,13 +11,13 @@ If you want a running stack to try these queries against, the [Docker Compose - 
 
 ## Where the catalog DSL works
 
-The catalog statements (`ADD CONNECTOR`, `ADD GRAPH`, `SHOW GRAPHS`, `SHOW CONNECTORS`, `DROP GRAPH`, `USE <graph>`, …) are available in **`CONNECTOR_TYPE=multi`** mode. Single-backend modes (`memgraph-gql`, `neo4j-gql`, `postgres`, `mysql`, `oracle`, `duckdb`, `clickhouse`, `iceberg`, `pinot`) connect to one backend configured via env vars and don't expose the catalog.
+The catalog statements (`ADD CONNECTOR`, `CREATE GRAPH`, `SHOW GRAPHS`, `SHOW CONNECTORS`, `DROP GRAPH`, `USE <graph>`, …) are available in **`CONNECTOR_TYPE=multi`** mode. Single-backend modes (`memgraph-gql`, `neo4j-gql`, `postgres`, `mysql`, `oracle`, `duckdb`, `clickhouse`, `iceberg`, `pinot`) connect to one backend configured via env vars and don't expose the catalog.
 
 | Statement | `multi` | Cypher single-backend | SQL single-backend |
 |---|---|---|---|
 | `SHOW GRAPHS` / `SHOW CONNECTORS` / `SHOW MAPPINGS` | ✓ | ✗ | ✗ |
 | `SHOW SCHEMA` / `REFRESH SCHEMA` | ✓ | ✗ | ✗ |
-| `ADD CONNECTOR` / `ADD GRAPH` / `CONNECT` | ✓ | ✗ | ✗ |
+| `ADD CONNECTOR` / `CREATE GRAPH … FROM` / `PING` | ✓ | ✗ | ✗ |
 | `CREATE GRAPH <x>` | ✓ (catalog entry) | ✓ (forwarded as `CREATE DATABASE <x>`) | ✗ |
 | `DROP GRAPH <x>` | ✓ | ✗ | ✗ |
 | `TRUNCATE <x>` | ✓ | ✓ (forwarded as `MATCH (n) DETACH DELETE n`) | ✗ |
@@ -27,25 +27,30 @@ If you need graph management today, run MemGQL in `multi` mode.
 
 ## Graph Registration
 
-Before querying across graphs, register them in the catalog using `ADD GRAPH` or `CREATE GRAPH`:
+Register connectors first, then define graphs over them. A **connector** is a
+connection; a **graph** is a mapping (`vertices` + `edges`) laid over one or more
+connectors.
 
 ```gql
--- Register existing graphs on different backends
-ADD GRAPH social ON CONNECTOR neo4j_prod GRAPH neo4j;
-ADD GRAPH events ON CONNECTOR clickhouse_logs READ ONLY;
-ADD GRAPH warehouse ON CONNECTOR postgres_dw MAPPING company_mapping READ ONLY;
-ADD GRAPH dev ON CONNECTOR memgraph_dev;
+-- 1. Register connectors (connections only)
+ADD CONNECTOR neo4j_prod      TYPE neo4j      URI 'bolt://neo4j:7687' USER 'neo4j' PASSWORD 'secret' GRAPH neo4j;
+ADD CONNECTOR clickhouse_logs TYPE clickhouse URI 'http://clickhouse:8123';
+ADD CONNECTOR postgres_dw     TYPE postgres   URI 'postgresql://pg:5432/dw';
 
--- No-op if the name is already registered (re-runnable setup scripts)
-ADD GRAPH IF NOT EXISTS social ON CONNECTOR neo4j_prod GRAPH neo4j;
+-- 2. Define graphs over them (mapping body from a file, or inline JSON)
+CREATE GRAPH social    FROM FILE '/data/social.graph.json';
+CREATE GRAPH events    FROM FILE '/data/events.graph.json';
+CREATE GRAPH warehouse FROM FILE '/data/warehouse.graph.json';
+
+-- read-only access where you want it
+ALTER GRAPH events    SET READ ONLY;
+ALTER GRAPH warehouse SET READ ONLY;
 ```
 
-Each graph entry stores:
-- **Name**: Local catalog identifier
-- **Connector**: Which connector hosts this graph
-- **Remote graph**: Backend-specific graph/database name (optional)
-- **Mapping**: Schema mapping for relational connectors (optional)
-- **Access mode**: `READ WRITE` (default) or `READ ONLY`
+Each graph carries a name, its per-connector mapping (`vertices` / `edges` — see
+the [Schema File](/memgraph-zero/memgql/schema-file) page), and an access mode
+(`READ WRITE` default, or `READ ONLY`). A single graph may span several
+connectors.
 
 ## Single Graph Queries
 
@@ -103,11 +108,9 @@ Routing is strict and deterministic:
   Disambiguate by referencing a property or relationship type that exists in
   only one of them, or add an explicit `USE`.
 - **Explicit `USE` always wins** and bypasses inference entirely.
-- **Session defaults never tie-break.** A sticky `default_connection` (from
-  `SET DEFAULT CONNECTION`) does not resolve an otherwise-ambiguous query.
-- **No-signal queries** like `MATCH (n) RETURN n` (no label, rel-type, or
-  property to route by) fall back to today's default-connection behavior
-  unchanged.
+- **No-signal queries** — `MATCH (n) RETURN n` with no label, relationship
+  type, or property to route by — have nothing to infer from; pin them with an
+  explicit `USE <graph>`.
 
 Identifier matching is **exact**: `:person` does not match a mapping (or
 introspected schema) that declares `Person`. Routing, translation, and the
@@ -253,7 +256,7 @@ RETURN p.name, u.rank ORDER BY u.rank DESC;
 
 Piping is an optimization, not a semantic change — results are identical with
 or without it. It engages for backends registered as catalog graphs
-(`ADD GRAPH`); when it doesn't apply, MemGQL pulls both sides and joins
+(via `CREATE GRAPH`); when it doesn't apply, MemGQL pulls both sides and joins
 locally. If the selective side matches nothing, the other backend is never
 queried.
 
@@ -371,50 +374,46 @@ and properties used for routing — use [`SHOW SCHEMA`](#schema-discovery).
 
 ## Graph Lifecycle Management
 
-### Creating Graphs
+### Creating graphs
 
-`CREATE GRAPH` both registers the graph and creates it on the remote backend:
+`CREATE GRAPH … FROM` registers a graph from a mapping body — inline JSON or a
+file — and auto-connects the connectors it references:
 
 ```gql
--- Create an empty graph on a specific backend
-CREATE GRAPH analytics ON CONNECTOR memgraph_dev;
+-- from a file
+CREATE GRAPH analytics FROM FILE '/data/analytics.graph.json';
 
--- Create with a GQL schema
-CREATE GRAPH typed_graph {
-    NODE Person ({name STRING, age INT}),
-    EDGE KNOWS ()-[]->()
-} ON CONNECTOR neo4j_prod;
+-- or inline
+CREATE GRAPH social FROM '{
+  "vertices": [ { "label": "User", "mappedGraphSource": { "connector": "neo4j_prod" } } ],
+  "edges":    [ { "label": "FOLLOWS", "from": "User", "to": "User", "mappedGraphSource": { "connector": "neo4j_prod" } } ]
+}';
 ```
 
-### Modifying Graphs
+See the [Schema File](/memgraph-zero/memgql/schema-file) page for the mapping
+body format.
+
+### Modifying graphs
 
 ```gql
 -- Change access mode
 ALTER GRAPH social SET READ ONLY;
 ALTER GRAPH social SET READ WRITE;
-
--- Rebind to a different connector (e.g., failover)
-ALTER GRAPH social SET CONNECTOR neo4j_staging;
-
--- Change the remote graph name
-ALTER GRAPH social SET GRAPH production_db;
-
--- Attach or change a mapping
-ALTER GRAPH knowledge SET MAPPING updated_mapping;
-ALTER GRAPH knowledge REMOVE MAPPING;
 ```
 
-### Removing Graphs
+A graph's mapping is fixed at creation. To change it, drop and re-create the
+graph with the new body (`DROP GRAPH`, then `CREATE GRAPH … FROM`).
+
+### Removing graphs
 
 ```gql
--- Remove from catalog only (remote graph is untouched)
-UNADD GRAPH social;
-UNADD GRAPH IF EXISTS social;
-
--- Remove from catalog AND drop on backend
-DROP GRAPH analytics;
-DROP GRAPH IF EXISTS analytics;
+DROP GRAPH social;
+DROP GRAPH IF EXISTS social;
 ```
+
+`DROP GRAPH` removes the graph from the catalog; the backend data is untouched.
+Connectors are removed separately with `DROP CONNECTOR` (refused while a graph
+still references the connector).
 
 ## Caching a graph in Memgraph
 
@@ -426,25 +425,31 @@ itself (populate-on-read), so only the subgraph your queries actually touch
 lands in Memgraph.
 
 Register a Memgraph connector to hold the cached data, then mark a graph
-cache-enabled with a `CACHE CONNECTOR` clause:
+cache-enabled with `ALTER GRAPH … SET CACHE`:
 
 ```gql
 -- A Memgraph instance (storage mode IN_MEMORY_ANALYTICAL) holds the cache
 ADD CONNECTOR mg TYPE memgraph URI 'memgraph:7687';
 
--- Cache the warehouse graph in `mg`, with optional bounds
-ADD GRAPH events ON CONNECTOR ice MAPPING warehouse READ ONLY
-    CACHE CONNECTOR mg TTL 3600 MAX_BYTES 8G;
+-- A warehouse graph that reads from Iceberg (connectors registered earlier)
+CREATE GRAPH events FROM FILE '/data/events.graph.json';
 
--- Or enable/disable caching on an already-registered graph
+-- Enable caching in `mg`, with optional bounds
 ALTER GRAPH events SET CACHE CONNECTOR mg TTL 3600 MAX_BYTES 8G;
+
+-- Disable caching (and drop the cached fragments)
 ALTER GRAPH events REMOVE CACHE;
 ```
+
+The cache connector must be a Memgraph-type connector. Re-issuing `SET CACHE`
+drops any fragments already recorded, so re-pointing the cache never serves a
+stale result.
 
 `TTL` is in seconds; `MAX_BYTES` accepts a plain byte count or a `K`/`M`/`G`/`T`
 binary suffix (`8G` = 8 × 1024³ bytes).
 
-How it behaves per `USE` part:
+The cache engages per routed part — whether the part is pinned with `USE` or
+routed USE-free by its labels:
 
 - **First read (cache MISS)** — the query runs on the source and the engine
   *tees* the scanned labels and edge types into the Memgraph cache, recording
@@ -463,8 +468,9 @@ How it behaves per `USE` part:
   RETURN a.event_id, b.event_id;
   ```
 
-In a cross-connector (multi-`USE`) query, each cache-enabled part is served
-from its cache independently while the other parts run on their own sources.
+In a cross-backend query — split by explicit `USE` **or** routed USE-free by
+label — each cache-enabled part is served from its cache independently while the
+other parts run on their own sources.
 
 Inspect what is cached with `SHOW GRAPH CACHES` (returns each cache-enabled
 graph, its cache connector, `TTL`, `MAX_BYTES`, and the number of cached
@@ -496,10 +502,12 @@ ADD CONNECTOR neo4j_prod TYPE neo4j URI 'bolt://neo4j:7687' USER 'neo4j' PASSWOR
 ADD CONNECTOR pg_warehouse TYPE postgres URI 'postgresql://pg:5432/dw';
 ADD CONNECTOR ch_logs TYPE clickhouse URI 'http://clickhouse:8123';
 
--- 2. Register graphs
-ADD GRAPH social ON CONNECTOR neo4j_prod GRAPH neo4j;
-ADD GRAPH warehouse ON CONNECTOR pg_warehouse MAPPING company_mapping READ ONLY;
-ADD GRAPH events ON CONNECTOR ch_logs READ ONLY;
+-- 2. Define graphs over the connectors (mapping bodies live in files)
+CREATE GRAPH social    FROM FILE '/data/social.graph.json';
+CREATE GRAPH warehouse FROM FILE '/data/warehouse.graph.json';
+CREATE GRAPH events    FROM FILE '/data/events.graph.json';
+ALTER GRAPH warehouse SET READ ONLY;
+ALTER GRAPH events    SET READ ONLY;
 
 -- 3. Single-graph queries
 USE social MATCH (p:Person) RETURN p.name LIMIT 5;
@@ -519,7 +527,7 @@ UNION
 USE warehouse MATCH (e:Employee) RETURN e.email AS email;
 
 -- 6. Cleanup
-UNADD GRAPH social;
-UNADD GRAPH warehouse;
-UNADD GRAPH events;
+DROP GRAPH social;
+DROP GRAPH warehouse;
+DROP GRAPH events;
 ```
