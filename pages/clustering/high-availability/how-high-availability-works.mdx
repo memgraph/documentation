@@ -765,6 +765,29 @@ depends on network latency and instance proximity.
 If the selected replica (promoted to MAIN) has the most recent committed data,
 failover completes **with zero data loss**.
 
+### Databases broken by recovery failure
+
+By default, a data instance whose durability files are corrupt refuses to boot
+and its role in the cluster goes down. If you run data instances with
+[`--storage-allow-recovery-failure=true`](/database-management/configuration),
+such an instance boots instead, with the affected database in a `broken` state
+(empty placeholder, on-disk files untouched). Only that database is affected —
+all healthy databases on the instance keep serving.
+
+- **Broken database on a REPLICA:** it **self-heals**. Because the broken
+  placeholder comes up empty with a fresh epoch, the MAIN detects the replica is
+  behind, drives it into recovery and sends a full snapshot, which clears the
+  broken state. No operator action is required.
+- **Broken database on the MAIN:** the cluster does **not** automatically fail
+  over based on per-database broken state — a MAIN that is broken for one
+  database but otherwise healthy **stays MAIN**, so the cluster never thrashes
+  over a single corrupt database. Replicas keep serving reads of their healthy
+  copy. The admin recovers the MAIN in place with `RECOVER SNAPSHOT`, after which
+  the database rejoins replication normally.
+
+See [recovery failure handling](/fundamentals/data-durability#recovery-failure-handling)
+for the full behavior and restoration paths.
+
 
 ## Raft configuration parameters
 
