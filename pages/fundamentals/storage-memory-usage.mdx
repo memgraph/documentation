@@ -523,6 +523,12 @@ memory allocation.
 Each `Edge` object has at least **32B** + **56B** for the `Delta` object, in
 total, a minimum of **88B**.
 
+By default, each `Edge` object is also placed inside the edge `SkipList`, which
+adds the `SkipListNode` container overhead described below (roughly **24B** per
+edge). The [lightweight edges](#lightweight-edges) mode
+(`--storage-light-edge`) removes this container and pool-allocates edges
+directly, eliminating that overhead.
+
 {<h4 className="custom-header"> <code>SkipList</code> memory layout </h4>}
 
 Each object (`Vertex`, `Edge`) is placed inside a data structure
@@ -907,8 +913,59 @@ Here are several tips how you can reduce memory usage and increase scalability:
    information will be inlined under `Vertex` objects. You can disable
    properties on relationships with a non-empty database, if the relationships
    are without properties.
-4. [Inspect query plans](/querying/best-practices#profiling-queries)
+4. If you do need properties on relationships, enable [lightweight
+   edges](#lightweight-edges) by setting the `--storage-light-edge` flag to
+   `true` to save roughly **24B per edge**.
+5. [Inspect query plans](/querying/best-practices#profiling-queries)
    and optimize them
+
+#### Lightweight edges
+
+When you need [properties on
+relationships](/data-modeling/graph-data-model), each relationship is stored as
+an `Edge` object inside a dedicated edge `SkipList`. That container adds roughly
+**24B of overhead per edge** on top of the `Edge` object itself (see the
+`Edge` memory layout section above).
+
+Lightweight edges remove that dedicated container and pool-allocate the `Edge`
+objects directly, saving **~24B per edge** without changing the `Edge` object or
+its `Delta`. To enable them, start Memgraph with:
+
+```
+--storage-light-edge=true
+```
+
+This flag **implies `--storage-properties-on-edges=true`**: if you enable
+lightweight edges without properties on edges, Memgraph logs a warning and turns
+properties on edges on for you. If you don't need properties on relationships at
+all, disabling `--storage-properties-on-edges` (tip 3 above) saves even more,
+because no `Edge` objects are created in the first place.
+
+<Callout type="warning">
+
+There is one tradeoff. The edge `SkipList` is the only structure that indexes
+edges directly by their internal ID. With lightweight edges there is no such
+container, so a **direct edge lookup by ID** (for example resolving an edge via
+[`id()`](/querying/functions)) can no longer be a direct lookup. Instead:
+
+- With `--storage-enable-edges-metadata=true`, the edge-metadata index locates
+  the edge's source vertex, and the lookup only scans that vertex's edges — fast.
+- Without edge metadata, Memgraph falls back to scanning every vertex's edges,
+  which can be slow on large or high-degree graphs.
+
+If your workload does edge lookups by ID, run
+`--storage-enable-edges-metadata=true` together with `--storage-light-edge=true`.
+Traversals, expansions, and pattern matches over relationships are **not**
+affected — they use vertex adjacency lists, which are unchanged.
+
+</Callout>
+
+Lightweight edges work with the in-memory storage modes
+(`IN_MEMORY_TRANSACTIONAL` and `IN_MEMORY_ANALYTICAL`), and are fully supported
+with [durability](/fundamentals/data-durability) (snapshots and WAL) and
+[replication](/clustering/replication). The on-disk snapshot and WAL formats are
+unchanged, so you can enable or disable the flag across a restart and recover the
+same data either way.
 
 #### Property compression
 
