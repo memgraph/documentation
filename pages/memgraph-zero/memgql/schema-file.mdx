@@ -18,12 +18,7 @@ file is the boot-time equivalent, and runtime changes persist back to it.
 
 ## Booting from a schema file
 
-```bash
-bolt_server --schema=/path/to/schema.json
-```
-
-In Docker — the simplest way to bring up a federated instance — mount the file
-and pass its container path:
+Run MemGQL in Docker: mount the schema file and pass its container path.
 
 ```bash
 docker run --rm -p 7688:7688 \
@@ -32,21 +27,20 @@ docker run --rm -p 7688:7688 \
   memgraph/memgql:latest --schema=/data/schema.json
 ```
 
-`--schema` (or the `SCHEMA_FILE` env var) is all you need — it implies
+`--schema` (or the `SCHEMA_FILE` env var) is all you need; it implies
 multi-connector mode. Set `BOLT_LISTEN_ADDR=0.0.0.0:7688` so the Bolt port is
 reachable from outside the container (the default binds loopback only), and run
-MemGQL on the same Docker network as the backends the schema's connectors
-reference.
+MemGQL on the same Docker network as the backends its connectors reference.
 
-Every connector connects and every graph registers at boot — no `CONNECT`, no
-`USE` required to start querying. `SCHEMA_FILE=<path>` is honored as an
-alternative to the flag. Runtime DDL writes the updated catalog back to this
-file atomically, so a restart reloads the same state with no replay
-(credentials are kept on disk but masked in `EXPORT SCHEMA`).
+Every connector connects and every graph registers at boot, so no `CONNECT` or
+`USE` is required to start querying. Runtime DDL writes the updated catalog back
+to this file atomically, so a restart reloads the same state with no replay
+(credentials stay on disk but are masked in `EXPORT SCHEMA`).
 
-The file is validated at boot: a malformed mapping — a relational edge missing
-`metaFields.from` / `metaFields.to`, or the legacy `nodes` / `id_column` format —
-is rejected with an actionable error before the server starts serving.
+The file is validated at boot. A malformed mapping (for example a relational
+edge missing `metaFields.from` / `metaFields.to`, or the legacy `nodes` /
+`id_column` format) is rejected with an actionable error before the server
+starts serving.
 
 The file has two top-level sections:
 
@@ -59,8 +53,8 @@ The file has two top-level sections:
 
 ## A minimal schema
 
-The smallest useful file is one connector and one vertex — a label mapped to a
-table by its primary-key column:
+The smallest useful file is one connector and one vertex: a label mapped to a
+table by its primary-key column.
 
 ```json
 {
@@ -112,7 +106,7 @@ The sections below are the full field reference for each block.
 
 ## `connectors`
 
-A connector is a **pure connection** — how to reach a backend, and nothing about
+A connector is a **pure connection**: how to reach a backend, and nothing about
 graph shape. `catalogs` is accepted as an alias for `connectors`.
 
 ```json
@@ -135,7 +129,7 @@ graph shape. `catalogs` is accepted as an alias for `connectors`.
 | `type`       | yes      | Backend type (see below). |
 | `connection` | yes      | A **native** connection block (see fields below). JDBC-style keys (`jdbc`, `driverClass`, …) are rejected. |
 
-Every `connection` field is optional — supply what a given backend needs:
+Every `connection` field is optional; supply what a given backend needs:
 
 | `connection` field | Used for |
 |--------------------|----------|
@@ -174,9 +168,9 @@ single graph may span **several** connectors.
 
 A vertex maps a **label** to a backend source. Exactly one source kind is set:
 
-- **`mappedTableSource`** — a relational table (PostgreSQL, MySQL, Oracle,
+- **`mappedTableSource`**: a relational table (PostgreSQL, MySQL, Oracle,
   SQL Server, DuckDB, ClickHouse, Iceberg). Rows become nodes.
-- **`mappedGraphSource`** — a native graph backend (Memgraph / Neo4j). Queries
+- **`mappedGraphSource`**: a native graph backend (Memgraph / Neo4j). Queries
   pass through as Cypher; only the connector is declared.
 
 ```json
@@ -230,7 +224,7 @@ A vertex maps a **label** to a backend source. Exactly one source kind is set:
 | `mappedTableSource.connector` | relational | Connector name (alias `catalog`). |
 | `mappedTableSource.schema`    | relational | Optional middle namespace (PostgreSQL schema, etc.). |
 | `mappedTableSource.table`     | relational | The backing table. |
-| `mappedTableSource.metaFields.id` | relational | Primary-key column — the node's identity and the join key for edges. |
+| `mappedTableSource.metaFields.id` | relational | Primary-key column; the node's identity and the join key for edges. |
 | `mappedGraphSource.connector` | native      | Connector name (Memgraph / Neo4j); the query passes through as Cypher. |
 
 ### Edges
@@ -281,7 +275,7 @@ A relational edge adds two more `metaFields` on top of `id`:
 | `from` | Foreign-key column pointing at the **source** vertex's id column. |
 | `to`   | Foreign-key column pointing at the **target** vertex's id column. |
 
-`from` and `to` are **required** on relational edges — they define the traversal
+`from` and `to` are **required** on relational edges; they define the traversal
 `(from)-[:LABEL]->(to)`. Loading fails with an actionable error if either is
 missing. Native-graph edges (`mappedGraphSource`) need only `from` / `to`
 labels; the traversal is resolved by the backend.
@@ -301,13 +295,13 @@ Allowed `type` values: `Boolean`, `Byte`, `Short`, `Int`, `Long`, `HugeInt`,
 
 `attributes` are optional and need not be exhaustive: a property you don't list
 still resolves to a same-named column at query time (`p.sku` → column `sku`).
-Declare the ones you want to **rename** (`column`), give a **type**, or **route
-by** USE-free.
+Declare the ones you want to **rename** (`column`), give a **type**, or route
+queries by.
 
-> **Note:** For USE-free routing to match a query by property (e.g.
-> `WHERE c.email = …`), the property must be a declared `attribute`. Route by
-> label / relationship type, or add an explicit `USE`, when a property is not
-> declared. See [USE-free routing](/memgraph-zero/memgql/multiple-graphs#use-free-routing).
+> **Note:** for routing to match a query by property (e.g. `WHERE c.email = …`),
+> the property must be a declared `attribute`. Route by label or relationship
+> type, or add an explicit `USE`, when a property isn't declared. See
+> [routing](/memgraph-zero/memgql/multiple-graphs#routing).
 
 ## Complete example
 
@@ -454,7 +448,7 @@ MATCH (p:Product) WHERE p.price > 100 RETURN p.title ORDER BY p.price DESC;
 
 The shared `uid` / `cid` id space also lets one query **join across both
 backends**. See [Multiple Graphs](/memgraph-zero/memgql/multiple-graphs) for the
-full query model — USE-free routing, cross-backend joins, and composites — and
+full query model (routing, cross-backend joins, and composites) and
 [Reference](/memgraph-zero/memgql/reference#graph-management-query-syntax) for
 the runtime DDL that builds the same catalog live.
 
