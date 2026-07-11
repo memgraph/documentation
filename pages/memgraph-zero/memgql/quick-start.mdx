@@ -234,14 +234,59 @@ Without `MAPPING_FILE`, a default Person/Company mapping (shown above) is used.
 ## Multi-Connection Mode
 
 Multi-connection mode lets one MemGQL instance federate multiple backends. The
-easiest way to start is to boot from a schema file; you can also build the
-catalog live with runtime DDL (steps 1–6 below). Either way you query with the
-same `ADD CONNECTOR` / `CREATE GRAPH` / `USE` statements.
+easiest way to start is a schema file: declare your connectors and graphs once,
+boot from it, and query straight away — then add more backends live whenever you
+need to.
 
-### Easiest: boot from a schema file
+### 1. Write a schema file
 
-Declare connectors + graphs in one JSON file and point MemGQL at it — everything
-is registered at startup, no runtime DDL required:
+A schema file declares the backends (`connectors`) and the graphs mapped over
+them. Here is a minimal `schema.json` — one Memgraph connector and a `social`
+graph on top of it:
+
+```json
+{
+  "connectors": [
+    {
+      "name": "mg",
+      "type": "memgraph",
+      "connection": {
+        "uri": "memgraph-dev:7687"
+      }
+    }
+  ],
+  "graphs": [
+    {
+      "name": "social",
+      "vertices": [
+        {
+          "label": "User",
+          "mappedGraphSource": {
+            "connector": "mg"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "label": "FOLLOWS",
+          "from": "User",
+          "to": "User",
+          "mappedGraphSource": {
+            "connector": "mg"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+See the [Schema File](/memgraph-zero/memgql/schema-file) page for every field.
+
+### 2. Boot from it
+
+Point MemGQL at the file — every connector connects and every graph registers at
+startup, with no further setup:
 
 ```bash
 docker run --rm -p 7688:7688 \
@@ -251,53 +296,46 @@ docker run --rm -p 7688:7688 \
     memgraph/memgql:latest --schema=/data/schema.json
 ```
 
-`--schema` (or the `SCHEMA_FILE` env var) is all you need — it implies
-multi-connector mode. See the [Schema File](/memgraph-zero/memgql/schema-file)
-page for the format; runtime DDL still works and persists changes back to the
-file.
-
-### 1. Start MemGQL in multi mode
-
-```bash
-docker run --rm \
-    --name memgql \
-    --network memgql-net \
-    --stop-timeout 2 \
-    -p 7688:7688 \
-    --env CONNECTOR_TYPE=multi \
-    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
-    -v ./mapping.json:/data/mapping.json \
-    memgraph/memgql:latest
-```
-
-### 2. Register connectors and graphs
+### 3. Query
 
 ```bash
 mgconsole --port 7688
 ```
 
-A connector is a connection; a graph is a mapping laid over connectors:
-
 ```gql
--- connectors (GRAPH selects the Cypher database on Memgraph / Neo4j)
-ADD CONNECTOR mg  TYPE memgraph URI 'memgraph-dev:7687' GRAPH memgraph;
-ADD CONNECTOR neo TYPE neo4j    URI 'neo4j-dev:7687'    GRAPH neo4j;
-
--- a graph over a connector (mapping body from a file, or inline JSON)
-CREATE GRAPH knowledge FROM FILE '/data/knowledge.graph.json';
+MATCH (u:User)-[:FOLLOWS]->(f:User) RETURN u.name, f.name LIMIT 5;
 ```
 
-### 3. Query graphs by name
+### 4. Add more backends at runtime
+
+Register more connectors and graphs live, without a restart — changes persist
+back to `schema.json`:
 
 ```gql
--- pin the query to a graph
-USE knowledge MATCH (n:Person) RETURN n.name LIMIT 5;
+ADD CONNECTOR pg TYPE postgres URI 'postgresql://postgres:postgres@postgres-dev:5432/postgres';
 
--- or USE-free: routing picks the graph by the labels the query mentions
-MATCH (n:Person) RETURN n.name LIMIT 5;
+CREATE GRAPH store FROM '{
+  "vertices": [
+    {
+      "label": "Customer",
+      "mappedTableSource": {
+        "connector": "pg",
+        "table": "customers",
+        "metaFields": { "id": "id" }
+      },
+      "attributes": [ { "name": "name" } ]
+    }
+  ]
+}';
+
+MATCH (c:Customer) RETURN c.name LIMIT 5;
 ```
 
-### 4. Introspection
+`CREATE GRAPH … FROM` also accepts `FROM FILE '<path>'` (the [mapping
+file](#mapping-file) format). Pinot can additionally run as a single backend via
+the `CONNECTION_TYPE` alias (`CONNECTION_TYPE=pinot PINOT_URL=…`).
+
+### 5. Introspection
 
 ```gql
 SHOW CONNECTORS;
@@ -305,23 +343,6 @@ SHOW GRAPHS;
 SHOW MAPPINGS;
 SHOW SCHEMA;
 PING mg;
-```
-
-### 5. Adding relational backends
-
-Relational connectors (PostgreSQL, MySQL, Oracle, DuckDB, ClickHouse, Iceberg, and
-Apache Pinot) map tables into a graph via the [mapping file](#mapping-file):
-
-```gql
-ADD CONNECTOR pg TYPE postgres URI 'postgresql://postgres:postgres@postgres-dev:5432/postgres';
-CREATE GRAPH store FROM FILE '/data/mapping.json';
-USE store MATCH (n:Person) RETURN n.name LIMIT 5;
-```
-
-Pinot can also run as a single backend via the `CONNECTION_TYPE` alias:
-
-```bash
-CONNECTION_TYPE=pinot PINOT_URL=http://localhost:8099 cargo run --bin bolt_server
 ```
 
 ### 6. Cleanup
