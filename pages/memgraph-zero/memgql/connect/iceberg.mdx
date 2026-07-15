@@ -1,18 +1,196 @@
 ---
 title: Iceberg
-description: Connect MemGQL to Apache Iceberg via Trino.
+description: Connect MemGQL to Apache Iceberg either natively (direct) or via Trino.
 ---
 
 # Iceberg
 
-The Iceberg connector (`CONNECTOR_TYPE=iceberg`) translates GQL queries into
-Trino-dialect SQL with fully-qualified table references
-(`catalog.schema.table`) and executes them against Iceberg tables via Trino's
-REST API. It requires a
+MemGQL can read [Apache Iceberg](https://iceberg.apache.org/) tables in two
+different ways. Both reuse the same
 [mapping file](../quick-start.mdx#mapping-file) that maps graph patterns to
-Iceberg tables.
+Iceberg tables, and both fully qualify table references as
+`catalog.schema.table`.
 
-## 1. Start Trino with Iceberg
+| Connector        | `CONNECTOR_TYPE` | Execution                                                                 | Writes |
+|------------------|------------------|---------------------------------------------------------------------------|--------|
+| Direct (native)  | `iceberg-direct` | Native, in-process — reads Iceberg as Arrow directly from object storage  | ❌ read-only |
+| Trino            | `iceberg`        | GQL → Trino-dialect SQL, executed by a Trino engine                       | ✓ |
+
+**Which one should you use?**
+
+- Use the **direct** connector when your workload is **scan-and-filter heavy**.
+  It reads Iceberg natively over the REST catalog and object storage (S3/MinIO),
+  pushing column projection and predicate filters into the scan
+  (manifest/partition/row-group pruning). There is no SQL engine in the path, so
+  base latency is lower. Joins, sort, limit, distinct, and aggregation run
+  **in-process** over Arrow batches. It is **read-only**.
+- Use the **Trino** connector when your workload is **join/aggregation heavy and
+  fully contained in one Iceberg catalog**, or when you need writes. Trino
+  executes joins, pruning, and aggregation server-side.
+
+Both connectors accept the same mapping file unchanged — a mapping written for
+one works against the other.
+
+---
+
+## Direct execution (`iceberg-direct`)
+
+The direct connector (`CONNECTOR_TYPE=iceberg-direct`) performs **native,
+in-process** graph execution on Iceberg. It uses the
+[`iceberg`](https://crates.io/crates/iceberg) and
+[`iceberg-catalog-rest`](https://crates.io/crates/iceberg-catalog-rest) Rust
+crates to talk to the Iceberg REST Catalog and read table data as Apache Arrow
+record batches directly from object storage. There is **no Trino** and no SQL
+string — MemGQL owns the entire execution loop.
+
+It is **read-only**: `INSERT`, `DELETE`, `SET`, and `REMOVE` return an explicit
+"unsupported" error.
+
+### 1. Start the Iceberg stack (MinIO + REST Catalog, no Trino)
+
+```bash
+docker network create memgql-net
+
+# S3-compatible object storage for Iceberg data/metadata files.
+docker run -d --rm \
+    --name minio-dev \
+    --network memgql-net \
+    -p 9000:9000 \
+    -p 9001:9001 \
+    --env MINIO_ROOT_USER=admin \
+    --env MINIO_ROOT_PASSWORD=password \
+    minio/minio server /data --console-address ":9001"
+
+# Create the warehouse bucket.
+docker exec minio-dev sh -c \
+    "mc alias set local http://localhost:9000 admin password && \
+     mc mb --ignore-existing local/warehouse"
+
+# Iceberg REST Catalog backed by MinIO.
+docker run -d --rm \
+    --name iceberg-rest-dev \
+    --network memgql-net \
+    -p 8181:8181 \
+    --env CATALOG_WAREHOUSE=s3://warehouse/ \
+    --env CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO \
+    --env CATALOG_S3_ENDPOINT=http://minio-dev:9000 \
+    --env CATALOG_S3_PATH__STYLE__ACCESS=true \
+    --env AWS_ACCESS_KEY_ID=admin \
+    --env AWS_SECRET_ACCESS_KEY=password \
+    --env AWS_REGION=us-east-1 \
+    tabulario/iceberg-rest
+```
+
+### 2. Seed data
+
+The direct connector is read-only, and the REST catalog only manages metadata,
+so seeding is done with an external Iceberg writer. The example below uses
+[PyIceberg](https://py.iceberg.apache.org/), which talks to the same REST
+catalog + MinIO that the connector reads from.
+
+```bash
+pip install "pyiceberg[s3fs]" pyarrow
+```
+
+```python
+import pyarrow as pa
+from pyiceberg.catalog.rest import RestCatalog
+
+catalog = RestCatalog(
+    "default",
+    **{
+        "uri": "http://localhost:8181",
+        "s3.endpoint": "http://localhost:9000",
+        "s3.access-key-id": "admin",
+        "s3.secret-access-key": "password",
+        "s3.region": "us-east-1",
+        "s3.path-style-access": "true",
+    },
+)
+
+catalog.create_namespace_if_not_exists("default")
+
+tables = {
+    "persons": (
+        pa.schema([("id", pa.int32()), ("name", pa.string()), ("age", pa.int32())]),
+        pa.table({"id": [1, 2], "name": ["Alice", "Bob"], "age": [30, 25]}),
+    ),
+    "companies": (
+        pa.schema([("id", pa.int32()), ("name", pa.string())]),
+        pa.table({"id": [1], "name": ["Acme Corp"]}),
+    ),
+    "knows": (
+        pa.schema([("from_id", pa.int32()), ("to_id", pa.int32())]),
+        pa.table({"from_id": [1], "to_id": [2]}),
+    ),
+    "works_at": (
+        pa.schema([("person_id", pa.int32()), ("company_id", pa.int32())]),
+        pa.table({"person_id": [1], "company_id": [1]}),
+    ),
+}
+
+for name, (schema, data) in tables.items():
+    table = catalog.create_table_if_not_exists(f"default.{name}", schema=schema)
+    table.append(data)
+```
+
+### 3. Start MemGQL
+
+The direct connector resolves the REST catalog and object storage from the
+`ICEBERG_*` environment variables.
+
+```bash
+docker run --rm \
+    --name memgql \
+    --network memgql-net \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTOR_TYPE=iceberg-direct \
+    --env ICEBERG_REST_URI=http://iceberg-rest-dev:8181 \
+    --env ICEBERG_WAREHOUSE=iceberg \
+    --env ICEBERG_SCHEMA=default \
+    --env ICEBERG_DIRECT_S3_ENDPOINT=http://minio-dev:9000 \
+    --env ICEBERG_DIRECT_S3_REGION=us-east-1 \
+    --env ICEBERG_DIRECT_S3_ACCESS_KEY_ID=admin \
+    --env ICEBERG_DIRECT_S3_SECRET_ACCESS_KEY=password \
+    --env MAPPING_FILE=/data/mapping.json \
+    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    -v ./mapping.json:/data/mapping.json \
+    memgraph/memgql:latest
+```
+
+### 4. Connect
+
+```bash
+mgconsole --port 7688
+```
+
+### 5. Query
+
+```gql
+MATCH (p:Person) RETURN p.name, p.age;
+```
+
+```gql
+MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
+```
+
+```gql
+MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
+```
+
+For environment variables, see [Reference](../reference.mdx#iceberg-direct-iceberg-direct).
+
+---
+
+## Trino (`iceberg`)
+
+The Trino-backed connector (`CONNECTOR_TYPE=iceberg`) translates GQL queries
+into Trino-dialect SQL with fully-qualified table references
+(`catalog.schema.table`) and executes them against Iceberg tables via Trino's
+REST API. Trino performs joins, pruning, aggregation, and writes server-side.
+
+### 1. Start Trino with Iceberg
 
 ```bash
 docker network create memgql-net
@@ -24,7 +202,7 @@ docker run -d --rm \
     trinodb/trino:latest
 ```
 
-## 2. Seed data
+### 2. Seed data
 
 ```bash
 docker exec -i trino-dev trino << 'SQL'
@@ -55,7 +233,7 @@ INSERT INTO iceberg.default.works_at VALUES (1, 1);
 SQL
 ```
 
-## 3. Start MemGQL
+### 3. Start MemGQL
 
 ```bash
 docker run --rm \
@@ -73,13 +251,13 @@ docker run --rm \
     memgraph/memgql:latest
 ```
 
-## 4. Connect
+### 4. Connect
 
 ```bash
 mgconsole --port 7688
 ```
 
-## 5. Query
+### 5. Query
 
 ```gql
 MATCH (p:Person) RETURN p.name, p.age;
@@ -95,15 +273,24 @@ MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
 
 For environment variables, see [Reference](../reference.mdx#iceberg-iceberg).
 
+---
+
 ## Supported GQL features
 
-| Feature                                       | Iceberg / Trino |
-|-----------------------------------------------|-----------------|
-| `MATCH (n:Label) RETURN n.prop`               | ✓               |
-| Whole-node `RETURN n` / whole-rel `RETURN r`  | ✓               |
-| Pattern-level `WHERE` (`MATCH (n WHERE …)`)   | ✓               |
-| Typed edge `(a)-[r:R]->(b)`                   | ✓               |
-| `ORDER BY` / `LIMIT`                          | ✓               |
-| `DISTINCT`                                    | ✓               |
-| `INSERT (a {…})`                              | ✓               |
-| `DELETE` (no alias — Trino requirement)       | ✓               |
+For the `iceberg-direct` connector, ✓ means the feature is supported; filters
+and scans run natively against the Iceberg scan (pushed into
+manifest/row-group pruning), while joins, sort, limit, distinct, and
+aggregation run **in-process** over Arrow batches.
+
+| Feature                                       | Iceberg (Direct) | Iceberg (Trino) |
+|-----------------------------------------------|------------------|-----------------|
+| `MATCH (n:Label) RETURN n.prop`               | ✓                | ✓               |
+| Whole-node `RETURN n` / whole-rel `RETURN r`  | ✓                | ✓               |
+| Pattern-level `WHERE` (`MATCH (n WHERE …)`)   | ✓                | ✓               |
+| Typed edge `(a)-[r:R]->(b)`                   | ✓ (local join)   | ✓               |
+| `ORDER BY` / `LIMIT`                          | ✓ (local)        | ✓               |
+| `DISTINCT`                                    | ✓ (local)        | ✓               |
+| Aggregation                                   | ✓ (local)        | ✓               |
+| Time-travel (snapshot)                        | ✓                | ✓               |
+| `INSERT (a {…})`                              | ❌ (read-only)   | ✓               |
+| `DELETE` (no alias — Trino requirement)       | ❌ (read-only)   | ✓               |

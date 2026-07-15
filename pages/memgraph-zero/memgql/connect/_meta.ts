@@ -7,5 +7,6 @@ export default {
   "oracle": "to Oracle",
   "postgres": "to PostgreSQL",
   "mysql": "to MySQL",
+  "sqlserver": "to SQL Server",
   "pinot": "to Pinot",
 }

@@ -7,6 +7,8 @@ description: Query across multiple graphs and backends using the graph catalog a
 
 MemGQL introduces a **graph catalog** that makes graphs first-class entities. Rather than specifying connectors and connections in every query, you register graphs once and reference them by name. This enables seamless multi-graph queries across heterogeneous backends using standard ISO GQL composite clauses.
 
+If you want a running stack to try these queries against, the [Docker Compose - Complete Setup](/memgraph-zero/memgql/complete) guide spins up MemGQL with Memgraph and PostgreSQL backends already wired up, so you can follow along here against real data.
+
 ## Where the catalog DSL works
 
 The catalog statements (`ADD CONNECTOR`, `ADD GRAPH`, `SHOW GRAPHS`, `SHOW CONNECTORS`, `DROP GRAPH`, `USE <graph>`, …) are available in **`CONNECTOR_TYPE=multi`** mode. Single-backend modes (`memgraph-gql`, `neo4j-gql`, `postgres`, `mysql`, `oracle`, `duckdb`, `clickhouse`, `iceberg`, `pinot`) connect to one backend configured via env vars and don't expose the catalog.
@@ -14,6 +16,7 @@ The catalog statements (`ADD CONNECTOR`, `ADD GRAPH`, `SHOW GRAPHS`, `SHOW CONNE
 | Statement | `multi` | Cypher single-backend | SQL single-backend |
 |---|---|---|---|
 | `SHOW GRAPHS` / `SHOW CONNECTORS` / `SHOW MAPPINGS` | ✓ | ✗ | ✗ |
+| `SHOW SCHEMA` / `REFRESH SCHEMA` | ✓ | ✗ | ✗ |
 | `ADD CONNECTOR` / `ADD GRAPH` / `CONNECT` | ✓ | ✗ | ✗ |
 | `CREATE GRAPH <x>` | ✓ (catalog entry) | ✓ (forwarded as `CREATE DATABASE <x>`) | ✗ |
 | `DROP GRAPH <x>` | ✓ | ✗ | ✗ |
@@ -32,6 +35,9 @@ ADD GRAPH social ON CONNECTOR neo4j_prod GRAPH neo4j;
 ADD GRAPH events ON CONNECTOR clickhouse_logs READ ONLY;
 ADD GRAPH warehouse ON CONNECTOR postgres_dw MAPPING company_mapping READ ONLY;
 ADD GRAPH dev ON CONNECTOR memgraph_dev;
+
+-- No-op if the name is already registered (re-runnable setup scripts)
+ADD GRAPH IF NOT EXISTS social ON CONNECTOR neo4j_prod GRAPH neo4j;
 ```
 
 Each graph entry stores:
@@ -57,6 +63,147 @@ USE warehouse MATCH (c:Company) WHERE c.revenue > 1000000 RETURN c;
 ```
 
 The engine resolves the graph name to its bound connector and executes the query on the appropriate backend.
+
+## USE-free routing
+
+You don't always have to name the graph. MemGQL maintains a **unified schema
+index** — the labels, relationship types, and properties every registered
+source defines — and uses it to infer which backend a query belongs to from the
+query itself. A query with no `USE` clause routes automatically when its schema
+signals point to exactly one source.
+
+```gql
+-- `name` is defined only on the warehouse's Person table → routes to warehouse
+MATCH (p:Person) RETURN p.name;
+
+-- FRIEND_OF exists only in the social graph → routes to social
+MATCH (me:Person {id: 1})-[:FRIEND_OF]->(f:Person) RETURN f.id;
+```
+
+The schema index is built from two sources:
+
+- **SQL-family connectors** (PostgreSQL, MySQL, Oracle, DuckDB, ClickHouse,
+  Iceberg, Pinot) — taken from the registered **mapping** (labels, rel-types,
+  and properties are known exactly).
+- **Cypher-family connectors** (Memgraph, Neo4j) — **introspected at `CONNECT`
+  time** and cached. Memgraph uses `SHOW SCHEMA INFO` (the server must run with
+  `--schema-info-enabled`); Neo4j uses `db.schema.*`, falling back to a
+  labels-and-rel-types-only view. When property names can't be introspected, a
+  source can still be *selected* by its labels/rel-types but is never *excluded*
+  by a property it might have.
+
+### Routing policy
+
+Routing is strict and deterministic:
+
+- **Exactly one candidate** → the query routes there.
+- **Zero candidates** → a hard error naming the sources that were checked and
+  pointing you at `SHOW SCHEMA`.
+- **Two or more candidates** → an *ambiguous* hard error listing the candidates.
+  Disambiguate by referencing a property or relationship type that exists in
+  only one of them, or add an explicit `USE`.
+- **Explicit `USE` always wins** and bypasses inference entirely.
+- **Session defaults never tie-break.** A sticky `default_connection` (from
+  `SET DEFAULT CONNECTION`) does not resolve an otherwise-ambiguous query.
+- **No-signal queries** like `MATCH (n) RETURN n` (no label, rel-type, or
+  property to route by) fall back to today's default-connection behavior
+  unchanged.
+
+Identifier matching is **exact**: `:person` does not match a mapping (or
+introspected schema) that declares `Person`. Routing, translation, and the
+backends all agree on the same casing.
+
+### USE-free federated queries
+
+Routing happens per query part, so multi-backend joins and composites work
+without any `USE` clauses — each part (or branch) routes independently and the
+existing [cross-backend hash join](#focused-multi-graph-queries) takes over at
+the boundary:
+
+```gql
+-- Federated JOIN with zero USE clauses: the FRIEND_OF part routes to social,
+-- the ORDERED part routes to the transactional backend, joined on f.id = fp.id
+MATCH (me:Person {id: 1})-[:FRIEND_OF]->(f:Person)
+MATCH (fp:Person)-[:ORDERED]->(prod:Product) WHERE fp.id = f.id
+RETURN fp.name AS friend, prod.name AS item;
+
+-- Federated UNION: each branch routes on its own signals
+MATCH (p:Person)-[:ORDERED]->(prod:Product) WHERE p.id = 1 RETURN prod.id
+UNION
+MATCH (:Product {id: 1})-[:SIMILAR_TO]->(s:Product) RETURN s.id;
+```
+
+Writes (`INSERT`) route the same way and require a **unique** candidate. A
+successful `INSERT` also teaches the schema cache the labels it wrote, so a
+follow-up read routes without needing a `REFRESH SCHEMA`.
+
+### What still needs an explicit `USE`
+
+- A graph bound to a **non-default remote database** (Memgraph multi-tenancy) is
+  fenced to explicit `USE` — per-tenant introspection isn't wired up yet.
+- A **single `MATCH` pattern that spans two backends** errors with guidance to
+  split it into one `MATCH` clause per graph; auto-splitting one pattern is out
+  of scope.
+- A label-less `MATCH (n)` against a SQL backend still surfaces a raw backend
+  error (there's nothing to route or translate by).
+
+## Schema discovery
+
+`SHOW SCHEMA` is the discoverability surface for USE-free routing — it's the
+unified index the router consults, and what routing errors point you at. It's
+especially useful for agents that need to learn what's queryable without
+hardcoded knowledge.
+
+```gql
+SHOW SCHEMA;
+```
+
+```
++----------------+---------+-----------+--------------------------+--------+---------+
+| source         | element | name      | properties               | from   | to      |
++----------------+---------+-----------+--------------------------+--------+---------+
+| transactional  | node    | Person    | id, name                 | —      | —       |
+| transactional  | node    | Product   | id, name, price          | —      | —       |
+| transactional  | edge    | ORDERED   | quantity                 | Person | Product |
+| social         | node    | Person    | (not introspected)       | —      | —       |
+| social         | edge    | FRIEND_OF | (not introspected)       | Person | Person  |
++----------------+---------+-----------+--------------------------+--------+---------+
+```
+
+Each row is one label (`element = node`) or relationship type
+(`element = edge`) defined by a source. `properties` lists the known property
+names, or `(not introspected)` when a Cypher backend exposed only labels and
+rel-types. `from` / `to` are the endpoint labels for relationships. Sources with
+no schema information at all are listed with a `(no schema info: …)` reason so
+you know to query them with an explicit `USE`.
+
+Filter to a single source:
+
+```gql
+SHOW SCHEMA FOR social;
+```
+
+`REFRESH SCHEMA` re-introspects every live Cypher connection (Memgraph / Neo4j)
+and updates the cache. Introspection already runs eagerly at `CONNECT` — use
+this after the underlying schema changes:
+
+```gql
+REFRESH SCHEMA;
+```
+
+```
++-------------+-------------+--------------------------------------------+
+| connection  | connector   | status                                     |
++-------------+-------------+--------------------------------------------+
+| social_conn | mg_social   | refreshed (3 labels, 2 relationship types) |
+| tx_conn     | pg_tx       | mapping-backed (nothing to introspect)     |
++-------------+-------------+--------------------------------------------+
+```
+
+SQL-family connections report `mapping-backed (nothing to introspect)` — their
+schema comes from the mapping, not from a live query. If introspection fails
+(for example, a Memgraph started without `--schema-info-enabled`), the status
+explains why; the connection stays reachable via explicit `USE`.
 
 ## Focused Multi-Graph Queries
 
@@ -88,6 +235,27 @@ MATCH (e:Event)
 WHERE e.user_email = friend.email AND e.type = 'purchase'
 RETURN friend.email AS email, e.item AS item, e.amount AS amount;
 ```
+
+### Piping: fetching only what joins
+
+Since v0.7.0, when one side of a two-backend query is selective — it carries a
+literal property filter, a `LIMIT`, or a bounded `CALL` — MemGQL runs that side
+first and uses its join keys to fetch only the matching rows from the other
+backend, instead of pulling the whole table:
+
+```gql
+-- {community: 42} makes the Memgraph side selective; only the matching
+-- profiles are fetched from Postgres.
+MATCH (u:User {community: 42})
+MATCH (p:Profile {uid: u.uid})
+RETURN p.name, u.rank ORDER BY u.rank DESC;
+```
+
+Piping is an optimization, not a semantic change — results are identical with
+or without it. It engages for backends registered as catalog graphs
+(`ADD GRAPH`); when it doesn't apply, MemGQL pulls both sides and joins
+locally. If the selective side matches nothing, the other backend is never
+queried.
 
 ## Composite Queries Across Graphs
 
@@ -197,6 +365,10 @@ View details for a specific graph:
 SHOW GRAPH social;
 ```
 
+`SHOW GRAPHS` lists how graphs are *registered* (connector, mapping, access
+mode). To see what each one actually *defines* — the labels, relationship types,
+and properties used for routing — use [`SHOW SCHEMA`](#schema-discovery).
+
 ## Graph Lifecycle Management
 
 ### Creating Graphs
@@ -244,15 +416,75 @@ DROP GRAPH analytics;
 DROP GRAPH IF EXISTS analytics;
 ```
 
+## Caching a graph in Memgraph
+
+Since v0.7.0, a graph can be **cached in a Memgraph instance**. This is aimed at
+data-warehouse connectors (Iceberg first) where a table is too large to
+materialize wholesale and every federated query otherwise re-scans it from
+object storage. The cache is **query-driven**: it is populated by execution
+itself (populate-on-read), so only the subgraph your queries actually touch
+lands in Memgraph.
+
+Register a Memgraph connector to hold the cached data, then mark a graph
+cache-enabled with a `CACHE CONNECTOR` clause:
+
+```gql
+-- A Memgraph instance (storage mode IN_MEMORY_ANALYTICAL) holds the cache
+ADD CONNECTOR mg TYPE memgraph URI 'memgraph:7687';
+
+-- Cache the warehouse graph in `mg`, with optional bounds
+ADD GRAPH events ON CONNECTOR ice MAPPING warehouse READ ONLY
+    CACHE CONNECTOR mg TTL 3600 MAX_BYTES 8G;
+
+-- Or enable/disable caching on an already-registered graph
+ALTER GRAPH events SET CACHE CONNECTOR mg TTL 3600 MAX_BYTES 8G;
+ALTER GRAPH events REMOVE CACHE;
+```
+
+`TTL` is in seconds; `MAX_BYTES` accepts a plain byte count or a `K`/`M`/`G`/`T`
+binary suffix (`8G` = 8 × 1024³ bytes).
+
+How it behaves per `USE` part:
+
+- **First read (cache MISS)** — the query runs on the source and the engine
+  *tees* the scanned labels and edge types into the Memgraph cache, recording
+  which scopes it cached.
+- **Later covered read (cache HIT)** — a query whose scans are covered by
+  existing cached scopes is served entirely from Memgraph, with no source I/O.
+- **Capability upgrade** — because cached data is a real graph in Memgraph,
+  queries over cached scopes can use Memgraph's full capability profile
+  (variable-length paths, quantified patterns, graph algorithms) even when the
+  source connector cannot express them:
+
+  ```gql
+  -- iceberg-direct cannot execute a variable-length expand; against the
+  -- Memgraph-resident cache of the same data it just works
+  USE events MATCH (a:Event) (-[:SPAWNED]->())+ (b:Event)
+  RETURN a.event_id, b.event_id;
+  ```
+
+In a cross-connector (multi-`USE`) query, each cache-enabled part is served
+from its cache independently while the other parts run on their own sources.
+
+Inspect what is cached with `SHOW GRAPH CACHES` (returns each cache-enabled
+graph, its cache connector, `TTL`, `MAX_BYTES`, and the number of cached
+fragments). Cache activity is logged at `DEBUG` as `[CACHE] MISS … teeing …`
+and `[CACHE] HIT … serving from cache connector …`.
+
+> **Note:** The query-driven cache is currently validated with Iceberg sources;
+> the mechanism generalizes to the other warehouse connectors.
+
 ## Cross-Graph Query Rules
 
-1. **No pushed joins across backends**: Cross-graph joins always materialize both sides locally and hash-join. The engine never pushes join operations across different backends.
+1. **No pushed joins across backends**: The join itself always executes locally; the engine never pushes join operations across different backends. (Since v0.7.0, [piping](#piping-fetching-only-what-joins) may push the selective side's join keys as a filter so the other side materializes only matching rows.)
 
 2. **Property-based join keys**: Join keys must use node/edge properties. Internal IDs are backend-specific and not comparable across connectors.
 
 3. **Single-graph writes**: Mutations in multi-graph queries must target a single graph. The engine rejects mutations spanning multiple backends in one statement.
 
 4. **Compatible column types**: All branches of a composite query must produce result sets with the same number of columns, in the same order, with compatible types.
+
+5. **Routing is per part**: With [USE-free routing](#use-free-routing) each query part (and each composite branch) routes on its own schema signals. A part that matches zero or multiple sources is a hard error — add an explicit `USE` or reference a label/property unique to one source.
 
 ## Complete Example
 
