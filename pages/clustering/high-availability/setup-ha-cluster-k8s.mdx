@@ -624,8 +624,10 @@ Although many configuration options exist, especially for networking, the workfl
 ### Customize the cluster-setup Job
 
 After `helm install`, the chart runs a `cluster-setup` Job as a Helm
-`post-install` hook. This Job registers all coordinators and data instances via
-`mgconsole`, producing a fully connected cluster.
+`post-install` and `post-upgrade` hook. This Job registers all coordinators and
+data instances via `mgconsole`, producing a fully connected cluster, and re-runs
+on every `helm upgrade` to reconcile cluster membership (see [Scale the cluster
+up and down](#scale-the-cluster-up-and-down)).
 
 You can customize the labels and security context applied to this Job through
 the `clusterSetup` block:
@@ -664,11 +666,73 @@ clusterSetup:
       type: RuntimeDefault
 ```
 
+### Scale the cluster up and down
+
+The `cluster-setup` Job runs as both a `post-install` and a `post-upgrade` hook,
+so it re-runs on every `helm upgrade` and reconciles the registered cluster with
+your chart values. All operations are idempotent — existing coordinators and data
+instances are left untouched:
+
+- **Scale out**: add an entry to `coordinators[]` or `data[]` and run `helm
+  upgrade`. The new coordinator is registered with `ADD COORDINATOR` and the new
+  data instance with `REGISTER INSTANCE`.
+- **Scale down**: remove an entry from `coordinators[]` or `data[]` and run `helm
+  upgrade`. Members that are registered in the cluster but no longer present in
+  the values are removed with `REMOVE COORDINATOR` / `UNREGISTER INSTANCE`.
+
+Instance names are keyed by their stable `id`, not by their position in the
+array, so removal is position-independent: dropping a middle entry unregisters
+exactly that member and leaves the others' names and endpoints intact. Data
+instance names are derived as `instance_<id+1>` (so ids `0, 1, 2` map to
+`instance_1, instance_2, instance_3`), and coordinator names as
+`coordinator_<id>`.
+
+<Callout type="info">
+**Scale-down safety**: the Job never removes the current MAIN data instance or
+the leader coordinator, because unregistering either can corrupt cluster state.
+When you scale one of those down, its pod is deleted and the cluster fails over /
+re-elects; on a later `helm upgrade` the removed member is no longer MAIN/leader
+and is cleaned up then. To remove it immediately, first promote/elect a different
+member, then upgrade — or run `UNREGISTER INSTANCE` / `REMOVE COORDINATOR`
+manually on the leader coordinator.
+</Callout>
+
+<Callout type="warning">
+**Breaking change for non-default data instance IDs**: data instance names are
+now derived from each entry's `id` (`instance_<id+1>`) instead of its position in
+the `data` array. For the shipped default ids (`0, 1, 2`) the names are unchanged
+(`instance_1, instance_2, instance_3`), so those deployments upgrade safely.
+
+If you use **non-sequential or non-zero-based ids** (e.g. `5, 6, 7`), the
+registered instance names change on upgrade: the `cluster-setup` Job will
+`REGISTER` the new names and `UNREGISTER` the old ones during reconciliation. The
+current MAIN is protected, but replicas are torn down and re-registered under
+their new names. Review your `data[].id` values before upgrading, and expect a
+brief replica re-registration if they don't follow the default `0`-based
+sequential scheme. In that case you may need to run `UNREGISTER INSTANCE` and
+`REMOVE COORDINATOR` manually to consolidate the cluster state.
+
+Each `data[].id` must be a unique, non-negative integer given as a string (e.g.
+`"0"`, `"1"`, `"2"`). Non-numeric ids are not supported, as they would all
+collapse to the same instance name.
+</Callout>
+
 ### Update bolt server
 
 This step is required only when:
   - Clients access the database from outside the cluster, and
   - You're using bolt+routing for client-side routing
+
+<Callout type="info">
+When you expose the cluster through **IngressNginx**, **Gateway API**, or the
+coordinator **CommonLoadBalancer** and set an `external-dns` hostname via
+annotations, the `cluster-setup` Job now sets each instance's routing
+`bolt_server` to the external hostname and port automatically, and reconciles it
+on every `helm upgrade` (including reverting to the internal address when
+external access is turned off). In that case you don't need to run the queries
+below manually. This does not apply to plain `LoadBalancer` / `NodePort`, where a
+shared service can't address individual instances by port.
+</Callout>
 
 Each instance must know its external address for routing to work correctly. Run the following queries on the leader coordinator:
 
@@ -693,7 +757,7 @@ for the full set of commands and usage patterns.
 The Memgraph HA Helm chart has native support for the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/). When enabled, the chart automatically creates TCPRoute resources for each data and coordinator instance. You can either let the chart create its own Gateway or attach routes to a pre-existing one.
 
 <Callout type="info">
-Gateway API is orthogonal to the `serviceType` external access options (IngressNginx, NodePort, LoadBalancer). The routes point at internal ClusterIP services that always exist, so you can use Gateway API alongside or instead of other external access methods.
+Gateway API works alongside the `NodePort` and `LoadBalancer` `serviceType` options — the routes point at internal ClusterIP services that always exist. However, Gateway API and the `IngressNginx` service type are **mutually exclusive**: enabling both (`externalAccessConfig.gateway.enabled: true` together with `IngressNginx` on the data instance or coordinator tier) fails chart rendering. Choose one.
 </Callout>
 
 #### Prerequisites
@@ -736,7 +800,7 @@ The chart will create:
 - A **Gateway** (`gateway.networking.k8s.io/v1`) with TCP listeners auto-generated for each data and coordinator instance.
 - A **TCPRoute** (`gateway.networking.k8s.io/v1alpha2`) per instance, routing traffic from the Gateway listener to the instance's Bolt port.
 
-Data instance ports are assigned as `dataPortBase + array index` (default: 9000, 9001, ...) and coordinator ports as `coordinatorPortBase + coordinator id` (default: 9011, 9012, 9013). You can customize the base ports:
+Data instance ports are assigned as `dataPortBase + data instance id` (default: 9000, 9001, ...) and coordinator ports as `coordinatorPortBase + coordinator id` (default: 10001, 10002, 10003). The coordinator base port is kept well above the data base port so the two ranges never overlap. You can customize the base ports:
 
 ```yaml
 externalAccessConfig:
@@ -744,7 +808,7 @@ externalAccessConfig:
     enabled: true
     gatewayClassName: "eg"
     dataPortBase: 9000
-    coordinatorPortBase: 9010
+    coordinatorPortBase: 10000
 ```
 
 You can also set annotations and labels on the Gateway resource:
@@ -845,18 +909,19 @@ helm install mem-ha-test ./charts/memgraph-high-availability --set \
 When using these settings, the chart will automatically install and configure
 **IngressNginx**, including all required TCP routing setup for Memgraph.
 
-Each instance is exposed on a distinct Bolt port. Data instance ports are
-assigned as `dataPortBase + array index` (default: 9000, 9001, ...) and
-coordinator ports as `coordinatorPortBase + coordinator id` (default: 9011,
-9012, 9013). These base ports are configured independently from the Gateway API
-under `externalAccessConfig.ingress`:
+<Callout type="warning">
+The `IngressNginx` service type and Gateway API (`externalAccessConfig.gateway.enabled`)
+are mutually exclusive — enabling both fails chart rendering. Choose one external
+access method.
+</Callout>
 
-```yaml
-externalAccessConfig:
-  ingress:
-    dataPortBase: 9000
-    coordinatorPortBase: 9010
-```
+All `IngressNginx` tiers share a single ingress-nginx controller Service (one
+LoadBalancer, one external IP). When you set an `external-dns` hostname via
+annotations, the data instance and coordinator annotations are merged onto that
+shared Service (the coordinator value wins on a key collision), so set the **same
+hostname** on both tiers. Instances behind the shared Service are told apart by
+port, not host: data instances are reachable at `ingress.dataPortBase + data
+instance id` and coordinators at `ingress.coordinatorPortBase + coordinator id`.
 
 
 ## Probes
@@ -1377,16 +1442,16 @@ and their default values.
 | `externalAccessConfig.coordinator.annotations`             | Annotations for external services attached to coordinators.                                                  | `{}`                           |
 | `externalAccessConfig.dataInstance.serviceType`            | IngressNginx, NodePort or LoadBalancer. By default, no external service will be created.                     | `""`                           |
 | `externalAccessConfig.dataInstance.annotations`            | Annotations for external services attached to data instances.                                                | `{}`                           |
-| `externalAccessConfig.ingress.dataPortBase`                | Base port for data instance IngressNginx TCP ports (`dataPortBase + index`).                                 | `9000`                         |
-| `externalAccessConfig.ingress.coordinatorPortBase`         | Base port for coordinator IngressNginx TCP ports (`coordinatorPortBase + id`).                               | `9010`                         |
-| `externalAccessConfig.gateway.enabled`                     | Enable Gateway API external access.                                                                          | `false`                        |
+| `externalAccessConfig.ingress.dataPortBase`                | Base port for data instance ports on the IngressNginx controller (`dataPortBase + data instance id`).        | `9000`                         |
+| `externalAccessConfig.ingress.coordinatorPortBase`         | Base port for coordinator ports on the IngressNginx controller (`coordinatorPortBase + coordinator id`). Kept well above `dataPortBase` so the data and coordinator port ranges never overlap. | `10000`                        |
+| `externalAccessConfig.gateway.enabled`                     | Enable Gateway API external access. Mutually exclusive with the `IngressNginx` service type.                | `false`                        |
 | `externalAccessConfig.gateway.gatewayClassName`            | Name of a pre-existing GatewayClass. Required when creating a new Gateway.                                   | `""`                           |
 | `externalAccessConfig.gateway.existingGatewayName`         | Name of an existing Gateway to attach routes to. Skips Gateway creation.                                     | `""`                           |
 | `externalAccessConfig.gateway.existingGatewayNamespace`    | Namespace of the existing Gateway. Defaults to release namespace.                                            | `""`                           |
 | `externalAccessConfig.gateway.annotations`                 | Annotations for the Gateway resource.                                                                        | `{}`                           |
 | `externalAccessConfig.gateway.labels`                      | Labels for the Gateway resource.                                                                             | `{}`                           |
-| `externalAccessConfig.gateway.dataPortBase`                | Base port for data instance Gateway listeners (`dataPortBase + index`).                                      | `9000`                         |
-| `externalAccessConfig.gateway.coordinatorPortBase`         | Base port for coordinator Gateway listeners (`coordinatorPortBase + id`).                                    | `9010`                         |
+| `externalAccessConfig.gateway.dataPortBase`                | Base port for data instance Gateway listeners (`dataPortBase + data instance id`).                           | `9000`                         |
+| `externalAccessConfig.gateway.coordinatorPortBase`         | Base port for coordinator Gateway listeners (`coordinatorPortBase + coordinator id`). Kept well above `dataPortBase` so the data and coordinator port ranges never overlap. | `10000`                        |
 | `headlessService.enabled`                                  | Specifies whether headless services will be used inside K8s network on all instances.                        | `false`                        |
 | `ports.boltPort`                                           | Bolt port used on coordinator and data instances.                                                            | `7687`                         |
 | `ports.managementPort`                                     | Management port used on coordinator and data instances.                                                      | `10000`                        |
