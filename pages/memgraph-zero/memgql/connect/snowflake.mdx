@@ -124,9 +124,9 @@ passthrough.
 
 ## 3. Start MemGQL in multi mode
 
-The account, user, authentication, and session context (warehouse, database,
-schema, role) are provided to MemGQL via environment variables. Mount your
-private key and pass its path:
+Mount your mapping and private key. Every connection parameter is given on the
+`ADD CONNECTOR` statement in the next step, so no Snowflake environment
+variables are required here:
 
 ```bash
 docker run --rm \
@@ -135,13 +135,6 @@ docker run --rm \
     -p 7688:7688 \
     --env CONNECTOR_TYPE=multi \
     --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
-    --env SNOWFLAKE_ACCOUNT=ORG-ACCOUNT \
-    --env SNOWFLAKE_USER=memgql \
-    --env SNOWFLAKE_PRIVATE_KEY_PATH=/data/rsa_key.p8 \
-    --env SNOWFLAKE_WAREHOUSE=memgql_wh \
-    --env SNOWFLAKE_DATABASE=memgql_db \
-    --env SNOWFLAKE_SCHEMA=PUBLIC \
-    --env SNOWFLAKE_ROLE=memgql_role \
     -v ./mapping.json:/data/mapping.json \
     -v ./rsa_key.p8:/data/rsa_key.p8 \
     memgraph/memgql:latest
@@ -153,14 +146,33 @@ docker run --rm \
 mgconsole --port 7688
 ```
 
+Provide the account, user, session context, and authentication inline:
+
 ```gql
-ADD CONNECTOR sf TYPE snowflake URI 'ORG-ACCOUNT' USER 'memgql';
+ADD CONNECTOR sf TYPE snowflake
+    URI 'ORG-ACCOUNT' USER 'memgql'
+    WAREHOUSE 'memgql_wh' DATABASE 'memgql_db' SCHEMA 'PUBLIC' ROLE 'memgql_role'
+    PRIVATE_KEY_PATH '/data/rsa_key.p8';
 CREATE GRAPH social FROM FILE '/data/mapping.json';
 MATCH (n:Person) RETURN n.name LIMIT 5;
 ```
 
-The `URI` is the Snowflake account identifier and `USER` the login user;
-authentication and session context come from the environment above.
+Options: `URI` (account identifier), `USER`, `WAREHOUSE`, `DATABASE`, `SCHEMA`,
+`ROLE`, and one auth option — `PRIVATE_KEY_PATH`, `TOKEN` (a.k.a. `PAT`), or
+`PASSWORD`. Any option you omit falls back to the corresponding `SNOWFLAKE_*`
+environment variable, so you can mix inline values with env defaults.
+
+Because the parameters live on the connector, **changing them needs no MemGQL
+restart** — rotate a key, switch warehouse, or point at a different database by
+re-registering the connector:
+
+```gql
+DROP CONNECTOR sf;
+ADD CONNECTOR sf TYPE snowflake
+    URI 'ORG-ACCOUNT' USER 'memgql'
+    WAREHOUSE 'bigger_wh' DATABASE 'memgql_db' SCHEMA 'PUBLIC' ROLE 'memgql_role'
+    PRIVATE_KEY_PATH '/data/rsa_key_new.p8';
+```
 
 ## 5. Query
 
@@ -178,13 +190,19 @@ MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
 
 ## Authentication
 
-Supply exactly one method (precedence: key-pair → token → password):
+Supply exactly one method (precedence: key-pair → token → password). Each can be
+given inline on `ADD CONNECTOR` or via an environment variable; the inline option
+wins when both are set:
 
-| Method | How to provide it |
-|---|---|
-| **Key-pair (JWT)** — recommended | `SNOWFLAKE_PRIVATE_KEY_PATH` (path to the PKCS#8 PEM) or `SNOWFLAKE_PRIVATE_KEY` (inline PEM), with the matching public key registered on the user |
-| **Programmatic access token** | `SNOWFLAKE_PAT` |
-| **Password** | `SNOWFLAKE_PASSWORD`, or inline in the connector's `PASSWORD '…'` option |
+| Method | Inline option | Environment fallback |
+|---|---|---|
+| **Key-pair (JWT)** — recommended | `PRIVATE_KEY_PATH '<path>'` | `SNOWFLAKE_PRIVATE_KEY_PATH` (path) or `SNOWFLAKE_PRIVATE_KEY` (inline PEM) |
+| **Programmatic access token** | `TOKEN '<tok>'` (a.k.a. `PAT`) | `SNOWFLAKE_PAT` |
+| **Password** | `PASSWORD '<pw>'` | `SNOWFLAKE_PASSWORD` |
+
+The key-pair's matching public key must be registered on the user
+(`ALTER USER … SET RSA_PUBLIC_KEY = …`). The standalone `CONNECTOR_TYPE=snowflake`
+mode has no `ADD CONNECTOR`, so it takes all of these from the environment.
 
 ## Dialect notes
 
