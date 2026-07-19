@@ -1,0 +1,229 @@
+---
+title: Snowflake
+description: Connect MemGQL to Snowflake.
+---
+
+# Snowflake
+
+The Snowflake connector (type `snowflake`) translates GQL queries into Snowflake
+SQL and runs them over Snowflake's HTTPS SQL API. It requires a
+[mapping file](/memgraph-zero/memgql/reference#mapping-schema) that maps graph
+patterns to relational tables — the same format as every other SQL backend —
+and references tables with three-part `database.schema.table` names.
+
+The driver is **pure-Rust**: there is no ODBC layer or Snowflake client to
+install. The connector supports **both reads and writes**, and exposes
+Snowflake's native **Time Travel** for point-in-time reads.
+
+Snowflake is cloud-only, so there is no local container to run — the connector
+connects to a real Snowflake account. It is available both in
+[`multi` mode](/memgraph-zero/memgql/multiple-graphs) (`ADD CONNECTOR … TYPE
+snowflake`) and as the standalone `CONNECTOR_TYPE=snowflake` mode.
+
+## 1. Prepare your Snowflake account
+
+In a Snowflake worksheet (as a role that can create these objects, e.g.
+`ACCOUNTADMIN`), create a warehouse, a database, and a user for MemGQL. Using
+key-pair (JWT) authentication is recommended for an unattended service user.
+
+```sql
+-- Compute: extra-small, suspends when idle so it doesn't accrue cost.
+CREATE WAREHOUSE IF NOT EXISTS memgql_wh
+  WAREHOUSE_SIZE = 'XSMALL' AUTO_SUSPEND = 60 AUTO_RESUME = TRUE INITIALLY_SUSPENDED = TRUE;
+
+-- Database (the PUBLIC schema is created automatically).
+CREATE DATABASE IF NOT EXISTS memgql_db;
+
+-- A role with just enough to read (and, if you want writes, create) tables.
+CREATE ROLE IF NOT EXISTS memgql_role;
+GRANT USAGE ON WAREHOUSE memgql_wh              TO ROLE memgql_role;
+GRANT USAGE ON DATABASE  memgql_db              TO ROLE memgql_role;
+GRANT USAGE, CREATE TABLE ON SCHEMA memgql_db.PUBLIC TO ROLE memgql_role;
+
+-- Service user with a registered public key (see below for generating it).
+CREATE USER IF NOT EXISTS memgql
+  DEFAULT_WAREHOUSE = memgql_wh
+  DEFAULT_ROLE      = memgql_role
+  DEFAULT_NAMESPACE = memgql_db.PUBLIC;
+ALTER USER memgql SET RSA_PUBLIC_KEY = 'MIIBIjANBgkq...';
+GRANT ROLE memgql_role TO USER memgql;
+```
+
+Generate the key pair locally and paste the **public** key body (without the
+`-----BEGIN/END PUBLIC KEY-----` lines and newlines) into the `RSA_PUBLIC_KEY`
+above:
+
+```bash
+openssl genrsa 2048 | openssl pkcs8 -topk8 -inform PEM -out rsa_key.p8 -nocrypt
+openssl rsa -in rsa_key.p8 -pubout -out rsa_key.pub
+```
+
+Keep `rsa_key.p8` (the private key) safe — MemGQL reads it to sign login tokens.
+
+Your **account identifier** is `ORG-ACCOUNT` (from the `app.snowflake.com` URL
+`<org>/<account>`, or `SELECT CURRENT_ORGANIZATION_NAME(), CURRENT_ACCOUNT_NAME();`).
+
+## 2. Write the mapping
+
+Save as `mapping.json`, the standard
+[mapping format](/memgraph-zero/memgql/reference#mapping-schema). Table
+references resolve against the connector's database and schema (set below);
+declare every property you plan to query — in `multi` mode the mapping is also
+the routing schema, so an undeclared property is a routing error, not a
+passthrough.
+
+```json
+{
+  "vertices": [
+    {
+      "label": "Person",
+      "mappedTableSource": {
+        "connector": "sf",
+        "table": "persons",
+        "metaFields": { "id": "id" }
+      },
+      "attributes": [
+        { "name": "name" },
+        { "name": "age", "type": "Int" }
+      ]
+    },
+    {
+      "label": "Company",
+      "mappedTableSource": {
+        "connector": "sf",
+        "table": "companies",
+        "metaFields": { "id": "id" }
+      },
+      "attributes": [ { "name": "name" } ]
+    }
+  ],
+  "edges": [
+    {
+      "label": "KNOWS",
+      "from": "Person",
+      "to": "Person",
+      "mappedTableSource": {
+        "connector": "sf",
+        "table": "knows",
+        "metaFields": { "id": "id", "from": "from_id", "to": "to_id" }
+      }
+    },
+    {
+      "label": "WORKS_AT",
+      "from": "Person",
+      "to": "Company",
+      "mappedTableSource": {
+        "connector": "sf",
+        "table": "works_at",
+        "metaFields": { "id": "id", "from": "person_id", "to": "company_id" }
+      }
+    }
+  ]
+}
+```
+
+## 3. Start MemGQL in multi mode
+
+Mount your mapping and private key. Every connection parameter is given on the
+`ADD CONNECTOR` statement in the next step, so no Snowflake environment
+variables are required here:
+
+```bash
+docker run --rm \
+    --name memgql \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTOR_TYPE=multi \
+    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    -v ./mapping.json:/data/mapping.json \
+    -v ./rsa_key.p8:/data/rsa_key.p8 \
+    memgraph/memgql:latest
+```
+
+## 4. Connect and register the backend
+
+```bash
+mgconsole --port 7688
+```
+
+Provide the account, user, session context, and authentication inline:
+
+```gql
+ADD CONNECTOR sf TYPE snowflake
+    URI 'ORG-ACCOUNT' USER 'memgql'
+    WAREHOUSE 'memgql_wh' DATABASE 'memgql_db' SCHEMA 'PUBLIC' ROLE 'memgql_role'
+    PRIVATE_KEY_PATH '/data/rsa_key.p8';
+CREATE GRAPH social FROM FILE '/data/mapping.json';
+MATCH (n:Person) RETURN n.name LIMIT 5;
+```
+
+Options: `URI` (account identifier), `USER`, `WAREHOUSE`, `DATABASE`, `SCHEMA`,
+`ROLE`, and one auth option — `PRIVATE_KEY_PATH`, `TOKEN` (a.k.a. `PAT`), or
+`PASSWORD`. Any option you omit falls back to the corresponding `SNOWFLAKE_*`
+environment variable, so you can mix inline values with env defaults.
+
+Because the parameters live on the connector, **changing them needs no MemGQL
+restart** — rotate a key, switch warehouse, or point at a different database by
+re-registering the connector:
+
+```gql
+DROP CONNECTOR sf;
+ADD CONNECTOR sf TYPE snowflake
+    URI 'ORG-ACCOUNT' USER 'memgql'
+    WAREHOUSE 'bigger_wh' DATABASE 'memgql_db' SCHEMA 'PUBLIC' ROLE 'memgql_role'
+    PRIVATE_KEY_PATH '/data/rsa_key_new.p8';
+```
+
+## 5. Query
+
+```gql
+MATCH (p:Person) RETURN p.name, p.age;
+```
+
+```gql
+MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
+```
+
+```gql
+MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
+```
+
+## Authentication
+
+Supply exactly one method (precedence: key-pair → token → password). Each can be
+given inline on `ADD CONNECTOR` or via an environment variable; the inline option
+wins when both are set:
+
+| Method | Inline option | Environment fallback |
+|---|---|---|
+| **Key-pair (JWT)** — recommended | `PRIVATE_KEY_PATH '<path>'` | `SNOWFLAKE_PRIVATE_KEY_PATH` (path) or `SNOWFLAKE_PRIVATE_KEY` (inline PEM) |
+| **Programmatic access token** | `TOKEN '<tok>'` (a.k.a. `PAT`) | `SNOWFLAKE_PAT` |
+| **Password** | `PASSWORD '<pw>'` | `SNOWFLAKE_PASSWORD` |
+
+The key-pair's matching public key must be registered on the user
+(`ALTER USER … SET RSA_PUBLIC_KEY = …`). The standalone `CONNECTOR_TYPE=snowflake`
+mode has no `ADD CONNECTOR`, so it takes all of these from the environment.
+
+## Dialect notes
+
+- Table references are three-part `database.schema.table`. Names resolve against
+  the connector's `SNOWFLAKE_DATABASE` / `SNOWFLAKE_SCHEMA` (default schema
+  `PUBLIC`); set `catalog` / `schema` on a `mappedTableSource` to pin a table
+  explicitly.
+- Booleans use Snowflake's native `TRUE` / `FALSE`.
+- `collect()` emits `ARRAY_AGG`; map projections (`RETURN n {.a, .b}`) emit
+  `OBJECT_CONSTRUCT`.
+- `AVG()` over integers is cast to `DOUBLE` so results arrive as floats.
+- **Time Travel**: point-in-time reads via Snowflake's `AT` / `BEFORE` are
+  available.
+
+## Known limitations
+
+- **Variable-length paths**: bounded quantified path patterns (`(){1,3}`) run
+  via a recursive CTE; unbounded paths and native shortest-path are not
+  available — use a bounded form or a Cypher backend.
+- **Quantified path patterns / graph algorithms** beyond the bounded CTE form
+  are not pushed down.
+
+For connector configuration, see the
+[mapping reference](/memgraph-zero/memgql/reference#mapping-schema).

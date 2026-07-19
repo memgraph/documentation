@@ -5,6 +5,46 @@ description: MemGQL release notes
 
 # MemGQL Changelog
 
+## MemGQL v0.8.0 - July 19th, 2026
+
+### ⚠️ Breaking changes
+
+- **New graph model: connectors + schema graphs.** A **connector** is now a pure
+  connection and a **graph** is a mapping (`vertices` + `edges`) laid over one or
+  more connectors. Register a connection with `ADD CONNECTOR`, then define a graph
+  with `CREATE GRAPH <name> FROM '<json>'` / `FROM FILE '<path>'`, or boot the
+  whole catalog from a single [`--schema`](/memgraph-zero/memgql/schema-file) file.
+- **New mapping format.** Mappings use `vertices` / `edges` with
+  `mappedTableSource` (relational) or `mappedGraphSource` (native), `metaFields`
+  (`id` / `from` / `to`), and `attributes`. The legacy `nodes` / `edges` format
+  (`id_column`, `source_label`, `rel_type`) is no longer accepted; loading it
+  raises an actionable error pointing at the new format.
+- **Removed statements.** `ADD GRAPH … ON CONNECTOR`, `UNADD GRAPH`,
+  `ALTER GRAPH SET CONNECTOR / GRAPH / MAPPING`, `ADD MAPPING` / `DROP MAPPING`,
+  and the connection-scoped `CONNECT … AS`, `DISCONNECT`, `USE CONNECTION`, and
+  `SET DEFAULT CONNECTION` are gone. Register connectors + graphs instead and
+  query by graph name (`USE <graph>`) or let routing pick the graph.
+
+### ✨ New features & Improvements
+
+- **Query graphs without `USE`.** [Schema-based routing](/memgraph-zero/memgql/multiple-graphs#routing)
+  infers the target graph from the labels, relationship types, and declared
+  properties a query mentions; ambiguity is an actionable error. Explicit
+  `USE <graph>` remains the override.
+- **Caching engages under routing.** A cache-enabled graph is populated
+  and served whether a part is pinned with `USE` or routed by label. Re-issuing
+  `ALTER GRAPH … SET CACHE` now drops stale fragments, so re-pointing the cache
+  can't serve a stale result.
+- **Snowflake connector.** New `snowflake` connector type translates GQL to
+  Snowflake SQL over Snowflake's HTTPS SQL API — a pure-Rust driver, so there's
+  no ODBC layer or Snowflake client to install. It uses the same
+  [mapping](/memgraph-zero/memgql/reference#mapping-schema) format as every other
+  SQL backend, references tables with three-part `database.schema.table` names,
+  and supports **both reads and writes**. Authenticate with a key-pair (JWT), a
+  programmatic access token, or a password. Snowflake's native **Time Travel** is
+  exposed for point-in-time reads. See the
+  [Snowflake connector page](/memgraph-zero/memgql/connect/snowflake) for setup.
+
 ## MemGQL v0.7.0 - July 5th, 2026
 
 ### ⚠️ Behavior changes
@@ -58,7 +98,7 @@ description: MemGQL release notes
   RETURN e.name, i.total;
   ```
   Previously this join had to be spelled as `WHERE i.employee_id = e.id`. Works
-  USE-free (each part routes by its own labels) and with multiple keys
+  without `USE` (each part routes by its own labels) and with multiple keys
   (`{country: o.country, city: o.city}`).
 - **SQL Server connector.** New `sqlserver` connector type (aliases: `mssql`,
   `sql_server`, `sql-server`) translates GQL to T-SQL. The driver is
@@ -93,12 +133,12 @@ description: MemGQL release notes
 
 ### ✨ New features & Improvements
 
-- **Schema-based routing (USE-free queries).** In `multi` mode, queries no
+- **Schema-based routing.** In `multi` mode, queries no
   longer need a `USE <graph>` clause — the engine infers the backend from the
   query's schema signals (labels, rel-types, properties) against a unified schema
   index, built from mappings for SQL backends and live introspection for Cypher
 	backends. Routing is strict: exactly one candidate routes, zero or multiple
-	hard-error with the fix; explicit `USE` always wins. USE-free federated
+	hard-error with the fix; explicit `USE` always wins. Routed federated
 	`JOIN` and `UNION` work too, and writes route on a unique candidate. Two new
 	statements expose the index: **`SHOW SCHEMA [FOR <graph>]`** and **`REFRESH
 	SCHEMA`**. Identifier matching is now **exact** engine-wide. **Still gated
