@@ -1,0 +1,463 @@
+---
+title: Schema File
+description: Boot MemGQL from a single JSON file that declares connectors and the named graphs mapped over them.
+---
+
+# Schema File
+
+MemGQL federates one or more backends behind a single Bolt endpoint and exposes
+them as **named graphs** you query with GQL / openCypher. A schema file is the
+one place that declares both halves of that setup:
+
+> **A connector is a connection. A graph is a mapping laid over connectors.
+> You query graphs; routing figures out which backend to hit.**
+
+Everything in the file can also be created at runtime with
+[DDL](/memgraph-zero/memgql/reference#graph-management-query-syntax); the schema
+file is the boot-time equivalent, and runtime changes persist back to it.
+
+## Booting from a schema file
+
+Run MemGQL in Docker: mount the schema file and pass its container path.
+
+```bash
+docker run --rm -p 7688:7688 \
+  -e BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+  -v "$(pwd)/schema.json:/data/schema.json" \
+  memgraph/memgql:latest --schema=/data/schema.json
+```
+
+`--schema` (or the `SCHEMA_FILE` env var) is all you need; it implies
+multi-connector mode. Set `BOLT_LISTEN_ADDR=0.0.0.0:7688` so the Bolt port is
+reachable from outside the container (the default binds loopback only), and run
+MemGQL on the same Docker network as the backends its connectors reference.
+
+Every connector connects and every graph registers at boot, so no `CONNECT` or
+`USE` is required to start querying. Runtime DDL writes the updated catalog back
+to this file atomically, so a restart reloads the same state with no replay
+(credentials stay on disk but are masked in `EXPORT SCHEMA`).
+
+The file is validated at boot. A malformed mapping (for example a relational
+edge missing `metaFields.from` / `metaFields.to`, or the legacy `nodes` /
+`id_column` format) is rejected with an actionable error before the server
+starts serving.
+
+The file has two top-level sections:
+
+```json
+{
+  "connectors": [],
+  "graphs": []
+}
+```
+
+## A minimal schema
+
+The smallest useful file is one connector and one vertex: a label mapped to a
+table by its primary-key column.
+
+```json
+{
+  "connectors": [
+    {
+      "name": "pg",
+      "type": "postgres",
+      "connection": {
+        "uri": "postgresql://demo:demo@localhost:5432/demo"
+      }
+    }
+  ],
+  "graphs": [
+    {
+      "name": "store",
+      "vertices": [
+        {
+          "label": "Product",
+          "mappedTableSource": {
+            "connector": "pg",
+            "table": "products",
+            "metaFields": {
+              "id": "pid"
+            }
+          },
+          "attributes": [
+            {
+              "name": "pid",
+              "type": "Int"
+            },
+            {
+              "name": "title"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Boot it, then query the label by name:
+
+```gql
+MATCH (p:Product) RETURN p.title LIMIT 5;
+```
+
+The sections below are the full field reference for each block.
+
+## `connectors`
+
+A connector is a **pure connection**: how to reach a backend, and nothing about
+graph shape. `catalogs` is accepted as an alias for `connectors`.
+
+```json
+{
+  "connectors": [
+    {
+      "name": "pg",
+      "type": "postgres",
+      "connection": {
+        "uri": "postgresql://user:pass@host:5432/db"
+      }
+    }
+  ]
+}
+```
+
+| Field        | Required | Description |
+|--------------|----------|-------------|
+| `name`       | yes      | Referenced by graphs and DDL. |
+| `type`       | yes      | Backend type (see below). |
+| `connection` | yes      | A **native** connection block (see fields below). JDBC-style keys (`jdbc`, `driverClass`, …) are rejected. |
+
+Every `connection` field is optional; supply what a given backend needs:
+
+| `connection` field | Used for |
+|--------------------|----------|
+| `uri`              | Connection string for the backend. |
+| `user` / `password`| Credentials (override / complement the URI). |
+| `database`         | Database name. |
+| `schema`           | Middle namespace (PostgreSQL schema, MySQL / ClickHouse database, Iceberg schema). |
+| `catalog`          | Native root for three-level backends (Iceberg catalog, SQL Server database). |
+| `path`             | File-backed backends (DuckDB). |
+
+**Supported `type` values:** `memgraph`, `neo4j`, `postgres` (`postgresql`),
+`mysql`, `sqlserver`, `oracle`, `duckdb`, `iceberg`, `iceberg-direct`,
+`clickhouse`, `pinot`.
+
+## `graphs`
+
+Each graph is a set of `vertices` and `edges` laid over the shared connectors. A
+single graph may span **several** connectors.
+
+```json
+{
+  "graphs": [
+    {
+      "name": "store",
+      "vertices": [],
+      "edges": []
+    }
+  ]
+}
+```
+
+> **Single-graph shorthand:** put `vertices` / `edges` at the top level instead
+> of a `graphs` block and you get one implicit graph named `default`.
+
+### Vertices
+
+A vertex maps a **label** to a backend source. Exactly one source kind is set:
+
+- **`mappedTableSource`**: a relational table (PostgreSQL, MySQL, Oracle,
+  SQL Server, DuckDB, ClickHouse, Iceberg). Rows become nodes.
+- **`mappedGraphSource`**: a native graph backend (Memgraph / Neo4j). Queries
+  pass through as Cypher; only the connector is declared.
+
+```json
+{
+  "label": "Customer",
+  "mappedTableSource": {
+    "connector": "pg",
+    "schema": "public",
+    "table": "customers",
+    "metaFields": {
+      "id": "cid"
+    }
+  },
+  "attributes": [
+    {
+      "name": "cid",
+      "type": "Int"
+    },
+    {
+      "name": "name",
+      "column": "full_name"
+    },
+    {
+      "name": "email",
+      "type": "String"
+    }
+  ]
+}
+```
+
+```json
+{
+  "label": "User",
+  "mappedGraphSource": {
+    "connector": "mg"
+  },
+  "attributes": [
+    {
+      "name": "uid",
+      "type": "Int"
+    },
+    {
+      "name": "handle"
+    }
+  ]
+}
+```
+
+| Field | Source kind | Description |
+|-------|-------------|-------------|
+| `mappedTableSource.connector` | relational | Connector name (alias `catalog`). |
+| `mappedTableSource.schema`    | relational | Optional middle namespace (PostgreSQL schema, etc.). |
+| `mappedTableSource.table`     | relational | The backing table. |
+| `mappedTableSource.metaFields.id` | relational | Primary-key column; the node's identity and the join key for edges. |
+| `mappedGraphSource.connector` | native      | Connector name (Memgraph / Neo4j); the query passes through as Cypher. |
+
+### Edges
+
+An edge maps a **relationship type** between two labels. Relational edges name
+the foreign-key columns via `metaFields.from` / `metaFields.to`; native-graph
+edges pass through.
+
+```json
+{
+  "label": "PURCHASED",
+  "from": "Customer",
+  "to": "Product",
+  "mappedTableSource": {
+    "connector": "pg",
+    "table": "orders",
+    "metaFields": {
+      "id": "oid",
+      "from": "cid",
+      "to": "pid"
+    }
+  },
+  "attributes": [
+    {
+      "name": "qty",
+      "type": "Int"
+    }
+  ]
+}
+```
+
+```json
+{
+  "label": "FOLLOWS",
+  "from": "User",
+  "to": "User",
+  "mappedGraphSource": {
+    "connector": "mg"
+  }
+}
+```
+
+A relational edge adds two more `metaFields` on top of `id`:
+
+| `metaFields` key | Description |
+|------------------|-------------|
+| `id`   | The edge row's own key. |
+| `from` | Foreign-key column pointing at the **source** vertex's id column. |
+| `to`   | Foreign-key column pointing at the **target** vertex's id column. |
+
+`from` and `to` are **required** on relational edges; they define the traversal
+`(from)-[:LABEL]->(to)`. Loading fails with an actionable error if either is
+missing. Native-graph edges (`mappedGraphSource`) need only `from` / `to`
+labels; the traversal is resolved by the backend.
+
+### Attributes
+
+`attributes` declare the properties a label exposes.
+
+| Field    | Required | Description |
+|----------|----------|-------------|
+| `name`   | yes      | The GQL property name. |
+| `column` | no       | The backing column (defaults to `name`), e.g. property `name` ← column `full_name`. |
+| `type`   | no       | Recorded, not enforced at query time (default `String`). |
+
+Allowed `type` values: `Boolean`, `Byte`, `Short`, `Int`, `Long`, `HugeInt`,
+`Float`, `Double`, `Decimal`, `String`, `Date`, `DateTime`.
+
+`attributes` are optional and need not be exhaustive: a property you don't list
+still resolves to a same-named column at query time (`p.sku` → column `sku`).
+Declare the ones you want to **rename** (`column`), give a **type**, or route
+queries by.
+
+> **Note:** for routing to match a query by property (e.g. `WHERE c.email = …`),
+> the property must be a declared `attribute`. Route by label or relationship
+> type, or add an explicit `USE`, when a property isn't declared. See
+> [routing](/memgraph-zero/memgql/multiple-graphs#routing).
+
+## Complete example
+
+One engine over **Memgraph** (a social graph) and **PostgreSQL** (a store),
+sharing a `uid` / `cid` id space so you can query each on its own or join across
+them.
+
+```json
+{
+  "connectors": [
+    {
+      "name": "mg",
+      "type": "memgraph",
+      "connection": {
+        "uri": "bolt://localhost:7687"
+      }
+    },
+    {
+      "name": "pg",
+      "type": "postgres",
+      "connection": {
+        "uri": "postgresql://demo:demo@localhost:5432/demo"
+      }
+    }
+  ],
+  "graphs": [
+    {
+      "name": "social",
+      "vertices": [
+        {
+          "label": "User",
+          "mappedGraphSource": {
+            "connector": "mg"
+          },
+          "attributes": [
+            {
+              "name": "uid",
+              "type": "Int"
+            },
+            {
+              "name": "handle"
+            },
+            {
+              "name": "name"
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "label": "FOLLOWS",
+          "from": "User",
+          "to": "User",
+          "mappedGraphSource": {
+            "connector": "mg"
+          }
+        }
+      ]
+    },
+    {
+      "name": "store",
+      "vertices": [
+        {
+          "label": "Customer",
+          "mappedTableSource": {
+            "connector": "pg",
+            "table": "customers",
+            "metaFields": {
+              "id": "cid"
+            }
+          },
+          "attributes": [
+            {
+              "name": "cid",
+              "type": "Int"
+            },
+            {
+              "name": "name",
+              "column": "full_name"
+            },
+            {
+              "name": "email"
+            }
+          ]
+        },
+        {
+          "label": "Product",
+          "mappedTableSource": {
+            "connector": "pg",
+            "table": "products",
+            "metaFields": {
+              "id": "pid"
+            }
+          },
+          "attributes": [
+            {
+              "name": "pid",
+              "type": "Int"
+            },
+            {
+              "name": "title"
+            },
+            {
+              "name": "price",
+              "type": "Double"
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "label": "PURCHASED",
+          "from": "Customer",
+          "to": "Product",
+          "mappedTableSource": {
+            "connector": "pg",
+            "table": "orders",
+            "metaFields": {
+              "id": "oid",
+              "from": "cid",
+              "to": "pid"
+            }
+          },
+          "attributes": [
+            {
+              "name": "qty",
+              "type": "Int"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Boot it, then query by label:
+
+```gql
+MATCH (u:User) RETURN u.handle, u.name ORDER BY u.uid LIMIT 5;
+MATCH (c:Customer)-[:PURCHASED]->(p:Product) RETURN c.name, p.title;
+MATCH (p:Product) WHERE p.price > 100 RETURN p.title ORDER BY p.price DESC;
+```
+
+The shared `uid` / `cid` id space also lets one query **join across both
+backends**. See [Multiple Graphs](/memgraph-zero/memgql/multiple-graphs) for the
+full query model (routing, cross-backend joins, and composites) and
+[Reference](/memgraph-zero/memgql/reference#graph-management-query-syntax) for
+the runtime DDL that builds the same catalog live.
+
+## How it works
+
+- **Connector = connection, graph = mapping.** A graph maps labels and
+  relationship types onto one or more connectors, so a single graph can span
+  backends.
+- **Routing by label.** At boot (and on `REFRESH SCHEMA`) the engine tracks
+  which graph defines each label. A query with no `USE` routes by the labels and
+  declared properties it mentions; anything ambiguous returns an actionable
+  error rather than a silent guess.
