@@ -1749,8 +1749,77 @@ cluster leader sits, run:
 SHOW INSTANCES;
 ```
 
+{<h4 className="custom-header"> Query behavior during the upgrade </h4>}
+
+Your applications can stay connected to the cluster throughout the upgrade.
+What they will observe depends on the query type and the replication mode:
+
+- **Read queries always work**, regardless of the replication mode used. There
+  is no specific exception you need to catch — Neo4j drivers are preconfigured
+  with automatic retries, so reads hitting an instance that is restarting are
+  transparently retried.
+
+  One exception applies to minimal clusters: with **1 main and 1 replica**, you
+  need to enable the
+  [`enabled_reads_on_main`](/clustering/high-availability/ha-commands-reference#enabled_reads_on_main)
+  coordinator setting so that, while the only replica is being upgraded, read
+  queries are routed to the main instance:
+
+  ```cypher
+  SET COORDINATOR SETTING 'enabled_reads_on_main' TO 'true';
+  ```
+- **Write queries depend on the replication mode:**
+  - **ASYNC** — writes keep working without errors.
+  - **SYNC** — writes keep working, but a **ReplicationException** can happen
+    because a commit couldn't be replicated to the instance that is being
+    restarted (e.g. the old main while it is coming back up). The transaction
+    is still committed on the MAIN, so your application should catch the
+    exception and continue. You can parse the error and check for the exact
+    message, for example: `Failed to replicate to SYNC replica 'instance_1':
+    replica is not reachable or not in sync with the main`.
+  - **STRICT_SYNC** — writes won't work while a data instance is being
+    restarted. Because of the two-phase commit protocol, a transaction cannot
+    be committed unless every STRICT_SYNC replica confirms it, so writes are
+    aborted until the restarted instance rejoins the cluster.
+
+If these write-side effects are not acceptable for your workload, you can pause
+writes across the whole cluster for the duration of the upgrade. The
+recommended way is the
+[`global_read_only`](/clustering/high-availability/ha-commands-reference#global_read_only)
+coordinator setting. Connect to the coordinator leader and run:
+
+```cypher
+SET COORDINATOR SETTING 'global_read_only' TO 'true';
+```
+
+When enabled, the current MAIN stops accepting write queries while it keeps
+serving reads and replicating existing data to REPLICAs. The setting blocks
+**all write sources** on the MAIN — user Cypher writes,
+[TTL](/querying/time-to-live) background expiry, and [stream-](/data-streams) and
+[trigger-](/fundamentals/triggers)driven writes — so the dataset stays frozen
+while replicas catch up and you swap binaries. The value is persisted in the
+coordinator's Raft-replicated cluster state, so it survives coordinator restarts
+and leader re-elections, and is honored across failovers: a newly promoted MAIN
+comes up read-only instead of silently accepting writes.
+
+<Callout type="warning">
+While the cluster runs mixed versions during the rolling upgrade, read-only mode
+is honored best-effort: older instances behave as before until every node is
+upgraded, after which the cluster self-heals to the requested state.
+</Callout>
+
 <Steps>
 {<h4 className="custom-header"> Upgrade replicas </h4>} 
+
+Before restarting any replica, check whether replicas are caught up with the
+MAIN:
+
+```cypher
+SHOW REPLICATION LAG;
+```
+
+If the replica you are about to restart is lagging behind, wait until it
+catches up before deleting its pod.
 
 If you are using K8s, the upgrade can be performed by deleting the pod. Start by
 deleting the replica pod (in this example replica is running on the pod
@@ -1777,44 +1846,20 @@ This step should be repeated for all of your replicas in the cluster.
 
 {<h4 className="custom-header"> Upgrade the main </h4>} 
 
-Before deleting the main pod, check replication lag to see whether replicas are
-behind MAIN:
+If you decided to pause writes with the `global_read_only` setting described
+above in **Query behavior during the upgrade**, enable it before deleting the
+main pod.
 
-```cypher
-SHOW REPLICATION LAG;
-```
-
-If replicas are behind, your upgrade will be prone to a data loss. In order to
-achieve zero-downtime upgrade without any data loss, either:
-
-  - Use `STRICT_SYNC` mode (writes will be blocked during upgrade), or
-  - Wait until replicas are fully caught up, then pause writes. This way, you
-can use any replication mode. Read queries should however work without any
-issues independently from the replica type you are using.
-
-The recommended way to pause writes across the whole cluster is the
-[`global_read_only`](/clustering/high-availability/ha-commands-reference#global_read_only)
-coordinator setting. Connect to the coordinator leader and run:
-
-```cypher
-SET COORDINATOR SETTING 'global_read_only' TO 'true';
-```
-
-When enabled, the current MAIN stops accepting write queries while it keeps
-serving reads and replicating existing data to REPLICAs. The setting blocks
-**all write sources** on the MAIN — user Cypher writes,
-[TTL](/querying/time-to-live) background expiry, and [stream-](/data-streams) and
-[trigger-](/fundamentals/triggers)driven writes — so the dataset stays frozen
-while replicas catch up and you swap binaries. The value is persisted in the
-coordinator's Raft-replicated cluster state, so it survives coordinator restarts
-and leader re-elections, and is honored across failovers: a newly promoted MAIN
-comes up read-only instead of silently accepting writes.
-
-<Callout type="warning">
-While the cluster runs mixed versions during the rolling upgrade, read-only mode
-is honored best-effort: older instances behave as before until every node is
-upgraded, after which the cluster self-heals to the requested state.
-</Callout>
+When the main pod is deleted, the coordinator detects that the main is down and
+performs an **automatic failover**, promoting one of the already upgraded
+replicas to be the new main. Until the failover completes, the cluster does not
+accept write queries. The length of this time window depends on how quickly the
+failover happens, which is governed by two coordinator settings: the
+coordinator pings data instances every
+[`instance_health_check_frequency_sec`](/clustering/high-availability/ha-commands-reference#instance_health_check_frequency_sec)
+seconds and declares an instance down after it hasn't responded for
+[`instance_down_timeout_sec`](/clustering/high-availability/ha-commands-reference#instance_down_timeout_sec)
+seconds. Lowering these values shortens the write-unavailability window.
 
 Upgrade the main pod:
 
