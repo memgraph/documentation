@@ -279,7 +279,7 @@ ports:
 
 {<h4 className="custom-header"> External network configuration </h4>}
 
-Memgraph HA uses **client-side routing**, so DNS resolution happens internal Cluster IP network. Because of that, we need
+Memgraph HA uses **client-side routing**, so DNS resolution happens on the driver. Because of that, we need
 one more type of network which will be used for clients accessing instances
 from outside the cluster. Our HA supports out of the box following K8s resources used to setup external access:
 
@@ -304,6 +304,72 @@ Note however that Ingress Nginx is getting retired and one of the alternatives i
 controllers like Envoy Gateway, Istio, Cilium, Traefik, or Kong. The HA chart has native Gateway API support — see [Use Memgraph HA chart with Gateway API](#use-memgraph-ha-chart-with-gateway-api).
 
 By default, the chart does **not** expose any external network services.
+
+{<h4 className="custom-header" id="recommended-external-access-setup"> Recommended external access setup </h4>}
+
+External access methods can be **mixed per tier**: coordinators and data
+instances each pick their own method independently. Our recommendation is to
+expose **coordinators through a `CommonLoadBalancer`** and **data instances
+through IngressNginx or the Gateway API**. This splits external access across
+two independent load balancers, so routing stays available even if a single
+load balancer goes down: if the load balancer in front of the data instances
+fails, clients can still reach the coordinators and get routing information,
+and if the coordinators' load balancer fails, connections to the data
+instances keep working. If everything sits behind one shared load balancer,
+that load balancer is a single point of failure for all external access.
+
+To set up the recommended combination with the Gateway API, leave
+`externalAccessConfig.dataInstance.serviceType` empty — the Gateway only
+exposes tiers whose `serviceType` is empty, so it will expose the data
+instances only:
+
+```yaml
+externalAccessConfig:
+  coordinator:
+    serviceType: "CommonLoadBalancer"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: "memgraph.coordinators.example.com"
+  # dataInstance.serviceType stays empty, so the Gateway exposes only the data instances
+  gateway:
+    enabled: true
+    gatewayClassName: "eg"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: "memgraph.data.example.com"
+```
+
+Or with IngressNginx for the data instances:
+
+```yaml
+externalAccessConfig:
+  dataInstance:
+    serviceType: "IngressNginx"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: "memgraph.data.example.com"
+  coordinator:
+    serviceType: "CommonLoadBalancer"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: "memgraph.coordinators.example.com"
+```
+
+In both cases every coordinator is reachable at the shared
+`memgraph.coordinators.example.com:<boltPort>` address, and each data instance
+at `memgraph.data.example.com:<dataPortBase + id>`. With the `external-dns`
+hostnames set, the `cluster-setup` Job registers the external `bolt_server`
+addresses automatically (see [Update bolt server](#update-bolt-server)).
+
+All other combinations are valid as well — for coordinators + data instances,
+for example:
+
+- `CommonLoadBalancer` + `LoadBalancer`
+- `LoadBalancer` + `LoadBalancer`
+- `IngressNginx` + `IngressNginx` (everything behind the single ingress-nginx load balancer)
+- Gateway API for everything (leave both `serviceType` fields empty and enable the gateway)
+- `NodePort` for either tier, combined with any of the above
+
+The only invalid combination is enabling the Gateway API
+(`externalAccessConfig.gateway.enabled: true`) while **both** tiers have a
+`serviceType` set: a tier with a `serviceType` is excluded from the Gateway,
+so the Gateway would apply to nothing and chart rendering fails.
 
 {<h4 className="custom-header"> Per-instance external access annotations </h4>}
 
@@ -338,6 +404,16 @@ In this example, each data instance's external Service gets the shared
 `aws-load-balancer-scheme` annotation plus its own unique `external-dns`
 hostname. Bolt and management ports are not set per-instance — they come from
 `ports.boltPort` and `ports.managementPort`.
+
+With `serviceType: LoadBalancer` and a per-instance `external-dns` hostname
+set like above, the `cluster-setup` Job automatically registers each
+instance's routing `bolt_server` as `<hostname>:<boltPort>` (see [Update bolt
+server](#update-bolt-server)). Do **not** set the `external-dns` hostname at
+the tier level (`externalAccessConfig.dataInstance.annotations` /
+`externalAccessConfig.coordinator.annotations`) when using `LoadBalancer`:
+each instance gets its own LoadBalancer Service, so a tier-level hostname
+would put one DNS record in front of every load balancer and register the
+same `bolt_server` for all instances.
 
 {<h4 className="custom-header"> Per-instance internal access annotations </h4>}
 
@@ -724,14 +800,19 @@ This step is required only when:
   - You're using bolt+routing for client-side routing
 
 <Callout type="info">
-When you expose the cluster through **IngressNginx**, **Gateway API**, or the
-coordinator **CommonLoadBalancer** and set an `external-dns` hostname via
-annotations, the `cluster-setup` Job now sets each instance's routing
-`bolt_server` to the external hostname and port automatically, and reconciles it
-on every `helm upgrade` (including reverting to the internal address when
-external access is turned off). In that case you don't need to run the queries
-below manually. This does not apply to plain `LoadBalancer` / `NodePort`, where a
-shared service can't address individual instances by port.
+When you expose the cluster through **IngressNginx**, **Gateway API**, the
+coordinator **CommonLoadBalancer**, or per-instance **LoadBalancer** Services
+and set an `external-dns` hostname via annotations, the `cluster-setup` Job
+sets each instance's routing `bolt_server` to the external hostname and port
+automatically, and reconciles it on every `helm upgrade` (including reverting
+to the internal address when external access is turned off). In that case you
+don't need to run the queries below manually. For `LoadBalancer`, set the
+hostname **per instance** via `data[].externalAccessAnnotations` /
+`coordinators[].externalAccessAnnotations` — each instance has its own
+LoadBalancer Service, so a tier-level hostname would register the same
+`bolt_server` for every instance. This does not apply to `NodePort` (or to
+instances without a hostname annotation), where the internal `bolt_server` is
+kept and you update it manually.
 </Callout>
 
 Each instance must know its external address for routing to work correctly. Run the following queries on the leader coordinator:
@@ -757,7 +838,15 @@ for the full set of commands and usage patterns.
 The Memgraph HA Helm chart has native support for the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/). When enabled, the chart automatically creates TCPRoute resources for each data and coordinator instance. You can either let the chart create its own Gateway or attach routes to a pre-existing one.
 
 <Callout type="info">
-Gateway API works alongside the `NodePort` and `LoadBalancer` `serviceType` options — the routes point at internal ClusterIP services that always exist. However, Gateway API and the `IngressNginx` service type are **mutually exclusive**: enabling both (`externalAccessConfig.gateway.enabled: true` together with `IngressNginx` on the data instance or coordinator tier) fails chart rendering. Choose one.
+The Gateway only exposes tiers whose `serviceType` is **empty**: a tier with
+`externalAccessConfig.dataInstance.serviceType` or
+`externalAccessConfig.coordinator.serviceType` set gets its external access
+from that service type instead and is excluded from the Gateway (no listeners
+or TCPRoutes are created for it). This lets you mix methods per tier — for
+example, coordinators via `CommonLoadBalancer` and data instances via the
+Gateway, which is our [recommended setup](#recommended-external-access-setup).
+Enabling the gateway while **both** tiers have a `serviceType` set fails chart
+rendering, since the Gateway would then apply to nothing.
 </Callout>
 
 #### Prerequisites
@@ -797,8 +886,8 @@ externalAccessConfig:
 ```
 
 The chart will create:
-- A **Gateway** (`gateway.networking.k8s.io/v1`) with TCP listeners auto-generated for each data and coordinator instance.
-- A **TCPRoute** (`gateway.networking.k8s.io/v1alpha2`) per instance, routing traffic from the Gateway listener to the instance's Bolt port.
+- A **Gateway** (`gateway.networking.k8s.io/v1`) with TCP listeners auto-generated for each data and coordinator instance whose tier has an empty `serviceType`.
+- A **TCPRoute** (`gateway.networking.k8s.io/v1alpha2`) per such instance, routing traffic from the Gateway listener to the instance's Bolt port.
 
 Data instance ports are assigned as `dataPortBase + data instance id` (default: 9000, 9001, ...) and coordinator ports as `coordinatorPortBase + coordinator id` (default: 10001, 10002, 10003). The coordinator base port is kept well above the data base port so the two ranges never overlap. You can customize the base ports:
 
@@ -910,9 +999,12 @@ When using these settings, the chart will automatically install and configure
 **IngressNginx**, including all required TCP routing setup for Memgraph.
 
 <Callout type="warning">
-The `IngressNginx` service type and Gateway API (`externalAccessConfig.gateway.enabled`)
-are mutually exclusive — enabling both fails chart rendering. Choose one external
-access method.
+The `IngressNginx` service type can be combined with the Gateway API
+(`externalAccessConfig.gateway.enabled`) as long as at least one tier keeps an
+empty `serviceType` — the Gateway only exposes tiers whose `serviceType` is
+empty, so a tier using `IngressNginx` is simply excluded from the Gateway.
+Enabling the gateway while **both** tiers have a `serviceType` set fails chart
+rendering.
 </Callout>
 
 All `IngressNginx` tiers share a single ingress-nginx controller Service (one
@@ -1444,7 +1536,7 @@ and their default values.
 | `externalAccessConfig.dataInstance.annotations`            | Annotations for external services attached to data instances.                                                | `{}`                           |
 | `externalAccessConfig.ingress.dataPortBase`                | Base port for data instance ports on the IngressNginx controller (`dataPortBase + data instance id`).        | `9000`                         |
 | `externalAccessConfig.ingress.coordinatorPortBase`         | Base port for coordinator ports on the IngressNginx controller (`coordinatorPortBase + coordinator id`). Kept well above `dataPortBase` so the data and coordinator port ranges never overlap. | `10000`                        |
-| `externalAccessConfig.gateway.enabled`                     | Enable Gateway API external access. Mutually exclusive with the `IngressNginx` service type.                | `false`                        |
+| `externalAccessConfig.gateway.enabled`                     | Enable Gateway API external access. Only exposes tiers whose `serviceType` is empty; fails rendering if both tiers have a `serviceType` set. | `false`                        |
 | `externalAccessConfig.gateway.gatewayClassName`            | Name of a pre-existing GatewayClass. Required when creating a new Gateway.                                   | `""`                           |
 | `externalAccessConfig.gateway.existingGatewayName`         | Name of an existing Gateway to attach routes to. Skips Gateway creation.                                     | `""`                           |
 | `externalAccessConfig.gateway.existingGatewayNamespace`    | Namespace of the existing Gateway. Defaults to release namespace.                                            | `""`                           |
