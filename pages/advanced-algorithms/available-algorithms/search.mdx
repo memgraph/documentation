@@ -1,0 +1,194 @@
+---
+title: search
+description: Look up nodes by a label and property value in Memgraph using a comparison operator, without writing the equivalent MATCH and WHERE clauses.
+---
+
+import { Callout } from 'nextra/components'
+import { Cards } from 'nextra/components'
+import GitHub from '/components/icons/GitHub'
+
+# search
+
+The `search` module finds nodes by comparing one or more of their properties
+against a value. You describe which properties to search with a `{label:
+property}` map, pick a comparison operator, and provide the value to compare
+against, instead of writing the equivalent `MATCH` and `WHERE` clauses yourself.
+When a matching label-property index exists, it is used automatically.
+
+<Cards>
+  <Cards.Card
+    icon={<GitHub />}
+    title="Source code"
+    href="https://github.com/memgraph/memgraph/blob/master/mage/cpp/search_module/search_module.cpp"
+  />
+</Cards>
+
+| Trait              | Value      |
+| ------------------ | ---------- |
+| **Module type**    | module     |
+| **Implementation** | C++        |
+| **Parallelism**    | sequential |
+
+## Procedures
+
+Both procedures take the same arguments and differ only in how they handle a
+node that matches more than once: `search.node` returns each matching node once,
+while `search.node_all` returns one row per property that matches.
+
+### Arguments
+
+The `label_property_map` argument names the labels and properties to search. It
+is a map from a label to a single property or to a list of properties, for
+example `{Person: "name"}` or `{Person: ["name", "email"]}`. When a label maps
+to a list of properties, a node matches if **any** of those properties matches
+the value. The map may also be given as a JSON string, for example
+`'{"Person": "name"}'` or `'{"Person": ["name", "email"]}'`.
+
+The `operator` argument selects the comparison to apply and is case-insensitive:
+
+| Operator      | Meaning                                              |
+| ------------- | ---------------------------------------------------- |
+| `=` / `exact` | Equal to the value.                                  |
+| `<>`          | Not equal to the value.                              |
+| `<`           | Less than the value.                                 |
+| `<=`          | Less than or equal to the value.                     |
+| `>`           | Greater than the value.                              |
+| `>=`          | Greater than or equal to the value.                  |
+| `starts with` | String starts with the value.                        |
+| `ends with`   | String ends with the value.                          |
+| `contains`    | String contains the value.                           |
+| `=~`          | String matches the value as a regular expression.    |
+
+The `starts with`, `ends with`, `contains` and `=~` operators only match string
+properties. String comparisons are performed by codepoint, so uppercase letters
+sort before lowercase ones.
+
+### `node()`
+
+Returns each node that matches the search criteria once, even if it matches on
+more than one label or property.
+
+<Callout type="info">
+This procedure is equivalent to **apoc.search.node**.
+</Callout>
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `label_property_map: Any` ➡ A map (or JSON string) from a label to the property or list of properties to search.
+- `operator: string` ➡ The comparison operator to apply. Case-insensitive.
+- `value: string` ➡ The value to compare each property against. If `null`, no nodes are returned.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `node: Node` ➡ A node matching the search criteria. Each matching node is returned once.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+Given the following graph:
+
+```cypher
+CREATE (:Person {name: 'Alice'});
+CREATE (:Person {name: 'Bob'});
+CREATE (:Person {name: 'Bobby'});
+CREATE (:Person {name: 'Carol'});
+```
+
+The following query returns every `Person` whose `name` is greater than or equal
+to `'Bob'`:
+
+```cypher
+CALL search.node({Person: 'name'}, '>=', 'Bob') YIELD node
+RETURN node.name AS name ORDER BY name;
+```
+
+```plaintext
++----------------------------+
+| name                       |
++----------------------------+
+| "Bob"                      |
+| "Bobby"                    |
+| "Carol"                    |
++----------------------------+
+```
+
+The `label_property_map` can also be given as a JSON string:
+
+```cypher
+CALL search.node('{"Person": "name"}', 'exact', 'Bob') YIELD node
+RETURN node.name AS name;
+```
+
+```plaintext
++----------------------------+
+| name                       |
++----------------------------+
+| "Bob"                      |
++----------------------------+
+```
+
+When a node carries several of the searched labels, `search.node` still returns
+it only once:
+
+```cypher
+CREATE (:P {name: 'x'});
+CREATE (:M {title: 'x'});
+CREATE (:P:M {name: 'x', title: 'x'});
+```
+
+```cypher
+CALL search.node({P: 'name', M: 'title'}, 'exact', 'x') YIELD node
+RETURN count(node) AS c;
+```
+
+```plaintext
++----------------------------+
+| c                          |
++----------------------------+
+| 3                          |
++----------------------------+
+```
+
+### `node_all()`
+
+Returns a node once for every property that matches the search criteria, so a
+node that matches on several properties or labels appears in more than one row.
+
+<Callout type="info">
+This procedure is equivalent to **apoc.search.nodeAll**.
+</Callout>
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `label_property_map: Any` ➡ A map (or JSON string) from a label to the property or list of properties to search.
+- `operator: string` ➡ The comparison operator to apply. Case-insensitive.
+- `value: string` ➡ The value to compare each property against. If `null`, no nodes are returned.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `node: Node` ➡ A node matching the search criteria, returned once per matching property.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+Given the following graph, where one movie matches on `title` and the other on
+`tagline`:
+
+```cypher
+CREATE (:Movie {title: 'Matrix', tagline: 'Neo'});
+CREATE (:Movie {title: 'Heat', tagline: 'Matrix'});
+```
+
+Searching both properties returns both movies:
+
+```cypher
+CALL search.node_all('{"Movie": ["title", "tagline"]}', 'exact', 'Matrix') YIELD node
+RETURN node.title AS title ORDER BY title;
+```
+
+```plaintext
++----------------------------+
+| title                      |
++----------------------------+
+| "Heat"                     |
+| "Matrix"                   |
++----------------------------+
+```
