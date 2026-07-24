@@ -63,3 +63,176 @@ The output shows the parsed object:
    "city": "New York"
 }
 ```
+
+### `from_json_map()`
+
+Parses a JSON-object string into a map. An optional `path` selects a nested part
+of the document before conversion; the selected value must be a JSON object.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `map: String` ➡ The JSON string to parse. A `null` value returns `null`.
+- `path: String` (default `""`) ➡ An optional selector for a nested part of the
+  document (see [Path option](#path-option)).
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `Map` ➡ The parsed map. Returns `null` when the input is `null`, when the path
+  does not resolve, or when the selected value is JSON `null`. An error is raised
+  when the input (or selected value) is not a JSON object.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+RETURN convert.from_json_map('{"name": "GDS"}') AS result;
+```
+
+```json
+{ "name": "GDS" }
+```
+
+Select a nested object with `path`:
+
+```cypher
+RETURN convert.from_json_map('{"a": 1, "b": {"c": 2, "d": [10, 20]}}', '$.b') AS result;
+```
+
+```json
+{ "c": 2, "d": [10, 20] }
+```
+
+To read a single value out of the parsed map, index it with Cypher instead of
+using `path`:
+
+```cypher
+RETURN convert.from_json_map('{"mode": "fast"}')['mode'] AS result;
+```
+
+```text
+"fast"
+```
+
+### `from_json_list()`
+
+Parses a JSON-array string into a list. An optional `path` selects a nested part
+of the document before conversion; the selected value must be a JSON array.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `list: String` ➡ The JSON string to parse. A `null` value returns `null`.
+- `path: String` (default `""`) ➡ An optional selector for a nested part of the
+  document (see [Path option](#path-option)).
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `List` ➡ The parsed list. Returns `null` when the input is `null`, when the
+  path does not resolve, or when the selected value is JSON `null`. An error is
+  raised when the input (or selected value) is not a JSON array.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+RETURN convert.from_json_list('[1, 2, 3]') AS result;
+```
+
+```json
+[1, 2, 3]
+```
+
+Select a nested array with `path`:
+
+```cypher
+RETURN convert.from_json_list('{"a": [1, 2, 3]}', '$.a') AS result;
+```
+
+```json
+[1, 2, 3]
+```
+
+### Path option
+
+`from_json_map()` and `from_json_list()` accept an optional `path` that selects a
+nested part of the JSON document before conversion.
+
+| Syntax | Meaning | Example (on `{"a": 1, "b": {"c": 2, "e": [10, 20]}}`) |
+| ------ | ------- | ----------------------------------------------------- |
+| `$` / empty / `null` | The whole document | `$` selects the whole object |
+| `.key` | Object key step | `$.b` selects `{"c": 2, "e": [10, 20]}` |
+| `['key']` or `["key"]` | Quoted key step, for keys with dots, spaces or special characters | `$['b']` selects `{"c": 2, "e": [10, 20]}` |
+| `[index]` | Array element, 0-based | `$.b.e[1]` selects `20` |
+
+Steps chain left to right (`$.b.e[0]` selects `10`), and a leading `$` is
+optional (`a.b` is equivalent to `$.a.b`). Wildcards (`$.e[*]`), recursive
+descent (`$..x`), filter expressions and array slices are not supported and raise
+an error. A path that does not resolve, or that resolves to JSON `null`, returns
+`null`.
+
+### `to_map()`
+
+Converts a value into a map.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `value: Any` ➡ The value to convert.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `Map` ➡ A map is returned unchanged, a node or relationship is returned as its
+  property map, and `null` or any other value returns `null`.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+CREATE (n:Person {id: 4, name: 'z'})
+RETURN convert.to_map(n) AS result;
+```
+
+```json
+{ "id": 4, "name": "z" }
+```
+
+### `to_json()`
+
+Serializes any value into a JSON string.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `value: Any` ➡ The value to serialize.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `String` ➡ The JSON string representation of the value.
+
+Scalars, lists and maps are serialized directly. Graph and spatial-temporal
+values use a structured form:
+
+- **Node** ➡ `{id, type: "node", labels, properties}`; `labels` and `properties`
+  are omitted when empty.
+- **Relationship** ➡ `{id, type: "relationship", label, start, end, properties}`,
+  where `start` and `end` are full node objects.
+- **Path** ➡ a flat array `[node, relationship, node, ...]`.
+- **Point** ➡ `{crs, x, y, z}` for cartesian points, `{crs, longitude, latitude,
+  height}` for geographic points.
+- **Temporal** ➡ the canonical string form (for example `"2020-01-02"` for a
+  date, ISO-8601 period for a duration).
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+RETURN convert.to_json({a: 1, b: 'x', c: [1, 2], d: null}) AS result;
+```
+
+```text
+{"a":1,"b":"x","c":[1,2],"d":null}
+```
+
+Serialize a node:
+
+```cypher
+CREATE (n:Person:Human {name: 'Ana', age: 30})
+RETURN convert.to_json(n) AS result;
+```
+
+```text
+{"id":"0","type":"node","labels":["Human","Person"],"properties":{"name":"Ana","age":30}}
+```
