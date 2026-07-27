@@ -124,49 +124,25 @@ Memgraph package](/getting-started/install-memgraph).
 Algorithms and query modules will be loaded into a Memgraph instance on startup
 once you install MAGE, so make sure your instances are not running. 
 
-{<h3 className="custom-header">Install dependencies</h3>}
+{<h3 className="custom-header">Download the Memgraph source code</h3>}
 
-To build from source, you will need:
-- Python3
-- Make
-- CMake
-- Clang
-- UUID 
-- [Rust and Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html)
-
-{<h3 className="custom-header">Set up the machine</h3>}
-
-Run the following commands: 
-
-```bash
-sudo apt-get update && sudo apt-get install -y \
-    libcurl4 \
-    libpython3.12 \
-    libssl-dev \
-    openssl \
-    build-essential \
-    cmake \
-    curl \
-    g++ \
-    python3 \
-    python3-pip \
-    python3-setuptools \
-    python3-dev \
-    clang \
-    git \
-    pkg-config \
-    uuid-dev \
-    xmlsec1 \
-    ninja-build \
-    --no-install-recommends 
-```
-
-{<h3 className="custom-header">Download the MAGE source code</h3>}
-
-Clone the [Memgraph source code](https://github.com/memgraph/memgraph) from GitHub:
+MAGE is developed and built as part of the Memgraph repository. Clone the
+[Memgraph source code](https://github.com/memgraph/memgraph) from GitHub
+(install `git` first if you don't have it — `sudo apt-get install -y git`):
 
 ```
 git clone https://github.com/memgraph/memgraph.git && cd memgraph/
+```
+
+{<h3 className="custom-header">Install dependencies</h3>}
+
+The repository ships scripts that install everything the toolchain and the
+build need — `build.sh` checks for both sets and stops if anything is
+missing:
+
+```bash
+sudo ./environment/os/install_deps.sh install TOOLCHAIN_RUN_DEPS
+sudo ./environment/os/install_deps.sh install MEMGRAPH_BUILD_DEPS
 ```
 
 {<h3 className="custom-header">Set up the toolchain</h3>}
@@ -177,23 +153,19 @@ curl -L https://s3-eu-west-1.amazonaws.com/deps.memgraph.io/toolchain-v7/toolcha
 sudo tar xzvfm toolchain.tar.gz -C /opt
 ```
 
-Install runtime dependencies for the toolchain:
-```bash
-sudo ./environment/os/install_deps.sh install TOOLCHAIN_RUN_DEPS
-```
-
 {<h3 className="custom-header">Install Rust and Python dependencies</h3>}
 
-Run the following command to install Rust and Python dependencies:
+Run the following commands from the root of the repository to install Rust
+(using the repository's helper, pinned to the same version CI builds with)
+and the Python packages the MAGE query modules use at runtime:
 
 ```shell
-cd mage
-curl https://sh.rustup.rs -sSf | sh -s -- -y 
-export PATH="/root/.cargo/bin:${PATH}" 
-python3 -m pip install -r python/requirements.txt 
-python3 -m pip install -r ../src/auth/reference_modules/requirements.txt
-python3 -m pip install torch-sparse torch-cluster torch-spline-conv torch-geometric torch-scatter -f https://data.pyg.org/whl/torch-2.6.0+cpu.html
-python3 -m pip install dgl -f https://data.dgl.ai/wheels/torch-2.6/repo.html
+source environment/util.sh
+install_rust 1.89
+python3 -m pip install -r src/mage/python/requirements.txt 
+python3 -m pip install -r src/auth/reference_modules/requirements.txt
+python3 -m pip install torch-sparse torch-cluster torch-spline-conv torch-geometric torch-scatter -f https://data.pyg.org/whl/torch-2.8.0+cpu.html
+python3 -m pip install dgl -f https://data.dgl.ai/wheels/torch-2.8/repo.html
 ```
 
 <Callout type="info">
@@ -201,46 +173,50 @@ python3 -m pip install dgl -f https://data.dgl.ai/wheels/torch-2.6/repo.html
 To install the dependencies for GPU-accelerated algorithms, you need to use the GPU-specific requirements file:
 
 ```shell
-python3 -m pip install -r python/requirements-gpu.txt
+python3 -m pip install -r src/mage/python/requirements-gpu.txt
 ```
 </Callout>
 
-{<h3 className="custom-header">Run the `setup` script</h3>}
+{<h3 className="custom-header">Build and install MAGE</h3>}
 
-Run the following command: 
+MAGE is built with the same build system as Memgraph. Run the following
+commands from the root of the repository:
 
 ```shell
 source /opt/toolchain-v7/activate
-python3 setup build
-sudo cp -r dist/* /usr/lib/memgraph/query_modules
+./build.sh --mage only
+sudo cmake --install build --component mage --prefix /usr
 ```
+
+`./build.sh --mage only` builds just the MAGE query modules (C++, Python and
+Rust) without Memgraph itself — the script sets up everything else it needs
+(a Python virtual environment, the Conan package manager and the project's
+dependencies) on first run. The built modules land in `build/mage/dist`.
+
+The `cmake --install` command then installs the modules to
+`/usr/lib/memgraph/query_modules`, the directory Memgraph loads query modules
+from, together with the runtime libraries they need.
 
 <Callout type="info">
 
-If you don't need all of the algorithms you can build only some of them based on the laguauge.
-
-To build C++ based algorithms run:
-
-```shell
-python3 setup build --lang cpp
-```
-
-To build Python based algorithms run:
+If you don't need all of the algorithms, you can build a subset by passing
+specific targets:
 
 ```shell
-python3 setup build --lang python
+# Only the Python modules (a copy step - fast)
+./build.sh --mage only --target mage_python_modules
+
+# Only the Rust modules
+./build.sh --mage only --target mage_rust_modules
+
+# Individual C++ modules by name
+./build.sh --mage only --target map text
 ```
 
 </Callout>
 
-The script will generate a `dist` directory with all the needed files.
-
-It will also copy the contents of the newly created `dist` directory to
-`/usr/lib/memgraph/query_modules`. Memgraph loads algorithms and modules from
-this directory. 
-
-If something isn't installed properly, the `setup` script will stop the
-installation process. If you have any questions, contact us on
+If something isn't set up properly, the build will stop with an error. If you
+have any questions, contact us on
 **[Discord](https://discord.gg/memgraph).**
 
 {<h3 className="custom-header">Start a Memgraph instance</h3>}
