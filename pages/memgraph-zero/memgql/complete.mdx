@@ -50,7 +50,7 @@ docker network create memgql-net
 MemGQL needs a graph mapping to translate graph patterns into SQL. Create
 these two files next to your `docker-compose.yml`:
 
-**`pg_init.sql`** — creates the relational tables:
+**`pg_init.sql`** creates the relational tables:
 
 ```sql
 CREATE TABLE users (
@@ -60,36 +60,52 @@ CREATE TABLE users (
 );
 
 CREATE TABLE friend_of (
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),
     friend_id INTEGER NOT NULL REFERENCES users(id),
-    PRIMARY KEY (user_id, friend_id)
+    UNIQUE (user_id, friend_id)
 );
 ```
 
-**`pg_mapping.json`** — tells MemGQL how tables map to graph labels:
+**`pg_mapping.json`** is a graph mapping body (`vertices` + `edges`) that maps the
+tables to graph labels on the `pg` connector:
 
 ```json
 {
-  "nodes": [
+  "vertices": [
     {
       "label": "User",
-      "table": "users",
-      "id_column": "id",
-      "properties": {
-        "name": "name",
-        "email": "email"
-      }
+      "mappedTableSource": {
+        "connector": "pg",
+        "table": "users",
+        "metaFields": {
+          "id": "id"
+        }
+      },
+      "attributes": [
+        {
+          "name": "name"
+        },
+        {
+          "name": "email"
+        }
+      ]
     }
   ],
   "edges": [
     {
-      "rel_type": "FRIEND_OF",
-      "table": "friend_of",
-      "id_column": "id",
-      "source_column": "user_id",
-      "target_column": "friend_id",
-      "source_label": "User",
-      "target_label": "User"
+      "label": "FRIEND_OF",
+      "from": "User",
+      "to": "User",
+      "mappedTableSource": {
+        "connector": "pg",
+        "table": "friend_of",
+        "metaFields": {
+          "id": "id",
+          "from": "user_id",
+          "to": "friend_id"
+        }
+      }
     }
   ]
 }
@@ -102,7 +118,7 @@ Save the following as `docker-compose.yml`:
 ```yaml
 services:
   memgql:
-    image: ${MEMGQL_IMAGE:-memgraph/memgql:0.7.0}
+    image: ${MEMGQL_IMAGE:-memgraph/memgql:0.8.0}
     container_name: memgql
     ports:
       - "7688:7688"
@@ -136,10 +152,8 @@ services:
       - -c
       - |
         echo "ADD CONNECTOR mg TYPE memgraph URI 'memgraph:7687' GRAPH memgraph;" | mgconsole --host memgql --port 7688 &&
-        echo "CONNECT mg AS mg_conn;" | mgconsole --host memgql --port 7688 &&
-        echo "ADD MAPPING pg_social FROM '/mappings/pg_mapping.json';" | mgconsole --host memgql --port 7688 &&
-        echo "ADD CONNECTOR pg TYPE postgres URI 'host=postgres user=postgres password=postgres dbname=postgres' MAPPING pg_social;" | mgconsole --host memgql --port 7688 &&
-        echo "CONNECT pg AS pg_conn;" | mgconsole --host memgql --port 7688 &&
+        echo "ADD CONNECTOR pg TYPE postgres URI 'host=postgres user=postgres password=postgres dbname=postgres';" | mgconsole --host memgql --port 7688 &&
+        echo "CREATE GRAPH social FROM FILE '/mappings/pg_mapping.json';" | mgconsole --host memgql --port 7688 &&
         echo "MemGQL bootstrap complete."
     depends_on:
       memgql:
@@ -151,7 +165,7 @@ services:
     restart: "no"
 
   memgraph:
-    image: memgraph/memgraph-mage:3.11.0
+    image: memgraph/memgraph-mage:3.12.0
     container_name: memgraph
     ports:
       - "7687:7687"
@@ -169,7 +183,7 @@ services:
       - memgql-net
 
   lab:
-    image: memgraph/lab:3.11.0
+    image: memgraph/lab:3.12.0
     container_name: lab
     ports:
       - "3000:3000"
@@ -248,7 +262,7 @@ docker compose ps
 
 You should see all eight services running: `memgraph`, `memgql`, `memgql-init`,
 `lab`, `postgres`, `memgql-mcp`, and `structured2graph`. The `memgql-init`
-container registers both connectors and exits — this is expected.
+container registers both connectors and exits; this is expected.
 
 ## 5. Connect with mgconsole
 
@@ -256,13 +270,21 @@ container registers both connectors and exits — this is expected.
 mgconsole --port 7688
 ```
 
-Both the Memgraph and PostgreSQL connectors are already registered and
-connected by the `memgql-init` service. You can start querying right away.
+The `mg` and `pg` connectors and the `social` graph (over PostgreSQL) are
+already registered by the `memgql-init` service. We add the native Memgraph
+graph below, then query each by its labels: routing picks the graph, so no
+`USE` is required.
 
 ### Seed Memgraph with developers
 
+Register a native graph over the Memgraph connector, then insert developers (the
+`Developer` label routes to `dev`):
+
 ```gql
-SET DEFAULT CONNECTION mg_conn;
+CREATE GRAPH dev FROM '{
+  "vertices": [ { "label": "Developer", "mappedGraphSource": { "connector": "mg" } } ],
+  "edges":    [ { "label": "FOLLOWS", "from": "Developer", "to": "Developer", "mappedGraphSource": { "connector": "mg" } } ]
+}';
 ```
 
 ```gql
@@ -289,11 +311,7 @@ MATCH (a:Developer)-[:FOLLOWS]->(b:Developer) RETURN a.name, b.name;
 
 ### Seed PostgreSQL with users
 
-Switch to the PostgreSQL connection and insert users:
-
-```gql
-SET DEFAULT CONNECTION pg_conn;
-```
+Insert users; the `User` label routes to the `social` graph (PostgreSQL):
 
 ```gql
 INSERT (alice:User {name: "Alice", email: "alice@example.com"});
@@ -321,25 +339,20 @@ MATCH (u:User)-[:FRIEND_OF]->(f:User) RETURN u.name, f.name;
 
 ### Query across both backends
 
-Each connection is queried independently — MemGQL routes the query to
-the right backend based on the `USE CONNECTION` clause:
-
 ```gql
-USE CONNECTION mg_conn
-  MATCH (d:Developer)-[:FOLLOWS]->(f:Developer)
+MATCH (d:Developer)-[:FOLLOWS]->(f:Developer)
   RETURN d.name AS source, "FOLLOWS" AS rel, f.name AS target;
 ```
 
 ```gql
-USE CONNECTION pg_conn
-  MATCH (u:User)-[:FRIEND_OF]->(f:User)
+MATCH (u:User)-[:FRIEND_OF]->(f:User)
   RETURN u.name AS source, "FRIEND_OF" AS rel, f.name AS target;
 ```
 
 ## 6. Open Memgraph Lab
 
 Open [http://localhost:3000](http://localhost:3000) in a browser.
-Lab is pre-configured to connect to MemGQL on port 7688 — click
+Lab is pre-configured to connect to MemGQL on port 7688; click
 **Quick Connect** and start exploring visually.
 
 ## 7. Create mappings with structured2graph

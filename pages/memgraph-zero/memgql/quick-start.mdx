@@ -29,7 +29,7 @@ docker run -d --rm \
     --name memgraph-dev \
     --network memgql-net \
     -p 7687:7687 \
-    memgraph/memgraph-mage:3.11.0 \
+    memgraph/memgraph-mage:3.12.0 \
     --log-level=TRACE --also-log-to-stderr
 ```
 
@@ -148,151 +148,226 @@ environment variables and connector-specific settings.
 
 ## Mapping File
 
-Relational connectors (PostgreSQL, MySQL, Oracle, DuckDB, ClickHouse, Iceberg, and
-Apache Pinot) and multi-connection mode require a JSON mapping file that defines
-how graph patterns map to relational tables. Node labels map to tables and edge types map to association tables,
-allowing GQL patterns like `MATCH (p:Person)-[:WORKS_AT]->(c:Company)` to be
-translated into SQL JOINs.
+A mapping describes how a relational backend's tables appear as graph labels and
+relationship types: node labels over tables (`vertices`), edge types over
+association tables (`edges`). The full field reference is on the
+[Schema File](/memgraph-zero/memgql/schema-file) page. The example below is a
+standalone mapping body, the shape `MAPPING_FILE` expects.
 
 Create a mapping file:
 
 ```bash
 cat > mapping.json << 'EOF'
 {
-  "nodes": [
+  "vertices": [
     {
       "label": "Person",
-      "table": "persons",
-      "id_column": "id",
-      "properties": { "name": "name", "age": "age" }
+      "mappedTableSource": {
+        "table": "persons",
+        "metaFields": {
+          "id": "id"
+        }
+      },
+      "attributes": [
+        {
+          "name": "name"
+        },
+        {
+          "name": "age",
+          "type": "Int"
+        }
+      ]
     },
     {
       "label": "Company",
-      "table": "companies",
-      "id_column": "id",
-      "properties": { "name": "name" }
+      "mappedTableSource": {
+        "table": "companies",
+        "metaFields": {
+          "id": "id"
+        }
+      },
+      "attributes": [
+        {
+          "name": "name"
+        }
+      ]
     }
   ],
   "edges": [
     {
-      "rel_type": "KNOWS",
-      "table": "knows",
-      "id_column": "id",
-      "source_column": "from_id",
-      "target_column": "to_id",
-      "source_label": "Person",
-      "target_label": "Person"
+      "label": "KNOWS",
+      "from": "Person",
+      "to": "Person",
+      "mappedTableSource": {
+        "table": "knows",
+        "metaFields": {
+          "id": "id",
+          "from": "from_id",
+          "to": "to_id"
+        }
+      }
     },
     {
-      "rel_type": "WORKS_AT",
-      "table": "works_at",
-      "id_column": "id",
-      "source_column": "person_id",
-      "target_column": "company_id",
-      "source_label": "Person",
-      "target_label": "Company"
+      "label": "WORKS_AT",
+      "from": "Person",
+      "to": "Company",
+      "mappedTableSource": {
+        "table": "works_at",
+        "metaFields": {
+          "id": "id",
+          "from": "person_id",
+          "to": "company_id"
+        }
+      }
     }
   ]
 }
 EOF
 ```
 
-Without `MAPPING_FILE`, a default Person/Company mapping (shown above) is used.
+## Connecting your data with a schema file
 
-## Multi-Connection Mode
+Declare your backends and the graphs over them in one file, boot from it, and
+query straight away, then add more whenever you need.
 
-Multi-connection mode (`CONNECTOR_TYPE=multi`) lets you manage multiple backend
-connectors and connections at runtime using MemGQL statements. You can add
-connectors, establish connections, and route queries to specific backends — all
-from within the same Bolt session.
+### 1. Write a schema file
 
-### 1. Start MemGQL in multi mode
+A schema file declares the backends (`connectors`) and the graphs mapped over
+them. Here is a minimal `schema.json` with one Memgraph connector and an
+`engineering` graph over the data you seeded above:
 
-```bash
-docker run --rm \
-    --name memgql \
-    --network memgql-net \
-    --stop-timeout 2 \
-    -p 7688:7688 \
-    --env CONNECTOR_TYPE=multi \
-    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
-    -v ./mapping.json:/data/mapping.json \
-    memgraph/memgql:latest
+```json
+{
+  "connectors": [
+    {
+      "name": "mg",
+      "type": "memgraph",
+      "connection": {
+        "uri": "memgraph-dev:7687"
+      }
+    }
+  ],
+  "graphs": [
+    {
+      "name": "engineering",
+      "vertices": [
+        {
+          "label": "Developer",
+          "mappedGraphSource": {
+            "connector": "mg"
+          }
+        },
+        {
+          "label": "Language",
+          "mappedGraphSource": {
+            "connector": "mg"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "label": "WRITES",
+          "from": "Developer",
+          "to": "Language",
+          "mappedGraphSource": {
+            "connector": "mg"
+          }
+        }
+      ]
+    }
+  ]
+}
 ```
 
-### 2. Connect and manage backends
+See the [Schema File](/memgraph-zero/memgql/schema-file) page for every field.
+
+### 2. Boot from it
+
+Point MemGQL at the file. Every connector connects and every graph registers at
+startup, with no further setup. This reuses the Memgraph you started above, so
+stop the MemGQL container you started earlier (Ctrl-C) to free port 7688:
+
+```bash
+docker run --rm -p 7688:7688 \
+    --network memgql-net \
+    -e BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    -v "$(pwd)/schema.json:/data/schema.json" \
+    memgraph/memgql:latest --schema=/data/schema.json
+```
+
+### 3. Query
 
 ```bash
 mgconsole --port 7688
 ```
 
-Add connectors and establish connections:
+No `USE` clause is needed; the query routes to `engineering` by its labels.
 
 ```gql
-ADD CONNECTOR mg TYPE memgraph URI 'memgraph-dev:7687' GRAPH memgraph;
-CONNECT mg AS mg_conn;
-
-ADD CONNECTOR neo TYPE neo4j URI 'neo4j-dev:7687' GRAPH neo4j;
-CONNECT neo AS neo_conn;
+MATCH (d:Developer)-[:WRITES]->(l:Language) RETURN d.name, l.name LIMIT 5;
 ```
 
-### 3. Route queries to specific connections
+### 4. Add more backends at runtime
+
+Register more connectors and graphs live, without a restart. Changes persist
+back to `schema.json`. For example, with a PostgreSQL reachable on the same
+network, add it and map a `store` graph over one of its tables:
 
 ```gql
-USE CONNECTION mg_conn MATCH (n) RETURN n.name LIMIT 5;
-USE CONNECTION neo_conn MATCH (n) RETURN n.name LIMIT 5;
+ADD CONNECTOR pg TYPE postgres URI 'postgresql://postgres:postgres@postgres-dev:5432/postgres';
+
+CREATE GRAPH store FROM '{
+  "vertices": [
+    {
+      "label": "Customer",
+      "mappedTableSource": {
+        "connector": "pg",
+        "table": "customers",
+        "metaFields": { "id": "id" }
+      },
+      "attributes": [ { "name": "name" } ]
+    }
+  ]
+}';
+
+MATCH (c:Customer) RETURN c.name LIMIT 5;
 ```
 
-### 4. Introspection
+`CREATE GRAPH … FROM` also accepts `FROM FILE '<path>'` (the [mapping
+file](#mapping-file) format). Pinot can additionally run as a single backend via
+the `CONNECTION_TYPE` alias (`CONNECTION_TYPE=pinot PINOT_URL=…`).
+
+### 5. Introspection
 
 ```gql
 SHOW CONNECTORS;
-SHOW CONNECTIONS;
+SHOW GRAPHS;
 SHOW MAPPINGS;
-PING mg_conn;
-```
-
-### 5. Adding relational backends
-
-Relational connectors (PostgreSQL, MySQL, Oracle, DuckDB, ClickHouse, Iceberg, and
-Apache Pinot) require a mapping that defines how graph patterns map to tables:
-
-```gql
-ADD MAPPING social FROM '/data/mapping.json';
-ADD CONNECTOR pg TYPE postgres USER 'postgres' PASSWORD 'postgres' DATABASE 'postgres' MAPPING social;
-CONNECT pg AS pg_conn;
-USE CONNECTION pg_conn MATCH (n:Person) RETURN n.name LIMIT 5;
-```
-
-Pinot can also run as a single backend with the alias requested by deployment
-environments that use connection naming:
-
-```bash
-CONNECTION_TYPE=pinot PINOT_URL=http://localhost:8099 cargo run --bin bolt_server
+SHOW SCHEMA;
+PING mg;
 ```
 
 ### 6. Cleanup
 
 ```gql
-DISCONNECT pg_conn;
+DROP GRAPH store;
 DROP CONNECTOR pg;
-DROP MAPPING social;
 ```
 
-### MemGQL Statements Reference
+## MemGQL Statements Reference
 
-| Statement                                          | Description                           |
-|----------------------------------------------------|---------------------------------------|
-| `ADD MAPPING <name> FROM '<file>'`                 | Load a graph mapping from a JSON file |
-| `DROP MAPPING <name>`                              | Remove a mapping                      |
-| `ADD CONNECTOR <name> TYPE <type> [options...]`    | Register a backend connector          |
-| `DROP CONNECTOR <name>`                            | Remove a connector                    |
-| `CONNECT <connector> AS <name> [DEFAULT]`          | Establish a named connection          |
-| `DISCONNECT <name>`                                | Close a connection                    |
-| `PING <connection>`                                | Test a connection is alive            |
-| `USE CONNECTION <name> <query>`                    | Route a query to a specific connection|
-| `SET DEFAULT CONNECTOR <name>`                     | Set session default connector         |
-| `SET DEFAULT CONNECTION <name>`                    | Set session default connection        |
-| `SHOW CONNECTORS`                                  | List registered connectors            |
-| `SHOW CONNECTIONS`                                 | List active connections               |
-| `SHOW MAPPINGS`                                    | List loaded mappings                  |
+| Statement                                                | Description                              |
+|----------------------------------------------------------|------------------------------------------|
+| `ADD CONNECTOR <name> TYPE <type> [options...]`          | Register a backend connector (connection)|
+| `DROP CONNECTOR <name>`                                  | Remove a connector                       |
+| `CREATE GRAPH <name> FROM '<json>' \| FROM FILE '<path>'`| Define a graph (mapping) over connectors |
+| `DROP GRAPH [IF EXISTS] <name>`                          | Remove a graph                           |
+| `ALTER GRAPH <name> SET READ ONLY \| READ WRITE`         | Toggle a graph's access mode             |
+| `ALTER GRAPH <name> SET CACHE CONNECTOR <mg> [...]`      | Cache a graph in Memgraph                |
+| `USE <graph> <query>`                                    | Route a query to a named graph           |
+| `PING <connector>`                                       | Test a connector is alive                |
+| `SHOW CONNECTORS` / `SHOW CONNECTIONS`                   | List connectors / live connections       |
+| `SHOW GRAPHS` / `SHOW GRAPH <name>`                      | List graphs / one graph's details        |
+| `SHOW MAPPINGS`                                          | List per-graph mappings                  |
+| `SHOW SCHEMA` / `REFRESH SCHEMA`                         | Routing index / re-introspect            |
+| `EXPORT SCHEMA [TO '<path>']`                            | Export the catalog as JSON               |

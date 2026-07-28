@@ -23,7 +23,9 @@ setup, the choice no longer matters.
 All queries can be run on any coordinator. If currently the coordinator is not a
 leader, the query will be automatically forwarded to the current leader and
 executed there. This is because the Raft protocol specifies that only the
-leader should accept changes in the cluster. 
+leader should accept changes in the cluster. The only exception is [`YIELD
+LEADERSHIP`](#yield-leadership), which must be run directly on the current
+leader.
 </Callout>
 
 ### `ADD COORDINATOR`
@@ -85,7 +87,9 @@ REMOVE COORDINATOR coordinatorId;
 {<h4 className="custom-header"> Behavior & implications </h4>}
 
 - Leader coordinator **cannot** remove itself. To remove the leader, first
-  trigger a leadership change.
+  trigger a leadership change with [`YIELD
+  LEADERSHIP`](#yield-leadership) and then run `REMOVE COORDINATOR` against the
+  new leader.
 
 {<h4 className="custom-header"> Example </h4>}
 
@@ -273,6 +277,84 @@ DEMOTE INSTANCE instanceName;
 DEMOTE INSTANCE instance1;
 ```
 
+
+## Coordinator leadership management
+
+### `YIELD LEADERSHIP`
+
+Makes the current leader coordinator give up its Raft leadership so that another
+coordinator gets elected as the new leader.
+
+```cypher
+YIELD LEADERSHIP;
+```
+
+{<h4 className="custom-header"> Parameters </h4>}
+
+The query takes no parameters and returns no rows. On success, it returns an
+informational notification that the request was submitted.
+
+{<h4 className="custom-header"> Behavior </h4>}
+
+- Must be run **on the coordinator that is currently the leader**. Unlike most
+  other cluster management queries, this query is **not forwarded** to the
+  leader — running it on a follower fails with:
+
+  > Only the current leader can yield the leadership!
+
+- Running it on a data instance fails with:
+
+  > Only coordinator can run YIELD LEADERSHIP query.
+
+- The request is handed over to Raft and processed **asynchronously**. The query
+  returns as soon as the request is submitted, not when the new leader is
+  elected.
+- Raft transfers leadership to another coordinator whose log is up to date. The
+  old leader becomes a follower.
+- When the new coordinator becomes the leader, it runs the [reconciliation
+  loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works):
+  it restores its view of the cluster from the Raft log and restarts health
+  checks toward all data instances. If no MAIN is found at that point, it
+  performs a failover.
+
+{<h4 className="custom-header"> Implications </h4>}
+
+- This changes only the **coordinator** leadership. Data instances keep their
+  MAIN and REPLICA roles — this is not a data failover, and client queries
+  against MAIN and REPLICAs are unaffected.
+- During the short election window, cluster management queries (e.g. `SHOW
+  INSTANCES`, registration queries) may temporarily fail or report instances as
+  `down` because there is no leader to serve them. Retry once the new leader is
+  elected.
+- At least one other healthy coordinator must be able to take over. In a
+  single-coordinator cluster, or when the other coordinators are down, the same
+  coordinator remains (or becomes again) the leader.
+- Failover of data instances is not triggered, but the new leader recomputes
+  cluster state, so a cluster that was already missing a MAIN can fail over as
+  part of the leadership change.
+- No privilege is required to run this query on the coordinators.
+
+{<h4 className="custom-header"> Typical use cases </h4>}
+
+- Removing the current leader coordinator from the cluster, since the leader
+  cannot remove itself — see [`REMOVE COORDINATOR`](#remove-coordinator).
+- Taking the leader coordinator down for maintenance, a restart, or a rolling
+  upgrade without waiting for its leadership to expire.
+- Moving leadership away from a node that is under heavy load or in a degraded
+  network zone.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+YIELD LEADERSHIP;
+```
+
+Verify the outcome by monitoring the cluster until a new coordinator reports the
+`leader` role:
+
+```cypher
+SHOW INSTANCES;
+```
 
 ## Monitoring Commands
 
