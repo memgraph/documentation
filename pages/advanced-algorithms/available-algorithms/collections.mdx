@@ -39,10 +39,52 @@ uncomparable. <br />
 Only `Numeric` data types can be used in `sum()` and `avg()` functions, so only
 `Int` and `Double` data types are allowed.
 
+### Handling `NULL` values
+
+Passing `NULL` as a whole list (or scalar) argument no longer raises an
+argument-validation error. Each function returns a defined result:
+
+| Function | Result when a list argument is `NULL` |
+| --- | --- |
+| `sum()`, `sum_longs()`, `avg()`, `min()`, `max()`, `to_set()`, `pairs()` | `null` |
+| `union()`, `union_all()`, `disjunction()` | the other list; `null` when both are `NULL` |
+| `remove_all()`, `subtract()` | `null` when the first list is `NULL`; the first list when the second is `NULL` |
+| `intersection()`, `sort()`, `flatten()`, `duplicates()` | empty list `[]` |
+| `contains()`, `contains_all()`, `contains_sorted()` | `false` |
+| `frequencies_as_map()` | empty map `{}` |
+| `split()`, `partition()` | no rows |
+
+`NULL` elements inside a list are handled per function:
+
+- `min()` and `max()` skip `NULL` elements; a list containing only `NULL` values returns `null`.
+- `contains()` and `contains_all()` never match a `NULL` search value (`NULL = NULL` is not true), so searching for `NULL` returns `false`.
+- `split()` treats a `NULL` delimiter as matching nothing and returns the whole list as a single part; `NULL` list elements are kept.
+- `frequencies_as_map()` counts `NULL` elements under the `"NO_VALUE"` key.
+- `flatten()`, `pairs()`, `to_set()`, `union()`, `union_all()`, `remove_all()`, `intersection()`, `disjunction()`, `subtract()` and `duplicates()` keep `NULL` elements as ordinary values.
+- `sum()`, `sum_longs()`, `avg()`, `sort()` and `contains_sorted()` still reject a list that contains a `NULL` element; `contains_sorted()` also rejects a `NULL` search value, and `partition()` still rejects a `NULL` size.
+
+For example, a `NULL` argument returns the defined result instead of erroring:
+
+```cypher
+RETURN collections.sum(null) AS sum, collections.sort(null) AS sorted;
+```
+
+```plaintext
++----------------------------+
+| sum        | sorted        |
++----------------------------+
+| null       | []            |
++----------------------------+
+```
+
 ### `sort()`
 
 Sorts the elements of an input list if they are of the same data type. For the input
 list to be sorted, its elements must be comparable and of the same type.
+
+<Callout type="info">
+This function is equivalent to **apoc.coll.sort**.
+</Callout>
 
 {<h4 className="custom-header"> Input: </h4>}
 
@@ -73,6 +115,10 @@ RETURN collections.sort([1, 4, 2.3, -5]) AS sorted;
 Verifies the presence of a certain element in a sorted list. If an unsorted list
 is passed, there is no guarantee that the result will be correct. For the input
 list to be sorted, its elements must be comparable and of the same type.
+
+<Callout type="info">
+This function is equivalent to **apoc.coll.containsSorted**.
+</Callout>
 
 {<h4 className="custom-header"> Input: </h4>}
 
@@ -239,6 +285,10 @@ RETURN collections.contains([1,2,3], "e") AS output;
 
 Checks if a list contains all the values from another list.
 
+<Callout type="info">
+This function is equivalent to **apoc.coll.containsAll**.
+</Callout>
+
 {<h4 className="custom-header"> Input: </h4>}
 
 - `coll: List[Any]` ➡ The target list used for searching values.
@@ -270,6 +320,10 @@ RETURN collections.contains_all([1, 2, 3, "pero"], [1, 1, 1, 1, 2, 3]) AS contai
 
 Returns the unique intersection of two lists.
 
+<Callout type="info">
+This function is equivalent to **apoc.coll.intersection**.
+</Callout>
+
 {<h4 className="custom-header"> Input: </h4>}
 
 - `first: List[Any]` ➡ The first list.
@@ -292,6 +346,107 @@ RETURN collections.intersection([1, 1, 2, 3, 4, 5], [1, 1, 3, 5, 7, 9]) AS inter
 | intersection                                            |
 +---------------------------------------------------------+
 | [3, 5, 1]                                               |
++---------------------------------------------------------+
+```
+
+### `disjunction()`
+
+Returns the disjunction (symmetric difference) of two lists: the unique elements
+present in exactly one of the lists. The order of the result is not guaranteed.
+
+<Callout type="info">
+This function is equivalent to **apoc.coll.disjunction**.
+</Callout>
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `list1: List[Any]` ➡ The first list.
+- `list2: List[Any]` ➡ The second list.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `List[Any]` ➡ The unique elements found in only one of the two lists.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+The following query will return the elements present in only one of the lists:
+
+```cypher
+RETURN collections.disjunction([1, 2, 3, 4, 5], [3, 4, 5]) AS disjunction;
+```
+
+```plaintext
++---------------------------------------------------------+
+| disjunction                                             |
++---------------------------------------------------------+
+| [1, 2]                                                  |
++---------------------------------------------------------+
+```
+
+### `subtract()`
+
+Returns the first list as a set with all elements of the second list removed. The
+result is deduplicated and its order is not guaranteed.
+
+<Callout type="info">
+This function is equivalent to **apoc.coll.subtract**.
+</Callout>
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `list1: List[Any]` ➡ The list to subtract from.
+- `list2: List[Any]` ➡ The list of elements to remove.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `List[Any]` ➡ The unique elements of the first list that are not present in the second list.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+The following query will remove the elements of the second list from the first:
+
+```cypher
+RETURN collections.subtract([1, 2, 3, 4, 5, 6, 6], [3, 4, 5]) AS subtracted;
+```
+
+```plaintext
++---------------------------------------------------------+
+| subtracted                                              |
++---------------------------------------------------------+
+| [1, 2, 6]                                               |
++---------------------------------------------------------+
+```
+
+### `duplicates()`
+
+Returns the values that appear more than once in a list, each reported a single
+time, in the order in which the duplicate is first observed.
+
+<Callout type="info">
+This function is equivalent to **apoc.coll.duplicates**.
+</Callout>
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `coll: List[Any]` ➡ The input list.
+
+{<h4 className="custom-header"> Output: </h4>}
+
+- `List[Any]` ➡ The values that occur more than once in the input list.
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+The following query will return the values that appear more than once:
+
+```cypher
+RETURN collections.duplicates([1, 1, 2, 3, 3, 3]) AS duplicates;
+```
+
+```plaintext
++---------------------------------------------------------+
+| duplicates                                              |
++---------------------------------------------------------+
+| [1, 3]                                                  |
 +---------------------------------------------------------+
 ```
 
@@ -468,6 +623,10 @@ RETURN collections.sum([1, 2.3, -4, a.id]) AS sum;
 Calculates the sum of list elements casted to integers. The initial list
 elements have to be `Numeric` data type, or an exception is thrown.
 
+<Callout type="info">
+This function is equivalent to **apoc.coll.sumLongs**.
+</Callout>
+
 {<h4 className="custom-header"> Input: </h4>}
 
 - `numbers: List[Any]` ➡ The list of numbers.
@@ -498,6 +657,10 @@ Calculates the average of listed elements if they are of the same type and can
 be summed (the elements need to be numerics). Listing elements of different data
 types, or data types that are impossible to sum, will throw an exception.
 
+<Callout type="info">
+This function is equivalent to **apoc.coll.avg**.
+</Callout>
+
 {<h4 className="custom-header"> Input: </h4>}
 
 - `numbers: List[Any]` ➡ The list of numbers.
@@ -525,6 +688,10 @@ RETURN collections.avg([5, 5, 6, 7, -5]) AS average;
 ### `max()`
 
 The procedure returns the element of the maximum value from the input list.
+
+<Callout type="info">
+This function is equivalent to **apoc.coll.max**.
+</Callout>
 
 {<h4 className="custom-header"> Input: </h4>}
 
@@ -555,6 +722,10 @@ RETURN collections.max([-1, -2, -3.3]) AS max;
 Finds the element of the minimum value in an input list. Listing elements of
 different data types, or data types that are impossible to compare, will throw an
 exception.
+
+<Callout type="info">
+This function is equivalent to **apoc.coll.min**.
+</Callout>
 
 {<h4 className="custom-header"> Input: </h4>}
 
@@ -587,6 +758,10 @@ RETURN collections.min([1,2,3]) AS min;
 Splits the provided list based on a specified delimiter. Returns a series of
 sublists generated by breaking the original list wherever the delimiter is
 encountered. The delimiter itself is not included in the resulting sublists.
+
+<Callout type="info">
+This procedure is equivalent to **apoc.coll.split**.
+</Callout>
 
 {<h4 className="custom-header"> Input: </h4>}
 
