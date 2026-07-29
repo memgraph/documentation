@@ -48,6 +48,119 @@ guide.
 
 ### Memgraph v3.13.0 - September 9th, 2026
 
+{<h4 className="custom-header">⚠️ Breaking changes</h4>}
+
+- The APOC compatibility names `apoc.convert.fromJsonList` and
+  `apoc.convert.toJson` now resolve to the C++ `convert` module
+  (`convert.from_json_list` / `convert.to_json`) instead of the Python
+  `json_util` implementations. Output can differ — especially for nodes,
+  relationships, paths, points, and temporals. Call `json_util.*` explicitly if
+  you need the previous Python behavior, or update consumers for the new
+  structured / ISO-8601 JSON forms.
+  [#4443](https://github.com/memgraph/memgraph/pull/4443)
+
+{<h4 className="custom-header">🐞 Bug fixes</h4>}
+
+- Text and vector search now respect fine-grained label and property
+  permissions. Hits the caller cannot read are filtered out, and
+  `text_search.aggregate` / `text_search.aggregate_edges` return an error unless
+  every indexed property is readable.
+  [#4316](https://github.com/memgraph/memgraph/pull/4316)
+- Fixed unbounded memory growth from the query AST cache when many
+  structurally unique queries were run (for example streams of inlined
+  embeddings). The cache is now a bounded LRU controlled by
+  `--query-ast-cache-max-size` (default `1000`; `0` disables it).
+  [#4334](https://github.com/memgraph/memgraph/pull/4334)
+- The `collections.*` functions and procedures now accept `NULL` list and scalar
+  arguments instead of failing argument validation. Each function returns a
+  defined result (for example `collections.sum(null)` → `null`,
+  `collections.sort(null)` → `[]`, `collections.contains(null, x)` → `false`),
+  matching the compatibility-layer behavior.
+  [#4416](https://github.com/memgraph/memgraph/pull/4416)
+- Fixed stale coordinator entries in the HA routing table and a possible
+  coordinator crash on `REMOVE COORDINATOR`. Coordinators now deduplicate
+  entries when applying Raft logs and snapshots.
+  [#4444](https://github.com/memgraph/memgraph/pull/4444)
+- Fixed `path.subgraph_all` and `path.subgraph_nodes` so their config options
+  work as expected.
+  [#4447](https://github.com/memgraph/memgraph/pull/4447)
+- Under heavy concurrent load, operations that need exclusive access to the
+  database could hang indefinitely while shared readers kept arriving. Those
+  exclusive waiters now take priority so the hang no longer happens.
+  [#4450](https://github.com/memgraph/memgraph/pull/4450)
+- Fixed a crash when `LOAD PARQUET` hit invalid values (for example a time
+  outside Memgraph’s supported range). The query now fails with an error
+  instead of taking down the server.
+  [#4454](https://github.com/memgraph/memgraph/pull/4454)
+- Fixed `LOAD PARQUET` silently storing wrong timestamps or durations when
+  converting large temporal values from Parquet. Those cases now fail with a
+  clear query error instead of corrupting data.
+  [#4455](https://github.com/memgraph/memgraph/pull/4455)
+- Fixed a rare crash in garbage collection under heavy concurrent writes when
+  indexes or unique constraints are defined.
+  [#4475](https://github.com/memgraph/memgraph/pull/4475)
+- Fixed a crash when multiple sessions printed query plans at the same time
+  (for example concurrent `EXPLAIN` / `PROFILE`, or query-plan logging).
+  [#4489](https://github.com/memgraph/memgraph/pull/4489)
+
+{<h4 className="custom-header">🛠️ Improvements</h4>}
+
+- MAGE is now built and packaged from the same unified CMake / Conan tree as
+  Memgraph. Build it with `build.sh --mage on` or `--mage only`; the old
+  `mage/setup` Python script is removed. Only affects people building MAGE from
+  source — prebuilt packages are unchanged.
+  [#4348](https://github.com/memgraph/memgraph/pull/4348)
+- `build.sh --target` now accepts several targets in one invocation (for
+  example `--target memgraph memgraph__unit`), so you can build multiple
+  targets with a single configure step instead of one run per target.
+  [#4404](https://github.com/memgraph/memgraph/pull/4404)
+- Reduced memory used by the query abstract syntax tree and plan caches by
+  storing each LRU cache key once instead of twice per entry.
+  [#4445](https://github.com/memgraph/memgraph/pull/4445)
+- Queries that use query-module functions or `CALL` procedures are now
+  plan-cached instead of being re-parsed and re-planned on every run. Module
+  reloads stay safe; only module-dependent queries are invalidated, and the
+  next execution picks up updated code.
+  [#4461](https://github.com/memgraph/memgraph/pull/4461)
+  [#4482](https://github.com/memgraph/memgraph/pull/4482)
+- In in-memory transactional mode, `CREATE INDEX` / `CREATE CONSTRAINT` no
+  longer stall behind garbage collection (and GC no longer waits on those DDL
+  statements). Under index-heavy workloads this removes GC-correlated latency
+  spikes on index and constraint creation.
+  [#4468](https://github.com/memgraph/memgraph/pull/4468)
+
+{<h4 className="custom-header">✨ New features</h4>}
+
+- Added `collections.disjunction`, `collections.subtract`, and
+  `collections.duplicates` to the MAGE `collections` module for set-style list
+  difference, subtraction, and finding repeated values.
+  [#4415](https://github.com/memgraph/memgraph/pull/4415)
+- Added `map.get` and `map.merge_list` to the MAGE `map` module. Existing
+  helpers such as `map.merge` and `map.set_key` now treat a `null` map as empty
+  (and a `null` key as a no-op) instead of failing, and accept nodes or
+  relationships by using their property maps.
+  [#4417](https://github.com/memgraph/memgraph/pull/4417)
+- Added `text.compare_cleaned(text1, text2)` to the MAGE `text` module. It
+  compares two strings for equality after keeping only ASCII letters and digits
+  (lowercased) and dropping everything else; `NULL` arguments return `false`.
+  [#4435](https://github.com/memgraph/memgraph/pull/4435)
+- Added `convert.from_json_map`, `convert.from_json_list`, `convert.to_map`, and
+  `convert.to_json` for parsing and serializing JSON, with an optional `path`
+  selector on the from_* helpers and structured output for graph and temporal
+  types from `to_json`.
+  [#4443](https://github.com/memgraph/memgraph/pull/4443)
+- Added `search.node` and `search.node_all` procedures that find nodes by a
+  `{label: property}` map, a comparison operator, and a value. A property list
+  per label is OR-ed; `search.node` de-duplicates by node while
+  `search.node_all` keeps duplicates. An existing label-property index is used
+  automatically when available.
+  [#4460](https://github.com/memgraph/memgraph/pull/4460)
+- `--coordinator-id=0` is now a valid coordinator id (previously rejected).
+  [#4483](https://github.com/memgraph/memgraph/pull/4483)
+- `CREATE RANGE INDEX FOR ... ON ...` now works for nodes and relationships and
+  creates Memgraph’s usual property index.
+  [#4486](https://github.com/memgraph/memgraph/pull/4486)
+
 ### Lab v3.13.0 - September 9th, 2026
 
 <LabReleasesClient version="3.13.0" />
