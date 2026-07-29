@@ -853,22 +853,32 @@ rendering, since the Gateway would then apply to nothing.
 
 Before enabling Gateway API in the chart, you need:
 
-1. **A Gateway API controller** installed in your cluster. Examples include [Envoy Gateway](https://gateway.envoyproxy.io/), [Istio](https://istio.io/), [Cilium](https://cilium.io/), [Traefik](https://traefik.io/), and [Kong](https://konghq.com/). This guide uses Envoy Gateway as an example:
+1. **The Gateway API CRDs** installed in your cluster. Some controllers ship them
+   with their own Helm chart (Envoy Gateway does), while others expect you to
+   install them yourself (Traefik does). The controller-specific guides below
+   cover both cases.
 
-   ```bash
-   helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.4 -n envoy-gateway-system --create-namespace
-   ```
+2. **A Gateway API controller** installed in your cluster. Examples include
+   [Envoy Gateway](https://gateway.envoyproxy.io/), [Istio](https://istio.io/),
+   [Cilium](https://cilium.io/), [Traefik](https://traefik.io/), and
+   [Kong](https://konghq.com/). Step-by-step guides are available for two of
+   them: [Envoy Gateway](#deploy-with-envoy-gateway) and
+   [Traefik](#deploy-with-traefik).
 
-2. **A GatewayClass resource** that references your controller. A GatewayClass is a cluster-scoped resource that defines which controller manages Gateways — each Gateway references a GatewayClass by name. The Helm chart does **not** create a GatewayClass; you must create one yourself or use one provided by your controller installation. For Envoy Gateway:
+3. **A GatewayClass resource** that references your controller. A GatewayClass is
+   a cluster-scoped resource that defines which controller manages Gateways —
+   each Gateway references a GatewayClass by name. The Memgraph Helm chart does
+   **not** create a GatewayClass; you must create one yourself or use one
+   provided by your controller installation (the Envoy Gateway chart does not
+   create one, the Traefik chart does).
 
-   ```yaml
-   apiVersion: gateway.networking.k8s.io/v1
-   kind: GatewayClass
-   metadata:
-     name: eg
-   spec:
-     controllerName: gateway.envoyproxy.io/gatewayclass-controller
-   ```
+<Callout type="warning">
+The chart exposes Bolt through `TCPRoute`, which is part of the Gateway API
+**experimental** channel. A standard-channel CRD bundle is not enough — whatever
+you install must include `tcproutes.gateway.networking.k8s.io`, and the
+controller itself may need experimental support turned on (Traefik does, see
+[Deploy with Traefik](#deploy-with-traefik)).
+</Callout>
 
 <Callout type="warning">
 You must ensure the GatewayClass exists before enabling the gateway feature in the chart. If you create your own Gateway (Option 1 below), the chart requires `gatewayClassName` to reference an existing GatewayClass, and will fail with an error if it is not set.
@@ -957,13 +967,18 @@ helm install memgraph-ha memgraph/memgraph-high-availability \
 ```
 
 <Callout type="warning">
-When using an existing Gateway, ensure it has listeners configured with the correct names and ports that match the TCPRoute `sectionName` references. The chart expects listener names in the format `data-{id}-bolt` for data instances and `coordinator-{id}-bolt` for coordinators. For example, the default HA setup (2 data instances, 3 coordinators) needs these listeners:
+When using an existing Gateway, ensure it has listeners whose **names** match the
+TCPRoute `sectionName` references. The chart expects listener names in the format
+`data-{id}-bolt` for data instances and `coordinator-{id}-bolt` for coordinators.
+The listener ports are your choice in this mode, but keeping them aligned with the
+chart defaults avoids surprises. For example, the default HA setup (2 data
+instances, 3 coordinators) needs these listeners:
 
 - `data-0-bolt` on port 9000
 - `data-1-bolt` on port 9001
-- `coordinator-1-bolt` on port 9011
-- `coordinator-2-bolt` on port 9012
-- `coordinator-3-bolt` on port 9013
+- `coordinator-1-bolt` on port 10001
+- `coordinator-2-bolt` on port 10002
+- `coordinator-3-bolt` on port 10003
 
 A standalone Gateway manifest with these pre-configured listeners is available in the [Helm charts repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/gateway.yaml).
 </Callout>
@@ -971,6 +986,199 @@ A standalone Gateway manifest with these pre-configured listeners is available i
 <Callout type="info">
 **TCPRoute API version**: TCPRoute uses `v1alpha2`, which is the latest available API version. It is supported by Envoy Gateway and other major implementations but is not yet GA. Gateway and HTTPRoute are both GA (`v1`).
 </Callout>
+
+#### Deploy with Envoy Gateway
+
+[Envoy Gateway](https://gateway.envoyproxy.io/) is the controller used in the
+examples above. Its Helm chart bundles the Gateway API CRDs, so no separate CRD
+installation is needed, and it programs listener ports dynamically — the Bolt
+ports only have to be configured in the Memgraph chart.
+
+<Steps>
+
+{<h4 className="custom-header"> Install Envoy Gateway </h4>}
+
+```bash
+helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.4 \
+  -n envoy-gateway-system --create-namespace
+```
+
+Chart version `v1.2.4` ships Gateway API bundle version `v1.2.1`, which includes
+the `TCPRoute` CRD.
+
+{<h4 className="custom-header"> Create the GatewayClass </h4>}
+
+The Envoy Gateway chart does not create a GatewayClass, so create one that points
+at its controller:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+```
+
+```bash
+kubectl apply -f gatewayclass.yaml
+```
+
+{<h4 className="custom-header"> Install the Memgraph HA chart </h4>}
+
+Assuming the `memgraph-secrets` Secret with the license and organization name
+already exists (see [Install Memgraph HA](#install-memgraph-ha)):
+
+```bash
+helm install memgraph-ha memgraph/memgraph-high-availability \
+  --set externalAccessConfig.gateway.enabled=true \
+  --set externalAccessConfig.gateway.gatewayClassName=eg
+```
+
+{<h4 className="custom-header"> Verify the setup </h4>}
+
+```bash
+kubectl get gatewayclass eg
+kubectl get gateway -o wide
+kubectl get tcproute
+```
+
+The GatewayClass should be `ACCEPTED=True` and the Gateway `PROGRAMMED=True` with
+an external address. Envoy Gateway provisions a separate Envoy deployment and
+LoadBalancer Service for the Gateway.
+
+</Steps>
+
+#### Deploy with Traefik
+
+[Traefik](https://traefik.io/) can serve the same setup, but its Gateway API
+support differs from Envoy Gateway in two ways that affect the Memgraph chart:
+
+- Its Helm chart ships **no Gateway API CRDs**, so you install them yourself, and
+  `TCPRoute` support has to be explicitly enabled.
+- Traefik does **not** open arbitrary listener ports. Every port used by a Gateway
+  listener must also be declared as a Traefik entryPoint, otherwise the listener
+  is silently ignored.
+
+<Steps>
+
+{<h4 className="custom-header"> Install the Gateway API CRDs </h4>}
+
+Install the experimental channel, which is where `TCPRoute` lives:
+
+```bash
+kubectl apply --server-side --force-conflicts \
+  -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
+```
+
+<Callout type="info">
+Use `--server-side`. A plain `kubectl apply` stores the whole manifest in the
+`kubectl.kubernetes.io/last-applied-configuration` annotation and the HTTPRoute
+CRD exceeds the 256 KB annotation limit, failing with
+`metadata.annotations: Too long: may not be more than 262144 bytes`.
+`--force-conflicts` is needed only when the CRDs were previously created with a
+client-side apply.
+</Callout>
+
+{<h4 className="custom-header"> Configure Traefik </h4>}
+
+Create a `traefik-values.yaml` file. The `ports` entries are the entryPoints
+backing the Gateway listeners the Memgraph chart creates — data instances on
+`dataPortBase + data instance id`, coordinators on
+`coordinatorPortBase + coordinator id`:
+
+```yaml
+providers:
+  kubernetesGateway:
+    enabled: true
+    # Required for TCPRoute support.
+    experimentalChannel: true
+    statusAddress:
+      service:
+        # Copies the Traefik LoadBalancer address into Gateway .status.addresses,
+        # which is what external-dns reads.
+        enabled: true
+
+# The Memgraph chart creates its own Gateway, so Traefik's default one is not needed.
+gateway:
+  enabled: false
+
+# Creates the GatewayClass "traefik" (controller traefik.io/gateway-controller).
+gatewayClass:
+  enabled: true
+
+service:
+  type: LoadBalancer
+
+ports:
+  data-0:
+    port: 9000
+    exposedPort: 9000
+    protocol: TCP
+    expose:
+      default: true
+  data-1:
+    port: 9001
+    exposedPort: 9001
+    protocol: TCP
+    expose:
+      default: true
+```
+
+A ready-to-use version of this file is available in the [Helm charts
+repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/traefik-values.yaml).
+
+<Callout type="warning">
+Declare one entryPoint per Gateway listener, and remember to add new ones when
+you [scale the cluster](#scale-the-cluster-up-and-down) — a third data instance
+needs port 9002, a fourth coordinator needs port 10004. If a tier is exposed
+through a `serviceType` instead of the Gateway, it has no listeners and needs no
+entryPoints; with the [recommended setup](#recommended-external-access-setup)
+(coordinators via `CommonLoadBalancer`, data instances via the Gateway) only the
+`data-*` entryPoints are required.
+</Callout>
+
+{<h4 className="custom-header"> Install Traefik </h4>}
+
+```bash
+helm repo add traefik https://traefik.github.io/charts
+helm repo update
+helm install traefik traefik/traefik -n traefik --create-namespace \
+  -f traefik-values.yaml
+```
+
+The values above were verified against Traefik chart `41.0.2` (Traefik `v3.7.6`).
+The `providers.kubernetesGateway.*` options require Traefik 3.x.
+
+{<h4 className="custom-header"> Install the Memgraph HA chart </h4>}
+
+Point `gatewayClassName` at the GatewayClass created by the Traefik chart.
+Assuming the `memgraph-secrets` Secret with the license and organization name
+already exists (see [Install Memgraph HA](#install-memgraph-ha)):
+
+```bash
+helm install memgraph-ha memgraph/memgraph-high-availability \
+  --set externalAccessConfig.gateway.enabled=true \
+  --set externalAccessConfig.gateway.gatewayClassName=traefik
+```
+
+{<h4 className="custom-header"> Verify the setup </h4>}
+
+```bash
+kubectl get gatewayclass traefik
+kubectl get gateway -o wide
+kubectl get tcproute
+# The chart names the Gateway <release-name>-memgraph-high-availability-gateway
+kubectl describe gateway memgraph-ha-memgraph-high-availability-gateway
+```
+
+If a listener reports `Detached` or `UnsupportedProtocol`, the matching entryPoint
+is missing from the Traefik values. Unlike Envoy Gateway, Traefik routes all
+Gateways through the single Traefik Service, so the external address comes from
+the `traefik` Service in the `traefik` namespace.
+
+</Steps>
+
 
 ### Use Memgraph HA chart with IngressNginx
 
