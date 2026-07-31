@@ -18,8 +18,10 @@ description: MemGQL release notes
   label's id and its declared `attributes`; a query reading anything else is a
   cache miss and reads the source, so results never differ from the uncached
   run. A label declaring no `attributes` still caches its ids and topology, so
-  traversals and graph algorithms work against it. `SHOW GRAPH CACHES` gained a
-  `cached_properties` column reporting what each fragment holds. See
+  traversals and graph algorithms work against it. `SHOW GRAPH CACHES` gained
+  `hits`, `misses` and `cached_properties` columns — enough to tell a cache that
+  is serving from one that never engages, and a property-driven miss from a cold
+  one. See
   [Caching a graph in Memgraph](/memgraph-zero/memgql/multiple-graphs#caching-a-graph-in-memgraph).
 
 ### Fixed
@@ -29,15 +31,18 @@ description: MemGQL release notes
   most clients were unaffected, but anything reading positionally was not: a
   `RETURN n` whose mapping had a property sorting before `id` came back with that
   property's value as the node's element id.
-- **The Memgraph cache dropped most edges and every undeclared property.** Cached
-  edges pointed at the wrong endpoints or were missing entirely, and cached nodes
-  carried only their id, so a query served from the cache silently returned
-  different rows than the same query against the source. Edge properties are now
-  copied into the cache as well.
+- **The Memgraph cache returned different rows than its source.** Cached edges
+  pointed at the wrong endpoints or were missing entirely, edge properties were
+  never copied at all, and a cache holding only a label's id answered property
+  reads with `NULL` instead of declining them — so a query silently changed its
+  answer once the cache was warm.
 - **`count(DISTINCT <node>)` and `count(DISTINCT <relationship>)` produced invalid
   SQL** on relational backends. Counting distinct properties was unaffected.
 - **Grouping by a whole element produced invalid SQL** — `WITH n, count(…)` and
   `WITH r, count(…)` on relational backends.
+- **A warm table was re-scanned from the source** every time a newly-touched
+  edge type pulled it in as an endpoint, repeating the full scan the cache
+  exists to avoid.
 - **The cache's warm-up log counted rows read from the source**, so it reported
   success even when no rows reached the cache.
 
