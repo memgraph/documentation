@@ -443,16 +443,21 @@ stale result.
 `TTL` is in seconds; `MAX_BYTES` accepts a plain byte count or a `K`/`M`/`G`/`T`
 binary suffix (`8G` = 8 × 1024³ bytes).
 
-**Every cached label must declare its `attributes`.** The cache copies only the
-columns the mapping names, so a label that declares none would land in Memgraph
-carrying nothing but its id, and every property read from the cache would come
-back `NULL`. Rather than serve those rows as if they were the source, MemGQL
-declines to cache the graph and logs an actionable message naming the label to
-fix. The query still runs against the source, exactly as it would on a cache
-miss, so this costs you caching and not correctness. Add the properties you want
-cached to that vertex's [`attributes`](/memgraph-zero/memgql/schema-file#attributes)
-and re-run. This is stricter than querying, where an undeclared property still
-resolves to a same-named column.
+**The cache holds a label's id and its declared
+[`attributes`](/memgraph-zero/memgql/schema-file#attributes)** — the columns the
+mapping names. A query reading any other property is a cache miss and reads the
+source, so results never differ from the uncached run; you lose the speed-up for
+that query, not correctness. This is the same rule
+[routing](#routing) applies: a property has to be declared to carry a signal.
+
+A label declaring no `attributes` at all still caches its **ids and topology**,
+which is what traversals, path finding and graph algorithms run on. That is
+usually the reason to cache a warehouse graph in Memgraph in the first place —
+`CALL pagerank.get()` and friends need no properties. Declare the attributes you
+also want answered from the cache.
+
+`SHOW GRAPH CACHES` reports a `cached_properties` column listing what each
+fragment holds, which is how you tell a property-driven miss from a cold one.
 
 The cache engages per routed part, whether the part is pinned with `USE` or
 routed by its labels:
@@ -476,7 +481,9 @@ routed by its labels:
 
 In a cross-backend query (split by explicit `USE`, or routed by label), each
 cache-enabled part is served from its cache independently while the other parts
-run on their own sources.
+run on their own sources. `UNION` / `UNION ALL` queries are the exception: they
+dispatch as a whole and never consult the cache, even when every scope they
+touch is resident.
 
 Inspect what is cached with `SHOW GRAPH CACHES` (returns each cache-enabled
 graph, its cache connector, `TTL`, `MAX_BYTES`, and the number of cached
