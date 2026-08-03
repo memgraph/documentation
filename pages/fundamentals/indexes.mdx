@@ -477,6 +477,53 @@ not yet supported.
 
 </Callout>
 
+### Global vertex property index
+
+<Callout type="info">
+
+This index supports non-blocking creation: reads continue without interruption,
+while writes are briefly paused. For more information, see the [concurrent index
+creation](#concurrent-index-creation).
+
+</Callout>
+
+A label-property index requires you to know the label up front. But sometimes
+you just want to find a node by a property, say `uuid`, regardless of what
+labels the node has. For this, you can use a global vertex-property index. For
+example, to create an index on all nodes with a `uuid` property:
+
+```cypher
+CREATE GLOBAL INDEX ON :(uuid);
+```
+
+Once created, queries that search by that property can use the index
+automatically:
+
+```cypher
+MATCH (n) WHERE n.uuid = "abc-123" RETURN n;
+MATCH (n {uuid: "abc-123"}) RETURN n;
+```
+
+The planner also considers this index as a fallback when a query specifies a
+label but no matching label-property index exists. For example, if there is no
+index on `:Person(uuid)` but a global index on `uuid` exists,
+`MATCH (n:Person {uuid: "abc-123"}) RETURN n` can use the global index and
+filter by label afterwards.
+
+<Callout type="info">
+
+When both a label-property index and a global vertex property index could serve
+a query, the planner picks whichever has the lower estimated cardinality. In
+practice this usually means the label-property index wins, since it's scoped to
+a single label.
+
+</Callout>
+
+To drop the index:
+```cypher
+DROP GLOBAL INDEX ON :(uuid);
+```
+
 ### Edge-type index
 
 <Callout type="info">
@@ -696,7 +743,8 @@ memgraph> MATCH (n:Person) WHERE n.name =~ ".*an$" RETURN n.name;
 ## Show created indexes
 
 To see all the information on the label, label-property, edge-type, edge-type
-property, point indexes and vector indexes, run the following query:
+property, global vertex property, global edge property, point indexes and vector
+indexes, run the following query:
 
 ```cypher
 SHOW INDEX INFO;
@@ -740,6 +788,10 @@ DROP INDEX ON :Label(property1, property2);
 ```
 
 ```cypher
+DROP GLOBAL INDEX ON :(property_name);
+```
+
+```cypher
 DROP EDGE INDEX ON :EDGE_TYPE;
 ```
 
@@ -760,8 +812,8 @@ DROP POINT INDEX ON :Label(property);
 The `DROP ALL INDEXES` clause allows you to delete all indices in your database
 in a single operation. This includes all types of indices: label indices,
 label-property indices, edge type indices, edge type-property indices, global
-edge indices, point indices, text indices, vector indices, and vector edge
-indices.
+vertex property indices, global edge property indices, point indices, text
+indices, vector indices, and vector edge indices.
 
 ```cypher
 DROP ALL INDEXES;
@@ -956,6 +1008,10 @@ USING INDEX :Label(property) ...;
 USING INDEX :Label(property1, property2) ...;
 ```
 
+```cypher
+USING INDEX :(property) ...;
+```
+
 It is also possible to specify multiple hints separated with comma. In that
 case, the planner will apply the first hint that is applicable for a given
 match.
@@ -1008,8 +1064,8 @@ b_1$, or $a_1 = b_1$ and $a_2 < b_2$.
 
 Memgraph supports **(almost) fully concurrent index creation** for all
 skiplist-based indices, including label, label-property, composite, edge-type,
-edge-type property, and global edge property, with minimal impact on
-performance.
+edge-type property, global edge property, and global vertex property, with
+minimal impact on performance.
 
 The three-phase implementation begins with a brief **registration phase** that
 requires `READ ONLY` access. This ensures that all pending write transactions
