@@ -58,6 +58,19 @@ guide.
   you need the previous Python behavior, or update consumers for the new
   structured / ISO-8601 JSON forms.
   [#4443](https://github.com/memgraph/memgraph/pull/4443)
+- The `COORDINATOR` privilege was removed — it never gated any operation. It is
+  no longer accepted in `GRANT` / `DENY` / `REVOKE` statements and is no longer
+  reported by `SHOW PRIVILEGES`. A stale grant in an existing deployment is
+  never reported and never checked, so no migration is required. Coordinator
+  access is now controlled by the new `COORDINATOR_READ` and `COORDINATOR_WRITE`
+  privileges.
+  [#4399](https://github.com/memgraph/memgraph/pull/4399)
+- Connecting to a coordinator with a username and password is no longer always
+  accepted. Once `--auth-module-mappings` is set, the enterprise license is
+  valid, **and** a role holding `COORDINATOR_WRITE` exists, basic authentication
+  is denied in favor of SSO. Until all three hold, the previous passthrough
+  behavior is unchanged.
+  [#4399](https://github.com/memgraph/memgraph/pull/4399)
 
 {<h4 className="custom-header">🐞 Bug fixes</h4>}
 
@@ -128,6 +141,15 @@ guide.
   statements). Under index-heavy workloads this removes GC-correlated latency
   spikes on index and constraint creation.
   [#4468](https://github.com/memgraph/memgraph/pull/4468)
+- Cluster management queries forwarded from a follower coordinator to the leader
+  now have [explicit RPC
+  timeouts](/clustering/high-availability/how-high-availability-works#rpc-timeouts),
+  so a Bolt session can no longer block indefinitely against a leader that is
+  reachable but stuck. The same applies to MAIN-to-REPLICA system transaction
+  messages (auth, multi-tenancy, parameters), which now time out after 10s and
+  defer to system recovery. The unused `EnableWritingOnMainRpc` and its
+  Prometheus counters were removed.
+  [#4399](https://github.com/memgraph/memgraph/pull/4399)
 
 {<h4 className="custom-header">✨ New features</h4>}
 
@@ -160,6 +182,18 @@ guide.
 - `CREATE RANGE INDEX FOR ... ON ...` now works for nodes and relationships and
   creates Memgraph’s usual property index.
   [#4486](https://github.com/memgraph/memgraph/pull/4486)
+- [SSO authentication on high availability
+  coordinators](/clustering/high-availability/coordinator-authentication)
+  (Enterprise). Coordinators authenticate OIDC, SAML and Kerberos connections
+  against a Raft-replicated set of roles and enforce two privileges,
+  `COORDINATOR_READ` and `COORDINATOR_WRITE`. Manage them with `CREATE ROLE`,
+  `DROP ROLE`, `SHOW ROLES`, `GRANT` / `REVOKE COORDINATOR_READ |
+  COORDINATOR_WRITE | ALL PRIVILEGES`, and `SHOW PRIVILEGES FOR ROLE` on any
+  coordinator — follower queries are forwarded to the leader. Basic
+  authentication stays open until a `COORDINATOR_WRITE` role exists, so no
+  coordinator restart is needed to roll SSO out, and it reopens if the license
+  becomes invalid so a coordinator can never lock every session out.
+  [#4399](https://github.com/memgraph/memgraph/pull/4399)
 
 ### Lab v3.13.0 - September 9th, 2026
 
