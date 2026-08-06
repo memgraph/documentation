@@ -20,12 +20,21 @@ setup, the choice no longer matters.
 </Callout>
 
 <Callout type="info">
-All queries can be run on any coordinator. If currently the coordinator is not a
-leader, the query will be automatically forwarded to the current leader and
-executed there. This is because the Raft protocol specifies that only the
-leader should accept changes in the cluster. The only exception is [`YIELD
-LEADERSHIP`](#yield-leadership), which must be run directly on the current
-leader.
+All queries can be run on any coordinator. If the coordinator you are connected
+to is not the leader, the query is automatically forwarded to the current leader
+and executed there. This is because the Raft protocol specifies that only the
+leader should accept changes in the cluster, and because only the leader holds an
+up-to-date view of the cluster.
+
+This also holds for the read-only cluster queries — [`SHOW
+INSTANCES`](#show-instances), [`SHOW COORDINATOR
+SETTINGS`](#coordinator-runtime-settings) and [`SHOW REPLICATION
+LAG`](#show-replication-lag) — which are always answered by the leader, and for
+[`YIELD LEADERSHIP`](#yield-leadership). Followers never answer them from their
+own local state, so you never see a stale or partial picture of the cluster. If
+the leader cannot be reached, these queries return **no rows** together with a
+warning notification instead of a degraded result — see [Error
+handling](#error-handling).
 </Callout>
 
 ### `ADD COORDINATOR`
@@ -88,8 +97,8 @@ REMOVE COORDINATOR coordinatorId;
 
 - Leader coordinator **cannot** remove itself. To remove the leader, first
   trigger a leadership change with [`YIELD
-  LEADERSHIP`](#yield-leadership) and then run `REMOVE COORDINATOR` against the
-  new leader.
+  LEADERSHIP`](#yield-leadership) and then run `REMOVE COORDINATOR` once a new
+  leader has been elected.
 
 {<h4 className="custom-header"> Example </h4>}
 
@@ -296,16 +305,17 @@ informational notification that the request was submitted.
 
 {<h4 className="custom-header"> Behavior </h4>}
 
-- Must be run **on the coordinator that is currently the leader**. Unlike most
-  other cluster management queries, this query is **not forwarded** to the
-  leader — running it on a follower fails with:
-
-  > Only the current leader can yield the leadership!
-
+- Can be run on **any coordinator**. If the coordinator is a follower, the query
+  is forwarded to the current leader, which yields its leadership. You no longer
+  have to find the leader first.
 - Running it on a data instance fails with:
 
   > Only coordinator can run YIELD LEADERSHIP query.
 
+- A coordinator that Raft already elected as leader but that has not yet
+  finished taking over the cluster still yields its leadership. This makes the
+  query usable as an escape hatch exactly when it is needed most — when a
+  freshly elected leader is stuck and you want another coordinator to take over.
 - The request is handed over to Raft and processed **asynchronously**. The query
   returns as soon as the request is submitted, not when the new leader is
   elected.
@@ -317,15 +327,24 @@ informational notification that the request was submitted.
   checks toward all data instances. If no MAIN is found at that point, it
   performs a failover.
 
+{<h4 className="custom-header"> Failure modes </h4>}
+
+| Error message | Meaning |
+| ------------- | ------- |
+| `Yielding leadership failed since the instance is not leader anymore!` | The request reached a coordinator that is no longer the leader — leadership changed in the meantime. Retry. |
+| `Tried to forward the request to the current leader but the leader couldn't be found!` | There is currently no known leader to forward the request to (for example, an election is in progress). Retry once a leader is elected. |
+| `Request forwarded to the leader but leader failed with request processing! Check logs on the leader to find out what happened!` | The leader was reached but failed to process the request. Inspect the leader's logs. |
+
 {<h4 className="custom-header"> Implications </h4>}
 
 - This changes only the **coordinator** leadership. Data instances keep their
   MAIN and REPLICA roles — this is not a data failover, and client queries
   against MAIN and REPLICAs are unaffected.
 - During the short election window, cluster management queries (e.g. `SHOW
-  INSTANCES`, registration queries) may temporarily fail or report instances as
-  `down` because there is no leader to serve them. Retry once the new leader is
-  elected.
+  INSTANCES`, registration queries) may temporarily fail because there is no
+  leader to serve them. Read queries such as `SHOW INSTANCES` return no rows and
+  a warning notification rather than a stale picture of the cluster. Retry once
+  the new leader is elected.
 - At least one other healthy coordinator must be able to take over. In a
   single-coordinator cluster, or when the other coordinators are down, the same
   coordinator remains (or becomes again) the leader.
@@ -369,14 +388,42 @@ SHOW INSTANCES;
 {<h4 className="custom-header"> Output includes </h4>}
 
 1. Network endpoints (bolt, coordinator, management)
-2. Health state
-3. Role: MAIN, REPLICA, LEADER, FOLLOWER, or UNKNOWN
+2. Health state (`up` or `down`)
+3. Role: MAIN, REPLICA, LEADER or FOLLOWER
 4. Time since last health ping
 
-{<h4 className="custom-header"> Behavior on followers </h4>}
+A data instance that is currently `down` keeps the role recorded in the Raft log
+(`main` or `replica`) instead of being reported with an unknown role, so you can
+still tell which instance the cluster considers MAIN while it is unreachable.
 
-1. Follower attempts to query the leader for accurate state.
-2. If leader unavailable, follower reports all servers as `"down"`.
+{<h4 className="custom-header"> Behavior </h4>}
+
+The query is **strongly consistent**: the result always comes from the leader
+coordinator, which is the only coordinator with an up-to-date view of the
+cluster.
+
+1. If you are connected to the leader, it answers directly.
+2. If you are connected to a follower, the follower forwards the request to the
+   leader and returns the leader's result.
+3. If the leader cannot be reached, the query returns an **empty result set**
+   together with a `LeaderNotReachable` warning notification:
+
+   > Couldn't reach the leader coordinator, so the state of the cluster is
+   > unknown. Please retry the query.
+
+   This happens when no leader is currently elected, when the connection to the
+   leader is broken, or when the coordinator you are connected to was just
+   elected leader but has not finished taking over the cluster yet.
+
+<Callout type="warning">
+**Behavior change in Memgraph 3.13:** previously, a follower that could not
+reach the leader fell back to reporting the cluster from its own local Raft
+state, with health reported as `unknown`. It now returns no rows and a warning
+notification instead, so a partial or stale cluster picture can never be
+mistaken for the real one. If you have tooling or health checks that parse
+`SHOW INSTANCES`, treat an empty result as "cluster state unknown, retry" rather
+than as "no instances registered".
+</Callout>
 
 
 ### `SHOW INSTANCE`
@@ -406,6 +453,23 @@ Shows replication lag (in committed transactions) for all instances.
 SHOW REPLICATION LAG;
 ```
 
+{<h4 className="custom-header"> Behavior </h4>}
+
+The lag data is collected by the leader coordinator from the current MAIN, so the
+query is answered by the leader — a follower forwards the request and returns the
+leader's result.
+
+Whenever the lag cannot be determined, the query returns **no rows** and a
+warning notification explaining why, so you know whether retrying will help:
+
+| Notification code | Message | Meaning |
+| ----------------- | ------- | ------- |
+| `LeaderNotReachable` | Couldn't reach the leader coordinator, so the replication lag is unknown. Please retry the query. | No leader could be contacted (for example, an election is in progress). |
+| `ReplicationLagUnavailable` | The leader coordinator hasn't finished taking over the cluster, so the replication lag is unknown. Please retry the query. | A new leader was elected but has not finished reconciling the cluster. |
+| `ReplicationLagUnavailable` | No instance is currently main, so there is no replication lag to report. | The cluster has no MAIN — promote one with `SET INSTANCE ... TO MAIN`, or wait for failover. |
+| `ReplicationLagUnavailable` | The current main didn't respond, so the replication lag is unknown. Check whether the main is up. | The MAIN did not answer the leader's request. |
+| `ReplicationLagUnavailable` | The instance the leader considers main reports that it is a replica, so the replication lag is unknown. Please retry the query once the cluster state is reconciled. | The leader's view is stale; the [reconciliation loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works) will fix it. |
+
 {<h4 className="custom-header"> Implications </h4>}
 
 - Lag values survive restarts (stored in snapshots + WAL).
@@ -418,6 +482,14 @@ Coordinator runtime settings are Raft-replicated and can be changed on a live
 cluster without downtime. Use `SET COORDINATOR SETTING` to modify a value and
 `SHOW COORDINATOR SETTINGS` to inspect all current values. Changes propagate
 automatically to every coordinator in the cluster.
+
+Both queries can be run on any coordinator and are served by the leader — a
+follower forwards the request and returns the leader's answer. If the leader
+cannot be reached, `SHOW COORDINATOR SETTINGS` returns **no rows** together with a
+`LeaderNotReachable` warning notification:
+
+> Couldn't reach the leader coordinator, so the coordinator settings are unknown.
+> Please retry the query.
 
 ### `instance_health_check_frequency_sec`
 
@@ -581,6 +653,35 @@ If a Raft log commit fails for any cluster operation (register, unregister,
 promote, demote, add coordinator), the error message will indicate:
 
 > Writing to Raft log failed. Please retry the operation.
+
+### When there is no leader to serve the query
+
+Because every cluster query is served by the leader, queries fail (or return
+nothing) while the cluster has no usable leader — most commonly during a leader
+election, or right after one, while the new leader is still taking over the
+cluster.
+
+State-changing queries (`ADD COORDINATOR`, `REMOVE COORDINATOR`, `UPDATE
+CONFIG`, `REGISTER INSTANCE`, `UNREGISTER INSTANCE`, `SET INSTANCE ... TO MAIN`,
+`DEMOTE INSTANCE`, `FORCE RESET CLUSTER STATE`) fail with an explicit error:
+
+> Couldn't &lt;operation&gt; since coordinator is not a leader! Try contacting
+> other coordinators as there might be leader election happening or other
+> coordinators are down.
+
+When the leader is known but the request still could not be executed there, the
+message instead names the current leader's id and Bolt address so you can
+connect to it directly. If the request could not be forwarded at all, the error
+is:
+
+> Tried to forward the request to the current leader but the leader couldn't be
+> found!
+
+Read queries (`SHOW INSTANCES`, `SHOW COORDINATOR SETTINGS`, `SHOW REPLICATION
+LAG`) do not fail — they return an **empty result set** with a warning
+notification (`LeaderNotReachable`, or `ReplicationLagUnavailable` for `SHOW
+REPLICATION LAG`). In both cases the operation is safe to retry once a leader is
+available.
 
 
 ## Troubleshooting commands

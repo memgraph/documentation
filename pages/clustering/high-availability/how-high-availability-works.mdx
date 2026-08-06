@@ -161,6 +161,8 @@ Below is a cleaned-up categorization.
 | RPC                      | Purpose                                      | Description                                                                                                                |
 | ------------------------ | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `ShowInstancesRpc`       | Follower requests cluster state from leader. | Sent by a follower coordinator to the leader coordinator when a user executes `SHOW INSTANCES` through the follower.       |
+| `ShowCoordSettingsRpc`   | Follower requests coordinator settings.      | Sent by a follower coordinator to the leader coordinator when a user executes `SHOW COORDINATOR SETTINGS` through the follower. |
+| `YieldLeadershipRpc`     | Follower asks the leader to step down.       | Sent by a follower coordinator to the leader coordinator when a user executes `YIELD LEADERSHIP` through the follower.     |
 | `AddCoordinatorRpc`      | Follower requests adding coordinator.        | Sent by a follower coordinator to the leader coordinator when a user executes `ADD COORDINATOR` through the follower.      |
 | `RemoveCoordinatorRpc`   | Follower requests removing coordinator.      | Sent by a follower coordinator to the leader coordinator when a user executes `REMOVE COORDINATOR` through the follower.   |
 | `RegisterInstanceRpc`    | Follower requests registering an instance.   | Sent by a follower coordinator to the leader coordinator when a user executes `REGISTER INSTANCE` through the follower.    |
@@ -546,21 +548,43 @@ modes](/clustering/replication/how-replication-works#replication-modes).
 
 ## Actions on follower coordinators
 
-Follower coordinators operate in a restricted mode.
-They can **only execute** the `SHOW INSTANCES` command.
+Follower coordinators never execute cluster operations themselves. Instead, they
+act as a transparent entry point: every cluster query you run on a follower is
+**forwarded to the current leader**, executed there, and the leader's answer is
+returned to you. This holds both for state-changing operations (registering and
+unregistering data instances, promoting and demoting instances, adding and
+removing coordinators, updating configuration, forcing a cluster state reset,
+[yielding
+leadership](/clustering/high-availability/ha-commands-reference#yield-leadership))
+and for read-only ones (`SHOW INSTANCES`, `SHOW COORDINATOR SETTINGS`, `SHOW
+REPLICATION LAG`, and `bolt+routing` routing table requests).
 
-All state-changing operations are disabled on followers, including:
+As a result you can point your tooling at any coordinator without first having to
+discover which one is the leader.
 
-- Registering data instances
-- Unregistering data instances
-- Demoting an instance
-- Promoting an instance to MAIN
-- Forcing a cluster state reset
-- Yielding leadership
+### Why followers never answer from local state
 
-These operations are permitted **only on the leader coordinator**. Note that
-[`YIELD LEADERSHIP`](/clustering/high-availability/ha-commands-reference#yield-leadership)
-is not forwarded to the leader — it fails on a follower instead.
+A follower's own Raft state is not enough to describe the cluster: health of the
+data instances is only known to the leader, which is the coordinator that pings
+them. For this reason followers do not fall back to a local, partial answer when
+the leader cannot be reached. Instead:
+
+- Read queries return an **empty result set** together with a warning
+  notification (`LeaderNotReachable`, or `ReplicationLagUnavailable` for `SHOW
+  REPLICATION LAG`).
+- State-changing queries fail with an error telling you that the coordinator is
+  not the leader, or that the leader could not be found.
+
+Both cases mean "cluster state unknown — retry", and both are expected during the
+brief window of a leader election or while a newly elected leader is still taking
+over the cluster. See [Error
+handling](/clustering/high-availability/ha-commands-reference#when-there-is-no-leader-to-serve-the-query)
+for the exact messages.
+
+The one exception is the `bolt+routing` routing table: a coordinator that Raft
+elected as leader answers routing requests from its own Raft state even before it
+has finished taking over the cluster, so that clients can keep routing queries
+during the leadership transition.
 
 ## Raft-first operations and the reconciliation loop
 
