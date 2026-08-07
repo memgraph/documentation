@@ -412,6 +412,60 @@ SHOW REPLICATION LAG;
 - Useful during manual failover to evaluate risk of data loss.
 
 
+### `SHOW ROUTING TABLE`
+
+Shows the routing table that a coordinator hands out to
+[`bolt+routing`](/clustering/high-availability/querying-the-cluster-in-high-availability)
+clients for the default database.
+
+```cypher
+SHOW ROUTING TABLE;
+```
+
+{<h4 className="custom-header"> Output includes </h4>}
+
+Each row contains a `role` and the list of Bolt `servers` serving that role:
+
+| `role`  | `servers`                                                          |
+| ------- | ------------------------------------------------------------------ |
+| `WRITE` | Bolt endpoint of the current MAIN.                                 |
+| `READ`  | Bolt endpoints of all REPLICAs, plus MAIN if [`enabled_reads_on_main`](#enabled_reads_on_main) is set to `true`. |
+| `ROUTE` | Bolt endpoints of all coordinators.                                |
+
+Example output on a cluster with three coordinators, one MAIN and two REPLICAs:
+
+```plaintext
++---------+------------------------------------------------------------------+
+| role    | servers                                                          |
++---------+------------------------------------------------------------------+
+| "WRITE" | ["localhost:7687"]                                               |
+| "READ"  | ["localhost:7688", "localhost:7689"]                             |
+| "ROUTE" | ["localhost:7690", "localhost:7691", "localhost:7692"]           |
++---------+------------------------------------------------------------------+
+```
+
+{<h4 className="custom-header"> Behavior </h4>}
+
+- The query can only be run on a coordinator. Running it on a data instance
+  fails with `Only coordinator can run SHOW ROUTING TABLE query.`
+- The query is always answered from the leader's state, so every coordinator
+  returns the same routing table. If the leader cannot be contacted, an empty
+  routing table is returned.
+- Roles with no servers are omitted. For example, if no data instance is
+  registered yet, only the `ROUTE` row is returned.
+- The routing table is reported for the default database, which is the same
+  database `bolt+routing` clients are routed to.
+
+{<h4 className="custom-header"> Implications </h4>}
+
+- Useful for verifying which instance clients will send writes to, and which
+  instances they can read from, without inspecting driver internals.
+- Because drivers cache the routing table for up to 5 minutes, the output of
+  this query can differ from what a connected client is currently using. See
+  [routing table TTL and refresh
+  behavior](/clustering/high-availability/querying-the-cluster-in-high-availability#routing-table-ttl-and-refresh-behavior).
+
+
 ## Coordinator runtime settings
 
 Coordinator runtime settings are Raft-replicated and can be changed on a live
