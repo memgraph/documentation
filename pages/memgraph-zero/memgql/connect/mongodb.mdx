@@ -1,0 +1,157 @@
+---
+title: MongoDB
+description: Connect MemGQL to MongoDB.
+---
+
+# MongoDB
+
+The MongoDB connector (`CONNECTOR_TYPE=mongodb`) translates GQL queries into
+MongoDB **aggregation pipelines** and executes them on the server. It requires a
+[mapping file](../quick-start.mdx#mapping-file) that maps graph patterns to
+MongoDB collections.
+
+Unlike the SQL connectors, nothing is translated to SQL. Node labels become
+collections, relationship types become their own collections holding `from`/`to`
+reference fields, and each GQL operator becomes a pipeline stage — a hop is
+`$lookup`, and a variable-length hop is `$graphLookup`, MongoDB's native
+recursive traversal.
+
+## 1. Start MongoDB
+
+```bash
+docker network create memgql-net
+
+docker run -d --rm \
+    --name mongodb-dev \
+    --network memgql-net \
+    -p 27017:27017 \
+    mongo:8
+```
+
+## 2. Seed data
+
+```bash
+docker exec -i mongodb-dev mongosh --quiet test << 'JS'
+db.persons.insertMany([
+    { id: 1, name: 'Alice', age: 30 },
+    { id: 2, name: 'Bob',   age: 25 },
+]);
+db.companies.insertOne({ id: 1, name: 'Acme Corp' });
+db.knows.insertOne({ id: 1, from_id: 1, to_id: 2 });
+db.works_at.insertOne({ id: 1, person_id: 1, company_id: 1 });
+
+// Identity and endpoint indexes: `$lookup` and `$graphLookup` match on these,
+// and without an index each hop is a collection scan.
+db.persons.createIndex({ id: 1 }, { unique: true });
+db.companies.createIndex({ id: 1 }, { unique: true });
+db.knows.createIndex({ from_id: 1 });
+db.knows.createIndex({ to_id: 1 });
+db.works_at.createIndex({ person_id: 1 });
+db.works_at.createIndex({ company_id: 1 });
+JS
+```
+
+## 3. Start MemGQL
+
+```bash
+docker run --rm \
+    --name memgql \
+    --network memgql-net \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTOR_TYPE=mongodb \
+    --env MONGODB_URL=mongodb://mongodb-dev:27017 \
+    --env MONGODB_DB=test \
+    --env MAPPING_FILE=/data/mapping.json \
+    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    -v ./mapping.json:/data/mapping.json \
+    memgraph/memgql:latest
+```
+
+## 4. Connect
+
+```bash
+mgconsole --port 7688
+```
+
+## 5. Query
+
+```gql
+MATCH (p:Person) RETURN p.name, p.age;
+```
+
+```gql
+MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
+```
+
+```gql
+MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
+```
+
+Variable-length traversal runs natively on MongoDB, and — unlike the SQL
+connectors — the unbounded form works too:
+
+```gql
+MATCH (a:Person)-[:KNOWS*1..3]->(b:Person) RETURN a.name, b.name;
+```
+
+For environment variables, see [Reference](../reference.mdx#mongodb-mongodb).
+
+## Mapping a document model
+
+The mapping file is the same one every other connector uses; only the field
+names read differently:
+
+| Mapping field              | MongoDB meaning                                |
+|----------------------------|------------------------------------------------|
+| `mappedTableSource.schema` | database (defaults to `MONGODB_DB`)            |
+| `mappedTableSource.table`  | collection                                     |
+| `metaFields.id`            | identity field (often `_id`)                   |
+| `metaFields.from` / `.to`  | endpoint reference fields on an edge collection |
+| `attributes[].column`      | backing document field                         |
+
+Relationships must live in their own collections carrying the `from`/`to`
+reference fields — that is the shape `$lookup` and `$graphLookup` consume. A
+model that embeds neighbours as an array inside the node document is not
+supported.
+
+Every collection in one graph must be in the same database: MongoDB's `$lookup`
+resolves collections inside the aggregation's own database and cannot join
+across databases. Spanning two databases needs two connectors.
+
+## Supported GQL features
+
+| Feature                                        | MongoDB                |
+|------------------------------------------------|------------------------|
+| `MATCH (n:Label) RETURN n.prop`                | ✓                      |
+| Whole-node `RETURN n` / whole-rel `RETURN r`   | ✓                      |
+| Pattern-level `WHERE` (`MATCH (n WHERE …)`)    | ✓                      |
+| Typed edge `(a)-[r:R]->(b)`                    | ✓ (`$lookup`)          |
+| Variable-length `(a)-[:R*1..n]->(b)`           | ✓ (`$graphLookup`)     |
+| Unbounded variable-length `(a)-[:R*]->(b)`     | ✓                      |
+| `OPTIONAL MATCH` (incl. a predicate inside it)  | ✓                      |
+| `WITH` pipeline boundaries                     | ✓                      |
+| `FOR x IN [...]`                               | ✓                      |
+| `ORDER BY` / `LIMIT` / `SKIP`                  | ✓                      |
+| `DISTINCT`                                     | ✓                      |
+| Aggregation (`count`, `sum`, `avg`, `collect`) | ✓ (`$group`)           |
+| `INSERT (a {…})`                               | ✓                      |
+| `DELETE` / `DETACH DELETE`                     | ✓                      |
+| `SET` / `REMOVE` (properties)                  | ✓                      |
+| `SET` / `REMOVE` (labels)                      | ✗ — a label is a collection |
+| `UNION` / `UNION ALL`                          | ✗                      |
+| Scalar functions in `RETURN` (`upper(x)`, …)   | ✗ — see below          |
+| Untyped edge `(a)-[]->(b)`                     | ✗ — name the edge type |
+| Undirected variable-length `(a)-[:R*]-(b)`     | ✗ — give it a direction |
+| Path binding on a quantified pattern           | ✗                      |
+
+Traversal is reachability-based: `$graphLookup` returns the set of nodes
+reachable through the edge collection, so a node reachable by several routes
+appears once. Queries that count distinct paths need a Cypher backend.
+
+Scalar functions inside `RETURN` (`upper(n.name)`, `abs(-7)`, `char_length(s)`)
+are not available on MongoDB. The other backends receive such a call as raw
+query text and evaluate it in their own dialect; an aggregation pipeline has no
+expression string to run, so the function has to be applied client-side for now.
+Aggregates (`count`, `sum`, `avg`, `min`, `max`, `collect`, and their `DISTINCT`
+forms) are unaffected and run natively as `$group`.
