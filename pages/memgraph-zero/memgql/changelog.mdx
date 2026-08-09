@@ -5,6 +5,63 @@ description: MemGQL release notes
 
 # MemGQL Changelog
 
+## MemGQL v0.9.0 - August 9th, 2026
+
+### 🍃 New features & Improvements
+
+- **Microsoft Fabric connector.** New `fabric` connector type translates GQL to
+  T-SQL over a Fabric Warehouse's SQL endpoint — a pure-Rust driver, so there's no
+  ODBC layer to install. The same connector also reaches Lakehouse SQL analytics
+  endpoints, SQL databases in Fabric, and mirrored databases, which need no
+  connector of their own. It uses the same
+  [mapping](/memgraph-zero/memgql/reference#mapping-schema) format as every other
+  SQL backend, references tables with three-part `item.schema.table` names — so one
+  query can join across items in a workspace — and supports **both reads and
+  writes**. Authenticate with a Microsoft Entra ID access token or a service
+  principal. Variable-length paths are rejected, since Fabric has no recursive
+  queries. See the
+  [Microsoft Fabric connector page](/memgraph-zero/memgql/connect/fabric) for setup.
+
+- **MongoDB connector.** New `mongodb` connector type brings a document store into
+  the federation — the first backend that is neither SQL nor Cypher. Queries
+  translate to **MongoDB aggregation pipelines** and run server-side: a single hop
+  becomes `$lookup`, a variable-length hop `$graphLookup`, so unlike the SQL
+  backends the unbounded `*` form works too. Labels map to collections and
+  relationship types to their own collections, using the same
+  [mapping](/memgraph-zero/memgql/reference#mapping-schema) format as every other
+  backend, and **both reads and writes** are supported, including `DETACH DELETE`.
+  Connect with a standard connection string, so replica sets and MongoDB Atlas work
+  as-is; `UNION` and scalar functions inside `RETURN` are the notable gaps. See the
+  [MongoDB connector page](/memgraph-zero/memgql/connect/mongodb) for setup.
+
+### ⚠️ Behavior changes
+
+- **A vertex's or edge's `metaFields.id` is now exposed as a property.** `RETURN n`
+  / `RETURN r` include it, and `n.<id_column>` reads it by name — including after a
+  `WITH n` boundary, which previously worked only when the column was called `id`.
+- **The cache answers only for properties it holds.** A fragment holds a label's id
+  and its declared `attributes`; a query reading anything else misses and reads the
+  source, so results never differ from the uncached run. `SHOW GRAPH CACHES` gained
+  `hits`, `misses` and `cached_properties` columns. See
+  [Caching a graph in Memgraph](/memgraph-zero/memgql/multiple-graphs#caching-a-graph-in-memgraph).
+
+### 🐞 Bug fixes
+
+- **ClickHouse returned result columns in alphabetical order** rather than the order
+  the query projected them. Names travelled with their values, so most clients were
+  unaffected — but anything reading positionally was not.
+- **The Memgraph cache returned different rows than its source.** Cached edges
+  pointed at the wrong endpoints or were missing, edge properties were never copied,
+  and a cache holding only a label's id answered property reads with `NULL`.
+- **`count(DISTINCT <node>)` and `count(DISTINCT <relationship>)` produced invalid
+  SQL** on relational backends. Counting distinct properties was unaffected.
+- **Grouping by a whole element produced invalid SQL** — `WITH n, count(…)` and
+  `WITH r, count(…)` on relational backends.
+- **A warm table was re-scanned from the source** whenever a newly-touched edge type
+  pulled it in as an endpoint.
+- **The cache's warm-up log counted rows read from the source**, reporting success
+  even when no rows reached the cache.
+
 ## MemGQL v0.8.0 - July 19th, 2026
 
 ### ⚠️ Breaking changes
