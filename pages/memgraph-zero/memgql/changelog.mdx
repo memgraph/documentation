@@ -9,87 +9,58 @@ description: MemGQL release notes
 
 ### 🍃 New features & Improvements
 
-- **Microsoft Fabric connector.** New `fabric` connector type queries a Fabric
-  Warehouse over its T-SQL/TDS endpoint. One connector reaches four surfaces:
-  a **Warehouse**, a **Lakehouse SQL analytics endpoint**, a **SQL database in
-  Fabric**, and every **mirrored database** (Snowflake, Azure SQL, Cosmos DB,
-  Databricks, Oracle, SQL Server replicated into OneLake) — a mirrored database
-  needs no connector of its own. **Both reads and writes** are supported, using
-  the same [mapping](/memgraph-zero/memgql/reference#mapping-schema) format as
-  every other backend, so a mapping written for PostgreSQL works unchanged.
-  Tables are referenced as three-part `item.schema.table`, which lets a single
-  pushed-down statement **join across items in one workspace** — a Warehouse
-  table to a Lakehouse table. Authentication is **Microsoft Entra ID**, either a
-  supplied access token or a service principal that mints and refreshes its own
-  tokens; since the parameters live on the connector, rotating a secret is a
-  `DROP CONNECTOR` + `ADD CONNECTOR` with no restart. The driver is pure-Rust —
-  no ODBC layer to install. Fabric's own engine limits surface as clear errors
-  rather than wrong answers: variable-length paths are rejected because Fabric
-  does not support recursive queries. Fabric runs the same cross-backend parity
-  corpus as every other connector, so its answers are checked against the same
-  golden rows. See the
-  [Microsoft Fabric connector page](/memgraph-zero/memgql/connect/fabric) for
-  setup.
-
-- **MongoDB connector.** New `mongodb` connector type brings a document store
-  into the federation. It is the first backend that is neither SQL nor Cypher:
-  queries are translated to **MongoDB aggregation pipelines** and executed
-  server-side. Node labels map to collections and relationship types to their own
-  collections holding `from`/`to` reference fields, using the same
+- **Microsoft Fabric connector.** New `fabric` connector type translates GQL to
+  T-SQL over a Fabric Warehouse's SQL endpoint — a pure-Rust driver, so there's no
+  ODBC layer to install. The same connector also reaches Lakehouse SQL analytics
+  endpoints, SQL databases in Fabric, and mirrored databases, which need no
+  connector of their own. It uses the same
   [mapping](/memgraph-zero/memgql/reference#mapping-schema) format as every other
-  backend — a mapping written for PostgreSQL works unchanged. A single hop
-  becomes `$lookup`; a **variable-length hop becomes `$graphLookup`**, MongoDB's
-  native recursive traversal, so `(a)-[:KNOWS*1..3]->(b)` runs on the server —
-  and unlike the SQL backends the **unbounded** `*` form is supported too.
-  Filters that compare a property to a literal emit the plain query form so
-  MongoDB can serve them from an index. **Both reads and writes** are supported,
-  including `DETACH DELETE`, which clears incident edge documents. Connect with a
-  standard connection string, so replica sets and MongoDB Atlas
-  (`mongodb+srv://`) work as-is. `WITH` boundaries, `OPTIONAL MATCH` (including a
-  predicate inside the optional pattern), `FOR x IN […]`, and the full aggregate
-  set all run server-side; `UNION` and scalar functions inside `RETURN` are the
-  notable gaps. MongoDB runs the same cross-backend parity corpus as every other
-  connector, so its answers are checked against the same golden rows. See the
+  SQL backend, references tables with three-part `item.schema.table` names — so one
+  query can join across items in a workspace — and supports **both reads and
+  writes**. Authenticate with a Microsoft Entra ID access token or a service
+  principal. Variable-length paths are rejected, since Fabric has no recursive
+  queries. See the
+  [Microsoft Fabric connector page](/memgraph-zero/memgql/connect/fabric) for setup.
+
+- **MongoDB connector.** New `mongodb` connector type brings a document store into
+  the federation — the first backend that is neither SQL nor Cypher. Queries
+  translate to **MongoDB aggregation pipelines** and run server-side: a single hop
+  becomes `$lookup`, a variable-length hop `$graphLookup`, so unlike the SQL
+  backends the unbounded `*` form works too. Labels map to collections and
+  relationship types to their own collections, using the same
+  [mapping](/memgraph-zero/memgql/reference#mapping-schema) format as every other
+  backend, and **both reads and writes** are supported, including `DETACH DELETE`.
+  Connect with a standard connection string, so replica sets and MongoDB Atlas work
+  as-is; `UNION` and scalar functions inside `RETURN` are the notable gaps. See the
   [MongoDB connector page](/memgraph-zero/memgql/connect/mongodb) for setup.
 
 ### ⚠️ Behavior changes
 
-- **A vertex's or edge's `metaFields.id` is now exposed as a property.**
-  `RETURN n` / `RETURN r` include it, and `n.<id_column>` reads it by name —
-  including after a `WITH n` boundary, which previously resolved only when the
-  id column happened to be called `id`. This aligns relational sources with native-graph ones and
-  with a graph's Memgraph cache, which stores the id as its merge key.
-- **The cache now answers only for properties it holds.** A fragment holds a
-  label's id and its declared `attributes`; a query reading anything else is a
-  cache miss and reads the source, so results never differ from the uncached
-  run. A label declaring no `attributes` still caches its ids and topology, so
-  traversals and graph algorithms work against it. `SHOW GRAPH CACHES` gained
-  `hits`, `misses` and `cached_properties` columns — enough to tell a cache that
-  is serving from one that never engages, and a property-driven miss from a cold
-  one. See
+- **A vertex's or edge's `metaFields.id` is now exposed as a property.** `RETURN n`
+  / `RETURN r` include it, and `n.<id_column>` reads it by name — including after a
+  `WITH n` boundary, which previously worked only when the column was called `id`.
+- **The cache answers only for properties it holds.** A fragment holds a label's id
+  and its declared `attributes`; a query reading anything else misses and reads the
+  source, so results never differ from the uncached run. `SHOW GRAPH CACHES` gained
+  `hits`, `misses` and `cached_properties` columns. See
   [Caching a graph in Memgraph](/memgraph-zero/memgql/multiple-graphs#caching-a-graph-in-memgraph).
 
-### Fixed
+### 🐞 Bug fixes
 
-- **ClickHouse returned result columns in alphabetical order** rather than the
-  order the query projected them. Column names travelled with their values, so
-  most clients were unaffected, but anything reading positionally was not: a
-  `RETURN n` whose mapping had a property sorting before `id` came back with that
-  property's value as the node's element id.
+- **ClickHouse returned result columns in alphabetical order** rather than the order
+  the query projected them. Names travelled with their values, so most clients were
+  unaffected — but anything reading positionally was not.
 - **The Memgraph cache returned different rows than its source.** Cached edges
-  pointed at the wrong endpoints or were missing entirely, edge properties were
-  never copied at all, and a cache holding only a label's id answered property
-  reads with `NULL` instead of declining them — so a query silently changed its
-  answer once the cache was warm.
+  pointed at the wrong endpoints or were missing, edge properties were never copied,
+  and a cache holding only a label's id answered property reads with `NULL`.
 - **`count(DISTINCT <node>)` and `count(DISTINCT <relationship>)` produced invalid
   SQL** on relational backends. Counting distinct properties was unaffected.
 - **Grouping by a whole element produced invalid SQL** — `WITH n, count(…)` and
   `WITH r, count(…)` on relational backends.
-- **A warm table was re-scanned from the source** every time a newly-touched
-  edge type pulled it in as an endpoint, repeating the full scan the cache
-  exists to avoid.
-- **The cache's warm-up log counted rows read from the source**, so it reported
-  success even when no rows reached the cache.
+- **A warm table was re-scanned from the source** whenever a newly-touched edge type
+  pulled it in as an endpoint.
+- **The cache's warm-up log counted rows read from the source**, reporting success
+  even when no rows reached the cache.
 
 ## MemGQL v0.8.0 - July 19th, 2026
 
