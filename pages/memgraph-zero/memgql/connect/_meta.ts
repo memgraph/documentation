@@ -1,6 +1,7 @@
 export default {
   "clickhouse": "to Clickhouse",
   "duckdb": "to DuckDB",
+  "fabric": "to Microsoft Fabric",
   "iceberg": "to Iceberg",
   "memgraph": "to Memgraph",
   "mongodb": "to MongoDB",
