@@ -3,6 +3,7 @@ export default {
   "duckdb": "to DuckDB",
   "iceberg": "to Iceberg",
   "memgraph": "to Memgraph",
+  "mongodb": "to MongoDB",
   "neo4j": "to Neo4j",
   "oracle": "to Oracle",
   "postgres": "to PostgreSQL",
