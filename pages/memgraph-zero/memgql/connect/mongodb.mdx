@@ -51,7 +51,72 @@ db.works_at.createIndex({ company_id: 1 });
 JS
 ```
 
+Check what landed, straight from `mongosh`:
+
+```bash
+docker exec mongodb-dev mongosh --quiet test --eval 'db.getCollectionNames().sort().forEach(c => print(c, JSON.stringify(db[c].find({}, {_id:0}).toArray())))'
+```
+
+```
+companies [{"id":1,"name":"Acme Corp"}]
+knows [{"id":1,"from_id":1,"to_id":2}]
+persons [{"id":1,"name":"Alice","age":30},{"id":2,"name":"Bob","age":25}]
+works_at [{"id":1,"person_id":1,"company_id":1}]
+```
+
+`persons` and `companies` are node collections; `knows` and `works_at` are edge
+collections whose `from_id`/`to_id` and `person_id`/`company_id` point at node
+`id`s. That reference shape is what the mapping below turns into a graph.
+
 ## 3. Start MemGQL
+
+Create the mapping file the connector reads — labels over collections
+(`vertices`), relationship types over edge collections (`edges`):
+
+```bash
+cat > mapping.json << 'EOF'
+{
+  "vertices": [
+    {
+      "label": "Person",
+      "mappedTableSource": {
+        "table": "persons",
+        "metaFields": { "id": "id" }
+      },
+      "attributes": [{ "name": "name" }, { "name": "age" }]
+    },
+    {
+      "label": "Company",
+      "mappedTableSource": {
+        "table": "companies",
+        "metaFields": { "id": "id" }
+      },
+      "attributes": [{ "name": "name" }]
+    }
+  ],
+  "edges": [
+    {
+      "label": "KNOWS",
+      "from": "Person",
+      "to": "Person",
+      "mappedTableSource": {
+        "table": "knows",
+        "metaFields": { "id": "id", "from": "from_id", "to": "to_id" }
+      }
+    },
+    {
+      "label": "WORKS_AT",
+      "from": "Person",
+      "to": "Company",
+      "mappedTableSource": {
+        "table": "works_at",
+        "metaFields": { "id": "id", "from": "person_id", "to": "company_id" }
+      }
+    }
+  ]
+}
+EOF
+```
 
 ```bash
 docker run --rm \
@@ -64,7 +129,7 @@ docker run --rm \
     --env MONGODB_DB=test \
     --env MAPPING_FILE=/data/mapping.json \
     --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
-    -v ./mapping.json:/data/mapping.json \
+    --mount type=bind,source="$PWD/mapping.json",target=/data/mapping.json,readonly \
     memgraph/memgql:latest
 ```
 
