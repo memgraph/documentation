@@ -443,12 +443,26 @@ stale result.
 `TTL` is in seconds; `MAX_BYTES` accepts a plain byte count or a `K`/`M`/`G`/`T`
 binary suffix (`8G` = 8 × 1024³ bytes).
 
+**The cache holds a label's id and its declared
+[`attributes`](/memgraph-zero/memgql/schema-file#attributes)** — the columns the
+mapping names. A query reading any other property is a cache miss and reads the
+source, so results never differ from the uncached run; you lose the speed-up for
+that query, not correctness. This is the same rule
+[routing](#routing) applies: a property has to be declared to carry a signal.
+
+`SHOW GRAPH CACHES` reports `hits` / `misses` per graph and a
+`cached_properties` column listing what each fragment holds — between them you
+can tell a cache that is serving from one that never engages, and a
+property-driven miss from a cold one.
+
 The cache engages per routed part, whether the part is pinned with `USE` or
 routed by its labels:
 
 - **First read (cache MISS)**: the query runs on the source and the engine
   *tees* the scanned labels and edge types into the Memgraph cache, recording
-  which scopes it cached.
+  which scopes it cached. Scopes already resident are left alone — teeing an
+  edge type pulls in its endpoint labels, and those are not re-scanned if the
+  cache already holds them.
 - **Later covered read (cache HIT)**: a query whose scans are covered by
   existing cached scopes is served entirely from Memgraph, with no source I/O.
 - **Capability upgrade**: because cached data is a real graph in Memgraph,
@@ -465,15 +479,20 @@ routed by its labels:
 
 In a cross-backend query (split by explicit `USE`, or routed by label), each
 cache-enabled part is served from its cache independently while the other parts
-run on their own sources.
+run on their own sources. `UNION` / `UNION ALL` queries are the exception: they
+dispatch as a whole and never consult the cache, even when every scope they
+touch is resident.
 
 Inspect what is cached with `SHOW GRAPH CACHES` (returns each cache-enabled
 graph, its cache connector, `TTL`, `MAX_BYTES`, and the number of cached
 fragments). Cache activity is logged at `DEBUG` as `[CACHE] MISS … teeing …`
 and `[CACHE] HIT … serving from cache connector …`.
 
-> **Note:** The query-driven cache is currently validated with Iceberg sources;
-> the mechanism generalizes to the other warehouse connectors.
+> **Note:** The query-driven cache is exercised in CI against PostgreSQL, MySQL,
+> DuckDB, SQL Server, ClickHouse and the native Iceberg connector, each
+> replaying the same query corpus from its cache that it runs against the
+> source, and asserting identical rows. Graph-native sources (Memgraph, Neo4j) cannot be cached —
+> there is no relational mapping to copy from.
 
 ## Cross-Graph Query Rules
 

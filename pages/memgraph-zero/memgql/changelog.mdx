@@ -30,6 +30,45 @@ description: MemGQL release notes
   connector, so its answers are checked against the same golden rows. See the
   [MongoDB connector page](/memgraph-zero/memgql/connect/mongodb) for setup.
 
+### ⚠️ Behavior changes
+
+- **A vertex's or edge's `metaFields.id` is now exposed as a property.**
+  `RETURN n` / `RETURN r` include it, and `n.<id_column>` reads it by name —
+  including after a `WITH n` boundary, which previously resolved only when the
+  id column happened to be called `id`. This aligns relational sources with native-graph ones and
+  with a graph's Memgraph cache, which stores the id as its merge key.
+- **The cache now answers only for properties it holds.** A fragment holds a
+  label's id and its declared `attributes`; a query reading anything else is a
+  cache miss and reads the source, so results never differ from the uncached
+  run. A label declaring no `attributes` still caches its ids and topology, so
+  traversals and graph algorithms work against it. `SHOW GRAPH CACHES` gained
+  `hits`, `misses` and `cached_properties` columns — enough to tell a cache that
+  is serving from one that never engages, and a property-driven miss from a cold
+  one. See
+  [Caching a graph in Memgraph](/memgraph-zero/memgql/multiple-graphs#caching-a-graph-in-memgraph).
+
+### Fixed
+
+- **ClickHouse returned result columns in alphabetical order** rather than the
+  order the query projected them. Column names travelled with their values, so
+  most clients were unaffected, but anything reading positionally was not: a
+  `RETURN n` whose mapping had a property sorting before `id` came back with that
+  property's value as the node's element id.
+- **The Memgraph cache returned different rows than its source.** Cached edges
+  pointed at the wrong endpoints or were missing entirely, edge properties were
+  never copied at all, and a cache holding only a label's id answered property
+  reads with `NULL` instead of declining them — so a query silently changed its
+  answer once the cache was warm.
+- **`count(DISTINCT <node>)` and `count(DISTINCT <relationship>)` produced invalid
+  SQL** on relational backends. Counting distinct properties was unaffected.
+- **Grouping by a whole element produced invalid SQL** — `WITH n, count(…)` and
+  `WITH r, count(…)` on relational backends.
+- **A warm table was re-scanned from the source** every time a newly-touched
+  edge type pulled it in as an endpoint, repeating the full scan the cache
+  exists to avoid.
+- **The cache's warm-up log counted rows read from the source**, so it reported
+  success even when no rows reached the cache.
+
 ## MemGQL v0.8.0 - July 19th, 2026
 
 ### ⚠️ Breaking changes
