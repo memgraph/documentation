@@ -279,7 +279,7 @@ ports:
 
 {<h4 className="custom-header"> External network configuration </h4>}
 
-Memgraph HA uses **client-side routing**, so DNS resolution happens internal Cluster IP network. Because of that, we need
+Memgraph HA uses **client-side routing**, so DNS resolution happens on the driver. Because of that, we need
 one more type of network which will be used for clients accessing instances
 from outside the cluster. Our HA supports out of the box following K8s resources used to setup external access:
 
@@ -304,6 +304,72 @@ Note however that Ingress Nginx is getting retired and one of the alternatives i
 controllers like Envoy Gateway, Istio, Cilium, Traefik, or Kong. The HA chart has native Gateway API support — see [Use Memgraph HA chart with Gateway API](#use-memgraph-ha-chart-with-gateway-api).
 
 By default, the chart does **not** expose any external network services.
+
+{<h4 className="custom-header" id="recommended-external-access-setup"> Recommended external access setup </h4>}
+
+External access methods can be **mixed per tier**: coordinators and data
+instances each pick their own method independently. Our recommendation is to
+expose **coordinators through a `CommonLoadBalancer`** and **data instances
+through IngressNginx or the Gateway API**. This splits external access across
+two independent load balancers, so routing stays available even if a single
+load balancer goes down: if the load balancer in front of the data instances
+fails, clients can still reach the coordinators and get routing information,
+and if the coordinators' load balancer fails, connections to the data
+instances keep working. If everything sits behind one shared load balancer,
+that load balancer is a single point of failure for all external access.
+
+To set up the recommended combination with the Gateway API, leave
+`externalAccessConfig.dataInstance.serviceType` empty — the Gateway only
+exposes tiers whose `serviceType` is empty, so it will expose the data
+instances only:
+
+```yaml
+externalAccessConfig:
+  coordinator:
+    serviceType: "CommonLoadBalancer"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: "memgraph.coordinators.example.com"
+  # dataInstance.serviceType stays empty, so the Gateway exposes only the data instances
+  gateway:
+    enabled: true
+    gatewayClassName: "eg"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: "memgraph.data.example.com"
+```
+
+Or with IngressNginx for the data instances:
+
+```yaml
+externalAccessConfig:
+  dataInstance:
+    serviceType: "IngressNginx"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: "memgraph.data.example.com"
+  coordinator:
+    serviceType: "CommonLoadBalancer"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: "memgraph.coordinators.example.com"
+```
+
+In both cases every coordinator is reachable at the shared
+`memgraph.coordinators.example.com:<boltPort>` address, and each data instance
+at `memgraph.data.example.com:<dataPortBase + id>`. With the `external-dns`
+hostnames set, the `cluster-setup` Job registers the external `bolt_server`
+addresses automatically (see [Update bolt server](#update-bolt-server)).
+
+All other combinations are valid as well — for coordinators + data instances,
+for example:
+
+- `CommonLoadBalancer` + `LoadBalancer`
+- `LoadBalancer` + `LoadBalancer`
+- `IngressNginx` + `IngressNginx` (everything behind the single ingress-nginx load balancer)
+- Gateway API for everything (leave both `serviceType` fields empty and enable the gateway)
+- `NodePort` for either tier, combined with any of the above
+
+The only invalid combination is enabling the Gateway API
+(`externalAccessConfig.gateway.enabled: true`) while **both** tiers have a
+`serviceType` set: a tier with a `serviceType` is excluded from the Gateway,
+so the Gateway would apply to nothing and chart rendering fails.
 
 {<h4 className="custom-header"> Per-instance external access annotations </h4>}
 
@@ -338,6 +404,16 @@ In this example, each data instance's external Service gets the shared
 `aws-load-balancer-scheme` annotation plus its own unique `external-dns`
 hostname. Bolt and management ports are not set per-instance — they come from
 `ports.boltPort` and `ports.managementPort`.
+
+With `serviceType: LoadBalancer` and a per-instance `external-dns` hostname
+set like above, the `cluster-setup` Job automatically registers each
+instance's routing `bolt_server` as `<hostname>:<boltPort>` (see [Update bolt
+server](#update-bolt-server)). Do **not** set the `external-dns` hostname at
+the tier level (`externalAccessConfig.dataInstance.annotations` /
+`externalAccessConfig.coordinator.annotations`) when using `LoadBalancer`:
+each instance gets its own LoadBalancer Service, so a tier-level hostname
+would put one DNS record in front of every load balancer and register the
+same `bolt_server` for all instances.
 
 {<h4 className="custom-header"> Per-instance internal access annotations </h4>}
 
@@ -724,14 +800,19 @@ This step is required only when:
   - You're using bolt+routing for client-side routing
 
 <Callout type="info">
-When you expose the cluster through **IngressNginx**, **Gateway API**, or the
-coordinator **CommonLoadBalancer** and set an `external-dns` hostname via
-annotations, the `cluster-setup` Job now sets each instance's routing
-`bolt_server` to the external hostname and port automatically, and reconciles it
-on every `helm upgrade` (including reverting to the internal address when
-external access is turned off). In that case you don't need to run the queries
-below manually. This does not apply to plain `LoadBalancer` / `NodePort`, where a
-shared service can't address individual instances by port.
+When you expose the cluster through **IngressNginx**, **Gateway API**, the
+coordinator **CommonLoadBalancer**, or per-instance **LoadBalancer** Services
+and set an `external-dns` hostname via annotations, the `cluster-setup` Job
+sets each instance's routing `bolt_server` to the external hostname and port
+automatically, and reconciles it on every `helm upgrade` (including reverting
+to the internal address when external access is turned off). In that case you
+don't need to run the queries below manually. For `LoadBalancer`, set the
+hostname **per instance** via `data[].externalAccessAnnotations` /
+`coordinators[].externalAccessAnnotations` — each instance has its own
+LoadBalancer Service, so a tier-level hostname would register the same
+`bolt_server` for every instance. This does not apply to `NodePort` (or to
+instances without a hostname annotation), where the internal `bolt_server` is
+kept and you update it manually.
 </Callout>
 
 Each instance must know its external address for routing to work correctly. Run the following queries on the leader coordinator:
@@ -757,29 +838,47 @@ for the full set of commands and usage patterns.
 The Memgraph HA Helm chart has native support for the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/). When enabled, the chart automatically creates TCPRoute resources for each data and coordinator instance. You can either let the chart create its own Gateway or attach routes to a pre-existing one.
 
 <Callout type="info">
-Gateway API works alongside the `NodePort` and `LoadBalancer` `serviceType` options — the routes point at internal ClusterIP services that always exist. However, Gateway API and the `IngressNginx` service type are **mutually exclusive**: enabling both (`externalAccessConfig.gateway.enabled: true` together with `IngressNginx` on the data instance or coordinator tier) fails chart rendering. Choose one.
+The Gateway only exposes tiers whose `serviceType` is **empty**: a tier with
+`externalAccessConfig.dataInstance.serviceType` or
+`externalAccessConfig.coordinator.serviceType` set gets its external access
+from that service type instead and is excluded from the Gateway (no listeners
+or TCPRoutes are created for it). This lets you mix methods per tier — for
+example, coordinators via `CommonLoadBalancer` and data instances via the
+Gateway, which is our [recommended setup](#recommended-external-access-setup).
+Enabling the gateway while **both** tiers have a `serviceType` set fails chart
+rendering, since the Gateway would then apply to nothing.
 </Callout>
 
 #### Prerequisites
 
 Before enabling Gateway API in the chart, you need:
 
-1. **A Gateway API controller** installed in your cluster. Examples include [Envoy Gateway](https://gateway.envoyproxy.io/), [Istio](https://istio.io/), [Cilium](https://cilium.io/), [Traefik](https://traefik.io/), and [Kong](https://konghq.com/). This guide uses Envoy Gateway as an example:
+1. **The Gateway API CRDs** installed in your cluster. Some controllers ship them
+   with their own Helm chart (Envoy Gateway does), while others expect you to
+   install them yourself (Traefik does). The controller-specific guides below
+   cover both cases.
 
-   ```bash
-   helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.4 -n envoy-gateway-system --create-namespace
-   ```
+2. **A Gateway API controller** installed in your cluster. Examples include
+   [Envoy Gateway](https://gateway.envoyproxy.io/), [Istio](https://istio.io/),
+   [Cilium](https://cilium.io/), [Traefik](https://traefik.io/), and
+   [Kong](https://konghq.com/). Step-by-step guides are available for two of
+   them: [Envoy Gateway](#deploy-with-envoy-gateway) and
+   [Traefik](#deploy-with-traefik).
 
-2. **A GatewayClass resource** that references your controller. A GatewayClass is a cluster-scoped resource that defines which controller manages Gateways — each Gateway references a GatewayClass by name. The Helm chart does **not** create a GatewayClass; you must create one yourself or use one provided by your controller installation. For Envoy Gateway:
+3. **A GatewayClass resource** that references your controller. A GatewayClass is
+   a cluster-scoped resource that defines which controller manages Gateways —
+   each Gateway references a GatewayClass by name. The Memgraph Helm chart does
+   **not** create a GatewayClass; you must create one yourself or use one
+   provided by your controller installation (the Envoy Gateway chart does not
+   create one, the Traefik chart does).
 
-   ```yaml
-   apiVersion: gateway.networking.k8s.io/v1
-   kind: GatewayClass
-   metadata:
-     name: eg
-   spec:
-     controllerName: gateway.envoyproxy.io/gatewayclass-controller
-   ```
+<Callout type="warning">
+The chart exposes Bolt through `TCPRoute`, which is part of the Gateway API
+**experimental** channel. A standard-channel CRD bundle is not enough — whatever
+you install must include `tcproutes.gateway.networking.k8s.io`, and the
+controller itself may need experimental support turned on (Traefik does, see
+[Deploy with Traefik](#deploy-with-traefik)).
+</Callout>
 
 <Callout type="warning">
 You must ensure the GatewayClass exists before enabling the gateway feature in the chart. If you create your own Gateway (Option 1 below), the chart requires `gatewayClassName` to reference an existing GatewayClass, and will fail with an error if it is not set.
@@ -797,8 +896,8 @@ externalAccessConfig:
 ```
 
 The chart will create:
-- A **Gateway** (`gateway.networking.k8s.io/v1`) with TCP listeners auto-generated for each data and coordinator instance.
-- A **TCPRoute** (`gateway.networking.k8s.io/v1alpha2`) per instance, routing traffic from the Gateway listener to the instance's Bolt port.
+- A **Gateway** (`gateway.networking.k8s.io/v1`) with TCP listeners auto-generated for each data and coordinator instance whose tier has an empty `serviceType`.
+- A **TCPRoute** (`gateway.networking.k8s.io/v1alpha2`) per such instance, routing traffic from the Gateway listener to the instance's Bolt port.
 
 Data instance ports are assigned as `dataPortBase + data instance id` (default: 9000, 9001, ...) and coordinator ports as `coordinatorPortBase + coordinator id` (default: 10001, 10002, 10003). The coordinator base port is kept well above the data base port so the two ranges never overlap. You can customize the base ports:
 
@@ -868,13 +967,18 @@ helm install memgraph-ha memgraph/memgraph-high-availability \
 ```
 
 <Callout type="warning">
-When using an existing Gateway, ensure it has listeners configured with the correct names and ports that match the TCPRoute `sectionName` references. The chart expects listener names in the format `data-{id}-bolt` for data instances and `coordinator-{id}-bolt` for coordinators. For example, the default HA setup (2 data instances, 3 coordinators) needs these listeners:
+When using an existing Gateway, ensure it has listeners whose **names** match the
+TCPRoute `sectionName` references. The chart expects listener names in the format
+`data-{id}-bolt` for data instances and `coordinator-{id}-bolt` for coordinators.
+The listener ports are your choice in this mode, but keeping them aligned with the
+chart defaults avoids surprises. For example, the default HA setup (2 data
+instances, 3 coordinators) needs these listeners:
 
 - `data-0-bolt` on port 9000
 - `data-1-bolt` on port 9001
-- `coordinator-1-bolt` on port 9011
-- `coordinator-2-bolt` on port 9012
-- `coordinator-3-bolt` on port 9013
+- `coordinator-1-bolt` on port 10001
+- `coordinator-2-bolt` on port 10002
+- `coordinator-3-bolt` on port 10003
 
 A standalone Gateway manifest with these pre-configured listeners is available in the [Helm charts repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/gateway.yaml).
 </Callout>
@@ -882,6 +986,199 @@ A standalone Gateway manifest with these pre-configured listeners is available i
 <Callout type="info">
 **TCPRoute API version**: TCPRoute uses `v1alpha2`, which is the latest available API version. It is supported by Envoy Gateway and other major implementations but is not yet GA. Gateway and HTTPRoute are both GA (`v1`).
 </Callout>
+
+#### Deploy with Envoy Gateway
+
+[Envoy Gateway](https://gateway.envoyproxy.io/) is the controller used in the
+examples above. Its Helm chart bundles the Gateway API CRDs, so no separate CRD
+installation is needed, and it programs listener ports dynamically — the Bolt
+ports only have to be configured in the Memgraph chart.
+
+<Steps>
+
+{<h4 className="custom-header"> Install Envoy Gateway </h4>}
+
+```bash
+helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.4 \
+  -n envoy-gateway-system --create-namespace
+```
+
+Chart version `v1.2.4` ships Gateway API bundle version `v1.2.1`, which includes
+the `TCPRoute` CRD.
+
+{<h4 className="custom-header"> Create the GatewayClass </h4>}
+
+The Envoy Gateway chart does not create a GatewayClass, so create one that points
+at its controller:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+```
+
+```bash
+kubectl apply -f gatewayclass.yaml
+```
+
+{<h4 className="custom-header"> Install the Memgraph HA chart </h4>}
+
+Assuming the `memgraph-secrets` Secret with the license and organization name
+already exists (see [Install Memgraph HA](#install-memgraph-ha)):
+
+```bash
+helm install memgraph-ha memgraph/memgraph-high-availability \
+  --set externalAccessConfig.gateway.enabled=true \
+  --set externalAccessConfig.gateway.gatewayClassName=eg
+```
+
+{<h4 className="custom-header"> Verify the setup </h4>}
+
+```bash
+kubectl get gatewayclass eg
+kubectl get gateway -o wide
+kubectl get tcproute
+```
+
+The GatewayClass should be `ACCEPTED=True` and the Gateway `PROGRAMMED=True` with
+an external address. Envoy Gateway provisions a separate Envoy deployment and
+LoadBalancer Service for the Gateway.
+
+</Steps>
+
+#### Deploy with Traefik
+
+[Traefik](https://traefik.io/) can serve the same setup, but its Gateway API
+support differs from Envoy Gateway in two ways that affect the Memgraph chart:
+
+- Its Helm chart ships **no Gateway API CRDs**, so you install them yourself, and
+  `TCPRoute` support has to be explicitly enabled.
+- Traefik does **not** open arbitrary listener ports. Every port used by a Gateway
+  listener must also be declared as a Traefik entryPoint, otherwise the listener
+  is silently ignored.
+
+<Steps>
+
+{<h4 className="custom-header"> Install the Gateway API CRDs </h4>}
+
+Install the experimental channel, which is where `TCPRoute` lives:
+
+```bash
+kubectl apply --server-side --force-conflicts \
+  -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
+```
+
+<Callout type="info">
+Use `--server-side`. A plain `kubectl apply` stores the whole manifest in the
+`kubectl.kubernetes.io/last-applied-configuration` annotation and the HTTPRoute
+CRD exceeds the 256 KB annotation limit, failing with
+`metadata.annotations: Too long: may not be more than 262144 bytes`.
+`--force-conflicts` is needed only when the CRDs were previously created with a
+client-side apply.
+</Callout>
+
+{<h4 className="custom-header"> Configure Traefik </h4>}
+
+Create a `traefik-values.yaml` file. The `ports` entries are the entryPoints
+backing the Gateway listeners the Memgraph chart creates — data instances on
+`dataPortBase + data instance id`, coordinators on
+`coordinatorPortBase + coordinator id`:
+
+```yaml
+providers:
+  kubernetesGateway:
+    enabled: true
+    # Required for TCPRoute support.
+    experimentalChannel: true
+    statusAddress:
+      service:
+        # Copies the Traefik LoadBalancer address into Gateway .status.addresses,
+        # which is what external-dns reads.
+        enabled: true
+
+# The Memgraph chart creates its own Gateway, so Traefik's default one is not needed.
+gateway:
+  enabled: false
+
+# Creates the GatewayClass "traefik" (controller traefik.io/gateway-controller).
+gatewayClass:
+  enabled: true
+
+service:
+  type: LoadBalancer
+
+ports:
+  data-0:
+    port: 9000
+    exposedPort: 9000
+    protocol: TCP
+    expose:
+      default: true
+  data-1:
+    port: 9001
+    exposedPort: 9001
+    protocol: TCP
+    expose:
+      default: true
+```
+
+A ready-to-use version of this file is available in the [Helm charts
+repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/traefik-values.yaml).
+
+<Callout type="warning">
+Declare one entryPoint per Gateway listener, and remember to add new ones when
+you [scale the cluster](#scale-the-cluster-up-and-down) — a third data instance
+needs port 9002, a fourth coordinator needs port 10004. If a tier is exposed
+through a `serviceType` instead of the Gateway, it has no listeners and needs no
+entryPoints; with the [recommended setup](#recommended-external-access-setup)
+(coordinators via `CommonLoadBalancer`, data instances via the Gateway) only the
+`data-*` entryPoints are required.
+</Callout>
+
+{<h4 className="custom-header"> Install Traefik </h4>}
+
+```bash
+helm repo add traefik https://traefik.github.io/charts
+helm repo update
+helm install traefik traefik/traefik -n traefik --create-namespace \
+  -f traefik-values.yaml
+```
+
+The values above were verified against Traefik chart `41.0.2` (Traefik `v3.7.6`).
+The `providers.kubernetesGateway.*` options require Traefik 3.x.
+
+{<h4 className="custom-header"> Install the Memgraph HA chart </h4>}
+
+Point `gatewayClassName` at the GatewayClass created by the Traefik chart.
+Assuming the `memgraph-secrets` Secret with the license and organization name
+already exists (see [Install Memgraph HA](#install-memgraph-ha)):
+
+```bash
+helm install memgraph-ha memgraph/memgraph-high-availability \
+  --set externalAccessConfig.gateway.enabled=true \
+  --set externalAccessConfig.gateway.gatewayClassName=traefik
+```
+
+{<h4 className="custom-header"> Verify the setup </h4>}
+
+```bash
+kubectl get gatewayclass traefik
+kubectl get gateway -o wide
+kubectl get tcproute
+# The chart names the Gateway <release-name>-memgraph-high-availability-gateway
+kubectl describe gateway memgraph-ha-memgraph-high-availability-gateway
+```
+
+If a listener reports `Detached` or `UnsupportedProtocol`, the matching entryPoint
+is missing from the Traefik values. Unlike Envoy Gateway, Traefik routes all
+Gateways through the single Traefik Service, so the external address comes from
+the `traefik` Service in the `traefik` namespace.
+
+</Steps>
+
 
 ### Use Memgraph HA chart with IngressNginx
 
@@ -910,9 +1207,12 @@ When using these settings, the chart will automatically install and configure
 **IngressNginx**, including all required TCP routing setup for Memgraph.
 
 <Callout type="warning">
-The `IngressNginx` service type and Gateway API (`externalAccessConfig.gateway.enabled`)
-are mutually exclusive — enabling both fails chart rendering. Choose one external
-access method.
+The `IngressNginx` service type can be combined with the Gateway API
+(`externalAccessConfig.gateway.enabled`) as long as at least one tier keeps an
+empty `serviceType` — the Gateway only exposes tiers whose `serviceType` is
+empty, so a tier using `IngressNginx` is simply excluded from the Gateway.
+Enabling the gateway while **both** tiers have a `serviceType` set fails chart
+rendering.
 </Callout>
 
 All `IngressNginx` tiers share a single ingress-nginx controller Service (one
@@ -1444,7 +1744,7 @@ and their default values.
 | `externalAccessConfig.dataInstance.annotations`            | Annotations for external services attached to data instances.                                                | `{}`                           |
 | `externalAccessConfig.ingress.dataPortBase`                | Base port for data instance ports on the IngressNginx controller (`dataPortBase + data instance id`).        | `9000`                         |
 | `externalAccessConfig.ingress.coordinatorPortBase`         | Base port for coordinator ports on the IngressNginx controller (`coordinatorPortBase + coordinator id`). Kept well above `dataPortBase` so the data and coordinator port ranges never overlap. | `10000`                        |
-| `externalAccessConfig.gateway.enabled`                     | Enable Gateway API external access. Mutually exclusive with the `IngressNginx` service type.                | `false`                        |
+| `externalAccessConfig.gateway.enabled`                     | Enable Gateway API external access. Only exposes tiers whose `serviceType` is empty; fails rendering if both tiers have a `serviceType` set. | `false`                        |
 | `externalAccessConfig.gateway.gatewayClassName`            | Name of a pre-existing GatewayClass. Required when creating a new Gateway.                                   | `""`                           |
 | `externalAccessConfig.gateway.existingGatewayName`         | Name of an existing Gateway to attach routes to. Skips Gateway creation.                                     | `""`                           |
 | `externalAccessConfig.gateway.existingGatewayNamespace`    | Namespace of the existing Gateway. Defaults to release namespace.                                            | `""`                           |
@@ -1740,7 +2040,8 @@ downtime:
 
 1. Upgrade **replicas** first.
 2. Upgrade the **main** instance.
-3. Upgrade **coordinator followers**, then the **leader**.
+3. Upgrade **coordinator followers**
+4. Upgrade the **coordinator leader**.
 
 In order to find out on which pod/server the current main and the current
 cluster leader sits, run:
@@ -1749,8 +2050,77 @@ cluster leader sits, run:
 SHOW INSTANCES;
 ```
 
+{<h4 className="custom-header"> Query behavior during the upgrade </h4>}
+
+Your applications can stay connected to the cluster throughout the upgrade.
+What they will observe depends on the query type and the replication mode:
+
+- **Read queries always work**, regardless of the replication mode used. There
+  is no specific exception you need to catch — Neo4j drivers are preconfigured
+  with automatic retries, so reads hitting an instance that is restarting are
+  transparently retried.
+
+  One exception applies to minimal clusters: with **1 main and 1 replica**, you
+  need to enable the
+  [`enabled_reads_on_main`](/clustering/high-availability/ha-commands-reference#enabled_reads_on_main)
+  coordinator setting so that, while the only replica is being upgraded, read
+  queries are routed to the main instance:
+
+  ```cypher
+  SET COORDINATOR SETTING 'enabled_reads_on_main' TO 'true';
+  ```
+- **Write queries depend on the replication mode:**
+  - **ASYNC** — writes keep working without errors.
+  - **SYNC** — writes keep working, but a **ReplicationException** can happen
+    because a commit couldn't be replicated to the instance that is being
+    restarted (e.g. the old main while it is coming back up). The transaction
+    is still committed on the MAIN, so your application should catch the
+    exception and continue. You can parse the error and check for the exact
+    message, for example: `Failed to replicate to SYNC replica 'instance_1':
+    replica is not reachable or not in sync with the main`.
+  - **STRICT_SYNC** — writes won't work while a data instance is being
+    restarted. Because of the two-phase commit protocol, a transaction cannot
+    be committed unless every STRICT_SYNC replica confirms it, so writes are
+    aborted until the restarted instance rejoins the cluster.
+
+If these write-side effects are not acceptable for your workload, you can pause
+writes across the whole cluster for the duration of the upgrade. The
+recommended way is the
+[`global_read_only`](/clustering/high-availability/ha-commands-reference#global_read_only)
+coordinator setting. Connect to the coordinator leader and run:
+
+```cypher
+SET COORDINATOR SETTING 'global_read_only' TO 'true';
+```
+
+When enabled, the current MAIN stops accepting write queries while it keeps
+serving reads and replicating existing data to REPLICAs. The setting blocks
+**all write sources** on the MAIN — user Cypher writes,
+[TTL](/querying/time-to-live) background expiry, and [stream-](/data-streams) and
+[trigger-](/fundamentals/triggers)driven writes — so the dataset stays frozen
+while replicas catch up and you swap binaries. The value is persisted in the
+coordinator's Raft-replicated cluster state, so it survives coordinator restarts
+and leader re-elections, and is honored across failovers: a newly promoted MAIN
+comes up read-only instead of silently accepting writes.
+
+<Callout type="warning">
+While the cluster runs mixed versions during the rolling upgrade, read-only mode
+is honored best-effort: older instances behave as before until every node is
+upgraded, after which the cluster self-heals to the requested state.
+</Callout>
+
 <Steps>
 {<h4 className="custom-header"> Upgrade replicas </h4>} 
+
+Before restarting any replica, check whether replicas are caught up with the
+MAIN:
+
+```cypher
+SHOW REPLICATION LAG;
+```
+
+If the replica you are about to restart is lagging behind, wait until it
+catches up before deleting its pod.
 
 If you are using K8s, the upgrade can be performed by deleting the pod. Start by
 deleting the replica pod (in this example replica is running on the pod
@@ -1777,44 +2147,16 @@ This step should be repeated for all of your replicas in the cluster.
 
 {<h4 className="custom-header"> Upgrade the main </h4>} 
 
-Before deleting the main pod, check replication lag to see whether replicas are
-behind MAIN:
-
-```cypher
-SHOW REPLICATION LAG;
-```
-
-If replicas are behind, your upgrade will be prone to a data loss. In order to
-achieve zero-downtime upgrade without any data loss, either:
-
-  - Use `STRICT_SYNC` mode (writes will be blocked during upgrade), or
-  - Wait until replicas are fully caught up, then pause writes. This way, you
-can use any replication mode. Read queries should however work without any
-issues independently from the replica type you are using.
-
-The recommended way to pause writes across the whole cluster is the
-[`global_read_only`](/clustering/high-availability/ha-commands-reference#global_read_only)
-coordinator setting. Connect to the coordinator leader and run:
-
-```cypher
-SET COORDINATOR SETTING 'global_read_only' TO 'true';
-```
-
-When enabled, the current MAIN stops accepting write queries while it keeps
-serving reads and replicating existing data to REPLICAs. The setting blocks
-**all write sources** on the MAIN — user Cypher writes,
-[TTL](/querying/time-to-live) background expiry, and [stream-](/data-streams) and
-[trigger-](/fundamentals/triggers)driven writes — so the dataset stays frozen
-while replicas catch up and you swap binaries. The value is persisted in the
-coordinator's Raft-replicated cluster state, so it survives coordinator restarts
-and leader re-elections, and is honored across failovers: a newly promoted MAIN
-comes up read-only instead of silently accepting writes.
-
-<Callout type="warning">
-While the cluster runs mixed versions during the rolling upgrade, read-only mode
-is honored best-effort: older instances behave as before until every node is
-upgraded, after which the cluster self-heals to the requested state.
-</Callout>
+When the main pod is deleted, the coordinator detects that the main is down and
+performs an **automatic failover**, promoting one of the already upgraded
+replicas to be the new main. Until the failover completes, the cluster does not
+accept write queries. The length of this time window depends on how quickly the
+failover happens, which is governed by two coordinator settings: the
+coordinator pings data instances every
+[`instance_health_check_frequency_sec`](/clustering/high-availability/ha-commands-reference#instance_health_check_frequency_sec)
+seconds and declares an instance down after it hasn't responded for
+[`instance_down_timeout_sec`](/clustering/high-availability/ha-commands-reference#instance_down_timeout_sec)
+seconds. Lowering these values shortens the write-unavailability window.
 
 Upgrade the main pod:
 
