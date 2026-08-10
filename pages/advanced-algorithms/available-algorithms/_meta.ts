@@ -21,6 +21,7 @@ export default {
   "distance_calculator": "distance_calculator",
   "elasticsearch_synchronization": "elasticsearch_synchronization",
   "embeddings": "embeddings",
+  "export": "export",
   "export_util": "export_util",
   "gnn": "gnn",
   "gnn_link_prediction": "gnn_link_prediction",
