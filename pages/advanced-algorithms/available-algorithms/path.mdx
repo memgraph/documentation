@@ -269,9 +269,14 @@ error — an empty entry such as `['']`, or one made only of separators such as 
 | `>LABEL`           | Label is added to the end list. When end list has labels, only paths ending with these labels will be returned, but they can be expanded further, to return paths ending in nodes with end labels beyond it, but the expansion will only go through nodes with whitelisted labels. Labels in the end list do not have to respect the whitelist.            |
 | `-LABEL`           | Label is added to the blacklist. No node in the path will contain labels in the blacklist. The blacklist takes precedence over all other filters.                   |
 | `/LABEL`           | Label is added to the termination list. When termination list contains labels, only paths ending with these labels will be returned, and any further expansion is stopped. Labels in the termination list do not have to respect the whitelist.                            |
+| `*`                | Matches every label, under any of the four prefixes. `*` and `+*` whitelist every node, `-*` blacklists every one, `>*` makes every node an end node and `/*` a termination node. This is how one step of a [sequence](#sequences) says "any label in this position".         |
 
 An empty entry, or a bare `+`, `-`, `>` or `/` with no label behind it, is an error rather than a
 filter that matches nothing.
+
+`*` is a label wildcard only. A relationship filter says "any type" with a bare direction marker
+instead — `'>'`, `'<'`, or `'<|>'` for either direction — and a relationship entry containing `*` is
+an error naming those spellings.
 
 With `filterStartNode` at its default the start node is exempt from the label filter entirely — its
 own labels are never consulted — so it is returned even when its labels would otherwise exclude it.
@@ -421,7 +426,9 @@ If subgraph is not specified, the algorithm is computed on the entire graph by d
  | filterStartNode     | Bool 	| False	  | Whether the label and node-identity filters apply to the start node. 	|
  | bfs                 | Bool 	| True	  | Emit every path of one length before any longer one, so a `limit` returns the shortest paths. `false` expands depth-first instead, which is faster on a deep traversal. The result set is the same either way; only the order differs. 	|
  | limit               | Int   	| -1   	  | The maximum number of paths to return. The traversal stops once the cap is reached rather than building the rest of the result and discarding it, which a trailing Cypher `LIMIT` cannot do. With several start nodes they are walked in the order they were listed, so that order decides which paths a `limit` returns. `-1` means no limit; a value below `-1` is an error. 	|
- | uniqueness          | String 	| RELATIONSHIP_PATH	| What may not repeat within a single path: `RELATIONSHIP_PATH` or `NODE_PATH`. Both allow a node or relationship to appear in other paths. 	|
+ | uniqueness          | String 	| RELATIONSHIP_PATH	| What may not repeat. `RELATIONSHIP_PATH` and `NODE_PATH` forbid a repeat within a single path, and allow a node or relationship to appear in other paths. `NODE_GLOBAL` forbids a node repeating anywhere in the traversal, so exactly one path per reachable node is returned. 	|
+ | sequence            | String 	| ""	    | One alternating string of label and relationship steps — a label step, then a relationship step, then a label step, and so on. Supersedes `labelFilter` and `relationshipFilter` when given. See [sequences](#sequences). 	|
+ | beginSequenceAtStart | Bool 	| True	  | Whether a sequence begins at the start node or one hop out from it. See [sequences](#sequences). 	|
  | endNodes            | List 	| [ ]	    | Nodes, or node IDs, that are returned and expanded through — the node-identity counterpart of the `>LABEL` prefix. With either this or `terminatorNodes` set, only the nodes they name end a returned path. 	|
  | terminatorNodes     | List 	| [ ]	    | Nodes, or node IDs, that are returned and end the walk — the node-identity counterpart of the `/LABEL` prefix. 	|
  | allowlistNodes      | List 	| [ ]	    | Nodes, or node IDs, the traversal is restricted to. An empty list allows every node. Nodes named by `endNodes` or `terminatorNodes` are allowed implicitly, so an allowlist that does not mention them still reaches them. 	|
@@ -431,19 +438,35 @@ If subgraph is not specified, the algorithm is computed on the entire graph by d
 `denylistNodes`, and are read only when the preferred key is absent or empty.
 
 A key this procedure does not recognize is an error, naming the key, rather than being ignored.
-`beginSequenceAtStart` is accepted and ignored: it only means something alongside a relationship
-sequence, which this procedure does not implement. `filterStartNode` alone decides whether the start
-node is filtered, by label and by node identity alike.
+
+`filterStartNode` decides whether the start node is filtered, by label and by node identity alike. The
+one exception is a sequence that begins one hop out: with `beginSequenceAtStart: false` the start node
+has no label step to be tested against, so the label filter does not apply to it however
+`filterStartNode` is set. The node-identity filters still follow `filterStartNode`.
 
 Every filter is evaluated independently and the results are combined: a node is returned only if every
 active filter includes it, and any one of them can stop the walk. So a `labelFilter` and a
 `denylistNodes` given together both apply, rather than one overriding the other.
 
+`uniqueness: NODE_GLOBAL` returns one path per reachable node. A node is spent by the first path that
+reaches it, so a node reachable at two depths comes back only at the shorter one — and it is spent even
+if a filter then rejects it, which means a `minHops` above every reachable node's own depth returns no
+rows at all. Several start nodes are all marked before any of them is expanded, so a start reached from
+another start is returned once, as its own root rather than a second time on the path that reached it.
+Which of two equal-length paths a node gets follows the order its relationships are iterated in.
+
 <Callout type="info">
-The two uniqueness modes that forbid a repeat across the whole traversal, rather than within one path,
-are not supported. Reaching a given depth means re-walking from the start node, so anything marked for
-the whole traversal would block the next pass. `NONE` is not supported either. An unsupported value is
-reported, naming it.
+`RELATIONSHIP_GLOBAL`, the `*_LEVEL` and `*_RECENT` modes and `NONE` are not supported: which paths
+survive them depends on the order relationships happen to be iterated in, which is not a rule a query
+can rely on. An unsupported value is reported, naming it.
+</Callout>
+
+<Callout type="info">
+`maxHops` is unbounded by default, and a depth-first expansion recurses once per hop, so it stops with
+an error past a depth of 5000. `uniqueness: NODE_GLOBAL` with the default `bfs: true` is the exception —
+that walk is iterative and spends each node once, so it is bounded by the graph rather than by the paths
+through it and needs no cap. Set `--memory-limit` so an unbounded traversal fails as a recoverable query
+error rather than exhausting the instance.
 </Callout>
 
 {<h4 className="custom-header"> Output: </h4>}
@@ -516,6 +539,150 @@ RETURN [n IN nodes(result) | labels(n)[0]] AS names;
 +-----------+
 ```
 
+**Example 4**
+
+Return one path per reachable node with `uniqueness: NODE_GLOBAL`. Every node the traversal can reach
+comes back exactly once, on the shortest path that reaches it.
+
+```cypher
+MATCH (h:Human)
+CALL path.expand_config(h, {minHops: 0, maxHops: 4, uniqueness: 'NODE_GLOBAL'})
+YIELD result
+RETURN [n IN nodes(result) | labels(n)[0]] AS names;
+```
+
+```plaintext
++----------------------------+
+| names                      |
++----------------------------+
+| ["Human"]                  |
+| ["Human", "Dog"]           |
+| ["Human", "Wolf"]          |
+| ["Human", "Mouse"]         |
+| ["Human", "Dog", "Cat"]    |
++----------------------------+
+```
+
+`Mouse` is reachable from `Human` directly and also through `Dog` and `Cat`; only the direct path is
+returned. The same call under the default `RELATIONSHIP_PATH` returns 36 paths rather than these five —
+every distinct route, including ones that come back to a node already on the path, since that mode only
+forbids reusing a relationship.
+
+### Sequences
+
+A filter can repeat. A comma in `labelFilter` or `relationshipFilter` separates the **steps** of a
+sequence, and the step a node or relationship is tested against is chosen by the depth it sits at — so
+the sequence starts over once the walk runs past its last step, and keeps repeating for as long as the
+walk goes on.
+
+Available on [`expand_config()`](#expand_config), [`subgraph_nodes()`](#subgraph_nodes) and
+[`subgraph_all()`](#subgraph_all). The positional [`expand()`](#expand) takes lists of alternatives,
+which cannot spell a sequence, for the same reason its signature cannot express `bfs` or `uniqueness`.
+
+A filter written without commas is the single-step case, which repeats at every depth — so what a filter
+matched before sequences existed, it matches still.
+
+{<h4 className="custom-header"> Steps and alternatives </h4>}
+
+Within one step, `|` separates alternatives exactly as it always has, so a step can accept any of
+several labels. Using the graph from [`expand()`](#expand), each depth is tested against its own step:
+
+```cypher
+MATCH (w:Wolf)
+CALL path.expand_config(w, {minHops: 0, maxHops: 3, filterStartNode: true,
+                            relationshipFilter: 'CATCHES>',
+                            labelFilter: 'Wolf|Dog, Dog|Cat, Cat|Mouse'})
+YIELD result
+RETURN [n IN nodes(result) | labels(n)[0]] AS names;
+```
+
+```plaintext
++--------------------------------+
+| names                          |
++--------------------------------+
+| ["Wolf"]                       |
+| ["Wolf", "Dog"]                |
+| ["Wolf", "Dog", "Cat"]         |
++--------------------------------+
+```
+
+`Mouse` sits at depth 3, which wraps back to the first step — `Wolf|Dog` — and it is neither, so the
+walk ends at `Cat`.
+
+A step that names no filter is an error, naming the key and the step's 1-based position — a blank step
+(`'Post,,Reply'`), a trailing comma (`'Post,'`), or a step whose alternatives are all empty
+(`'Post,|,Reply'`). Each of those would otherwise read as "match everything", which is the one thing a
+filter cannot have been meant to say.
+
+A `,` inside a **list** entry is also an error: a list entry is one alternative, so
+`labelFilter: ['Post,Reply']` is rejected pointing at the string form. Give the whole filter as a string
+to spell a sequence.
+
+{<h4 className="custom-header"> The `sequence` key </h4>}
+
+When both kinds alternate, `sequence` spells them in one string — a label step, then a relationship
+step, then a label step, and so on:
+
+```cypher
+MATCH (w:Wolf)
+CALL path.expand_config(w, {minHops: 0, maxHops: 3, filterStartNode: true,
+                            sequence: 'Wolf, CATCHES>, Dog, CATCHES>, Cat, CATCHES>, Mouse'})
+YIELD result
+RETURN [n IN nodes(result) | labels(n)[0]] AS names;
+```
+
+```plaintext
++--------------------------------------+
+| names                                |
++--------------------------------------+
+| ["Wolf"]                             |
+| ["Wolf", "Dog"]                      |
+| ["Wolf", "Dog", "Cat"]               |
+| ["Wolf", "Dog", "Cat", "Mouse"]      |
++--------------------------------------+
+```
+
+`sequence` supersedes both `labelFilter` and `relationshipFilter` when it is given; they are not merged
+with it. A blank or whitespace-only `sequence` is no sequence at all, and the two filter keys apply as
+usual. Both keys are still checked for type even when a `sequence` supersedes them, so a mistyped one is
+named rather than quietly dropped.
+
+{<h4 className="custom-header"> `beginSequenceAtStart` </h4>}
+
+By default a sequence begins **at** the start node: the first label step is tested against the start
+node, and the first relationship step against the hop out of it.
+
+With `beginSequenceAtStart: false` the sequence begins one hop **out**. The first relationship step is
+spent on the hop out of the start node and the remaining steps repeat from there, and the start node has
+no label step to be tested against — so the label filter does not apply to it however `filterStartNode`
+is set:
+
+```cypher
+MATCH (w:Wolf)
+CALL path.expand_config(w, {minHops: 0, maxHops: 3, beginSequenceAtStart: false,
+                            relationshipFilter: 'CATCHES>,FRIENDS_WITH>'})
+YIELD result
+RETURN [n IN nodes(result) | labels(n)[0]] AS names;
+```
+
+```plaintext
++----------------------------------+
+| names                            |
++----------------------------------+
+| ["Wolf"]                         |
+| ["Wolf", "Dog"]                  |
+| ["Wolf", "Dog", "Mouse"]         |
++----------------------------------+
+```
+
+`CATCHES>` is spent on the single hop out of `Wolf`, and `FRIENDS_WITH>` is what repeats from `Dog`
+onwards. With `beginSequenceAtStart` left at its default, `CATCHES>` and `FRIENDS_WITH>` would instead
+alternate from the start node.
+
+Because that first step is consumed, a relationship filter of only **one** step leaves nothing to
+repeat, and `beginSequenceAtStart: false` alongside one is an error naming the key. The same applies to
+a `sequence` whose relationship half has a single step.
+
 ### `subgraph_all()`
 
 Returns a subgraph in a form of nodes and relationships that can be reached from
@@ -538,6 +705,8 @@ If subgraph is not specified, the algorithm is computed on the entire graph by d
  | maxHops            | Int   	| -1   	  | The maximum number of hops in the traversal. `-1` means no limit; any other negative value matches nothing. `maxLevel` is an alias. 	|
  | relationshipFilter  | List or String 	| [ ]    	| Relationships which the subgraph formation will follow. Can be filtered using the notation described below.	|
  | labelFilter         | List or String 	| [ ]	    | Labels which will define filtering. Can be filtered using the notation described below. |
+ | sequence            | String 	| ""	    | One alternating string of label and relationship steps. Supersedes `labelFilter` and `relationshipFilter` when given. See [sequences](#sequences). 	|
+ | beginSequenceAtStart | Bool 	| True	  | Whether a sequence begins at the start node or one hop out from it. See [sequences](#sequences). 	|
  | filterStartNode     | Bool 	| False	  | Whether the label and node-identity filters apply to the start nodes. 	|
  | limit               | Int   	| -1   	  | The maximum number of nodes to return. The traversal stops once the cap is reached, so the nodes returned are the ones closest to the start. With several start nodes they are visited in the order they were listed, so that order decides which nodes a `limit` returns. `-1` means no limit; a value below `-1` is an error. 	|
  | endNodes            | List 	| [ ]	    | Nodes, or node IDs, that are returned and expanded through — the node-identity counterpart of the `>LABEL` prefix. With either this or `terminatorNodes` set, only the nodes they name are returned. 	|
@@ -552,10 +721,13 @@ A key the procedure does not recognize is an error, naming the key, rather than 
 misspelling such as `maxhops` would otherwise return a different result set than was asked for. The
 same applies to supplying a key together with its alias.
 
-`bfs`, `uniqueness` and `beginSequenceAtStart` are accepted here and ignored, whatever value they are
-given. This traversal is always breadth-first and visits each node once — which is what makes a node's
-hop count its shortest distance, and so what gives `minHops` its meaning — so none of the three can
-ask it for anything it does not already do.
+`bfs` and `uniqueness` are accepted here and ignored, whatever value they are given. This traversal is
+always breadth-first and visits each node once — which is what makes a node's hop count its shortest
+distance, and so what gives `minHops` its meaning — so neither key can ask it for anything it does not
+already do.
+
+`sequence` and `beginSequenceAtStart` do apply here, on the same terms as on
+[`expand_config()`](#expand_config). See [sequences](#sequences).
 
 Every filter is evaluated independently and the results are combined: a node is returned only if every
 active filter includes it, and any one of them can stop the walk. A `labelFilter` and a
@@ -602,9 +774,14 @@ Label filters are described in the table below:
 | `>LABEL`           | Label is added to the end list. When end list has labels, only paths ending with these labels will be returned, but they can be expanded further, to return paths ending in nodes with end labels beyond it, but the expansion will only go through nodes with whitelisted labels. Labels in the end list do not have to respect the whitelist.            |
 | `-LABEL`           | Label is added to the blacklist. No node in the path will contain labels in the blacklist. The blacklist takes precedence over all other filters.                   |
 | `/LABEL`           | Label is added to the termination list. When termination list contains labels, only paths ending with these labels will be returned, and any further expansion is stopped. Labels in the termination list do not have to respect the whitelist.                            |
+| `*`                | Matches every label, under any of the four prefixes. `*` and `+*` whitelist every node, `-*` blacklists every one, `>*` makes every node an end node and `/*` a termination node. This is how one step of a [sequence](#sequences) says "any label in this position".         |
 
 An empty entry, or a bare `+`, `-`, `>` or `/` with no label behind it, is an error rather than a
 filter that matches nothing.
+
+`*` is a label wildcard only. A relationship filter says "any type" with a bare direction marker
+instead — `'>'`, `'<'`, or `'<|>'` for either direction — and a relationship entry containing `*` is
+an error naming those spellings.
 
 With `filterStartNode` at its default the start node is exempt from the label filter entirely — its
 own labels are never consulted — so it is returned even when its labels would otherwise exclude it.
@@ -788,6 +965,8 @@ If subgraph is not specified, the algorithm is computed on the entire graph by d
  | maxHops            | Int   	| -1   	  | The maximum number of hops in the traversal. `-1` means no limit; any other negative value matches nothing. `maxLevel` is an alias. 	|
  | relationshipFilter  | List or String 	| [ ]    	| Relationships which the subgraph formation will follow. Explained in detail below.	|
  | labelFilter         | List or String 	| [ ]	    | Labels which will define filtering. Explained in detail below. |
+ | sequence            | String 	| ""	    | One alternating string of label and relationship steps. Supersedes `labelFilter` and `relationshipFilter` when given. See [sequences](#sequences). 	|
+ | beginSequenceAtStart | Bool 	| True	  | Whether a sequence begins at the start node or one hop out from it. See [sequences](#sequences). 	|
  | filterStartNode     | Bool 	| False	  | Whether the label and node-identity filters apply to the start nodes. 	|
  | limit               | Int   	| -1   	  | The maximum number of nodes to return. The traversal stops once the cap is reached, so the nodes returned are the ones closest to the start. With several start nodes they are visited in the order they were listed, so that order decides which nodes a `limit` returns. `-1` means no limit; a value below `-1` is an error. 	|
  | endNodes            | List 	| [ ]	    | Nodes, or node IDs, that are returned and expanded through — the node-identity counterpart of the `>LABEL` prefix. With either this or `terminatorNodes` set, only the nodes they name are returned. 	|
@@ -802,10 +981,13 @@ A key the procedure does not recognize is an error, naming the key, rather than 
 misspelling such as `maxhops` would otherwise return a different result set than was asked for. The
 same applies to supplying a key together with its alias.
 
-`bfs`, `uniqueness` and `beginSequenceAtStart` are accepted here and ignored, whatever value they are
-given. This traversal is always breadth-first and visits each node once — which is what makes a node's
-hop count its shortest distance, and so what gives `minHops` its meaning — so none of the three can
-ask it for anything it does not already do.
+`bfs` and `uniqueness` are accepted here and ignored, whatever value they are given. This traversal is
+always breadth-first and visits each node once — which is what makes a node's hop count its shortest
+distance, and so what gives `minHops` its meaning — so neither key can ask it for anything it does not
+already do.
+
+`sequence` and `beginSequenceAtStart` do apply here, on the same terms as on
+[`expand_config()`](#expand_config). See [sequences](#sequences).
 
 Every filter is evaluated independently and the results are combined: a node is returned only if every
 active filter includes it, and any one of them can stop the walk. A `labelFilter` and a
@@ -851,9 +1033,14 @@ error — an empty entry such as `['']`, or one made only of separators such as 
 | `>LABEL`           | Label is added to the end list. When end list has labels, only paths ending with these labels will be returned, but they can be expanded further, to return paths ending in nodes with end labels beyond it, but the expansion will only go through nodes with whitelisted labels. Labels in the end list do not have to respect the whitelist.            |
 | `-LABEL`           | Label is added to the blacklist. No node in the path will contain labels in the blacklist. The blacklist takes precedence over all other filters.                   |
 | `/LABEL`           | Label is added to the termination list. When termination list contains labels, only paths ending with these labels will be returned, and any further expansion is stopped. Labels in the termination list do not have to respect the whitelist.                            |
+| `*`                | Matches every label, under any of the four prefixes. `*` and `+*` whitelist every node, `-*` blacklists every one, `>*` makes every node an end node and `/*` a termination node. This is how one step of a [sequence](#sequences) says "any label in this position".         |
 
 An empty entry, or a bare `+`, `-`, `>` or `/` with no label behind it, is an error rather than a
 filter that matches nothing.
+
+`*` is a label wildcard only. A relationship filter says "any type" with a bare direction marker
+instead — `'>'`, `'<'`, or `'<|>'` for either direction — and a relationship entry containing `*` is
+an error naming those spellings.
 
 With `filterStartNode` at its default the start node is exempt from the label filter entirely — its
 own labels are never consulted — so it is returned even when its labels would otherwise exclude it.
