@@ -75,6 +75,20 @@ guide.
   is denied in favor of SSO. Until all three hold, the previous passthrough
   behavior is unchanged.
   [#4399](https://github.com/memgraph/memgraph/pull/4399)
+- `SHOW INSTANCES` is now strongly consistent and always answered by the leader
+  coordinator. A follower that cannot reach the leader no longer falls back to
+  reporting the cluster from its own local Raft state with `unknown` health —
+  it returns an empty result set with a `LeaderNotReachable` warning
+  notification instead. Tooling that parses `SHOW INSTANCES` should treat an
+  empty result as "cluster state unknown, retry" rather than "no instances
+  registered". A data instance that is down now reports the role recorded in the
+  Raft log (`main` / `replica`) instead of an unknown role.
+  [#4492](https://github.com/memgraph/memgraph/pull/4492)
+- `TERMINATE TRANSACTIONS` now requires transaction ids to parse in full. Ids
+  with trailing characters previously terminated the transaction matching the
+  numeric prefix, and unparseable ids were reported back as an attempt on
+  `18446744073709551615`; both now raise an error.
+  [#4534](https://github.com/memgraph/memgraph/pull/4534)
 
 {<h4 className="custom-header">🐞 Bug fixes</h4>}
 
@@ -119,6 +133,10 @@ guide.
 - Fixed a crash when multiple sessions printed query plans at the same time
   (for example concurrent `EXPLAIN` / `PROFILE`, or query-plan logging).
   [#4489](https://github.com/memgraph/memgraph/pull/4489)
+- `TERMINATE TRANSACTIONS` no longer reports `killed: true` for a transaction
+  the caller is not authorized to terminate. Such a match now reports
+  `killed: false`, indistinguishable from an id that does not exist.
+  [#4534](https://github.com/memgraph/memgraph/pull/4534)
 
 {<h4 className="custom-header">🛠️ Improvements</h4>}
 
@@ -154,6 +172,17 @@ guide.
   defer to system recovery. The unused `EnableWritingOnMainRpc` and its
   Prometheus counters were removed.
   [#4399](https://github.com/memgraph/memgraph/pull/4399)
+- `YIELD LEADERSHIP` and `SHOW COORDINATOR SETTINGS` can now be run on any
+  coordinator — followers forward them to the leader instead of failing or
+  answering from local state. When no leader can serve a cluster query,
+  Memgraph now says so explicitly: read queries (`SHOW INSTANCES`, `SHOW
+  COORDINATOR SETTINGS`, `SHOW REPLICATION LAG`) return no rows with a
+  `LeaderNotReachable` warning, `SHOW REPLICATION LAG` additionally reports why
+  the lag is unavailable via `ReplicationLagUnavailable` (no current main, main
+  unresponsive, leader still taking over, stale leader view), and
+  `ADD COORDINATOR`, `REMOVE COORDINATOR` and `UPDATE CONFIG` fail with a clear
+  "coordinator is not a leader" error instead of a misleading one.
+  [#4492](https://github.com/memgraph/memgraph/pull/4492)
 
 {<h4 className="custom-header">✨ New features</h4>}
 
@@ -204,6 +233,28 @@ guide.
   coordinators it is a `COORDINATOR_READ` query, so an SSO role with only
   `COORDINATOR_READ` granted can run it.
   [#4535](https://github.com/memgraph/memgraph/pull/4535)
+- Added the `SHOW ROUTING TABLE` query, which shows the routing table a
+  coordinator hands out to `bolt+routing` clients as `WRITE`, `READ` and `ROUTE`
+  rows. It can only be run on a coordinator, is always answered from the
+  leader's state, and returns an empty table if the leader cannot be contacted.
+  [#4502](https://github.com/memgraph/memgraph/pull/4502)
+- Added `TERMINATE TRANSACTIONS "*"`, which terminates every transaction the
+  caller is authorized to terminate across all databases, instead of naming ids
+  one by one. The caller's own transaction is skipped, transactions it may not
+  terminate are omitted from the result, and rows come back ordered by
+  ascending transaction id. The wildcard cannot be combined with ids.
+  [#4534](https://github.com/memgraph/memgraph/pull/4534)
+- A data instance in a high availability cluster can now use the
+  `IN_MEMORY_ANALYTICAL` storage mode for a bulk import: unregister the
+  replicas, switch to analytical, import, switch back to
+  `IN_MEMORY_TRANSACTIONAL` and register the replicas again. The switch back
+  writes a snapshot of the imported data, archives the superseded durability
+  files and restarts WAL numbering, and replica recovery detects that the
+  imported data exists in no WAL file, so a re-registered replica catches up
+  from that snapshot without wiping its data directory. Starting a data instance
+  with `--storage-mode=IN_MEMORY_ANALYTICAL` remains forbidden. See [bulk import
+  in analytical mode](/clustering/high-availability/analytical-import).
+  [#4510](https://github.com/memgraph/memgraph/pull/4510)
 
 ### Lab v3.13.0 - September 9th, 2026
 
@@ -1265,7 +1316,7 @@ the `username()` and `roles()` built-in functions. These functions allow users
 to programmatically retrieve current authentication details, simplifying
 auditing and the development of dynamic, role-based logic within queries.
 [#3563](https://github.com/memgraph/memgraph/pull/3563)
-- Added `--storage-enable-backup-dir` flag to control whether the `.old`
+- Added `--storage-backup-dir-enabled` flag to control whether the `.old`
 directory is used for storing old durability files during potential data loss
 scenarios. When disabled, old durability files are deleted instead of backed up.
 [#3631](https://github.com/memgraph/memgraph/pull/3631)
