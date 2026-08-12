@@ -1,6 +1,6 @@
 ---
 title: Server-side descriptions
-description: Annotate labels, edge types, properties and databases with human-readable descriptions that are persisted by Memgraph and surfaced in SHOW SCHEMA INFO.
+description: Annotate labels, edge types, properties, property values and databases with human-readable descriptions that are persisted by Memgraph and surfaced in SHOW SCHEMA INFO and the description() function.
 ---
 
 # Server-side descriptions
@@ -8,6 +8,10 @@ description: Annotate labels, edge types, properties and databases with human-re
 Server-side descriptions are human-readable strings attached to schema
 elements - labels, edge types, properties and databases - that Memgraph stores
 durably and surfaces alongside the schema.
+
+You can also describe individual property *values* - for example, decoding an
+enum or lookup code such as `"1"` into `"Male"` - and read them back at query
+time with the [`description()`](#resolve-a-value-with-description) function.
 
 They are useful for documenting the meaning of nodes, edges and properties
 directly inside the database, so tools that consume `SHOW SCHEMA INFO` (such as
@@ -33,10 +37,16 @@ You can attach a description to any of the following targets:
 | Edge type property | `EDGE TYPE PROPERTY :KNOWS(since)` |
 | Edge type pattern property | `EDGE TYPE PROPERTY (:Person)-[:KNOWS]->(:Person)(since)` |
 | Property (global) | `PROPERTY age` |
+| Property value | `PROPERTY gender VALUE "1"` |
 | Database | `DATABASE memgraph` |
 
 Multi-label combinations are matched exactly; setting a description on
 `:Person:Student` does not affect nodes that only carry `:Person`.
+
+A property-value description is keyed on the exact value: `PROPERTY gender VALUE "1"`
+describes only the value `"1"` of `gender`, independent of any global
+`PROPERTY gender` description. The value can be any literal (a string, number or
+boolean).
 
 ## Set a description
 
@@ -54,6 +64,8 @@ SET DESCRIPTION ON LABEL PROPERTY :Person(name) "Full name";
 SET DESCRIPTION ON EDGE TYPE PROPERTY :KNOWS(since) "Year they met";
 SET DESCRIPTION ON EDGE TYPE PROPERTY (:Person)-[:KNOWS]->(:Person)(since) "Year they met (pattern)";
 SET DESCRIPTION ON PROPERTY age "Age in years";
+SET DESCRIPTION ON PROPERTY gender VALUE "1" "Male";
+SET DESCRIPTION ON PROPERTY gender VALUE "2" "Female";
 
 SET DESCRIPTION ON DATABASE memgraph "Main graph database";
 ```
@@ -70,6 +82,7 @@ DELETE DESCRIPTION ON LABEL :Person;
 DELETE DESCRIPTION ON EDGE TYPE (:Person)-[:KNOWS]->(:Person);
 DELETE DESCRIPTION ON LABEL PROPERTY :Person(name);
 DELETE DESCRIPTION ON PROPERTY age;
+DELETE DESCRIPTION ON PROPERTY gender VALUE "1";
 DELETE DESCRIPTION ON DATABASE memgraph;
 ```
 
@@ -84,17 +97,55 @@ SHOW DESCRIPTIONS;
 Result columns:
 
 - `type` - kind of target. One of `"label"`, `"edge type"`, `"label property"`,
-  `"edge type property"`, `"property"`, or `"database"`. Edge-type-pattern
-  targets share the `"edge type"` / `"edge type property"` value with their
-  global counterparts and are distinguished by the populated
+  `"edge type property"`, `"property"`, `"property value"`, or `"database"`.
+  Edge-type-pattern targets share the `"edge type"` / `"edge type property"`
+  value with their global counterparts and are distinguished by the populated
   `start_node_labels` and `end_node_labels` columns.
 - `label` - label or label combination, when applicable.
 - `start_node_labels` - source labels, for edge type patterns.
 - `end_node_labels` - destination labels, for edge type patterns.
 - `property` - property key, when applicable.
+- `value` - the described value, for `"property value"` rows.
 - `description` - the stored text.
 
 Columns that don't apply to a given row are returned as `Null`.
+
+## Resolve a value with `description()`
+
+Property-value descriptions are read back at query time with the `description()`
+function, which maps a value to the description set for it:
+
+```opencypher
+description(property_name, value)
+```
+
+- `property_name` - the property key, as a string.
+- `value` - the value to look up, typically a stored property.
+
+It returns the description for that property/value pair, or `Null` if none is
+set (or if `value` is `Null`).
+
+For example, after:
+
+```opencypher
+SET DESCRIPTION ON PROPERTY gender VALUE "1" "Male";
+SET DESCRIPTION ON PROPERTY gender VALUE "2" "Female";
+```
+
+stored codes can be decoded into labels:
+
+```opencypher
+MATCH (p:Person)
+RETURN p.name, description("gender", p.gender) AS gender;
+```
+
+| p.name  | gender     |
+|---------|------------|
+| "Alice" | "Male"     |
+| "Bob"   | "Female"   |
+| "Carol" | `Null`     |
+
+`Carol`'s `gender` has no matching description, so it resolves to `Null`.
 
 ## Descriptions in `SHOW SCHEMA INFO`
 
@@ -177,4 +228,18 @@ units, allowed value ranges, or links to upstream systems:
 SET DESCRIPTION ON LABEL PROPERTY :Sensor(temperature) "Reading in degrees Celsius";
 SET DESCRIPTION ON LABEL PROPERTY :Order(amount) "Total in cents, in the order's currency";
 SET DESCRIPTION ON EDGE TYPE :PAID_WITH "Links an order to the payment method actually charged";
+```
+
+### Decoding enum or lookup values
+
+Property-value descriptions turn opaque codes into readable labels without a
+join or a separate lookup table. Describe each code once, then resolve it at
+query time with `description()`:
+
+```opencypher
+SET DESCRIPTION ON PROPERTY status VALUE "A" "Active";
+SET DESCRIPTION ON PROPERTY status VALUE "C" "Closed";
+
+MATCH (a:Account)
+RETURN a.id, description("status", a.status) AS status;
 ```

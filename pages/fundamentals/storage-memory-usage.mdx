@@ -62,6 +62,11 @@ If some other transactions are running in your system, you will receive a
 warning message, so be sure to [set the log level at least to
 `WARNING`](/database-management/logs).
 
+Switching to `IN_MEMORY_ANALYTICAL` is refused when replicas are registered,
+because analytical writes are not replicated. See [In-memory analytical storage
+mode](#in-memory-analytical-storage-mode) and [Bulk import in analytical
+mode](/clustering/high-availability/analytical-import).
+
 Switching from the in-memory storage mode to the on-disk storage mode is allowed
 when there is only one active session and the database is empty. As Memgraph Lab
 uses multiple sessions to run queries in parallel, it is currently impossible to
@@ -223,23 +228,41 @@ SNAPSHOT;` Cypher query.
 In the analytical storage mode, WAL files and periodic snapshots are **not
 created**. 
 
-Before switching back to the in-memory transactional storage mode create a
-snapshot manually. In the in-memory analytical storage mode, Memgraph guarantees
-that creating a snapshot is **the only** transaction present in the system, and
-all the other transactions will wait until the snapshot is created to ensure its
-validity. Once Memgraph switches to the in-memory transactional mode, it will
-restore data from the snapshot file and create a WAL for all new updates, if not
-otherwise instructed by the [config
+Switching back to the in-memory transactional storage mode writes a snapshot on
+its own, synchronously and before the mode change completes, so there is no need
+to create one manually first. If that snapshot cannot be written, the switch is
+aborted and the query throws: the database stays in analytical mode with its
+data and durability files unchanged, so you can fix the cause and retry. When
+the snapshot succeeds, the superseded snapshots and WAL files are moved to the
+`.old` directory — or deleted when
+[`--storage-backup-dir-enabled`](/database-management/configuration) is set to
+`false` — and WAL sequence numbering restarts from 0, because the new snapshot is
+a new durability base rather than an increment on the old one. New updates are
+written to a WAL again, if not otherwise instructed by the [config
 file](/configuration/configuration-settings#storage).
 
+In the in-memory analytical storage mode, Memgraph guarantees that creating a
+snapshot is **the only** transaction present in the system, and all the other
+transactions will wait until the snapshot is created to ensure its validity.
+Avoid taking a manual snapshot in the middle of an import you intend to finish
+with a switch back to transactional mode, though: analytical writes do not
+advance the durable timestamp, so such a snapshot is stamped with the
+**pre-import** timestamp.
 
 These are some of the implications of not having ACID properties. But if you do
 not have write-heavy workload, and you want to run analytical queries that will
 not change the data, you can take advantage of the low memory costs of the
 analytical mode.
 
-At the moment, the in-memory analytical storage mode **doesn't support
-replication and high availability**.
+Analytical writes are never appended to the WAL, so they **cannot be
+replicated**. An instance can enter the analytical storage mode only when it is
+the MAIN and has no registered replicas, and replicas can be registered or
+unregistered only while every database is in transactional mode. Within those
+rules, analytical mode can be used for a bulk import on a
+[replication](/clustering/replication/best-practices#storage-mode-requirements)
+or [high availability](/clustering/high-availability/analytical-import) cluster:
+unregister the replicas, import, switch back to transactional mode and register
+them again.
 
 ### On-disk transactional storage mode
 

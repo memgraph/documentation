@@ -5,6 +5,7 @@ export default {
     "setup-ha-cluster-docker-compose": "Set up HA cluster with Docker Compose",
     "setup-ha-cluster-k8s": "Set up HA cluster with K8s",
     "best-practices": "Best practices",
+    "analytical-import": "Bulk import in analytical mode",
     "ha-commands-reference": "Reference commands",
     "ha-reference-architectures": "Reference architectures",
     "migrating-to-v3-9-ha": "Migrating to v3.9 HA",
