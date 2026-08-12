@@ -116,9 +116,9 @@ The COORDINATOR instance is a **very restricted instance**, and it will
 not respond to any queries that are not related to management of the cluster.
 That means, you cannot run any data queries on the coordinator directly (we
 will talk more about routing data queries in the next sections). However,
-system information queries such as `SHOW CONFIG`, `SHOW LICENSE INFO`,
-`SHOW BUILD INFO` and `SHOW STORAGE INFO` are supported on coordinators, as
-well as `SET DATABASE SETTING`, `RELOAD BOLT_SERVER TLS` and
+system information queries such as `SHOW CONFIG`, `SHOW VERSION`,
+`SHOW LICENSE INFO`, `SHOW BUILD INFO` and `SHOW STORAGE INFO` are supported on
+coordinators, as well as `SET DATABASE SETTING`, `RELOAD BOLT_SERVER TLS` and
 `RELOAD INTRA_CLUSTER TLS`.
 </Callout>
 
@@ -257,23 +257,108 @@ in the cluster to ensure high availability, with timeouts.
 
 | RPC message request      | source      | target         | timeout          |
 |--------------------------|-------------|----------------| -----------------|
-| `ShowInstancesReq`         | Coordinator | Coordinator    |                  |
-| `DemoteMainToReplicaReq`   | Coordinator | Data instance  |                  |
-| `PromoteToMainReq`         | Coordinator | Data instance  |                  |
-| `RegisterReplicaOnMainReq` | Coordinator | Data instance  |                  |
-| `UnregisterReplicaReq`     | Coordinator | Data instance  |                  | 
-| `EnableWritingOnMainReq`   | Coordinator | Data instance  |    deprecated    |
-| `GetDatabaseHistoriesReq`  | Coordinator | Data instance  |                  |
+| `ShowInstancesReq`         | Coordinator | Coordinator    | 10s              |
+| `DemoteMainToReplicaReq`   | Coordinator | Data instance  | 10s              |
+| `PromoteToMainReq`         | Coordinator | Data instance  | 10s              |
+| `RegisterReplicaOnMainReq` | Coordinator | Data instance  | 10s              |
+| `UnregisterReplicaReq`     | Coordinator | Data instance  | 10s              |
+| `ReplicationLagReq`        | Coordinator | Data instance  | 5s               |
+| `GetDatabaseHistoriesReq`  | Coordinator | Data instance  | 10s              |
 | `StateCheckReq`            | Coordinator | Data instance  | 5s               |
-| `SwapMainUUIDReq`          | Coordinator | Data instance  |                  |
+| `SwapMainUUIDReq`          | Coordinator | Data instance  | 10s              |
+| `UpdateDataInstanceConfigReq` | Coordinator | Data instance | 10s            |
 | `FrequentHeartbeatReq`     | Main        | Replica        | 5s               |
-| `HeartbeatReq`             | Main        | Replica        |                  |
-| `SystemRecoveryReq`        | Main        | Replica        | 5s               |
+| `HeartbeatReq`             | Main        | Replica        | 10s              |
+| `SystemRecoveryReq`        | Main        | Replica        | 30s              |
 | `PrepareCommitRpc`         | Main        | Replica        | proportional     |
 | `FinalizeCommitReq`        | Main        | Replica        | 10s              |
 | `SnapshotRpc`              | Main        | Replica        | proportional     |
 | `WalFilesRpc`              | Main        | Replica        | proportional     |
 | `CurrentWalRpc`            | Main        | Replica        | proportional     |
+
+<Callout type="info">
+`EnableWritingOnMainReq` was **removed in Memgraph 3.13**. It was never sent —
+writing on a newly promoted MAIN is enabled through the `writing_enabled` flag
+carried inside `PromoteToMainRpc`. Its Prometheus counters were removed along
+with it.
+</Callout>
+
+{<h5 className="custom-header"> Follower-to-leader forwarding timeouts </h5>}
+
+Cluster management queries can be run on any coordinator; a follower forwards
+them to the leader over RPC. From Memgraph 3.13, each of these RPCs has an
+explicit timeout. They run on the caller's **Bolt session thread**, so without
+one, a session would block forever against a leader that is reachable but stuck.
+
+The four instance operations must outlast the work they trigger on the leader,
+or a follower would report failure for an operation the leader has already
+committed to Raft. Their budgets are the sum of that work plus headroom, where a
+Raft commit is capped at 3 seconds and each RPC from the leader to a data
+instance is capped by its entry in the table above.
+
+| RPC message request      | source      | target      | timeout | Budget breakdown |
+|--------------------------|-------------|-------------|---------|------------------|
+| `RegisterInstanceReq`    | Coordinator | Coordinator | 30s     | Raft commit + demote the new replica + register it |
+| `UnregisterInstanceReq`  | Coordinator | Coordinator | 20s     | Raft commit + one RPC to the current MAIN |
+| `DemoteInstanceReq`      | Coordinator | Coordinator | 20s     | Raft commit + one RPC to the current MAIN |
+| `SetInstanceToMainReq`   | Coordinator | Coordinator | 60s     | Raft commit + one `SwapMainUUID` per other instance + promote the new MAIN |
+| `AddCoordinatorReq`      | Coordinator | Coordinator | 10s     | Raft commit only |
+| `RemoveCoordinatorReq`   | Coordinator | Coordinator | 10s     | Raft commit only |
+| `UpdateConfigReq`        | Coordinator | Coordinator | 10s     | Raft commit only |
+| `ForceResetReq`          | Coordinator | Coordinator | 60s     | Unbounded leader-side work — see the note below |
+| `SetCoordinatorSettingReq` | Coordinator | Coordinator | 10s   | Raft commit only |
+| `GetRoutingTableReq`     | Coordinator | Coordinator | 10s     | Read served by the leader |
+| `CoordReplLagReq`        | Coordinator | Coordinator | 10s     | Read served by the leader |
+| `CreateRoleReq`          | Coordinator | Coordinator | 10s     | Raft commit only |
+| `DropRoleReq`            | Coordinator | Coordinator | 10s     | Raft commit only |
+| `GrantPrivilegeReq`      | Coordinator | Coordinator | 10s     | Raft commit only |
+| `RevokePrivilegeReq`     | Coordinator | Coordinator | 10s     | Raft commit only |
+| `GetRolesReq`            | Coordinator | Coordinator | 10s     | Read served by the leader |
+| `GetRolePrivilegesReq`   | Coordinator | Coordinator | 10s     | Read served by the leader |
+
+<Callout type="warning">
+`SetInstanceToMainReq` sends one `SwapMainUUID` per other instance, so its cost
+grows with the number of data instances. The 60s budget comfortably covers five
+instances. Beyond that, a follower can time out before the leader answers — no
+fixed value bounds it. Run `SET INSTANCE ... TO MAIN` directly on the leader in
+very large clusters.
+
+`ForceResetReq` triggers a reconciliation that retries under a 1s–60s backoff
+for as long as the coordinator stays leader, so the leader-side work has no
+upper bound at all. The 60s budget only keeps a genuinely wedged leader from
+blocking the session — hitting it does **not** mean the reset failed, and
+[`FORCE RESET CLUSTER
+STATE`](/clustering/high-availability/ha-commands-reference#force-reset-cluster-state)
+is safe to re-run.
+</Callout>
+
+The role and privilege RPCs are used by [coordinator
+authentication](/clustering/high-availability/coordinator-authentication):
+`GetRolesReq` in particular is sent on **every query of an SSO session**, because
+coordinator privileges are re-derived from the leader's committed role set
+rather than cached at login.
+
+{<h5 className="custom-header"> System transaction timeouts </h5>}
+
+MAIN-to-REPLICA system-delta RPCs are sent while committing a system
+transaction, so they must not block indefinitely either. From Memgraph 3.13 each
+carries a **10 second** timeout; a timeout marks the REPLICA as `BEHIND` and
+defers to system recovery.
+
+| RPC message request | source | target  | timeout |
+|---------------------|--------|---------|---------|
+| `UpdateAuthDataReq`     | Main | Replica | 10s |
+| `DropAuthDataReq`       | Main | Replica | 10s |
+| `FinalizeSystemTxReq`   | Main | Replica | 10s |
+| `CreateDatabaseReq`     | Main | Replica | 10s |
+| `DropDatabaseReq`       | Main | Replica | 10s |
+| `SuspendDatabaseReq`    | Main | Replica | 10s |
+| `ResumeDatabaseReq`     | Main | Replica | 10s |
+| `RenameDatabaseReq`     | Main | Replica | 10s |
+| `TenantProfileReq`      | Main | Replica | 10s |
+| `SetParameterReq`       | Main | Replica | 10s |
+| `UnsetParameterReq`     | Main | Replica | 10s |
+| `DeleteAllParametersReq`| Main | Replica | 10s |
 
 ## Intra-cluster TLS
 

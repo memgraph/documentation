@@ -37,6 +37,17 @@ warning notification instead of a degraded result — see [Error
 handling](#error-handling).
 </Callout>
 
+<Callout type="info">
+From Memgraph 3.13, coordinators can enforce privileges on these queries. Every
+query on this page requires either `COORDINATOR_READ` (read-only introspection)
+or `COORDINATOR_WRITE` (everything mutating). A session that connected with
+basic auth carries full `COORDINATOR_WRITE`, so nothing changes unless you
+enable [SSO on coordinators](/clustering/high-availability/coordinator-authentication).
+See the [privilege
+reference](/clustering/high-availability/coordinator-authentication#which-privilege-each-query-requires)
+for the per-query mapping.
+</Callout>
+
 ### `ADD COORDINATOR`
 
 Adds a coordinator to the cluster.
@@ -368,7 +379,9 @@ informational notification that the request was submitted.
 - Failover of data instances is not triggered, but the new leader recomputes
   cluster state, so a cluster that was already missing a MAIN can fail over as
   part of the leadership change.
-- No privilege is required to run this query on the coordinators.
+- Requires `COORDINATOR_WRITE`. A basic-auth session carries it implicitly; an
+  [SSO session](/clustering/high-availability/coordinator-authentication) needs
+  a role that has been granted it.
 
 {<h4 className="custom-header"> Typical use cases </h4>}
 
@@ -696,7 +709,11 @@ survives coordinator restarts and leader re-elections, and is honored across
 failovers: a newly promoted MAIN comes up read-only when the cluster is in
 read-only mode, instead of silently accepting writes.
 
-No privilege is required to run this query on the coordinators.
+`SET COORDINATOR SETTING` requires `COORDINATOR_WRITE` and `SHOW COORDINATOR
+SETTINGS` requires `COORDINATOR_READ`. A basic-auth session carries both
+implicitly; an [SSO
+session](/clustering/high-availability/coordinator-authentication) needs a role
+that has been granted them.
 
 <Callout type="info">
 Enabling read-only mode blocks **all write sources** on the MAIN — user Cypher
@@ -718,10 +735,170 @@ cluster self-heals to the requested state.
 </Callout>
 
 
+## Coordinator role and privilege management
+
+<Callout type="info">
+These queries are **Memgraph Enterprise** features and require a valid license.
+They exist so that [SSO
+identities](/clustering/high-availability/coordinator-authentication) have
+something to map onto. Coordinators have no users — only roles.
+</Callout>
+
+Coordinator roles are stored in the **Raft-replicated cluster state**, not in
+the auth store, so they survive restarts, follower catch-up and leader failover.
+Like the cluster registration queries, all of these can be run on any
+coordinator: writes are transparently forwarded to the leader and committed
+through the Raft log, and `SHOW ROLES` / `SHOW PRIVILEGES FOR ROLE` are strong
+reads served by the leader.
+
+### `CREATE ROLE`
+
+Creates a coordinator role. New roles start with **no** privileges.
+
+```cypher
+CREATE ROLE ifNotExists? roleName;
+```
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- Errors if the role already exists, unless `IF NOT EXISTS` is given.
+- The role name must match the `--auth-user-or-role-name-regex` pattern,
+  otherwise the query fails with `Invalid role name '<name>'.`
+- Requires `COORDINATOR_WRITE`.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+CREATE ROLE dba;
+CREATE ROLE IF NOT EXISTS analyst;
+```
+
+### `DROP ROLE`
+
+Removes a coordinator role.
+
+```cypher
+DROP ROLE roleName;
+```
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- Errors with `Role '<name>' doesn't exist.` if the role is not present.
+- Takes effect on **already-connected sessions immediately** — privileges are
+  re-derived from the committed role set on every query, so a session that
+  authenticated with the dropped role is denied its next privileged query
+  without needing to reconnect.
+- Requires `COORDINATOR_WRITE`.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+DROP ROLE analyst;
+```
+
+### `SHOW ROLES`
+
+Lists the coordinator roles. Returns one `role` column, name only.
+
+```cypher
+SHOW ROLES;
+```
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- Strong read served by the leader. If no leader can be reached, the query fails
+  rather than returning possibly-stale local state.
+- Requires `COORDINATOR_READ`.
+
+### `GRANT` / `REVOKE` coordinator privileges
+
+Grants or revokes a coordinator privilege on a role. Coordinators support
+exactly two privileges: `COORDINATOR_READ` and `COORDINATOR_WRITE`, where
+`COORDINATOR_WRITE` is a superset of `COORDINATOR_READ`.
+
+```cypher
+GRANT ( ALL PRIVILEGES | COORDINATOR_READ | COORDINATOR_WRITE [, ...] ) TO ROLE? roleName;
+REVOKE ( ALL PRIVILEGES | COORDINATOR_READ | COORDINATOR_WRITE [, ...] ) FROM ROLE? roleName;
+```
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- `GRANT ALL PRIVILEGES` grants **both** coordinator privileges;
+  `REVOKE ALL PRIVILEGES` removes both.
+- Errors with `Role '<name>' doesn't exist.` if the role is not present.
+- Only `COORDINATOR_READ` and `COORDINATOR_WRITE` may appear in the privilege
+  list. Any other privilege, `DENY` in any form, a `USER` target, fine-grained
+  access control (`ON NODES` / `ON EDGES`), property permissions and
+  `GRANT DATABASE` are all rejected on a coordinator.
+- Like `DROP ROLE`, a `REVOKE` applies to already-connected sessions on their
+  next query.
+- Requires `COORDINATOR_WRITE`.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+GRANT ALL PRIVILEGES TO dba;
+GRANT COORDINATOR_READ TO analyst;
+REVOKE COORDINATOR_WRITE FROM analyst;
+```
+
+### `SHOW PRIVILEGES FOR ROLE`
+
+Reports the privileges granted to a coordinator role, one per row.
+
+```cypher
+SHOW PRIVILEGES FOR ROLE? roleName;
+```
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- A role with no grants returns no rows.
+- The trailing `ON MAIN | CURRENT | DATABASE <db>` clause is **rejected** —
+  coordinators have no databases.
+- `SHOW PRIVILEGES FOR USER <user>` is rejected — coordinators have no users.
+- Strong read served by the leader.
+- Requires `COORDINATOR_READ`.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+SHOW PRIVILEGES FOR ROLE dba;
+```
+
+```plaintext
++---------------------+
+| privilege           |
++---------------------+
+| COORDINATOR_READ    |
+| COORDINATOR_WRITE   |
++---------------------+
+```
+
+### `SHOW CURRENT USER` and `SHOW CURRENT ROLE`
+
+Report the identity of the current session.
+
+```cypher
+SHOW CURRENT USER;
+SHOW CURRENT ROLE;
+```
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- **No privilege and no license are required** — these are self-service queries
+  that reveal only the session's own identity.
+- `SHOW CURRENT USER` returns the principal the SSO module reported. It is
+  session-local and works even when the leader is unreachable. A basic-auth
+  passthrough session returns `null`.
+- `SHOW CURRENT ROLE` returns the session's roles filtered against the leader's
+  committed role set, so a dropped role stops being reported. A basic-auth
+  passthrough session has no roles and returns `null`.
+
 ## Error handling
 
 If a Raft log commit fails for any cluster operation (register, unregister,
-promote, demote, add coordinator), the error message will indicate:
+promote, demote, add coordinator, role or privilege change), the error message
+will indicate:
 
 > Writing to Raft log failed. Please retry the operation.
 

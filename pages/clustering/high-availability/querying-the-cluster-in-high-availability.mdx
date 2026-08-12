@@ -190,19 +190,49 @@ When using the **bolt+routing protocol**, provide credentials for users that
 exist on the data instances. The authentication flow works as follows:
 
 1. The client authenticates and connects to a **coordinator**.
-2. The coordinator returns a routing table - no authentication occurs here.
+2. The coordinator returns a routing table.
 3. The client connects to the appropriate **data instance** using the **same
    credentials**.
 4. The data instance performs authentication and executes the query.
 
-This preserves a clean separation: coordinators route traffic, while data
-instances manage users.
-
 <Callout>
 
-1. You may connect to a coordinator via plain Bolt **without authentication**.
-2. When using Bolt+routing, you **must** provide credentials - authentication is
+1. By default, you may connect to a coordinator via plain Bolt **without
+   authentication** — username and password are accepted as a passthrough and
+   ignored.
+2. When using Bolt+routing, you **must** provide credentials — authentication is
    performed on the data instances.
+
+</Callout>
+
+### Authenticating against coordinators
+
+From Memgraph 3.13, coordinators are no longer unconditionally open. They can
+enforce [single sign-on and coordinator
+privileges](/clustering/high-availability/coordinator-authentication), which
+changes the flow above in two ways:
+
+- **Step 1 becomes a real authentication.** Once SSO is configured on the
+  coordinators, basic auth is refused and the client must present a valid IdP
+  token for a scheme listed in `--auth-module-mappings`.
+- **Step 2 requires a privilege.** Serving the routing table requires
+  `COORDINATOR_READ`. A session whose roles carry no coordinator privilege is
+  denied the routing table with `You don't have permission to read the routing
+  table on the coordinator!` — reported as a non-retryable client error so
+  drivers do not retry it.
+
+<Callout type="warning">
+
+Because the driver reuses **one set of credentials for both legs** of a routing
+connection, a `neo4j://` session works only when the **same role names exist on
+both the coordinators and the data instances**, and the same SSO scheme is
+configured on both. The privileges attached to those roles differ by design —
+coordinators know only `COORDINATOR_READ` / `COORDINATOR_WRITE`, data instances
+know only the data privilege set — but the names must match.
+
+See [Bolt+routing with
+SSO](/clustering/high-availability/coordinator-authentication#boltrouting-with-sso)
+for the full setup.
 
 </Callout>
 
