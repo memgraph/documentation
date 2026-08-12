@@ -102,6 +102,19 @@ guide.
 - Fixed a crash when multiple sessions printed query plans at the same time
   (for example concurrent `EXPLAIN` / `PROFILE`, or query-plan logging).
   [#4489](https://github.com/memgraph/memgraph/pull/4489)
+- Fixed silent data loss when a WAL file other than the last one in the chain
+  was damaged. Recovery used to apply the readable prefix of that file and then
+  apply the following files in full, coming up with an incomplete dataset
+  without reporting anything; on a replica the divergence never healed because
+  the replica reported the later timestamp and main considered it caught up.
+  Damage in a completed (finalized) WAL file is now fatal: the database fails
+  recovery instead of starting stale, and a replica stops applying the rest of
+  the chain. A WAL file that was still being written when the process crashed
+  is unaffected and is still truncated to its last whole transaction. Recover
+  such an instance with
+  [`--storage-allow-recovery-failure`](/database-management/configuration) plus
+  `RECOVER SNAPSHOT`, or from a backup.
+  [#4528](https://github.com/memgraph/memgraph/pull/4528)
 
 {<h4 className="custom-header">🛠️ Improvements</h4>}
 
@@ -128,6 +141,12 @@ guide.
   statements). Under index-heavy workloads this removes GC-correlated latency
   spikes on index and constraint creation.
   [#4468](https://github.com/memgraph/memgraph/pull/4468)
+- Recovery from WAL files is roughly 35% faster. Each WAL file now records its
+  timestamp range and transaction count in its header, so deciding which files
+  to recover from no longer requires parsing every file end to end, and
+  replaying a file parses it once instead of twice. This also speeds up replica
+  recovery and the WAL cleanup that runs after every snapshot.
+  [#4528](https://github.com/memgraph/memgraph/pull/4528)
 
 {<h4 className="custom-header">✨ New features</h4>}
 
