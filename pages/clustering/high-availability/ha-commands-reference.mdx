@@ -175,6 +175,13 @@ REGISTER INSTANCE instanceName ( AS ASYNC | AS STRICT_SYNC ) ? WITH CONFIG {
 - In Kubernetes, use service DNS names (e.g.
   `memgraph-data-1.default.svc.cluster.local`).
 - Local development uses `localhost`.
+- Register instances only while every database on the MAIN is in the
+  `IN_MEMORY_TRANSACTIONAL` storage mode. If the MAIN is in analytical mode, the
+  query still returns success (the Raft commit is the success criterion) but the
+  replica is not attached until the MAIN switches back, at which point the
+  reconciliation loop attaches it. The data instance logs the reason for the
+  rejection. See [Bulk import in analytical
+  mode](/clustering/high-availability/analytical-import).
 
 {<h4 className="custom-header">Example </h4>}
 
@@ -205,6 +212,16 @@ UNREGISTER INSTANCE instanceName;
   the replica from MAIN fails, the [reconciliation
   loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works)
   automatically retries the operation.
+- The unregistered instance keeps running and keeps all of its data. It is
+  removed from the cluster, not wiped, so you do not need to clear its data
+  directory before registering it back.
+- The MAIN refuses the unregister RPC while any of its databases is in the
+  `IN_MEMORY_ANALYTICAL` storage mode, and logs the reason. The instance is
+  still removed from the Raft state, but the MAIN keeps its replication client
+  until the reconciliation loop retries once every database is transactional
+  again. Unregister instances only while the cluster is in transactional mode —
+  see [Bulk import in analytical
+  mode](/clustering/high-availability/analytical-import).
 
 {<h4 className="custom-header"> Example </h4>}
 
