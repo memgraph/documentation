@@ -143,9 +143,10 @@ Memgraph's privilege system controls access to various database operations throu
 | `SHOW SNAPSHOTS` | `DURABILITY` | `SHOW SNAPSHOTS` |
 | `SHOW NEXT SNAPSHOT` | `DURABILITY` | `SHOW NEXT SNAPSHOT` |
 | `SET SETTING` | `CONFIG` | `SET SETTING ...` |
-| `SHOW VERSION` | `STATS` | `SHOW VERSION` |
+| `SHOW VERSION` | `STATS` | `SHOW VERSION` — on coordinators it requires `COORDINATOR_READ` instead, see [Coordinator operations](#coordinator-operations). |
 | `SHOW TRANSACTIONS` | `TRANSACTION_MANAGEMENT` | `SHOW TRANSACTIONS` |
 | `TERMINATE TRANSACTIONS` | `TRANSACTION_MANAGEMENT` | `TERMINATE TRANSACTIONS 'transaction_id'` |
+| `TERMINATE TRANSACTIONS "*"` | `TRANSACTION_MANAGEMENT` | `TERMINATE TRANSACTIONS "*"` terminates every transaction the user may terminate. Without the privilege, only the user's own transactions are terminated. |
 | `RELOAD BOLT_SERVER TLS` | `RELOAD_TLS` | `RELOAD BOLT_SERVER TLS` |
 | `RELOAD INTRA_CLUSTER TLS` | `RELOAD_TLS` | `RELOAD INTRA_CLUSTER TLS` |
 
@@ -156,7 +157,7 @@ Memgraph's privilege system controls access to various database operations throu
 | `REPLICATION` operations | `REPLICATION` | Various replication commands. |
 | `SHOW REPLICATION ROLE` | `REPLICATION` | `SHOW REPLICATION ROLE` |
 | `SHOW REPLICAS` | `REPLICATION` | `SHOW REPLICAS` |
-| `SHOW REPLICATION LAG` | `COORDINATOR` | `SHOW REPLICATION LAG` |
+| `SHOW REPLICATION LAG` | `COORDINATOR_READ` | Coordinators only — see [Coordinator operations](#coordinator-operations). |
 
 ## Multi-database operations
 
@@ -191,10 +192,39 @@ Memgraph's privilege system controls access to various database operations throu
 
 ## Coordinator operations
 
+These privileges apply **only on [high availability
+coordinators](/clustering/high-availability/coordinator-authentication)**. They
+are granted to roles that live in the coordinators' Raft-replicated cluster
+state, not in the data-instance auth store, and are not part of the
+data-instance privilege set — `GRANT ALL PRIVILEGES` on a data instance does not
+grant them.
+
+`COORDINATOR_WRITE` is a superset of `COORDINATOR_READ`: a `COORDINATOR_WRITE`
+grant satisfies a `COORDINATOR_READ` requirement. A session that connected to a
+coordinator with basic auth carries both implicitly.
+
 | Query Type | Required Privileges | Example |
 |------------|-------------------|---------|
+| Routing table (Bolt `ROUTE` message) | `COORDINATOR_READ` | Any `neo4j://` connection. |
+| `SHOW INSTANCE` / `SHOW INSTANCES` | `COORDINATOR_READ` | `SHOW INSTANCES` |
+| `SHOW COORDINATOR SETTINGS` | `COORDINATOR_READ` | `SHOW COORDINATOR SETTINGS` |
+| `SHOW REPLICATION LAG` | `COORDINATOR_READ` | `SHOW REPLICATION LAG` |
+| `SHOW ROLES` / `SHOW PRIVILEGES FOR ROLE` | `COORDINATOR_READ` | `SHOW PRIVILEGES FOR ROLE dba` |
+| `SHOW CONFIG`, `SHOW SETTING`, system info queries | `COORDINATOR_READ` | `SHOW CONFIG` |
+| `SHOW VERSION` | `COORDINATOR_READ` | `SHOW VERSION` |
+| `SHOW CURRENT USER` / `SHOW CURRENT ROLE` | **None** | Self-service identity queries. |
+| Cluster management operations | `COORDINATOR_WRITE` | `REGISTER INSTANCE`, `SET INSTANCE ... TO MAIN`, `ADD COORDINATOR`, `YIELD LEADERSHIP`, `FORCE RESET CLUSTER STATE`, … |
+| `SET COORDINATOR SETTING` / `SET SETTING` | `COORDINATOR_WRITE` | `SET COORDINATOR SETTING 'sync_failover_only' TO 'true'` |
+| `CREATE ROLE` / `DROP ROLE` / `GRANT` / `REVOKE` | `COORDINATOR_WRITE` | `GRANT COORDINATOR_READ TO analyst` |
 | `COORDINATOR` operations | `COORDINATOR` | Various coordinator commands. |
 | `SHOW COORDINATOR SETTINGS` | `COORDINATOR` | `SHOW COORDINATOR SETTINGS` |
+| `SHOW ROUTING TABLE` | `COORDINATOR` | `SHOW ROUTING TABLE` |
+
+<Callout type="warning">
+**Breaking change in Memgraph 3.13:** the `COORDINATOR` privilege was removed
+and replaced by `COORDINATOR_READ` and `COORDINATOR_WRITE`. It never gated any
+operation and is no longer accepted in `GRANT` / `DENY` / `REVOKE` statements.
+</Callout>
 
 ## Schema information
 
