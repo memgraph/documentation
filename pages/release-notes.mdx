@@ -75,6 +75,21 @@ guide.
   is denied in favor of SSO. Until all three hold, the previous passthrough
   behavior is unchanged.
   [#4399](https://github.com/memgraph/memgraph/pull/4399)
+- Inside a bare `CALL {}` subquery, a pattern that mentions an outer variable
+  without importing it now opens a fresh binding instead of silently reusing
+  the caller’s. Queries that relied on the old leak return different results
+  with no error. Import explicitly with `CALL (n) {`, `CALL (*) {`, or a
+  leading `WITH n`. Some invalid pattern-comprehension shapes that used to
+  abort the server now raise a clear query error instead (create+reference in
+  the same clause, reusing a bound relationship, variable-length expand from a
+  node written in the same query part).
+  [#4487](https://github.com/memgraph/memgraph/pull/4487)
+- In `path.expand` / `path.expand_config` / `path.subgraph_*` relationship
+  filters, `<TYPE>` now means incoming `TYPE` (the old reciprocal-pair reading
+  is gone). `*` in a label filter is a wildcard, not a literal label. Unknown
+  config keys are errors instead of being ignored. Calls that relied on the
+  old readings can return different results or fail without a code change.
+  [#4530](https://github.com/memgraph/memgraph/pull/4530)
 - `SHOW INSTANCES` is now strongly consistent and always answered by the leader
   coordinator. A follower that cannot reach the leader no longer falls back to
   reporting the cluster from its own local Raft state with `unknown` health —
@@ -92,18 +107,13 @@ guide.
 
 {<h4 className="custom-header">🐞 Bug fixes</h4>}
 
-- Replicas no longer time out during recovery steps that run long inside a
-  single delta, such as populating an index, validating a constraint, loading a
-  snapshot, clearing storage before a reset, or aborting an interrupted
-  two-phase commit. A replica now reports progress on a fixed time interval for
-  as long as the work keeps advancing, instead of after a fixed number of
-  processed deltas, so the main no longer drops the connection mid-build and
-  leaves the replica unable to converge. A replica that stops advancing stops
-  reporting, so a genuinely stuck replica is still caught by the main's timeout.
-  As a consequence, the `deltas_batch_progress_size` coordinator setting **no
-  longer has any effect**; it stays readable and settable so existing
-  configurations keep working across an upgrade, and will be removed in a future
-  release. [#4557](https://github.com/memgraph/memgraph/pull/4557)
+- Identifiers may now include currency symbols such as `$` anywhere except as
+  the first character (for example `price$`), matching openCypher. Whitespace
+  between `$` and a parameter name (for example `$ 1`) is also handled
+  correctly. Previously both cases could confuse the query stripper and crash
+  the server.
+  [#4283](https://github.com/memgraph/memgraph/pull/4283)
+  [#4285](https://github.com/memgraph/memgraph/pull/4285)
 - Text and vector search now respect fine-grained label and property
   permissions. Hits the caller cannot read are filtered out, and
   `text_search.aggregate` / `text_search.aggregate_edges` return an error unless
@@ -114,6 +124,10 @@ guide.
   embeddings). The cache is now a bounded LRU controlled by
   `--query-ast-cache-max-size` (default `1000`; `0` disables it).
   [#4334](https://github.com/memgraph/memgraph/pull/4334)
+- Fixed parallel index scans (`USING PARALLEL EXECUTION`) so a filter that
+  evaluates to `null` returns no rows instead of treating the filter as absent
+  and returning every matching edge or node.
+  [#4406](https://github.com/memgraph/memgraph/pull/4406)
 - The `collections.*` functions and procedures now accept `NULL` list and scalar
   arguments instead of failing argument validation. Each function returns a
   defined result (for example `collections.sum(null)` → `null`,
@@ -131,6 +145,9 @@ guide.
   database could hang indefinitely while shared readers kept arriving. Those
   exclusive waiters now take priority so the hang no longer happens.
   [#4450](https://github.com/memgraph/memgraph/pull/4450)
+- Fixed concurrent `SET STORAGE MODE` handling so mode switches are safe under
+  load.
+  [#4451](https://github.com/memgraph/memgraph/pull/4451)
 - Fixed a crash when `LOAD PARQUET` hit invalid values (for example a time
   outside Memgraph’s supported range). The query now fails with an error
   instead of taking down the server.
@@ -142,9 +159,21 @@ guide.
 - Fixed a rare crash in garbage collection under heavy concurrent writes when
   indexes or unique constraints are defined.
   [#4475](https://github.com/memgraph/memgraph/pull/4475)
+- Fixed pattern comprehensions in `WITH … WHERE` / `ORDER BY` so they correlate
+  with the bound variable instead of scanning the whole graph; fixed `CALL {}`
+  overwriting outer variables it did not import; and fixed related wrong
+  results for named paths and `WITH` + `ORDER BY` + `WHERE`.
+  [#4487](https://github.com/memgraph/memgraph/pull/4487)
 - Fixed a crash when multiple sessions printed query plans at the same time
   (for example concurrent `EXPLAIN` / `PROFILE`, or query-plan logging).
   [#4489](https://github.com/memgraph/memgraph/pull/4489)
+- Fixed TTL sometimes never running after it was configured or enabled, so
+  expired data is cleaned up as scheduled.
+  [#4513](https://github.com/memgraph/memgraph/pull/4513)
+- `SET COORDINATOR SETTING 'instance_health_check_frequency_sec' TO '0'` is now
+  rejected with an invalid-argument error instead of crashing the coordinator
+  later (for example on `REGISTER INSTANCE` or restart).
+  [#4522](https://github.com/memgraph/memgraph/pull/4522)
 - Fixed silent data loss when a WAL file other than the last one in the chain
   was damaged. Recovery used to apply the readable prefix of that file and then
   apply the following files in full, coming up with an incomplete dataset
@@ -158,13 +187,43 @@ guide.
   [`--storage-allow-recovery-failure`](/database-management/configuration) plus
   `RECOVER SNAPSHOT`, or from a backup.
   [#4528](https://github.com/memgraph/memgraph/pull/4528)
+- Fixed several `path` module issues: traversals honor query timeout /
+  `TERMINATE TRANSACTIONS` / shutdown; deep expansions error instead of
+  crashing; `path.create` no longer aborts on a missing `rel` key; and filter /
+  hop-bound edge cases that produced wrong or empty results.
+  [#4530](https://github.com/memgraph/memgraph/pull/4530)
 - `TERMINATE TRANSACTIONS` no longer reports `killed: true` for a transaction
   the caller is not authorized to terminate. Such a match now reports
   `killed: false`, indistinguishable from an id that does not exist.
   [#4534](https://github.com/memgraph/memgraph/pull/4534)
+- Fixed a crash when writing a property covered by a nested index if the value
+  has nothing at the indexed path (for example `CREATE (:T {m: 1})` with an
+  index on `:T(m.k)`).
+  [#4550](https://github.com/memgraph/memgraph/pull/4550)
+- `path.slice` clamps out-of-range `offset` / `length` instead of throwing, and
+  `path.slice`, `path.elements`, and `path.combine` accept a null path. A
+  negative `length` other than `-1` (to the end) now returns a subpath with no
+  relationships rather than the rest of the path.
+  [#4552](https://github.com/memgraph/memgraph/pull/4552)
+- Replicas no longer time out during recovery steps that run long inside a
+  single delta, such as populating an index, validating a constraint, loading a
+  snapshot, clearing storage before a reset, or aborting an interrupted
+  two-phase commit. A replica now reports progress on a fixed time interval for
+  as long as the work keeps advancing, instead of after a fixed number of
+  processed deltas, so the main no longer drops the connection mid-build and
+  leaves the replica unable to converge. A replica that stops advancing stops
+  reporting, so a genuinely stuck replica is still caught by the main's timeout.
+  As a consequence, the `deltas_batch_progress_size` coordinator setting **no
+  longer has any effect**; it stays readable and settable so existing
+  configurations keep working across an upgrade, and will be removed in a future
+  release. [#4557](https://github.com/memgraph/memgraph/pull/4557)
 
 {<h4 className="custom-header">🛠️ Improvements</h4>}
 
+- `node2vec` and `node2vec_online` now use a C++ word2vec implementation instead
+  of the unmaintained Python `gensim` package. Usage is unchanged, expect
+  faster runs.
+  [#4319](https://github.com/memgraph/memgraph/pull/4319)
 - MAGE is now built and packaged from the same unified CMake / Conan tree as
   Memgraph. Build it with `build.sh --mage on` or `--mage only`; the old
   `mage/setup` Python script is removed. Only affects people building MAGE from
@@ -188,12 +247,26 @@ guide.
   statements). Under index-heavy workloads this removes GC-correlated latency
   spikes on index and constraint creation.
   [#4468](https://github.com/memgraph/memgraph/pull/4468)
+- `SHOW TRIGGERS` and `DROP TRIGGER` no longer take a storage write lock.
+  `CREATE TRIGGER` uses a read accessor only. Clients that poll
+  `SHOW TRIGGERS` often (for example Memgraph Lab) no longer contend with
+  writers for that reason.
+  [#4495](https://github.com/memgraph/memgraph/pull/4495)
+- Garbage collection is faster on databases with many indexes: it only visits
+  indexes that recent writes could have touched.
+  [#4508](https://github.com/memgraph/memgraph/pull/4508)
 - Recovery from WAL files is roughly 35% faster. Each WAL file now records its
   timestamp range and transaction count in its header, so deciding which files
   to recover from no longer requires parsing every file end to end, and
   replaying a file parses it once instead of twice. This also speeds up replica
   recovery and the WAL cleanup that runs after every snapshot.
   [#4528](https://github.com/memgraph/memgraph/pull/4528)
+- Path config filters are stricter: empty or bare filter entries, `*` in a
+  relationship filter, and blank sequence steps are rejected instead of
+  producing wrong results. On `path.subgraph_nodes` / `path.subgraph_all`,
+  `bfs` and `uniqueness` are accepted and ignored (those procedures are always
+  breadth-first, one visit per node).
+  [#4530](https://github.com/memgraph/memgraph/pull/4530)
 - Cluster management queries forwarded from a follower coordinator to the leader
   now have [explicit RPC
   timeouts](/clustering/high-availability/how-high-availability-works#rpc-timeouts),
@@ -217,6 +290,11 @@ guide.
 
 {<h4 className="custom-header">✨ New features</h4>}
 
+- Added global vertex-property indexes with `CREATE GLOBAL INDEX ON :(prop)`
+  (and `DROP GLOBAL INDEX ON :(prop)`). They speed up property lookups across
+  all nodes when there is no shared label, for example
+  `MATCH (n) WHERE n.uid = '123' RETURN n`.
+  [#4353](https://github.com/memgraph/memgraph/pull/4353)
 - Added `collections.disjunction`, `collections.subtract`, and
   `collections.duplicates` to the MAGE `collections` module for set-style list
   difference, subtraction, and finding repeated values.
@@ -286,6 +364,16 @@ guide.
   with `--storage-mode=IN_MEMORY_ANALYTICAL` remains forbidden. See [bulk import
   in analytical mode](/clustering/high-availability/analytical-import).
   [#4510](https://github.com/memgraph/memgraph/pull/4510)
+- Added property-value descriptions: attach a human-readable label to a
+  specific property value with `SET DESCRIPTION ON PROPERTY … VALUE …`, resolve
+  it in queries with `description(property, value)`, and manage them with the
+  existing `SHOW` / `DELETE DESCRIPTION` commands.
+  [#4526](https://github.com/memgraph/memgraph/pull/4526)
+- Added `path.expand_config(start, config)` and extended the path config map
+  with node-identity filters, `limit`, `uniqueness` (including `NODE_GLOBAL`),
+  and repeating label/relationship sequences. `path.subgraph_nodes` and
+  `path.subgraph_all` accept the new filter keys too.
+  [#4530](https://github.com/memgraph/memgraph/pull/4530)
 - Added
   [`--storage-rocksdb-keep-log-file-num`](/database-management/configuration#storage)
   (default `1000`), which caps how many RocksDB info log files are kept per
