@@ -139,10 +139,17 @@ Every `connection` field is optional; supply what a given backend needs:
 | `schema`           | Middle namespace (PostgreSQL schema, MySQL / ClickHouse database, Iceberg schema). |
 | `catalog`          | Native root for three-level backends (Iceberg catalog, SQL Server database, Fabric warehouse/lakehouse item). |
 | `path`             | File-backed backends (DuckDB). |
+| `sslRootCert`      | PEM bundle of CA certificates to trust instead of the system roots (PostgreSQL). |
+| `trustServerCertificate` | Encrypt without verifying the server's certificate (PostgreSQL). Mutually exclusive with `sslRootCert`. |
 
 **Supported `type` values:** `memgraph`, `neo4j`, `postgres` (`postgresql`),
 `mysql`, `sqlserver`, `oracle`, `duckdb`, `iceberg`, `iceberg-direct`,
-`clickhouse`, `pinot`, `fabric`.
+`clickhouse`, `pinot`, `snowflake`, `mongodb`, `fabric`.
+
+For PostgreSQL, the TLS **mode** stays in the URI (`sslmode=`), where libpq
+users expect it; `sslRootCert` / `trustServerCertificate` declare what a URI
+cannot express. See
+[TLS connections](/memgraph-zero/memgql/connect/postgres#tls-connections).
 
 ## `graphs`
 
@@ -231,7 +238,9 @@ A vertex maps a **label** to a backend source. Exactly one source kind is set:
 
 An edge maps a **relationship type** between two labels. Relational edges name
 the foreign-key columns via `metaFields.from` / `metaFields.to`; native-graph
-edges pass through.
+edges pass through; and a `mappedJoinSource` edge links two labels that live in
+**different connectors** (see [Cross-connector edges](#cross-connector-edges)).
+Exactly one source kind is set.
 
 ```json
 {
@@ -280,6 +289,68 @@ A relational edge adds two more `metaFields` on top of `id`:
 missing. Native-graph edges (`mappedGraphSource`) need only `from` / `to`
 labels; the traversal is resolved by the backend.
 
+#### Cross-connector edges
+
+A third source kind, `mappedJoinSource`, declares an edge whose two endpoints
+live in **different connectors**. It has no backing table anywhere: the
+relationship *is* equality between one property on each endpoint.
+
+```json
+{
+  "label": "MANUFACTURED_BY",
+  "from": "Component",
+  "to": "Manufacturer",
+  "mappedJoinSource": {
+    "fromKey": "manufacturer_code",
+    "toKey": "code"
+  }
+}
+```
+
+With `Component` mapped to a PostgreSQL table and `Manufacturer` to a Memgraph
+connector, one pattern now traverses the boundary:
+
+```gql
+MATCH (c:Component)-[:MANUFACTURED_BY]->(m:Manufacturer) RETURN c.sku, m.name;
+```
+
+| `mappedJoinSource` key | Description |
+|------------------------|-------------|
+| `fromKey` | Property on the `from` vertex. A **GQL property name**, not a raw column; it resolves through that vertex's own mapping. |
+| `toKey`   | Property on the `to` vertex, resolved the same way. |
+
+This is the only edge form that works when one endpoint is a native-graph
+backend, which has no joinable edge table to point at. Under the hood the
+traversal is rewritten into the
+[cross-backend join](/memgraph-zero/memgql/multiple-graphs#focused-multi-graph-queries)
+that already runs — one part per connector plus the join equality — so piping,
+per-part caching and the local join all apply unchanged.
+
+`RETURN c, r, m` packs real nodes and a relationship, so graph clients such as
+Memgraph Lab can draw and expand the result. Element ids are synthesized from
+the connector, label and key, so two backends that both number rows from `1`
+don't collide.
+
+**Rules and limits** (each is refused with a message saying what to write
+instead):
+
+- Both endpoints must live in different connectors — within one connector use
+  `mappedTableSource` with `metaFields.from` / `to`.
+- Each key must be a declared `attribute` of its endpoint vertex (native-graph
+  vertices are exempt, since the query passes through).
+- The edge must be traversed **in a direction**: `-[:R]->` or `<-[:R]-`, not
+  `-[:R]-`.
+- No variable-length traversal, no `OPTIONAL MATCH`, and one `MATCH` with one
+  path pattern per query.
+- The edge carries no properties, so it cannot be filtered — filter the
+  endpoints instead.
+- Every node in the pattern needs a label, so each side can be routed.
+- Aggregating *across* the join (for example `count()` over both sides) is not
+  supported yet; return the rows and count client-side.
+
+A **table-backed** edge whose endpoints sit in different connectors is still
+skipped at load time with a warning pointing at `mappedJoinSource`.
+
 ### Attributes
 
 `attributes` declare the properties a label exposes.
@@ -289,9 +360,57 @@ labels; the traversal is resolved by the backend.
 | `name`   | yes      | The GQL property name. |
 | `column` | no       | The backing column (defaults to `name`), e.g. property `name` ← column `full_name`. |
 | `type`   | no       | Recorded, not enforced at query time (default `String`). |
+| `path`   | no       | Location inside a JSON document column (see below). |
 
 Allowed `type` values: `Boolean`, `Byte`, `Short`, `Int`, `Long`, `HugeInt`,
-`Float`, `Double`, `Decimal`, `String`, `Date`, `DateTime`.
+`Float`, `Double`, `Decimal`, `String`, `Date`, `DateTime`, `Json`.
+
+#### JSON / JSONB columns
+
+A document column (PostgreSQL `JSONB`, MySQL `JSON`, …) can be mapped two ways,
+and they compose — use both on the same column.
+
+**Declared path.** Pin a value inside the document to its own typed property.
+`column` names the document column, `path` the location inside it, and `type`
+the type of the value found there:
+
+```json
+{
+  "name": "voltage",
+  "column": "props",
+  "path": "electrical.voltage",
+  "type": "Double"
+}
+```
+
+```gql
+MATCH (c:Component) WHERE c.voltage > 240 RETURN c.voltage;
+```
+
+pushes down to the source as an extraction cast to the declared type. The cast
+is what makes the comparison numeric — without it the database compares text,
+where `'90' > '240'`. `path` is a dotted string; for keys that themselves
+contain a dot, write an explicit segment list: `"path": ["spec.v2", "voltage"]`.
+
+**Passthrough.** Mark the column `Json` and it stays a document: `RETURN
+c.props` returns a map, and **undeclared** keys are reachable with ordinary
+property syntax — `c.props.rohs`, `c.props.electrical.voltage` — each pushed
+down as an extraction on the source. This is the option for heterogeneous blobs
+where declaring every key up front isn't possible. An undeclared key carries no
+declared type, so the comparison supplies one: compared against a number it is
+cast like a declared numeric path, compared against a string it stays text. A
+key the document doesn't have reads as `null` rather than failing the query.
+
+```json
+{ "name": "props", "type": "Json" }
+```
+
+**Limits.** `path` attributes are read-only — an `INSERT` through a JSON path is
+rejected rather than clobbering the surrounding document. JSON path support is
+per backend: PostgreSQL, MySQL, DuckDB, SQL Server, Microsoft Fabric and
+Snowflake. A mapping that declares a `path` against any other connector fails to
+load, so the mismatch surfaces at boot / `CREATE GRAPH` rather than on every
+query.
 
 `attributes` are optional and need not be exhaustive: a property you don't list
 still resolves to a same-named column at query time (`p.sku` → column `sku`).
