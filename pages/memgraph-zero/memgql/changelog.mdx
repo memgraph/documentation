@@ -9,49 +9,32 @@ description: MemGQL release notes
 
 ### 🍃 New features & Improvements
 
-- **Cross-connector edges.** A graph can now declare an edge whose two endpoints
-  live in *different* backends, with `mappedJoinSource { "fromKey": …, "toKey": … }`
-  — no backing table on either side; the relationship *is* equality between one
-  property on each endpoint. A single pattern then traverses the boundary:
-  `MATCH (c:Component)-[:MANUFACTURED_BY]->(m:Manufacturer)` reads components
-  from PostgreSQL and manufacturers from Memgraph. This is the only edge form
-  that works when one endpoint is a native-graph backend, which has no joinable
-  edge table to point at. `RETURN c, r, m` packs real nodes and a relationship,
-  so graph clients can draw and expand the result. Under the hood the pattern is
-  rewritten into the cross-backend join that already ran, so piping, per-part
-  caching and the local join apply unchanged. See
+- **Cross-connector edges.** An edge declared with
+  `mappedJoinSource { "fromKey": …, "toKey": … }` links two labels in *different*
+  backends, so one pattern traverses the boundary:
+  `MATCH (c:Component)-[:MANUFACTURED_BY]->(m:Manufacturer)` reads components from
+  PostgreSQL and manufacturers from Memgraph. `RETURN c, r, m` packs real nodes and
+  a relationship, so graph clients can draw and expand the result. See
   [Cross-connector edges](/memgraph-zero/memgql/schema-file#cross-connector-edges).
-- **JSON / JSONB columns are queryable.** Document columns (PostgreSQL `JSONB`,
-  MySQL `JSON`, …) map two composable ways. A **declared path** pins a value
-  inside the document to its own typed property
-  (`{ "name": "voltage", "column": "props", "path": "electrical.voltage", "type": "Double" }`),
-  so `WHERE c.voltage > 240` pushes down as an extraction cast to that type — the
-  cast is what keeps the comparison numeric instead of text, where `'90' > '240'`.
-  **Passthrough** (`{ "name": "props", "type": "Json" }`) keeps the column a
-  document: it returns as a map and *undeclared* keys stay reachable as
-  `c.props.rohs`, each pushed down as an extraction, for heterogeneous blobs that
-  can't be declared up front. Supported on PostgreSQL, MySQL, DuckDB, SQL Server,
-  Microsoft Fabric and Snowflake; a mapping declaring a `path` against any other
-  connector fails to load rather than failing every query. Writing *through* a
-  path is refused rather than clobbering the surrounding document. See
+- **JSON / JSONB columns are queryable.** An attribute can declare a `path` into a
+  document column (`"column": "props", "path": "electrical.voltage", "type": "Double"`),
+  giving it its own typed property; or type the column `Json`, which returns it as a
+  map and keeps *undeclared* keys reachable as `c.props.rohs`. Both push the
+  extraction down to the source, and a declared type keeps comparisons numeric
+  rather than lexicographic. PostgreSQL, MySQL, DuckDB, SQL Server, Microsoft
+  Fabric and Snowflake. See
   [JSON / JSONB columns](/memgraph-zero/memgql/schema-file#json--jsonb-columns).
-- **TLS for PostgreSQL connections.** The mode stays in the connection URI
-  (`sslmode=`, libpq semantics), and the connector declares what a URI cannot
-  express: `sslRootCert` (a PEM bundle to trust instead of the system roots) and
-  `trustServerCertificate` (encrypt without verifying the server — an escape
-  hatch for managed instances behind a mismatched certificate, warned about on
-  every use). Implemented with rustls, so there's no OpenSSL to install.
-  Declaring TLS settings alongside `sslmode=disable` is refused rather than
-  silently connecting in plaintext, and the two trust options are mutually
-  exclusive. Both survive an `EXPORT SCHEMA` round-trip. See
+- **TLS for PostgreSQL connections.** The mode stays in the URI (`sslmode=`, libpq
+  semantics); the connector adds `sslRootCert` (PEM bundle to trust instead of the
+  system roots) and `trustServerCertificate` (encrypt without verifying the server).
+  Built on rustls, so there's no OpenSSL to install. Declaring TLS settings
+  alongside `sslmode=disable` is refused rather than silently connecting in
+  plaintext. See
   [TLS connections](/memgraph-zero/memgql/connect/postgres#tls-connections).
-- **`SHOW STATS` reports query load per source.** One row per connector with
-  `queries`, `rows`, `errors`, `avg_latency_ms` and `max_latency_ms` — what the
-  *source* saw, so the load a federated query puts on a production backend can be
-  estimated before rollout. Latency covers the statement *and* the fetch of its
-  rows, in fractional milliseconds. `RESET STATS` zeroes the counters, so a single
-  query can be measured in isolation. Cache efficacy stays in `SHOW GRAPH CACHES`,
-  which is keyed by graph rather than connector. See
+- **`SHOW STATS` reports query load per source.** One row per connector —
+  `queries`, `rows`, `errors`, `avg_latency_ms`, `max_latency_ms` — counting what
+  the source itself saw, so federation's impact on a production backend can be
+  measured. `RESET STATS` zeroes the counters. See
   [Load per source](/memgraph-zero/memgql/multiple-graphs#load-per-source).
 
 ## MemGQL v0.9.0 - August 9th, 2026
