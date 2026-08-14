@@ -671,16 +671,36 @@ SET COORDINATOR SETTING 'max_replica_read_lag' TO '10' ;
 
 ### `deltas_batch_progress_size`
 
-Users can control how often REPLICAs report back to the MAIN that they're still processing the data (transactions, WALs, snapshots)
-the MAIN has sent to them. The default value is 100'000, which should be enough for most of your transactions.
-However, if processing 100'000 deltas takes more than 30s (because you're dealing with large deltas or you have older CPUs),
-you can set the configuration value `deltas_batch_progress_size` to a smaller value. This will avoid timeouts on REPLICAs so
-you won't see the query exception "At least one SYNC replica has not committed", but at the cost of lower throughput since REPLICAs
-will be sending in-progress messages to the MAIN more often.
+<Callout type="warning">
+**Deprecated in 3.13: this setting no longer has any effect.** REPLICAs report
+progress on a fixed time interval instead of after a fixed number of deltas, so
+there is nothing left to tune. The setting remains readable and settable so that
+existing configurations and automation keep working across an upgrade, but
+changing it does not alter replication behavior. It will be removed in a future
+release.
+</Callout>
+
+Previously, this setting controlled how many deltas a REPLICA processed before
+reporting back to the MAIN that it is still working on the data (transactions,
+WALs, snapshots) the MAIN sent it. Counting deltas could not cover work that
+happens *inside* a single delta — populating an index, validating a constraint,
+clearing storage before a snapshot load, or aborting an interrupted two-phase
+commit. On a large dataset any one of those can run for minutes while the
+REPLICA reports nothing, so the MAIN would hit its RPC timeout and drop the
+connection mid-build, and the REPLICA would never converge.
+
+As of 3.13, a REPLICA emits an in-progress message on a fixed interval for as
+long as the operation keeps making progress, regardless of how that work is
+divided into deltas. An operation that stops progressing stops reporting, so a
+genuinely stuck REPLICA is still caught by the MAIN's timeout rather than masked
+by an unconditional keepalive.
 
 ```
 SET COORDINATOR SETTING 'deltas_batch_progress_size' TO '50000';
 ```
+
+The query above still succeeds and the value is still returned by `SHOW
+COORDINATOR SETTINGS`, but it is ignored.
 
 ### `global_read_only`
 
