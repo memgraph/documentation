@@ -174,7 +174,34 @@ SHOW MAPPINGS;                   -- per-graph mappings
 SHOW SCHEMA [FOR <graph>];       -- unified routing index: labels, rel-types, properties
 EXPORT SCHEMA [TO '<path>'];     -- merged catalog as canonical schema JSON (round-trippable)
 REFRESH SCHEMA;                  -- re-introspect live Cypher connections (Memgraph/Neo4j)
+
+-- Query load per source
+SHOW STATS;                      -- source, queries, rows, errors, avg_latency_ms, max_latency_ms
+RESET STATS;                     -- zero the counters
 ```
+
+`SHOW STATS` reports what each **source** saw — statements MemGQL dispatched to
+it and rows it returned — so the load federation puts on a production backend
+can be measured before rollout:
+
+```
++--------+---------+------+--------+----------------+----------------+
+| source | queries | rows | errors | avg_latency_ms | max_latency_ms |
++--------+---------+------+--------+----------------+----------------+
+| mg     |       3 |    6 |      0 |           6.42 |          11.03 |
+| pg     |       3 |   12 |      0 |           9.18 |          18.55 |
++--------+---------+------+--------+----------------+----------------+
+```
+
+Latency covers a whole query — the statement *and* the fetch of its rows — and
+is reported in fractional milliseconds, since a healthy local source answers in
+hundreds of microseconds. `max_latency_ms` sits next to the average because an
+average hides the tail that shows up as a load problem. `RESET STATS` zeroes the
+counters, so a single query's cost can be measured in isolation.
+
+Counters are keyed by connector. **Cache** efficacy is keyed by graph and lives
+in [`SHOW GRAPH CACHES`](/memgraph-zero/memgql/multiple-graphs#caching-a-graph-in-memgraph)
+(hits, misses, resident fragments).
 
 ```
 -- Single graph
