@@ -140,8 +140,10 @@ follow-up read routes without needing a `REFRESH SCHEMA`.
 - A graph bound to a **non-default remote database** (Memgraph multi-tenancy) is
   fenced to explicit `USE`; per-tenant introspection isn't wired up yet.
 - A **single `MATCH` pattern that spans two backends** errors with guidance to
-  split it into one `MATCH` clause per graph; auto-splitting one pattern is out
-  of scope.
+  split it into one `MATCH` clause per graph — unless the link between them is
+  declared as a
+  [cross-connector edge](#traversing-across-backends-with-an-edge), which is
+  split automatically.
 - A label-less `MATCH (n)` against a SQL backend still surfaces a raw backend
   error (there's nothing to route or translate by).
 
@@ -255,6 +257,46 @@ or without it. It engages for backends registered as catalog graphs
 locally. If the selective side matches nothing, the other backend is never
 queried.
 
+### Traversing across backends with an edge
+
+The joins above are written as predicates over two query parts. A graph can
+instead declare the link as a **cross-connector edge**, so the same join is
+traversed as one pattern:
+
+```json
+{
+  "label": "MANUFACTURED_BY",
+  "from": "Component",
+  "to": "Manufacturer",
+  "mappedJoinSource": { "fromKey": "manufacturer_code", "toKey": "code" }
+}
+```
+
+With `Component` mapped to PostgreSQL and `Manufacturer` to Memgraph, one
+`MATCH` now spans both:
+
+```gql
+-- Instead of: USE pg_graph MATCH (c:Component) USE mg_graph MATCH (m:Manufacturer)
+--             WHERE c.manufacturer_code = m.code
+MATCH (c:Component)-[:MANUFACTURED_BY]->(m:Manufacturer)
+WHERE c.voltage > 100
+RETURN c.sku, m.name;
+```
+
+MemGQL rewrites the pattern into the federated join described above — one part
+per connector plus the join equality — so piping, per-part caching and the local
+join all apply unchanged. Returning whole elements works too, which is what a
+graph client needs to draw and expand the result:
+
+```gql
+MATCH (c:Component)-[r:MANUFACTURED_BY]->(m:Manufacturer) RETURN c, r, m;
+```
+
+The edge must be traversed in a direction, matched by a single `MATCH` with one
+path pattern, and carries no properties of its own. See
+[Schema File → Cross-connector edges](/memgraph-zero/memgql/schema-file#cross-connector-edges)
+for the full rules.
+
 ## Composite Queries Across Graphs
 
 The GQL standard defines composite expressions combining query branches with `UNION`, `INTERSECT`, and `EXCEPT`. Each branch can target a different graph.
@@ -366,6 +408,32 @@ SHOW GRAPH social;
 `SHOW GRAPHS` lists how graphs are *registered* (connector, mapping, access
 mode). To see what each one actually *defines* (the labels, relationship types,
 and properties used for routing), use [`SHOW SCHEMA`](#schema-discovery).
+
+### Load per source
+
+Federated queries fan out to several backends, so it helps to know how much each
+one is actually being asked to do. `SHOW STATS` reports that per connector:
+
+```gql
+RESET STATS;
+MATCH (c:Component)-[:MANUFACTURED_BY]->(m:Manufacturer) RETURN c.sku, m.name;
+SHOW STATS;
+```
+
+```
++--------+---------+------+--------+----------------+----------------+
+| source | queries | rows | errors | avg_latency_ms | max_latency_ms |
++--------+---------+------+--------+----------------+----------------+
+| mg     |       1 |    2 |      0 |           6.42 |           6.42 |
+| pg     |       1 |    4 |      0 |           9.18 |           9.18 |
++--------+---------+------+--------+----------------+----------------+
+```
+
+Counts are what each **source** saw: statements dispatched to it and rows it
+returned. `RESET STATS` zeroes the counters, so one query's cost on a production
+backend can be measured in isolation. Cache hits and misses are keyed by graph
+rather than connector and live in
+[`SHOW GRAPH CACHES`](#caching-a-graph-in-memgraph).
 
 ## Graph Lifecycle Management
 
@@ -489,7 +557,7 @@ fragments). Cache activity is logged at `DEBUG` as `[CACHE] MISS … teeing …`
 and `[CACHE] HIT … serving from cache connector …`.
 
 > **Note:** The query-driven cache is exercised in CI against PostgreSQL, MySQL,
-> DuckDB, SQL Server, ClickHouse and the native Iceberg connector, each
+> DuckDB, SQL Server, SAP HANA, ClickHouse and the native Iceberg connector, each
 > replaying the same query corpus from its cache that it runs against the
 > source, and asserting identical rows. Graph-native sources (Memgraph, Neo4j) cannot be cached —
 > there is no relational mapping to copy from.

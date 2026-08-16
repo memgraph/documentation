@@ -10,7 +10,7 @@ Memgraph and Neo4j (translation is largely passthrough); "SQL backends"
 means PostgreSQL, MySQL and DuckDB. **MongoDB** is neither — it translates to
 aggregation pipelines — so it gets its own column.
 
-SQL Server, ClickHouse, Apache Iceberg, and Apache Pinot are also supported
+SQL Server, SAP HANA, ClickHouse, Apache Iceberg, and Apache Pinot are also supported
 as connectors but with a narrower verified surface. See each connector's page for the exact list of features each one
 supports.
 
@@ -140,9 +140,9 @@ apply depends on the type:
 | Option                      | Read by                                                              |
 |-----------------------------|----------------------------------------------------------------------|
 | `GRAPH '<db>'`              | Memgraph, Neo4j — selects the Cypher database (it is not a mapping)  |
-| `DATABASE '<db>'`           | PostgreSQL, MySQL, SQL Server, Oracle (service name), ClickHouse, MongoDB, Snowflake, Fabric (warehouse/lakehouse item) |
+| `DATABASE '<db>'`           | PostgreSQL, MySQL, SQL Server, Oracle (service name), ClickHouse, MongoDB, Snowflake, Fabric (warehouse/lakehouse item), SAP HANA (tenant database of an MDC system) |
 | `CATALOG '<catalog>'`       | Iceberg (Trino catalog), Iceberg Direct (warehouse)                 |
-| `SCHEMA '<schema>'`         | Iceberg, Snowflake, Fabric (default `dbo`); MongoDB accepts it as a fallback for `DATABASE` |
+| `SCHEMA '<schema>'`         | Iceberg, Snowflake, Fabric (default `dbo`), SAP HANA (defaults to the connection user's own schema); MongoDB accepts it as a fallback for `DATABASE` |
 | `WAREHOUSE` / `ROLE`        | Snowflake session settings                                           |
 | `PRIVATE_KEY_PATH` / `TOKEN`| Snowflake auth (key-pair JWT / programmatic access token); `TOKEN` is also a Fabric Entra ID access token |
 | `TENANT_ID` / `CLIENT_ID` / `CLIENT_SECRET` | Fabric service-principal auth (Microsoft Entra ID)     |
@@ -174,7 +174,34 @@ SHOW MAPPINGS;                   -- per-graph mappings
 SHOW SCHEMA [FOR <graph>];       -- unified routing index: labels, rel-types, properties
 EXPORT SCHEMA [TO '<path>'];     -- merged catalog as canonical schema JSON (round-trippable)
 REFRESH SCHEMA;                  -- re-introspect live Cypher connections (Memgraph/Neo4j)
+
+-- Query load per source
+SHOW STATS;                      -- source, queries, rows, errors, avg_latency_ms, max_latency_ms
+RESET STATS;                     -- zero the counters
 ```
+
+`SHOW STATS` reports what each **source** saw — statements MemGQL dispatched to
+it and rows it returned — so the load federation puts on a production backend
+can be measured before rollout:
+
+```
++--------+---------+------+--------+----------------+----------------+
+| source | queries | rows | errors | avg_latency_ms | max_latency_ms |
++--------+---------+------+--------+----------------+----------------+
+| mg     |       3 |    6 |      0 |           6.42 |          11.03 |
+| pg     |       3 |   12 |      0 |           9.18 |          18.55 |
++--------+---------+------+--------+----------------+----------------+
+```
+
+Latency covers a whole query — the statement *and* the fetch of its rows — and
+is reported in fractional milliseconds, since a healthy local source answers in
+hundreds of microseconds. `max_latency_ms` sits next to the average because an
+average hides the tail that shows up as a load problem. `RESET STATS` zeroes the
+counters, so a single query's cost can be measured in isolation.
+
+Counters are keyed by connector. **Cache** efficacy is keyed by graph and lives
+in [`SHOW GRAPH CACHES`](/memgraph-zero/memgql/multiple-graphs#caching-a-graph-in-memgraph)
+(hits, misses, resident fragments).
 
 ```
 -- Single graph
@@ -274,6 +301,7 @@ connections.
 | `iceberg-direct` | None (native in-process)  | Iceberg (REST catalog + Arrow) |
 | `pinot`        | GQL -> SQL         | Apache Pinot                     |
 | `mongodb`      | GQL -> aggregation pipeline | MongoDB 5.0+            |
+| `hana`         | GQL -> SQL         | SAP HANA 2.0 SPS05+, HANA Cloud, HANA Express |
 | `multi`        | Per-connector      | Multiple backends simultaneously |
 
 
@@ -378,6 +406,30 @@ as an alias for the connector type.
 
 Every collection in one graph must live in the same database — MongoDB's
 `$lookup` cannot join across databases.
+
+#### SAP HANA (`hana`)
+
+| Variable        | Default                                     | Description                                                |
+|-----------------|---------------------------------------------|------------------------------------------------------------|
+| `HANA_URL`      | `hdbsql://SYSTEM:HXEHana1@localhost:39017`  | Connection URL. The scheme selects the transport: `hdbsql://` plaintext, `hdbsqls://` TLS (required by SAP HANA Cloud) |
+| `HANA_USER`     | _(from the URL)_                            | DB user, when not written into the URL                      |
+| `HANA_PASSWORD` | _(from the URL)_                            | Password, when not written into the URL                     |
+| `HANA_DATABASE` | _(none)_                                    | Tenant database of a multitenant (MDC) system               |
+| `MAPPING_FILE`  | _(required)_                                | Path to JSON mapping file (same format as Postgres)         |
+
+`sap-hana`, `sap_hana`, and `saphana` are accepted aliases for the `hana` type.
+
+Prefer `HANA_USER` / `HANA_PASSWORD` (or the `USER` / `PASSWORD` connector
+options) over embedding credentials in the URL: a HANA password often contains
+`@` or `:`, which cannot be expressed inside a URL.
+
+The connector uses [hdbconnect](https://crates.io/crates/hdbconnect), a
+pure-Rust implementation of HANA's SQL Command Network Protocol. No ODBC, no
+JDBC, and no SAP HANA client installation is required at build or runtime.
+
+There is no `CATALOG` level for HANA: the tenant database is chosen at login,
+not spelled into a qualified table name, so a HANA table reference is at most
+`schema.table`. See the [SAP HANA connector page](/memgraph-zero/memgql/connect/hana).
 
 #### Iceberg (`iceberg`)
 
