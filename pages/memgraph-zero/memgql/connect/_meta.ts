@@ -9,4 +9,5 @@ export default {
   "mysql": "to MySQL",
   "sqlserver": "to SQL Server",
   "pinot": "to Pinot",
+  "snowflake": "to Snowflake",
 }
