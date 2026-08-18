@@ -104,9 +104,17 @@ guide.
   numeric prefix, and unparseable ids were reported back as an attempt on
   `18446744073709551615`; both now raise an error.
   [#4534](https://github.com/memgraph/memgraph/pull/4534)
+- Whole-number strings that do not fit in a 64-bit integer now raise an error
+  in `toInteger()` instead of wrapping to a wrong value. Use `toIntegerOrNull()`
+  if you want `null` for those inputs.
+  [#4589](https://github.com/memgraph/memgraph/pull/4589)
 
 {<h4 className="custom-header">🐞 Bug fixes</h4>}
 
+- Fixed a query planning crash when `extract()` was used inside `WHERE` (for
+  example `WHERE 'x' IN extract(v IN n.list | v.field)`). Those queries now
+  run as written.
+  [#4081](https://github.com/memgraph/memgraph/pull/4081)
 - Identifiers may now include currency symbols such as `$` anywhere except as
   the first character (for example `price$`), matching openCypher. Whitespace
   between `$` and a parameter name (for example `$ 1`) is also handled
@@ -217,9 +225,30 @@ guide.
   longer has any effect**; it stays readable and settable so existing
   configurations keep working across an upgrade, and will be removed in a future
   release. [#4557](https://github.com/memgraph/memgraph/pull/4557)
+- Filters on a variable imported into a scoped `CALL (v) { ... }` subquery now
+  use a label-property or `id()` index instead of scanning every node or edge
+  once per input row. `MATCH ()-[e:TYPE]->() WHERE id(e) = ...` no longer
+  returns an edge of the wrong type.
+  [#4561](https://github.com/memgraph/memgraph/pull/4561)
+- Variables imported by `CALL (v1, v2) { ... }` and `CALL (*) { ... }` now stay
+  bound after a `WITH` inside the subquery. Previously an inner `WITH` that
+  omitted them could return wrong rows, overwrite the outer variable, or
+  `CREATE`/`MERGE` a new node instead of using the imported one.
+  [#4578](https://github.com/memgraph/memgraph/pull/4578)
+- `toInteger()` now converts whole-number strings exactly. Values near the
+  64-bit limits no longer round to a neighbouring integer (for example the
+  largest integer no longer comes back as the smallest).
+  [#4589](https://github.com/memgraph/memgraph/pull/4589)
+- `split('', ',')` now returns `['']` rather than an empty list, so a non-null
+  string always yields at least one field.
+  [#4591](https://github.com/memgraph/memgraph/pull/4591)
 
 {<h4 className="custom-header">🛠️ Improvements</h4>}
 
+- Memgraph is now built with a distro-agnostic toolchain, so DEB and RPM
+  packages install on a wider range of Linux distributions that meet
+  GLIBC >= 2.31 and Python >= 3.10.
+  [#3587](https://github.com/memgraph/memgraph/pull/3587)
 - `node2vec` and `node2vec_online` now use a C++ word2vec implementation instead
   of the unmaintained Python `gensim` package. Usage is unchanged, expect
   faster runs.
@@ -267,6 +296,16 @@ guide.
   `bfs` and `uniqueness` are accepted and ignored (those procedures are always
   breadth-first, one visit per node).
   [#4530](https://github.com/memgraph/memgraph/pull/4530)
+- Writing and loading a snapshot no longer fills the operating system's file
+  cache, so more memory stays free for queries while it happens. This works
+  automatically; `--storage-snapshot-writeback-window-mib` tunes how much of a
+  snapshot is cached before being written to disk (`0` restores the old
+  behaviour).
+  [#4546](https://github.com/memgraph/memgraph/pull/4546)
+- Replicating edge deletions is much faster on replicas. Large deletes that
+  were previously quadratic on the replica now scale with the number of edges
+  deleted, as they do on MAIN.
+  [#4564](https://github.com/memgraph/memgraph/pull/4564)
 - Cluster management queries forwarded from a follower coordinator to the leader
   now have [explicit RPC
   timeouts](/clustering/high-availability/how-high-availability-works#rpc-timeouts),
@@ -347,6 +386,12 @@ guide.
   rows. It can only be run on a coordinator, is always answered from the
   leader's state, and returns an empty table if the leader cannot be contacted.
   [#4502](https://github.com/memgraph/memgraph/pull/4502)
+- `EXISTS { ... }` and `exists((a)-[]->(b))` now work in `WITH` / `RETURN`
+  projections, `WITH ... WHERE`, `ORDER BY`, and aggregate arguments, not only
+  in a `MATCH` `WHERE`. You can write
+  `WITH p, EXISTS { MATCH (p)-[:ACTED_IN]->() } AS hasActed` instead of
+  rewriting it as an `OPTIONAL MATCH` plus a count.
+  [#4504](https://github.com/memgraph/memgraph/pull/4504)
 - Added `TERMINATE TRANSACTIONS "*"`, which terminates every transaction the
   caller is authorized to terminate across all databases, instead of naming ids
   one by one. The caller's own transaction is skipped, transactions it may not
@@ -374,6 +419,13 @@ guide.
   and repeating label/relationship sequences. `path.subgraph_nodes` and
   `path.subgraph_all` accept the new filter keys too.
   [#4530](https://github.com/memgraph/memgraph/pull/4530)
+- Added `--storage-omit-vector-index-properties-on-return` (also a runtime
+  database setting, default `false`). When enabled, properties backed by a
+  vector index are omitted from whole nodes and relationships returned to the
+  client, which cuts payload size for embeddings. Explicit access such as
+  `n.embedding` still returns the value; dumps, WAL, and replication are
+  unchanged.
+  [#4556](https://github.com/memgraph/memgraph/pull/4556)
 - Added
   [`--storage-rocksdb-keep-log-file-num`](/database-management/configuration#storage)
   (default `1000`), which caps how many RocksDB info log files are kept per
