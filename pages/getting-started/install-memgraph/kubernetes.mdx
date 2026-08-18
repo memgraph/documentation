@@ -321,6 +321,10 @@ prometheus:
     label: grafana_dashboard
 ```
 
+A second dashboard, **Memgraph Logs**, covers the logs shipped by `vectorRemote` and is
+enabled with `vectorRemote.grafanaDashboard.enabled: true` — see
+[Grafana dashboards](#grafana-dashboards).
+
 #### Remote metrics and logs
 
 The standalone chart can also ship:
@@ -454,24 +458,45 @@ Notes:
 A ready-to-use example values file is available in the Helm charts repository:
 [`examples/remote-monitoring/values-standalone-k8s-metrics.yaml`](https://github.com/memgraph/helm-charts/blob/main/examples/remote-monitoring/values-standalone-k8s-metrics.yaml).
 
-##### Example Grafana dashboards
+##### Grafana dashboards
 
-Example dashboards for visualizing the shipped metrics and logs are available in the
-Helm charts repository under
-[`examples/dashboards/`](https://github.com/memgraph/helm-charts/tree/main/examples/dashboards):
+The chart bundles two dashboards, each shipped as its own `ConfigMap` (labelled
+`grafana_dashboard`) for a Grafana sidecar to auto-load, and each behind its own flag:
 
-- [`memgraph_openmetrics.json`](https://github.com/memgraph/helm-charts/blob/main/examples/dashboards/memgraph_openmetrics.json) —
-  Memgraph metrics scraped directly from the OpenMetrics endpoint
-  (`scrapeMemgraphDirectly: true`). This is the same dashboard that
-  `prometheus.grafanaDashboard.enabled: true` ships as a `ConfigMap`.
-- [`memgraph_victorialogs.json`](https://github.com/memgraph/helm-charts/blob/main/examples/dashboards/memgraph_victorialogs.json) —
-  Memgraph logs shipped by `vectorRemote` and queried from VictoriaLogs.
+| Dashboard | Enable with | Shows |
+| --------- | ----------- | ----- |
+| **Memgraph OpenMetrics** | `prometheus.grafanaDashboard.enabled: true` | The metrics `vmagentRemote` scrapes and remote-writes |
+| **Memgraph Logs** | `vectorRemote.grafanaDashboard.enabled: true` | The logs `vectorRemote` ships to VictoriaLogs |
 
-Import them in Grafana via *Dashboards* → *New* → *Import*. Both use datasource template
-variables, so after importing pick your Prometheus-compatible datasource ("Metrics data
-source") and, for the logs dashboard, your VictoriaLogs datasource ("Logs data source").
-Their filters are driven by the `cluster_id`, `cluster_env` and `service_name` labels you
-set in `vmagentRemote.externalLabels` and `vectorRemote.extraLabels`.
+```yaml
+prometheus:
+  grafanaDashboard:
+    enabled: true
+    namespace: monitoring   # must be a namespace the Grafana sidecar watches
+    label: grafana_dashboard
+
+vectorRemote:
+  grafanaDashboard:
+    enabled: true
+    namespace: monitoring
+    label: grafana_dashboard
+```
+
+Each `ConfigMap` must live in a namespace the sidecar watches — set `namespace` to
+Grafana's namespace (or run the sidecar with `searchNamespace: ALL`). Both default to
+`prometheus.namespace`, else the release namespace. The metrics dashboard is also covered
+under [Grafana dashboard for direct scraping](#grafana-dashboard-for-direct-scraping).
+
+Both use datasource template variables rather than hardcoded UIDs, so they bind to the
+datasources you select. The OpenMetrics dashboard needs a Prometheus-compatible one
+("Data source"); the logs dashboard needs a VictoriaLogs one ("Logs data source") for its
+panels plus a Prometheus-compatible one ("Metrics data source") that populates its filter
+variables. Both filter on the `cluster_id`, `cluster_env` and `service_name` labels you set
+in `vmagentRemote.externalLabels` and `vectorRemote.extraLabels`.
+
+If you do not run a Grafana sidecar, both dashboards can be imported by hand via
+*Dashboards* → *New* → *Import* in Grafana — they live in the Helm charts repository under
+[`charts/memgraph/dashboards/`](https://github.com/memgraph/helm-charts/tree/main/charts/memgraph/dashboards).
 
 ### Node affinity
 
@@ -695,6 +720,19 @@ The following table lists the configurable parameters of the Memgraph standalone
 | `vmagentRemote.kubernetes.kubelet.additionalMetricsPath`     | Metrics path for the additional kubelet scrape.                                                                                              | `/metrics`                               |
 | `vmagentRemote.kubernetes.kubelet.apiServerAddress`          | Kubernetes API server address used to proxy kubelet scrapes.                                                                                 | `kubernetes.default.svc:443`             |
 | `vmagentRemote.kubernetes.kubelet.insecureSkipVerify`        | Skip TLS verification of the kube-apiserver serving cert when scraping kubelet.                                                              | `false`                                  |
+| `vectorRemote.enabled`                                       | Add a Vector sidecar that ships Memgraph logs from its monitoring websocket to a Loki-compatible endpoint.                                   | `false`                                  |
+| `vectorRemote.image.repository`                              | Vector image repository.                                                                                                                     | `timberio/vector`                        |
+| `vectorRemote.image.tag`                                     | Vector image tag.                                                                                                                            | `0.49.0-debian`                          |
+| `vectorRemote.image.pullPolicy`                              | Vector image pull policy.                                                                                                                    | `IfNotPresent`                           |
+| `vectorRemote.logsEndpoint`                                  | Loki-compatible logs endpoint base URL; Vector's loki sink appends `/loki/api/v1/push`. Required when `vectorRemote.enabled=true`.           | `""`                                     |
+| `vectorRemote.auth.secretName`                               | Kubernetes Secret holding basic-auth credentials for the logs endpoint. When empty, basic auth is not configured.                            | `""`                                     |
+| `vectorRemote.auth.usernameKey`                              | Key in the basic-auth Secret holding the username.                                                                                           | `username`                               |
+| `vectorRemote.auth.passwordKey`                              | Key in the basic-auth Secret holding the password.                                                                                           | `password`                               |
+| `vectorRemote.extraLabels`                                   | Extra labels attached to every log event shipped by Vector.                                                                                  | `{}`                                     |
+| `vectorRemote.grafanaDashboard.enabled`                      | Ship the bundled "Memgraph Logs" Grafana dashboard as a `ConfigMap` for a Grafana sidecar to auto-load.                                      | `false`                                  |
+| `vectorRemote.grafanaDashboard.namespace`                    | Namespace for the dashboard `ConfigMap`; must be one the Grafana sidecar watches. Defaults to `prometheus.namespace`, else release namespace. | `""`                                     |
+| `vectorRemote.grafanaDashboard.label`                        | Label the Grafana sidecar selects dashboards by.                                                                                             | `grafana_dashboard`                      |
+| `vectorRemote.resources`                                     | Resource requests/limits for the Vector sidecar container.                                                                                   | `{}`                                     |
 
 <Callout type="warning">
 If you enable the [`--storage-snapshot-on-exit`](/database-management/configuration)
