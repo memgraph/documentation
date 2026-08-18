@@ -377,6 +377,40 @@ original role.
 
 ![](/pages/clustering/replication/memgraph-replication-ids.png)
 
+### Progress reporting during long recovery steps
+
+When the MAIN sends a REPLICA a transaction, a set of WAL files, or a snapshot,
+it waits a bounded amount of time for the REPLICA's response before dropping the
+connection. Some of the work a REPLICA does while answering such a request is not
+divided into small steps: populating an index, validating a constraint, loading a
+snapshot, clearing storage before a reset, and aborting an interrupted two-phase
+commit all walk the entire dataset and can run for minutes on a large tenant.
+
+To keep those requests alive, a REPLICA emits an in-progress message on a fixed
+interval for as long as the operation it is running keeps advancing. The message
+carries no data — it only tells the MAIN that the REPLICA is still working, so
+the MAIN extends its wait instead of closing the socket. Reporting is tied to
+actual advancement rather than to wall-clock time alone: an operation that stops
+progressing stops reporting, so a REPLICA that is genuinely stuck is still caught
+by the MAIN's timeout rather than kept alive indefinitely by a blind keepalive.
+
+If the MAIN disappears while a REPLICA is populating an index or validating a
+constraint, the REPLICA abandons that build instead of finishing work whose
+result can no longer be delivered. Loading a snapshot is the exception: the data
+is already on disk at that point, so the REPLICA finishes deriving indices and
+constraints from it. That advances its commit timestamp, which means a
+reconnecting MAIN may only need to ship WAL deltas from that point rather than
+the whole snapshot again.
+
+<Callout type="info">
+
+Progress reporting used to be driven by the number of processed deltas, tunable
+through the `deltas_batch_progress_size` coordinator setting. That setting has
+had no effect since 3.13. See the [HA commands
+reference](/clustering/high-availability/ha-commands-reference#deltas_batch_progress_size).
+
+</Callout>
+
 ### System data replication
 
 We have outlined in the main section of this guide how graph data replication
