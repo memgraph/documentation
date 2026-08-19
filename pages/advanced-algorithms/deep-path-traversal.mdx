@@ -825,6 +825,33 @@ RETURN path;
 
 This will return at most 3 shortest paths between the source and target nodes.
 
+The limit applies **per source-target pair**, not to the query as a whole. A query
+that matches several pairs returns up to `k` paths for each of them, so the example
+below returns up to six paths across three pairs:
+
+```cypher
+MATCH (source:Node), (target:Node)
+WHERE source.group = target.group
+WITH source, target
+MATCH path=(source)-[*KSHORTEST|2]->(target)
+RETURN source, target, path;
+```
+
+The limit can be any expression that evaluates to an integer, including one that
+reads the current row, so different pairs can ask for a different number of paths:
+
+```cypher
+MATCH (source:Node), (target:Node)
+WITH source, target
+MATCH path=(source)-[*KSHORTEST|coalesce(source.paths_wanted, 1)]->(target)
+RETURN path;
+```
+
+The limit is evaluated once per pair and must be an integer on every one of them,
+so guard an optional property with `coalesce` as above - a `null` limit raises an
+error. A limit of `0` returns no paths for that pair without searching, and a
+negative limit raises an error.
+
 ### Example
 
 
@@ -875,6 +902,10 @@ RETURN path;
 ```
 
 This will only return paths with a length between 2 and 4 hops (inclusive).
+
+A negative minimum depth and a maximum depth below 1 both raise an error. A range
+whose minimum exceeds its maximum, such as `4..3`, is empty and returns no paths
+without searching.
 
 ### Constraining the expansion based on property values
 
@@ -929,6 +960,8 @@ Use the K shortest paths algorithm when you need to:
 - **No accumulated path in the filter lambda**: the two-argument
   `(r, n | ...)` filter is supported, the three-argument `(r, n, p | ...)` form
   is not
+- **Filter results**: the filter must evaluate to a boolean or `null`. `null`
+  prunes the expansion, as `false` does; any other type raises an error
 
 
 <CommunityLinks/>
