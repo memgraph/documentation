@@ -104,6 +104,19 @@ guide.
   numeric prefix, and unparseable ids were reported back as an attempt on
   `18446744073709551615`; both now raise an error.
   [#4534](https://github.com/memgraph/memgraph/pull/4534)
+- `size()`, `substring()`, `left()`, and `right()` now count characters, not
+  bytes. For non-ASCII text, lengths and cut positions can change (for example
+  `size('中')` is `1`, not `3`). Recheck any stored results that depended on
+  the old byte offsets.
+  [#4586](https://github.com/memgraph/memgraph/pull/4586)
+- A number that starts with `0` is now octal, so `09` and `018` are parse
+  errors instead of `9.0` and `18.0`. Drop the leading zero for decimal, or
+  keep it for octal (`010` is still `8`).
+  [#4588](https://github.com/memgraph/memgraph/pull/4588)
+- A `RETURN` inside `EXISTS { ... }` now affects the answer. Queries that
+  relied on the body `RETURN` being ignored may return different results after
+  upgrading.
+  [#4597](https://github.com/memgraph/memgraph/pull/4597)
 - Whole-number strings that do not fit in a 64-bit integer now raise an error
   in `toInteger()` instead of wrapping to a wrong value. Use `toIntegerOrNull()`
   if you want `null` for those inputs.
@@ -213,6 +226,19 @@ guide.
   negative `length` other than `-1` (to the end) now returns a subpath with no
   relationships rather than the rest of the path.
   [#4552](https://github.com/memgraph/memgraph/pull/4552)
+- `*KSHORTEST|k` now returns up to `k` paths for each input row, not for the
+  whole query. `|k` can also be an expression from the current row (for example
+  `-[*KSHORTEST|n.k]->`). With an inlined edge property map, only matching
+  paths count toward `k`.
+  [#4559](https://github.com/memgraph/memgraph/pull/4559)
+- Negative or empty `*KSHORTEST` depth bounds and a negative `|k` now raise a
+  query error instead of returning no rows (or scanning the whole graph first).
+  [#4559](https://github.com/memgraph/memgraph/pull/4559)
+- `EXISTS { ... }` subquery bodies now behave as expected: bodies that always
+  match evaluate to `true` instead of crashing the server, and `EXISTS` in
+  `WITH` projections and `ORDER BY` no longer fails with a spurious aliasing
+  error.
+  [#4560](https://github.com/memgraph/memgraph/pull/4560)
 - Replicas no longer time out during recovery steps that run long inside a
   single delta, such as populating an index, validating a constraint, loading a
   snapshot, clearing storage before a reset, or aborting an interrupted
@@ -235,13 +261,52 @@ guide.
   omitted them could return wrong rows, overwrite the outer variable, or
   `CREATE`/`MERGE` a new node instead of using the imported one.
   [#4578](https://github.com/memgraph/memgraph/pull/4578)
+- Fixed crashes and unbounded index growth in `IN_MEMORY_ANALYTICAL` when
+  indexes are enabled. Index entries are now removed before the nodes or edges
+  they point to are deleted.
+  [#4580](https://github.com/memgraph/memgraph/pull/4580)
+- `reverse()` now reverses characters, not bytes, so accented text, Chinese,
+  and emoji come back readable instead of as broken UTF-8.
+  [#4585](https://github.com/memgraph/memgraph/pull/4585)
+- `size()`, `substring()`, `left()`, and `right()` now work on whole
+  characters, so cuts no longer split multi-byte text into invalid UTF-8.
+  [#4586](https://github.com/memgraph/memgraph/pull/4586)
+- Integer literals with a leading zero are no longer treated as floating-point
+  values, so they get a proper integer range check instead of a silent
+  approximate double.
+  [#4588](https://github.com/memgraph/memgraph/pull/4588)
 - `toInteger()` now converts whole-number strings exactly. Values near the
   64-bit limits no longer round to a neighbouring integer (for example the
   largest integer no longer comes back as the smallest).
   [#4589](https://github.com/memgraph/memgraph/pull/4589)
+- `single()` now returns `null` when the predicate is `null` for any element
+  (for example `single(x IN [null, 1] WHERE x > 0)`), instead of claiming
+  `true`. Wrap with `coalesce(single(...), false)` if you want those rows
+  treated as not matching.
+  [#4590](https://github.com/memgraph/memgraph/pull/4590)
 - `split('', ',')` now returns `['']` rather than an empty list, so a non-null
   string always yields at least one field.
   [#4591](https://github.com/memgraph/memgraph/pull/4591)
+- An invalid timezone now raises a clear argument error instead of "An
+  unknown exception occurred". UTC offsets such as `+01:00` and `Z` are
+  accepted as well as timezone names.
+  [#4592](https://github.com/memgraph/memgraph/pull/4592)
+- A `RETURN` inside `EXISTS { ... }` is now planned instead of ignored, so
+  `DISTINCT`, `SKIP`, `LIMIT`, and aggregation in the body affect the answer.
+  Results can change without an error — recheck any query that relied on the
+  body `RETURN` being ignored.
+  [#4597](https://github.com/memgraph/memgraph/pull/4597)
+- Replication and coordination now log cluster state changes at `INFO` instead
+  of `TRACE`, so you can see failover, role, and leadership changes without
+  enabling per-delta trace logs. The default log level stays `WARNING`.
+  [#4599](https://github.com/memgraph/memgraph/pull/4599)
+- Query log masking no longer leaks part of a secret when the value contains
+  quotes or is missing a closing quote. Those values are now fully redacted in
+  logs.
+  [#4629](https://github.com/memgraph/memgraph/pull/4629)
+- Type constraints now accept zoned datetimes whose timezone is a numeric UTC
+  offset, such as `+01:00`, instead of rejecting them as the wrong type.
+  [#4635](https://github.com/memgraph/memgraph/pull/4635)
 
 {<h4 className="custom-header">🛠️ Improvements</h4>}
 
@@ -296,16 +361,35 @@ guide.
   `bfs` and `uniqueness` are accepted and ignored (those procedures are always
   breadth-first, one visit per node).
   [#4530](https://github.com/memgraph/memgraph/pull/4530)
+- Queries that filter with `IN` on an indexed label and property (for example
+  `MATCH (x:L) WHERE x.p IN ["a", "b"]`) now get accurate cardinality estimates,
+  so the planner picks better index plans for those filters.
+  [#4538](https://github.com/memgraph/memgraph/pull/4538)
 - Writing and loading a snapshot no longer fills the operating system's file
   cache, so more memory stays free for queries while it happens. This works
   automatically; `--storage-snapshot-writeback-window-mib` tunes how much of a
   snapshot is cached before being written to disk (`0` restores the old
   behaviour).
   [#4546](https://github.com/memgraph/memgraph/pull/4546)
+- Variable-length expands that return distinct vertices (for example with
+  `DISTINCT`) no longer walk every edge-unique path. Memgraph can use a
+  pruning breadth-first search instead, which is much faster on wide or dense
+  graphs.
+  [#4558](https://github.com/memgraph/memgraph/pull/4558)
+- `CONTAINS`, `STARTS WITH`, and `ENDS WITH` on an indexed label and property
+  now use that index instead of scanning every node.
+  [#4562](https://github.com/memgraph/memgraph/pull/4562)
 - Replicating edge deletions is much faster on replicas. Large deletes that
   were previously quadratic on the replica now scale with the number of edges
   deleted, as they do on MAIN.
   [#4564](https://github.com/memgraph/memgraph/pull/4564)
+- `WHERE NOT NOT n.prop = 42` (and similar double negation) now uses a property
+  index instead of scanning the label. Results are unchanged.
+  [#4594](https://github.com/memgraph/memgraph/pull/4594)
+- In `IN_MEMORY_ANALYTICAL`, `CREATE INDEX` and `DROP INDEX` no longer block
+  read queries. You can also build several supported indices in parallel, while
+  writes are still held off until the build finishes.
+  [#4633](https://github.com/memgraph/memgraph/pull/4633)
 - Cluster management queries forwarded from a follower coordinator to the leader
   now have [explicit RPC
   timeouts](/clustering/high-availability/how-high-availability-works#rpc-timeouts),
@@ -426,6 +510,17 @@ guide.
   `n.embedding` still returns the value; dumps, WAL, and replication are
   unchanged.
   [#4556](https://github.com/memgraph/memgraph/pull/4556)
+- `*KSHORTEST` now accepts a filter lambda, `-[*KSHORTEST (r, n | pred)]->`, so
+  you can narrow the search while expanding instead of filtering whole paths
+  afterwards.
+  [#4559](https://github.com/memgraph/memgraph/pull/4559)
+- `EXISTS { ... }` can now be used inside a `CASE` expression, including in the
+  condition (for example `CASE WHEN EXISTS { ... } THEN ... END`).
+  [#4596](https://github.com/memgraph/memgraph/pull/4596)
+- Added `COUNT { ... }`, which counts the rows a subquery body produces (for
+  example `RETURN COUNT { MATCH (p)-[:KNOWS]->(f) }`). Use it instead of
+  building a list with a pattern comprehension and calling `size()`.
+  [#4598](https://github.com/memgraph/memgraph/pull/4598)
 - Added
   [`--storage-rocksdb-keep-log-file-num`](/database-management/configuration#storage)
   (default `1000`), which caps how many RocksDB info log files are kept per
