@@ -913,7 +913,7 @@ rendering, since the Gateway would then apply to nothing.
 
 Before enabling Gateway API in the chart, you need:
 
-1. **A Gateway API controller** installed in your cluster. Examples include [Envoy Gateway](https://gateway.envoyproxy.io/), [Istio](https://istio.io/), [Cilium](https://cilium.io/), [Traefik](https://traefik.io/), and [Kong](https://konghq.com/). This guide uses Envoy Gateway as an example:
+1. **A Gateway API controller** installed in your cluster. Examples include [Envoy Gateway](https://gateway.envoyproxy.io/), [Istio](https://istio.io/), [Cilium](https://cilium.io/), [Traefik](https://traefik.io/), and [Kong](https://konghq.com/). This guide uses Envoy Gateway as an example (for Istio, see [Use Istio as the Gateway API controller](#use-istio-as-the-gateway-api-controller)):
 
    ```bash
    helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.4 -n envoy-gateway-system --create-namespace
@@ -1031,6 +1031,99 @@ A standalone Gateway manifest with these pre-configured listeners is available i
 <Callout type="info">
 **TCPRoute API version**: TCPRoute uses `v1alpha2`, which is the latest available API version. It is supported by Envoy Gateway and other major implementations but is not yet GA. Gateway and HTTPRoute are both GA (`v1`).
 </Callout>
+
+#### Use Istio as the Gateway API controller
+
+[Istio](https://istio.io/) implements the Gateway API and works with the HA
+chart out of the box — only Istio's `base` and `istiod` Helm charts are needed,
+because istiod deploys a gateway for every Gateway resource automatically (the
+`istio/gateway` chart is not used), and the installation creates the `istio`
+GatewayClass for you.
+
+Since the chart exposes Bolt through TCPRoute, which is an **alpha** Gateway
+API resource, two extra steps are required compared to a plain Istio
+installation: the Gateway API CRDs must come from the **experimental** channel,
+and istiod must run with `PILOT_ENABLE_ALPHA_GATEWAY_API=true`.
+
+Install the experimental Gateway API CRDs first — istiod detects the alpha CRDs
+at startup, so if it is already running, restart it afterwards with `kubectl
+rollout restart deploy/istiod -n istio-system`:
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
+```
+
+Then install Istio with the alpha Gateway API flag enabled:
+
+```bash
+helm repo add istio https://istio-release.storage.googleapis.com/charts
+helm repo update
+helm install istio-base istio/base -n istio-system --create-namespace
+helm install istiod istio/istiod -n istio-system --wait \
+  --set pilot.env.PILOT_ENABLE_ALPHA_GATEWAY_API=true
+```
+
+<Callout type="warning">
+Without `PILOT_ENABLE_ALPHA_GATEWAY_API=true`, istiod rejects the chart's TCP
+listeners (`protocol "TCP" is supported, but only when
+PILOT_ENABLE_ALPHA_GATEWAY_API=true is configured`) and the failure is easy to
+misread: the Gateway still shows `Programmed=True` and its LoadBalancer Service
+still lists all the ports, but the TCPRoutes get **no status at all** and every
+connection times out. If you hit this, set the flag with `helm upgrade istiod
+istio/istiod -n istio-system --reuse-values --set
+pilot.env.PILOT_ENABLE_ALPHA_GATEWAY_API=true --wait` and check that the
+TCPRoutes report `Accepted`.
+</Callout>
+
+Finally, install the HA chart with the `istio` GatewayClass:
+
+```bash
+helm install memgraph-ha memgraph/memgraph-high-availability \
+  --set externalAccessConfig.gateway.enabled=true \
+  --set externalAccessConfig.gateway.gatewayClassName=istio
+```
+
+Istio provisions a Deployment and a LoadBalancer Service named
+`<gateway-name>-istio` carrying every listener port: clients reach all
+coordinators through the shared listener at `<external-ip>:<boltPort>` (default
+7687) and each data instance at `<external-ip>:<dataPortBase + id>` (default
+9000, 9001, ...). Unlike some controllers (for example Traefik, which requires
+every listener port to be declared as an entryPoint), Istio programs listener
+ports automatically, so scaling the data tier needs no controller
+configuration.
+
+Drivers should connect with `bolt://` directly to the port they want, or, when
+using `neo4j://` routing mode, set an `external-dns` hostname on the Gateway so
+the coordinators register the external `<hostname>:<boltPort>` as their routing
+`bolt_server` (see [Update bolt server](#update-bolt-server)):
+
+```yaml
+externalAccessConfig:
+  gateway:
+    enabled: true
+    gatewayClassName: "istio"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: "memgraph.example.com"
+```
+
+Istio copies the LoadBalancer address into the Gateway's `.status.addresses`,
+which is where `external-dns` reads it from, so no extra Istio configuration is
+needed.
+
+<Callout type="info">
+Using Istio as the Gateway API controller does **not** require adding the
+Memgraph pods to the Istio service mesh. If you do sidecar-inject them
+(namespace label `istio-injection=enabled`), use native sidecars (Kubernetes >=
+1.28 and `--set pilot.env.ENABLE_NATIVE_SIDECARS=true` on istiod) — a classic
+`istio-proxy` sidecar keeps the `cluster-setup` Job pod running forever, which
+hangs the chart's post-install hook, and native sidecars also start the proxy
+before Memgraph so coordinators don't fail their initial connections to each
+other. On older clusters, exclude the Job from the mesh instead with `--set
+clusterSetup.labels."sidecar\.istio\.io/inject"=false`.
+</Callout>
+
+A ready-made istiod values file with these settings is available in the [Helm
+charts repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/istio-values.yaml).
 
 ### Use Memgraph HA chart with IngressNginx
 
