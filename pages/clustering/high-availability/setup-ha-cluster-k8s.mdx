@@ -257,6 +257,66 @@ kubectl patch pvc PVC_NAME -p '{"metadata":{"finalizers": []}}' --type=merge
 
 </Callout>
 
+### Extra volumes
+
+Besides the PVCs the chart creates for database files and logs, you can attach
+your own volumes to Memgraph pods at two levels:
+
+- **Per role** — `storage.data.extraVolumes` / `storage.data.extraVolumeMounts`
+  apply to every data instance, and `storage.coordinators.extraVolumes` /
+  `storage.coordinators.extraVolumeMounts` apply to every coordinator.
+- **Per instance** — `extraVolumes` / `extraVolumeMounts` on an individual entry
+  in `data[]` or `coordinators[]` apply only to that one instance.
+
+The two levels are additive: a pod gets the volumes defined for its role plus
+the ones defined on its own instance entry. Volume names must be unique across
+both levels, otherwise Kubernetes rejects the pod spec because of duplicate
+volume names. Both levels are rendered through `tpl`, so Helm templating such as
+`{{ .Release.Name }}` works inside the volume definitions.
+
+A typical use case for per-instance volumes is mounting a dataset that only one
+instance needs, for example a PVC holding CSV files to import. First create the
+claim:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-csv-import
+  namespace: memgraph
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+Then mount it on a single data instance:
+
+```yaml
+data:
+  - id: "0"
+    extraVolumes:
+      - name: csv-import
+        persistentVolumeClaim:
+          claimName: pvc-csv-import
+    extraVolumeMounts:
+      - name: csv-import
+        mountPath: /import
+        readOnly: true
+  - id: "1"
+```
+
+<Callout type="info">
+With the `ReadWriteOnce` access mode, only one pod can mount the claim at a
+time, so attach it to a single instance. If several instances need the same
+data, use a claim with the `ReadWriteMany` access mode, or define the volume at
+the role level instead.
+</Callout>
+
 ### Network configuration
 
 All Memgraph HA components communicate internally using ClusterIP network for
@@ -1897,6 +1957,8 @@ following parameters:
 | `id`                                        | ID of the instance                                                                                  | `0` for data, `1` for coordinators      |
 | `internalAccessAnnotations`                 | Per-instance annotations for the internal ClusterIP Service.                                        | `{}`                                    |
 | `externalAccessAnnotations`                 | Per-instance annotations for the external access Service, merged with global annotations.           | `{}`                                    |
+| `extraVolumes`                              | Additional volumes available only to this instance's pod, added on top of `storage.<role>.extraVolumes`. Rendered through `tpl`, so Helm templating is supported.| `[]`                                    |
+| `extraVolumeMounts`                         | Additional volume mounts for this instance's Memgraph container. Each `name` must match an entry in this instance's `extraVolumes` or in `storage.<role>.extraVolumes`.| `[]`                                    |
 | `tls.bolt.enabled`                          | Enable Bolt TLS termination on this instance. The chart auto-appends `--bolt-cert-file` / `--bolt-key-file` and mounts the certificate Secret at `/etc/memgraph/ssl`. | `false`                  |
 | `tls.bolt.secretName`                       | Name of a pre-existing Kubernetes Secret holding the Bolt TLS certificate and private key. Required when `tls.bolt.enabled=true`. | `bolt-tls-secret`     |
 | `tls.bolt.certSecretPath`                   | Key inside the Secret holding the TLS certificate.                                                  | `tls.crt`                               |

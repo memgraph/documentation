@@ -20,12 +20,32 @@ setup, the choice no longer matters.
 </Callout>
 
 <Callout type="info">
-All queries can be run on any coordinator. If currently the coordinator is not a
-leader, the query will be automatically forwarded to the current leader and
-executed there. This is because the Raft protocol specifies that only the
-leader should accept changes in the cluster. The only exception is [`YIELD
-LEADERSHIP`](#yield-leadership), which must be run directly on the current
-leader.
+All queries can be run on any coordinator. If the coordinator you are connected
+to is not the leader, the query is automatically forwarded to the current leader
+and executed there. This is because the Raft protocol specifies that only the
+leader should accept changes in the cluster, and because only the leader holds an
+up-to-date view of the cluster.
+
+This also holds for the read-only cluster queries — [`SHOW
+INSTANCES`](#show-instances), [`SHOW COORDINATOR
+SETTINGS`](#coordinator-runtime-settings) and [`SHOW REPLICATION
+LAG`](#show-replication-lag) — which are always answered by the leader, and for
+[`YIELD LEADERSHIP`](#yield-leadership). Followers never answer them from their
+own local state, so you never see a stale or partial picture of the cluster. If
+the leader cannot be reached, these queries return **no rows** together with a
+warning notification instead of a degraded result — see [Error
+handling](#error-handling).
+</Callout>
+
+<Callout type="info">
+From Memgraph 3.13, coordinators can enforce privileges on these queries. Every
+query on this page requires either `COORDINATOR_READ` (read-only introspection)
+or `COORDINATOR_WRITE` (everything mutating). A session that connected with
+basic auth carries full `COORDINATOR_WRITE`, so nothing changes unless you
+enable [SSO on coordinators](/clustering/high-availability/coordinator-authentication).
+See the [privilege
+reference](/clustering/high-availability/coordinator-authentication#which-privilege-each-query-requires)
+for the per-query mapping.
 </Callout>
 
 ### `ADD COORDINATOR`
@@ -88,8 +108,8 @@ REMOVE COORDINATOR coordinatorId;
 
 - Leader coordinator **cannot** remove itself. To remove the leader, first
   trigger a leadership change with [`YIELD
-  LEADERSHIP`](#yield-leadership) and then run `REMOVE COORDINATOR` against the
-  new leader.
+  LEADERSHIP`](#yield-leadership) and then run `REMOVE COORDINATOR` once a new
+  leader has been elected.
 
 {<h4 className="custom-header"> Example </h4>}
 
@@ -175,6 +195,13 @@ REGISTER INSTANCE instanceName ( AS ASYNC | AS STRICT_SYNC ) ? WITH CONFIG {
 - In Kubernetes, use service DNS names (e.g.
   `memgraph-data-1.default.svc.cluster.local`).
 - Local development uses `localhost`.
+- Register instances only while every database on the MAIN is in the
+  `IN_MEMORY_TRANSACTIONAL` storage mode. If the MAIN is in analytical mode, the
+  query still returns success (the Raft commit is the success criterion) but the
+  replica is not attached until the MAIN switches back, at which point the
+  reconciliation loop attaches it. The data instance logs the reason for the
+  rejection. See [Bulk import in analytical
+  mode](/clustering/high-availability/analytical-import).
 
 {<h4 className="custom-header">Example </h4>}
 
@@ -205,6 +232,16 @@ UNREGISTER INSTANCE instanceName;
   the replica from MAIN fails, the [reconciliation
   loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works)
   automatically retries the operation.
+- The unregistered instance keeps running and keeps all of its data. It is
+  removed from the cluster, not wiped, so you do not need to clear its data
+  directory before registering it back.
+- The MAIN refuses the unregister RPC while any of its databases is in the
+  `IN_MEMORY_ANALYTICAL` storage mode, and logs the reason. The instance is
+  still removed from the Raft state, but the MAIN keeps its replication client
+  until the reconciliation loop retries once every database is transactional
+  again. Unregister instances only while the cluster is in transactional mode —
+  see [Bulk import in analytical
+  mode](/clustering/high-availability/analytical-import).
 
 {<h4 className="custom-header"> Example </h4>}
 
@@ -296,16 +333,17 @@ informational notification that the request was submitted.
 
 {<h4 className="custom-header"> Behavior </h4>}
 
-- Must be run **on the coordinator that is currently the leader**. Unlike most
-  other cluster management queries, this query is **not forwarded** to the
-  leader — running it on a follower fails with:
-
-  > Only the current leader can yield the leadership!
-
+- Can be run on **any coordinator**. If the coordinator is a follower, the query
+  is forwarded to the current leader, which yields its leadership. You no longer
+  have to find the leader first.
 - Running it on a data instance fails with:
 
   > Only coordinator can run YIELD LEADERSHIP query.
 
+- A coordinator that Raft already elected as leader but that has not yet
+  finished taking over the cluster still yields its leadership. This makes the
+  query usable as an escape hatch exactly when it is needed most — when a
+  freshly elected leader is stuck and you want another coordinator to take over.
 - The request is handed over to Raft and processed **asynchronously**. The query
   returns as soon as the request is submitted, not when the new leader is
   elected.
@@ -317,22 +355,33 @@ informational notification that the request was submitted.
   checks toward all data instances. If no MAIN is found at that point, it
   performs a failover.
 
+{<h4 className="custom-header"> Failure modes </h4>}
+
+| Error message | Meaning |
+| ------------- | ------- |
+| `Yielding leadership failed since the instance is not leader anymore!` | The request reached a coordinator that is no longer the leader — leadership changed in the meantime. Retry. |
+| `Tried to forward the request to the current leader but the leader couldn't be found!` | There is currently no known leader to forward the request to (for example, an election is in progress). Retry once a leader is elected. |
+| `Request forwarded to the leader but leader failed with request processing! Check logs on the leader to find out what happened!` | The leader was reached but failed to process the request. Inspect the leader's logs. |
+
 {<h4 className="custom-header"> Implications </h4>}
 
 - This changes only the **coordinator** leadership. Data instances keep their
   MAIN and REPLICA roles — this is not a data failover, and client queries
   against MAIN and REPLICAs are unaffected.
 - During the short election window, cluster management queries (e.g. `SHOW
-  INSTANCES`, registration queries) may temporarily fail or report instances as
-  `down` because there is no leader to serve them. Retry once the new leader is
-  elected.
+  INSTANCES`, registration queries) may temporarily fail because there is no
+  leader to serve them. Read queries such as `SHOW INSTANCES` return no rows and
+  a warning notification rather than a stale picture of the cluster. Retry once
+  the new leader is elected.
 - At least one other healthy coordinator must be able to take over. In a
   single-coordinator cluster, or when the other coordinators are down, the same
   coordinator remains (or becomes again) the leader.
 - Failover of data instances is not triggered, but the new leader recomputes
   cluster state, so a cluster that was already missing a MAIN can fail over as
   part of the leadership change.
-- No privilege is required to run this query on the coordinators.
+- Requires `COORDINATOR_WRITE`. A basic-auth session carries it implicitly; an
+  [SSO session](/clustering/high-availability/coordinator-authentication) needs
+  a role that has been granted it.
 
 {<h4 className="custom-header"> Typical use cases </h4>}
 
@@ -369,14 +418,42 @@ SHOW INSTANCES;
 {<h4 className="custom-header"> Output includes </h4>}
 
 1. Network endpoints (bolt, coordinator, management)
-2. Health state
-3. Role: MAIN, REPLICA, LEADER, FOLLOWER, or UNKNOWN
+2. Health state (`up` or `down`)
+3. Role: MAIN, REPLICA, LEADER or FOLLOWER
 4. Time since last health ping
 
-{<h4 className="custom-header"> Behavior on followers </h4>}
+A data instance that is currently `down` keeps the role recorded in the Raft log
+(`main` or `replica`) instead of being reported with an unknown role, so you can
+still tell which instance the cluster considers MAIN while it is unreachable.
 
-1. Follower attempts to query the leader for accurate state.
-2. If leader unavailable, follower reports all servers as `"down"`.
+{<h4 className="custom-header"> Behavior </h4>}
+
+The query is **strongly consistent**: the result always comes from the leader
+coordinator, which is the only coordinator with an up-to-date view of the
+cluster.
+
+1. If you are connected to the leader, it answers directly.
+2. If you are connected to a follower, the follower forwards the request to the
+   leader and returns the leader's result.
+3. If the leader cannot be reached, the query returns an **empty result set**
+   together with a `LeaderNotReachable` warning notification:
+
+   > Couldn't reach the leader coordinator, so the state of the cluster is
+   > unknown. Please retry the query.
+
+   This happens when no leader is currently elected, when the connection to the
+   leader is broken, or when the coordinator you are connected to was just
+   elected leader but has not finished taking over the cluster yet.
+
+<Callout type="warning">
+**Behavior change in Memgraph 3.13:** previously, a follower that could not
+reach the leader fell back to reporting the cluster from its own local Raft
+state, with health reported as `unknown`. It now returns no rows and a warning
+notification instead, so a partial or stale cluster picture can never be
+mistaken for the real one. If you have tooling or health checks that parse
+`SHOW INSTANCES`, treat an empty result as "cluster state unknown, retry" rather
+than as "no instances registered".
+</Callout>
 
 
 ### `SHOW INSTANCE`
@@ -406,10 +483,81 @@ Shows replication lag (in committed transactions) for all instances.
 SHOW REPLICATION LAG;
 ```
 
+{<h4 className="custom-header"> Behavior </h4>}
+
+The lag data is collected by the leader coordinator from the current MAIN, so the
+query is answered by the leader — a follower forwards the request and returns the
+leader's result.
+
+Whenever the lag cannot be determined, the query returns **no rows** and a
+warning notification explaining why, so you know whether retrying will help:
+
+| Notification code | Message | Meaning |
+| ----------------- | ------- | ------- |
+| `LeaderNotReachable` | Couldn't reach the leader coordinator, so the replication lag is unknown. Please retry the query. | No leader could be contacted (for example, an election is in progress). |
+| `ReplicationLagUnavailable` | The leader coordinator hasn't finished taking over the cluster, so the replication lag is unknown. Please retry the query. | A new leader was elected but has not finished reconciling the cluster. |
+| `ReplicationLagUnavailable` | No instance is currently main, so there is no replication lag to report. | The cluster has no MAIN — promote one with `SET INSTANCE ... TO MAIN`, or wait for failover. |
+| `ReplicationLagUnavailable` | The current main didn't respond, so the replication lag is unknown. Check whether the main is up. | The MAIN did not answer the leader's request. |
+| `ReplicationLagUnavailable` | The instance the leader considers main reports that it is a replica, so the replication lag is unknown. Please retry the query once the cluster state is reconciled. | The leader's view is stale; the [reconciliation loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works) will fix it. |
+
 {<h4 className="custom-header"> Implications </h4>}
 
 - Lag values survive restarts (stored in snapshots + WAL).
 - Useful during manual failover to evaluate risk of data loss.
+
+
+### `SHOW ROUTING TABLE`
+
+Shows the routing table that a coordinator hands out to
+[`bolt+routing`](/clustering/high-availability/querying-the-cluster-in-high-availability)
+clients for the default database.
+
+```cypher
+SHOW ROUTING TABLE;
+```
+
+{<h4 className="custom-header"> Output includes </h4>}
+
+Each row contains a `role` and the list of Bolt `servers` serving that role:
+
+| `role`  | `servers`                                                          |
+| ------- | ------------------------------------------------------------------ |
+| `WRITE` | Bolt endpoint of the current MAIN.                                 |
+| `READ`  | Bolt endpoints of all REPLICAs, plus MAIN if [`enabled_reads_on_main`](#enabled_reads_on_main) is set to `true`. |
+| `ROUTE` | Bolt endpoints of all coordinators.                                |
+
+Example output on a cluster with three coordinators, one MAIN and two REPLICAs:
+
+```plaintext
++---------+------------------------------------------------------------------+
+| role    | servers                                                          |
++---------+------------------------------------------------------------------+
+| "WRITE" | ["localhost:7687"]                                               |
+| "READ"  | ["localhost:7688", "localhost:7689"]                             |
+| "ROUTE" | ["localhost:7690", "localhost:7691", "localhost:7692"]           |
++---------+------------------------------------------------------------------+
+```
+
+{<h4 className="custom-header"> Behavior </h4>}
+
+- The query can only be run on a coordinator. Running it on a data instance
+  fails with `Only coordinator can run SHOW ROUTING TABLE query.`
+- The query is always answered from the leader's state, so every coordinator
+  returns the same routing table. If the leader cannot be contacted, an empty
+  routing table is returned.
+- Roles with no servers are omitted. For example, if no data instance is
+  registered yet, only the `ROUTE` row is returned.
+- The routing table is reported for the default database, which is the same
+  database `bolt+routing` clients are routed to.
+
+{<h4 className="custom-header"> Implications </h4>}
+
+- Useful for verifying which instance clients will send writes to, and which
+  instances they can read from, without inspecting driver internals.
+- Because drivers cache the routing table for up to 5 minutes, the output of
+  this query can differ from what a connected client is currently using. See
+  [routing table TTL and refresh
+  behavior](/clustering/high-availability/querying-the-cluster-in-high-availability#routing-table-ttl-and-refresh-behavior).
 
 
 ## Coordinator runtime settings
@@ -418,6 +566,14 @@ Coordinator runtime settings are Raft-replicated and can be changed on a live
 cluster without downtime. Use `SET COORDINATOR SETTING` to modify a value and
 `SHOW COORDINATOR SETTINGS` to inspect all current values. Changes propagate
 automatically to every coordinator in the cluster.
+
+Both queries can be run on any coordinator and are served by the leader — a
+follower forwards the request and returns the leader's answer. If the leader
+cannot be reached, `SHOW COORDINATOR SETTINGS` returns **no rows** together with a
+`LeaderNotReachable` warning notification:
+
+> Couldn't reach the leader coordinator, so the coordinator settings are unknown.
+> Please retry the query.
 
 ### `instance_health_check_frequency_sec`
 
@@ -515,16 +671,36 @@ SET COORDINATOR SETTING 'max_replica_read_lag' TO '10' ;
 
 ### `deltas_batch_progress_size`
 
-Users can control how often REPLICAs report back to the MAIN that they're still processing the data (transactions, WALs, snapshots)
-the MAIN has sent to them. The default value is 100'000, which should be enough for most of your transactions.
-However, if processing 100'000 deltas takes more than 30s (because you're dealing with large deltas or you have older CPUs),
-you can set the configuration value `deltas_batch_progress_size` to a smaller value. This will avoid timeouts on REPLICAs so
-you won't see the query exception "At least one SYNC replica has not committed", but at the cost of lower throughput since REPLICAs
-will be sending in-progress messages to the MAIN more often.
+<Callout type="warning">
+**Deprecated in 3.13: this setting no longer has any effect.** REPLICAs report
+progress on a fixed time interval instead of after a fixed number of deltas, so
+there is nothing left to tune. The setting remains readable and settable so that
+existing configurations and automation keep working across an upgrade, but
+changing it does not alter replication behavior. It will be removed in a future
+release.
+</Callout>
+
+Previously, this setting controlled how many deltas a REPLICA processed before
+reporting back to the MAIN that it is still working on the data (transactions,
+WALs, snapshots) the MAIN sent it. Counting deltas could not cover work that
+happens *inside* a single delta — populating an index, validating a constraint,
+clearing storage before a snapshot load, or aborting an interrupted two-phase
+commit. On a large dataset any one of those can run for minutes while the
+REPLICA reports nothing, so the MAIN would hit its RPC timeout and drop the
+connection mid-build, and the REPLICA would never converge.
+
+As of 3.13, a REPLICA emits an in-progress message on a fixed interval for as
+long as the operation keeps making progress, regardless of how that work is
+divided into deltas. An operation that stops progressing stops reporting, so a
+genuinely stuck REPLICA is still caught by the MAIN's timeout rather than masked
+by an unconditional keepalive.
 
 ```
 SET COORDINATOR SETTING 'deltas_batch_progress_size' TO '50000';
 ```
+
+The query above still succeeds and the value is still returned by `SHOW
+COORDINATOR SETTINGS`, but it is ignored.
 
 ### `global_read_only`
 
@@ -553,7 +729,11 @@ survives coordinator restarts and leader re-elections, and is honored across
 failovers: a newly promoted MAIN comes up read-only when the cluster is in
 read-only mode, instead of silently accepting writes.
 
-No privilege is required to run this query on the coordinators.
+`SET COORDINATOR SETTING` requires `COORDINATOR_WRITE` and `SHOW COORDINATOR
+SETTINGS` requires `COORDINATOR_READ`. A basic-auth session carries both
+implicitly; an [SSO
+session](/clustering/high-availability/coordinator-authentication) needs a role
+that has been granted them.
 
 <Callout type="info">
 Enabling read-only mode blocks **all write sources** on the MAIN — user Cypher
@@ -575,12 +755,201 @@ cluster self-heals to the requested state.
 </Callout>
 
 
+## Coordinator role and privilege management
+
+<Callout type="info">
+These queries are **Memgraph Enterprise** features and require a valid license.
+They exist so that [SSO
+identities](/clustering/high-availability/coordinator-authentication) have
+something to map onto. Coordinators have no users — only roles.
+</Callout>
+
+Coordinator roles are stored in the **Raft-replicated cluster state**, not in
+the auth store, so they survive restarts, follower catch-up and leader failover.
+Like the cluster registration queries, all of these can be run on any
+coordinator: writes are transparently forwarded to the leader and committed
+through the Raft log, and `SHOW ROLES` / `SHOW PRIVILEGES FOR ROLE` are strong
+reads served by the leader.
+
+### `CREATE ROLE`
+
+Creates a coordinator role. New roles start with **no** privileges.
+
+```cypher
+CREATE ROLE ifNotExists? roleName;
+```
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- Errors if the role already exists, unless `IF NOT EXISTS` is given.
+- The role name must match the `--auth-user-or-role-name-regex` pattern,
+  otherwise the query fails with `Invalid role name '<name>'.`
+- Requires `COORDINATOR_WRITE`.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+CREATE ROLE dba;
+CREATE ROLE IF NOT EXISTS analyst;
+```
+
+### `DROP ROLE`
+
+Removes a coordinator role.
+
+```cypher
+DROP ROLE roleName;
+```
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- Errors with `Role '<name>' doesn't exist.` if the role is not present.
+- Takes effect on **already-connected sessions immediately** — privileges are
+  re-derived from the committed role set on every query, so a session that
+  authenticated with the dropped role is denied its next privileged query
+  without needing to reconnect.
+- Requires `COORDINATOR_WRITE`.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+DROP ROLE analyst;
+```
+
+### `SHOW ROLES`
+
+Lists the coordinator roles. Returns one `role` column, name only.
+
+```cypher
+SHOW ROLES;
+```
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- Strong read served by the leader. If no leader can be reached, the query fails
+  rather than returning possibly-stale local state.
+- Requires `COORDINATOR_READ`.
+
+### `GRANT` / `REVOKE` coordinator privileges
+
+Grants or revokes a coordinator privilege on a role. Coordinators support
+exactly two privileges: `COORDINATOR_READ` and `COORDINATOR_WRITE`, where
+`COORDINATOR_WRITE` is a superset of `COORDINATOR_READ`.
+
+```cypher
+GRANT ( ALL PRIVILEGES | COORDINATOR_READ | COORDINATOR_WRITE [, ...] ) TO ROLE? roleName;
+REVOKE ( ALL PRIVILEGES | COORDINATOR_READ | COORDINATOR_WRITE [, ...] ) FROM ROLE? roleName;
+```
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- `GRANT ALL PRIVILEGES` grants **both** coordinator privileges;
+  `REVOKE ALL PRIVILEGES` removes both.
+- Errors with `Role '<name>' doesn't exist.` if the role is not present.
+- Only `COORDINATOR_READ` and `COORDINATOR_WRITE` may appear in the privilege
+  list. Any other privilege, `DENY` in any form, a `USER` target, fine-grained
+  access control (`ON NODES` / `ON EDGES`), property permissions and
+  `GRANT DATABASE` are all rejected on a coordinator.
+- Like `DROP ROLE`, a `REVOKE` applies to already-connected sessions on their
+  next query.
+- Requires `COORDINATOR_WRITE`.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+GRANT ALL PRIVILEGES TO dba;
+GRANT COORDINATOR_READ TO analyst;
+REVOKE COORDINATOR_WRITE FROM analyst;
+```
+
+### `SHOW PRIVILEGES FOR ROLE`
+
+Reports the privileges granted to a coordinator role, one per row.
+
+```cypher
+SHOW PRIVILEGES FOR ROLE? roleName;
+```
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- A role with no grants returns no rows.
+- The trailing `ON MAIN | CURRENT | DATABASE <db>` clause is **rejected** —
+  coordinators have no databases.
+- `SHOW PRIVILEGES FOR USER <user>` is rejected — coordinators have no users.
+- Strong read served by the leader.
+- Requires `COORDINATOR_READ`.
+
+{<h4 className="custom-header"> Example </h4>}
+
+```cypher
+SHOW PRIVILEGES FOR ROLE dba;
+```
+
+```plaintext
++---------------------+
+| privilege           |
++---------------------+
+| COORDINATOR_READ    |
+| COORDINATOR_WRITE   |
++---------------------+
+```
+
+### `SHOW CURRENT USER` and `SHOW CURRENT ROLE`
+
+Report the identity of the current session.
+
+```cypher
+SHOW CURRENT USER;
+SHOW CURRENT ROLE;
+```
+
+{<h4 className="custom-header"> Behavior & implications </h4>}
+
+- **No privilege and no license are required** — these are self-service queries
+  that reveal only the session's own identity.
+- `SHOW CURRENT USER` returns the principal the SSO module reported. It is
+  session-local and works even when the leader is unreachable. A basic-auth
+  passthrough session returns `null`.
+- `SHOW CURRENT ROLE` returns the session's roles filtered against the leader's
+  committed role set, so a dropped role stops being reported. A basic-auth
+  passthrough session has no roles and returns `null`.
+
 ## Error handling
 
 If a Raft log commit fails for any cluster operation (register, unregister,
-promote, demote, add coordinator), the error message will indicate:
+promote, demote, add coordinator, role or privilege change), the error message
+will indicate:
 
 > Writing to Raft log failed. Please retry the operation.
+
+### When there is no leader to serve the query
+
+Because every cluster query is served by the leader, queries fail (or return
+nothing) while the cluster has no usable leader — most commonly during a leader
+election, or right after one, while the new leader is still taking over the
+cluster.
+
+State-changing queries (`ADD COORDINATOR`, `REMOVE COORDINATOR`, `UPDATE
+CONFIG`, `REGISTER INSTANCE`, `UNREGISTER INSTANCE`, `SET INSTANCE ... TO MAIN`,
+`DEMOTE INSTANCE`, `FORCE RESET CLUSTER STATE`) fail with an explicit error:
+
+> Couldn't &lt;operation&gt; since coordinator is not a leader! Try contacting
+> other coordinators as there might be leader election happening or other
+> coordinators are down.
+
+When the leader is known but the request still could not be executed there, the
+message instead names the current leader's id and Bolt address so you can
+connect to it directly. If the request could not be forwarded at all, the error
+is:
+
+> Tried to forward the request to the current leader but the leader couldn't be
+> found!
+
+Read queries (`SHOW INSTANCES`, `SHOW COORDINATOR SETTINGS`, `SHOW REPLICATION
+LAG`) do not fail — they return an **empty result set** with a warning
+notification (`LeaderNotReachable`, or `ReplicationLagUnavailable` for `SHOW
+REPLICATION LAG`). In both cases the operation is safe to retry once a leader is
+available.
 
 
 ## Troubleshooting commands

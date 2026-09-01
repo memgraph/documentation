@@ -307,6 +307,85 @@ Alternative options, such as `f16` for lower memory usage, allow you to fine-tun
 | `i16`     | 16-bit signed integer.                                     |
 | `i8`      | 8-bit signed integer.                                      |
 
+## Access control <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+When [fine-grained access control](/database-management/authentication-and-authorization/role-based-access-control#fine-grained-access-control)
+is active for the user running the query, vector search respects their read
+permissions: `vector_search.search` and `vector_search.search_edges` return a
+node or relationship only if the user could read it with a normal query.
+
+A result is included only when **both** of these hold:
+
+- **The node or relationship is readable.** The user has `READ` on its
+  [labels](/database-management/authentication-and-authorization/role-based-access-control#label-based-access-control)
+  — or, for a relationship, on its
+  [type](/database-management/authentication-and-authorization/role-based-access-control#relationship-permissions)
+  and on both endpoint nodes. Permissions are evaluated against the entity's
+  *actual* labels, so a `DENY` on any of them removes it.
+- **The indexed property is readable.** The user must be able to read the
+  [property](/database-management/authentication-and-authorization/role-based-access-control#property-based-access-control)
+  the index is built on (the embedding). If it is denied, the result is dropped —
+  otherwise the match and its similarity score would reveal the vector.
+
+Results the user is not allowed to see are **silently dropped** (no error is
+raised), so a search may return fewer than the requested number of results. For
+an index that spans several labels or edge types — including a
+[wildcard index](/querying/vector-search#index-on-multiple-labels-or-edge-types) —
+this check runs per result, so one index returns only the entities the user is
+permitted to read.
+
+For example, with a wildcard vector index `docs` on `(embedding)` and a reader
+who may see public documents but not confidential ones:
+
+```cypher
+GRANT READ ON NODES CONTAINING LABELS :Public TO reader;
+DENY READ ON NODES CONTAINING LABELS :Confidential TO reader;
+GRANT READ {*} ON NODES CONTAINING LABELS * TO reader;
+```
+
+`CALL vector_search.search('docs', 5, [0.1, 0.2])` returns only the `:Public`
+documents among the nearest neighbours; `:Confidential` ones are dropped even if
+they are closer.
+
+<Callout type="info">
+These checks apply only when fine-grained access control is active for the user.
+An unrestricted user (for example an administrator) and Memgraph Community
+edition see all matches.
+</Callout>
+
+## Omit vector properties from results
+
+Embeddings are large, so returning them inside whole nodes or edges bloats
+result payloads - which is especially costly when an LLM agent or
+[Memgraph Lab](/memgraph-lab) explores the graph. To keep the vectors in the
+database but out of returned objects, enable
+`--storage-omit-vector-index-properties-on-return` (setting
+`storage.omit_vector_index_properties_on_return`, default `false`). It is
+toggleable at runtime - no restart - and can also be set on startup via the
+[flag](/database-management/configuration#storage):
+
+```cypher
+SET DATABASE SETTING 'storage.omit_vector_index_properties_on_return' TO 'true';
+```
+
+With it on, returning a whole node or edge omits any property backed by a vector
+index, while explicit access still returns the value:
+
+```cypher
+MATCH (n:Doc) RETURN n;              // comes back without `embedding`
+MATCH (n:Doc) RETURN n.embedding;    // still returns the vector
+MATCH (n:Doc) RETURN properties(n);  // still includes `embedding`
+```
+
+- What counts as a vector property is decided by **vector-index membership**,
+  respecting each index's label / edge-type filter (including
+  [wildcard](#index-on-multiple-labels-or-edge-types)) - not by the property's
+  name or type. A plain list of floats that is not in a vector index is returned
+  as usual.
+- The omission applies to nodes, edges, paths and graphs returned to the client.
+- `DUMP DATABASE`, snapshots, the WAL and replication are unaffected - the value
+  is always persisted and replicated in full.
+
 ## Monitor vector index memory
 
 Memgraph tracks vector index memory separately from the rest of the graph data. You can inspect both from `SHOW STORAGE INFO`:

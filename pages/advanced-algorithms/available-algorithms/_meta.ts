@@ -59,6 +59,7 @@ export default {
   "path": "path",
   "periodic": "periodic",
   "refactor": "refactor",
+  "search": "search",
   "set_cover": "set_cover",
   "set_property": "set_property",
   "temporal": "temporal",

@@ -332,6 +332,7 @@ fallback to the value of the command-line argument.
 | storage.snapshot.interval  | Define periodic snapshot schedule via 6-field cron expression (seconds, minute, hour, day of month, month, day of week—an [Enterprise feature](/database-management/enabling-memgraph-enterprise)) or as a period in seconds. Set to empty string to disable.                         | no                      |
 | storage-gc-aggressive      | Enables aggressive garbage collection, which performs full cleanup on GC call where deltas, vertices, edges or indices and constraints skip lists are being cleaned up. This setting requires taking a unique lock that will temporarily block the system during garbage collection.  | yes                     |
 | storage.access_timeout_sec | Storage access timeout in seconds. Guards against queries waiting indefinitely for storage access. Valid range: [1, 1000000]. Corresponds to `--storage-access-timeout-sec`.                                                                                                          | no                      |
+| storage.omit_vector_index_properties_on_return | When `true`, properties backed by a vector index (for example embeddings) are omitted when a whole node or relationship is returned; they remain accessible via explicit property access (`n.embedding`, `properties(n)`). Corresponds to `--storage-omit-vector-index-properties-on-return`. | yes |
 | aws.region                 | AWS region in which your S3 service is located.                                                                                                                                                                                                                                       | yes                     |
 | aws.access_key             | Access key used to READ the file from S3.                                                                                                                                                                                                                                             | yes                     |
 | aws.secret_key             | Secret key used to READ the file from S3.                                                                                                                                                                                                                                             | yes                     |
@@ -478,6 +479,7 @@ in Memgraph.
 | `--storage-items-per-batch=1000000`                             | The number of edges and vertices stored in a batch in a snapshot file.                                                             | `[uint64]` |
 | `--storage-parallel-schema-recovery=false`                      | Controls whether the indices and constraints creation can be done in a multithreaded fashion during recovery.                      | `[bool]`   |
 | `--storage-properties-on-edges=true`                            | Controls whether edges have properties.                                                                                            | `[bool]`   |
+| `--storage-omit-vector-index-properties-on-return=false`        | When `true`, properties backed by a vector index (for example embeddings) are omitted when a whole node or relationship is returned; they stay accessible via explicit property access. Can also be changed at runtime via `SET DATABASE SETTING 'storage.omit_vector_index_properties_on_return' TO 'true'`. | `[bool]`   |
 | `--storage-recovery-thread-count`                               | The number of threads used to recover persisted data from disk. Defaults to using system's maximum thread count.                   | `[uint64]` |
 | `--storage-snapshot-interval-sec=300`                           | Storage snapshot creation interval (in seconds). Set to 0 to disable periodic snapshot creation.                                   | `[uint64]` |
 | `--storage-snapshot-interval="300`"                             | Define periodic snapshot schedule via 6-field cron expression (with seconds) or as a period in seconds. Set to empty string to disable. | `[string]` |
@@ -486,10 +488,11 @@ in Memgraph.
 | `--storage-snapshot-retention-count=3`                          | The number of snapshots that should always be kept.                                                                                | `[uint64]` |
 | `--storage-parallel-snapshot-creation=false`                    | Controls whether the snapshot creation can be done in a multi-threaded fashion.                                                    | `[bool]`   |
 | `--storage-snapshot-thread-count`                               | The number of threads used to create snapshots. Defaults to using system's maximum thread count.                                   | `[uint64]` |
+| `--storage-snapshot-writeback-window-mib`                       | How large a chunk of a snapshot is written to disk at a time, in MiB. Defaults to 32. Set to 0 to disable. See [limiting the impact of snapshots on queries](/fundamentals/data-durability#limiting-the-impact-of-snapshots-on-queries). | `[uint64]` |
 | `--storage-wal-enabled=true`                                    | Controls whether the storage uses write-ahead-logging. To enable WAL, periodic snapshots must be enabled.                          | `[bool]`   |
 | `--storage-wal-file-flush-every-n-tx=100000`                    | Issue a 'fsync' call after this amount of transactions are written to the WAL file. Set to 1 for fully synchronous operation.      | `[uint64]` |
 | `--storage-wal-file-size-kib=20480`                             | Minimum file size of each WAL file.                                                                                                | `[uint64]` |
-| `--storage-mode=IN_MEMORY_TRANSACTIONAL`                        | The storage mode Memgraph will run on startup. Can be IN_MEMORY_TRANSACTIONAL, IN_MEMORY_ANALYTICAL or ON_DISK_TRANSACTIONAL.      | `[string]` |
+| `--storage-mode=IN_MEMORY_TRANSACTIONAL`                        | The storage mode Memgraph will run on startup. Can be IN_MEMORY_TRANSACTIONAL, IN_MEMORY_ANALYTICAL or ON_DISK_TRANSACTIONAL. A data instance in a high availability cluster cannot start in IN_MEMORY_ANALYTICAL; it can only [switch to it at runtime](/clustering/high-availability/analytical-import). | `[string]` |
 | `--storage-enable-schema-metadata=false`                        | Facilitates the utilization of a specialized cache designed to store specific metadata related to the database.                    | `[bool]`   |
 | `--storage-enable-edges-metadata=false`                         | Utilizes additional memory to store metadata related to edges. This metadata is used to speed up id based lookups on edges.        | `[bool]`   |
 | `--storage-light-edge=false`                                    | Stores edges as lightweight objects to reduce memory footprint (saves ~24B per edge by removing the dedicated edge container). Implies `--storage-properties-on-edges=true`. Direct edge lookups by ID become slower; pair with `--storage-enable-edges-metadata=true` for such workloads. In-memory storage modes only. | `[bool]`   |
@@ -499,7 +502,26 @@ in Memgraph.
 | `--storage-property-store-compression-level=mid`                | Controls property store compression level. Allowed values: low, mid, high                                                          | `[string]` |
 | `--storage-floating-point-resolution-bits=64`                   | Max bits for floating-point property storage. Allowed values: 16, 32, 64. Lower values save memory but reduce precision.           | `[uint64]` |
 | `--storage-access-timeout-sec=1`                                | Storage access timeout in seconds. Used to fine-tune the responsiveness and guard against queries indefinitely waiting. Can also be changed at runtime via `SET DATABASE SETTING 'storage.access_timeout_sec' TO 'value'`. Valid range: [1, 1000000]. | `[uint64]` |
-| `--storage-enable-backup-dir=true`                              | Controls whether `.old` directory will be used to store backup.                                                                    | `[bool]`   |
+| `--storage-backup-dir-enabled=true`                             | Controls whether `.old` directory will be used to store backup.                                                                    | `[bool]`   |
+| `--storage-rocksdb-info-log-level=INFO_LEVEL`                   | Verbosity of the RocksDB info logs. Allowed values: `DEBUG_LEVEL`, `INFO_LEVEL`, `WARN_LEVEL`, `ERROR_LEVEL`, `FATAL_LEVEL`, `HEADER_LEVEL`. | `[string]` |
+| `--storage-rocksdb-keep-log-file-num=1000`                      | Maximum number of RocksDB info log files kept per RocksDB instance. Every restart rolls the current info log and older ones are deleted. Valid range: [1, 2^64-1]. | `[uint64]` |
+| `--storage-rocksdb-enable-thread-tracking=false`                | Enables RocksDB thread status tracking for the on-disk storage. Disabled by default to reduce `gettimeofday`/`gettid` syscall overhead. | `[bool]`   |
+
+<Callout type="info">
+
+`--storage-rocksdb-info-log-level` and `--storage-rocksdb-keep-log-file-num`
+apply to **every** RocksDB instance Memgraph opens, not just the one backing the
+`ON_DISK_TRANSACTIONAL` storage mode. That includes the key-value stores holding
+authentication data, triggers, streams, settings, and replication and high
+availability state. Each instance keeps its own info logs (`LOG`, `LOG.old.*`)
+in its own directory, so the limit is per instance and not per Memgraph
+process.
+
+Every restart rolls the current info log into a new file, so on deployments with
+constrained disk space and frequent restarts it is worth lowering
+`--storage-rocksdb-keep-log-file-num` from the default of `1000`.
+
+</Callout>
 
 ### Streams
 
@@ -556,7 +578,7 @@ This section contains the list of all other relevant flags used within Memgraph.
 | `--log-retention-days=35`                       | Controls for how many days daily log files will be preserved. Allowed values: 1–1000000.                                                                                                                                                                                                                                                                     | `[uint64]` |
 | `--memory-limit=0`                              | Total memory limit in MiB. Set to 0 to use the default values which are 100% of the physical memory if the swap is enabled and 90% of the physical memory otherwise.                                                                                                                                                                                         | `[uint64]` |
 | `--metrics-address="0.0.0.0"`                   | Host for HTTP server for exposing metrics.                                                                                                                                                                                                                                                                                                                   | `[string]` |
-| `--metrics-format=JSON`                         | Format of the metrics HTTP endpoint. Allowed values: `OpenMetrics`, `JSON`. The `JSON` format is deprecated; use `OpenMetrics` for new deployments. See [monitoring](/database-management/monitoring#metrics-tracking-via-http-server-enterprise-edition) for details. | `[string]` |
+| `--metrics-format=OpenMetrics`                  | Format of the metrics HTTP endpoint. Allowed values: `OpenMetrics`, `JSON`. The `JSON` format is deprecated and will be removed in a future release. See [monitoring](/database-management/monitoring#metrics-tracking-via-http-server-enterprise-edition) for details. | `[string]` |
 | `--metrics-port=9091`                           | Port for HTTP server for exposing metrics.                                                                                                                                                                                                                                                                                                                   | `[int32]` |
 | `--memory-warning-threshold=1024`               | Memory warning threshold, in MB. If Memgraph detects there is less available RAM it will log a warning. <br/>Set to 0 to disable.                                                                                                                                                                                                                            | `[uint64]` |
 | `--monitoring-address="0.0.0.0"`                | IP address where the Memgraph's monitoring WebSocket server should listen.                                                                                                                                                                                                                                                                                   | `[string]` |
