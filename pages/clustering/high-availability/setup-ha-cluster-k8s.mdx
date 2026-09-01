@@ -347,7 +347,7 @@ from outside the cluster. Our HA supports out of the box following K8s resources
 - **NodePort** - exposes ports on each node (requires public node IPs).
 - **LoadBalancer** - one LoadBalancer per instance (highest cost).
 - **CommonLoadBalancer (coordinators only)** - single LB for all coordinators.
-- **Gateway API** - uses Kubernetes Gateway API resources (Gateway + TCPRoute). Configured under `externalAccessConfig.gateway`.
+- **Gateway API** - uses Kubernetes Gateway API resources (Gateway + TCPRoute), with one listener per data instance and a single shared listener load balancing across all coordinators. Configured under `externalAccessConfig.gateway`.
 
 For coordinators, there is an additional option of using `CommonLoadBalancer`.
 In this scenario, there is one load balancer sitting in front of coordinators.
@@ -423,7 +423,7 @@ for example:
 - `CommonLoadBalancer` + `LoadBalancer`
 - `LoadBalancer` + `LoadBalancer`
 - `IngressNginx` + `IngressNginx` (everything behind the single ingress-nginx load balancer)
-- Gateway API for everything (leave both `serviceType` fields empty and enable the gateway)
+- Gateway API for everything (leave both `serviceType` fields empty and enable the gateway) — data instances get a port each, all coordinators share the Bolt port
 - `NodePort` for either tier, combined with any of the above
 
 The only invalid combination is enabling the Gateway API
@@ -895,7 +895,19 @@ for the full set of commands and usage patterns.
 
 ### Use Memgraph HA chart with Gateway API
 
-The Memgraph HA Helm chart has native support for the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/). When enabled, the chart automatically creates TCPRoute resources for each data and coordinator instance. You can either let the chart create its own Gateway or attach routes to a pre-existing one.
+The Memgraph HA Helm chart has native support for the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/). When enabled, the chart automatically creates a TCPRoute for each data instance and a single TCPRoute shared by all coordinators. You can either let the chart create its own Gateway or attach routes to a pre-existing one.
+
+<Callout type="warning">
+**Breaking change in HA chart versions after 1.3.3**: coordinators are no
+longer exposed on one Gateway listener each. They now share a single listener
+and a single TCPRoute on `ports.boltPort`, so
+`externalAccessConfig.gateway.coordinatorPortBase` no longer exists and chart
+rendering fails if you still set it. Remove the value from your `values.yaml`,
+point clients at `<gateway-host>:<boltPort>` instead of the old per-coordinator
+ports, and if you use an existing Gateway, replace the `coordinator-{id}-bolt`
+listeners with a single `coordinators-bolt` listener on `ports.boltPort`. Change
+`ports.boltPort` if you need the coordinators on a different port.
+</Callout>
 
 <Callout type="info">
 The Gateway only exposes tiers whose `serviceType` is **empty**: a tier with
@@ -945,11 +957,24 @@ externalAccessConfig:
     gatewayClassName: "eg"
 ```
 
-The chart will create:
-- A **Gateway** (`gateway.networking.k8s.io/v1`) with TCP listeners auto-generated for each data and coordinator instance whose tier has an empty `serviceType`.
-- A **TCPRoute** (`gateway.networking.k8s.io/v1alpha2`) per such instance, routing traffic from the Gateway listener to the instance's Bolt port.
+The chart will create, for every tier whose `serviceType` is empty:
+- A **Gateway** (`gateway.networking.k8s.io/v1`) with one TCP listener per data instance, plus a single shared listener for all coordinators.
+- A **TCPRoute** (`gateway.networking.k8s.io/v1alpha2`) per data instance, plus one TCPRoute for the whole coordinator tier that lists every coordinator Service as a backend.
 
-Data instance ports are assigned as `dataPortBase + data instance id` (default: 9000, 9001, ...) and coordinator ports as `coordinatorPortBase + coordinator id` (default: 10001, 10002, 10003). The coordinator base port is kept well above the data base port so the two ranges never overlap. You can customize the base ports:
+Each data instance gets its own port, assigned as `dataPortBase + data instance
+id` (default: 9000, 9001, ...), because clients must be able to reach a
+specific data instance. Coordinators instead share **one** listener on
+`ports.boltPort` (default 7687): the single coordinator TCPRoute has every
+coordinator Service as an equally weighted backend, so the Gateway distributes
+new connections round-robin across them. Clients therefore need only one
+coordinator address, connections keep working when the coordinator they landed
+on goes away, and scaling the coordinator tier does not add a listener or a
+port. When an `external-dns` hostname is set on the Gateway, the
+`cluster-setup` Job registers that shared `<hostname>:<boltPort>` as the routing
+`bolt_server` of every coordinator, the same way it does for a coordinator
+`CommonLoadBalancer` (see [Update bolt server](#update-bolt-server)).
+
+You can customize the data instance base port:
 
 ```yaml
 externalAccessConfig:
@@ -957,8 +982,12 @@ externalAccessConfig:
     enabled: true
     gatewayClassName: "eg"
     dataPortBase: 9000
-    coordinatorPortBase: 10000
 ```
+
+Keep the resulting data instance ports away from `ports.boltPort`: when both
+tiers are exposed through the Gateway and `dataPortBase + id` of some data
+instance equals `ports.boltPort`, that listener would collide with the shared
+coordinator listener and chart rendering fails.
 
 You can also set annotations and labels on the Gateway resource:
 
@@ -1017,13 +1046,14 @@ helm install memgraph-ha memgraph/memgraph-high-availability \
 ```
 
 <Callout type="warning">
-When using an existing Gateway, ensure it has listeners configured with the correct names and ports that match the TCPRoute `sectionName` references. The chart expects listener names in the format `data-{id}-bolt` for data instances and `coordinator-{id}-bolt` for coordinators. For example, the default HA setup (2 data instances, 3 coordinators) needs these listeners:
+When using an existing Gateway, ensure it has listeners configured with the correct names and ports that match the TCPRoute `sectionName` references. The chart expects one listener named `data-{id}-bolt` per data instance and a single listener named `coordinators-bolt` for the entire coordinator tier. For example, the default HA setup (2 data instances, 3 coordinators) needs these listeners:
 
 - `data-0-bolt` on port 9000
 - `data-1-bolt` on port 9001
-- `coordinator-1-bolt` on port 9011
-- `coordinator-2-bolt` on port 9012
-- `coordinator-3-bolt` on port 9013
+- `coordinators-bolt` on port 7687 (`ports.boltPort`)
+
+Adding coordinators needs no new listener, while every new data instance needs
+one on `dataPortBase + id`.
 
 A standalone Gateway manifest with these pre-configured listeners is available in the [Helm charts repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/gateway.yaml).
 </Callout>
@@ -1695,10 +1725,9 @@ and their default values.
 | `externalAccessConfig.gateway.existingGatewayNamespace`    | Namespace of the existing Gateway. Defaults to release namespace.                                            | `""`                           |
 | `externalAccessConfig.gateway.annotations`                 | Annotations for the Gateway resource.                                                                        | `{}`                           |
 | `externalAccessConfig.gateway.labels`                      | Labels for the Gateway resource.                                                                             | `{}`                           |
-| `externalAccessConfig.gateway.dataPortBase`                | Base port for data instance Gateway listeners (`dataPortBase + data instance id`).                           | `9000`                         |
-| `externalAccessConfig.gateway.coordinatorPortBase`         | Base port for coordinator Gateway listeners (`coordinatorPortBase + coordinator id`). Kept well above `dataPortBase` so the data and coordinator port ranges never overlap. | `10000`                        |
+| `externalAccessConfig.gateway.dataPortBase`                | Base port for data instance Gateway listeners (`dataPortBase + data instance id`). Must not resolve to `ports.boltPort`, which the shared coordinators listener uses. | `9000`                         |
 | `headlessService.enabled`                                  | Specifies whether headless services will be used inside K8s network on all instances.                        | `false`                        |
-| `ports.boltPort`                                           | Bolt port used on coordinator and data instances.                                                            | `7687`                         |
+| `ports.boltPort`                                           | Bolt port used on coordinator and data instances. Also the port of the shared coordinators Gateway listener. | `7687`                         |
 | `ports.managementPort`                                     | Management port used on coordinator and data instances.                                                      | `10000`                        |
 | `ports.replicationPort`                                    | Replication port used on data instances.                                                                     | `20000`                        |
 | `ports.coordinatorPort`                                    | Coordinator port used on coordinators.                                                                       | `12000`                        |
