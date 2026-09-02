@@ -117,11 +117,26 @@ received or a timeout is reached. If the REPLICA fails, MAIN instance will still
 the data and move forward. This behaviour does not block writes on REPLICA failure, and still
 ensures other REPLICAs to receive new data.
 
-When a SYNC replica fails to confirm a transaction, Memgraph raises an error
-that identifies the specific replica and the reason for the failure, for example:
-`Failed to replicate to SYNC replica 'instance_1': replica is not reachable or not in sync with the main`.
-The transaction is still committed on the MAIN instance and other alive replicas.
-Failed replicas will be recovered automatically.
+When a SYNC replica fails to confirm a transaction, the transaction is still
+committed on the MAIN instance and on every alive replica, so the query
+**succeeds**. Memgraph reports the failure as a `WARNING`
+[notification](/database-management/query-metadata#notifications) with the code
+`SyncReplicationFailure`, which identifies the specific replica and the reason
+for the failure, for example: `Failed to replicate to SYNC replica
+'instance_1': replica is not reachable or not in sync with the main`. Failed
+replicas will be recovered automatically.
+
+<Callout type="warning">
+
+**Breaking change in Memgraph 3.13**: a SYNC replication failure used to be
+reported as a `ReplicationException`, which failed the query even though the
+write had been committed. It is now reported as a warning notification instead.
+Applications that caught the exception around writes should read the
+notification from the query summary instead of relying on an error. A
+`ReplicationException` is now raised only when the transaction was actually
+rolled back everywhere, which happens in a STRICT_SYNC cluster.
+
+</Callout>
 
 The following diagrams express the behavior of the MAIN instance in cases when
 SYNC REPLICA doesn't answer within the expected timeout.
@@ -141,8 +156,8 @@ scenario in which a failover is the most critical operation to support. Such a m
 allows you a failover **without the fear of experiencing a data loss**.
 
 When a STRICT_SYNC replica fails to confirm a transaction, the transaction is
-aborted on all instances. The error message identifies the specific replica and
-the reason, for example:
+aborted on all instances and the query fails with a `ReplicationException`. The
+error message identifies the specific replica and the reason, for example:
 `Failed to replicate to STRICT_SYNC replica 'instance_2': replica is not reachable or not in sync with the main`.
 
 **STRICT_SYNC mode ensures consistency and partition tolerance (CP).**
