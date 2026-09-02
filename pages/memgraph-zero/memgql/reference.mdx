@@ -107,6 +107,56 @@ supports.
   variable it constrains; one spanning two variables returns an actionable
   error rather than silently dropping rows.
 
+## Query Languages
+
+MemGQL speaks **GQL** (the default) and **Cypher**. Which language a
+statement is parsed in is resolved by precedence, highest first:
+
+| Level | Mechanism                                       | Scope                                                    |
+|-------|-------------------------------------------------|----------------------------------------------------------|
+| 1     | `CYPHER [25] <query>` / `GQL <query>` prefix    | one statement                                            |
+| 2     | `SET SESSION LANGUAGE CYPHER`                   | the current Bolt session                                 |
+| 3     | `ADD CONNECTOR … LANGUAGE 'cypher'`             | `USE <graph>` queries whose graph maps to that connector |
+| 4     | `--default-language=<l>` / `MEMGQL_DEFAULT_LANGUAGE` | server                                              |
+
+Nothing set means GQL, so existing deployments see no change. Management
+statements (`SHOW …`, `ADD CONNECTOR …`) are language-independent. A version
+in the prefix (`CYPHER 25 MATCH …`, Neo4j-style) is accepted and recorded;
+today every version selects the same dialect.
+
+```cypher
+CYPHER MATCH (e:Entity {name: 'Acme'})-[:HAS_ALIAS*0..]->(a) RETURN a.name;
+CYPHER 25 USE live MATCH (m:Message) RETURN count(m) AS messages;
+SET SESSION LANGUAGE CYPHER;   -- bare queries are Cypher from here on
+MATCH (p)-[:BELONGS_TO*]->(ancestor) RETURN ancestor.name;
+SET SESSION LANGUAGE GQL;
+```
+
+How a Cypher statement executes depends on the backend it routes to:
+
+- **Memgraph / Neo4j:** the text executes **verbatim** — no
+  parse → plan → re-generate round trip — so whatever the backend supports
+  works. That includes Cypher constructs beyond MemGQL's own parser (`CALL`
+  subqueries, pattern predicates, list comprehensions, `reduce`, `UNION`, map
+  literals, writes): those forward as-is whenever the statement's target is
+  unambiguously one Cypher backend (an explicit `USE <graph>`, or a single
+  live connection). A graph set to `READ ONLY` still refuses write-looking
+  statements before they reach the backend.
+- **Every other backend** (Iceberg, PostgreSQL, Snowflake, …): the Cypher
+  parses into the same internal representation as GQL and runs through the
+  regular planning / translation path. The parsed surface covers `MATCH` /
+  `OPTIONAL MATCH`, `WHERE`, `WITH`, `UNWIND`, `RETURN`, variable-length
+  relationships (`[:R*0..]`, `[:R*1..3]`), relationship-type alternation
+  (`[:A|B]`), `ORDER BY` / `SKIP` / `LIMIT`, and the expression core
+  (comparisons, boolean logic, arithmetic, `IN`, `STARTS WITH` /
+  `ENDS WITH` / `CONTAINS`, `IS [NOT] NULL`, `CASE`, lists, parameters,
+  aggregates with `DISTINCT`).
+
+One note on result columns for verbatim execution: when the statement parses
+in MemGQL's Cypher grammar, columns come back in the query's `RETURN` order;
+a statement that runs only via the verbatim forward reports its columns in
+alphabetical order.
+
 ## Graph Management Query Syntax
 
 ```
@@ -117,9 +167,13 @@ ADD CONNECTOR <name> TYPE <type>
     [DATABASE '<db>'] [CATALOG '<catalog>'] [SCHEMA '<schema>'] [GRAPH '<db>']
     [WAREHOUSE '<wh>'] [ROLE '<role>']
     [PRIVATE_KEY_PATH '<path>'] [TOKEN '<token>']
-    [TENANT_ID '<tid>'] [CLIENT_ID '<cid>'] [CLIENT_SECRET '<secret>'];
+    [TENANT_ID '<tid>'] [CLIENT_ID '<cid>'] [CLIENT_SECRET '<secret>']
+    [LANGUAGE '<gql|cypher>'];
 DROP CONNECTOR <name>;
 PING <connector>;
+
+-- Session
+SET SESSION LANGUAGE GQL|CYPHER [<version>];  -- language for bare queries on this session
 
 -- Graphs (mappings over connectors)
 CREATE GRAPH <name> FROM '<json>';        -- inline { "vertices": …, "edges": … } body
@@ -147,6 +201,7 @@ apply depends on the type:
 | `PRIVATE_KEY_PATH` / `TOKEN`| Snowflake auth (key-pair JWT / programmatic access token); `TOKEN` is also a Fabric Entra ID access token |
 | `TENANT_ID` / `CLIENT_ID` / `CLIENT_SECRET` | Fabric service-principal auth (Microsoft Entra ID)     |
 | `PATH '<path>'`             | DuckDB (database file; `:memory:` by default)                        |
+| `LANGUAGE '<lang>'`         | Any connector — default [query language](/memgraph-zero/memgql/reference#query-languages) (`gql` / `cypher`) for `USE <graph>` queries whose graph maps to it |
 
 An option a connector doesn't read is ignored, and one that is omitted falls
 back to that connector's environment variable. Re-adding a connector replaces
@@ -164,6 +219,20 @@ covered queries are served from that cache. See
 `TTL` is in seconds; `MAX_BYTES` accepts a plain byte count or a `K`/`M`/`G`/`T`
 binary suffix (e.g. `8G`).
 
+### Access modes
+
+A graph is `READ WRITE` by default. Set it `READ ONLY` — with
+`ALTER GRAPH <name> SET READ ONLY`, or `"accessMode": "readOnly"` in the
+[schema file](/memgraph-zero/memgql/schema-file#access-mode) — and any write
+(`INSERT` / `DELETE` / `SET` / `REMOVE`) routed to it, explicitly via `USE` or
+by label inference, is refused **before any backend sees the statement**, with
+a message naming `ALTER GRAPH <name> SET READ WRITE` as the way to lift it.
+The flip persists back to the boot `--schema` file, so a restart cannot
+quietly reopen a replica, and `EXPORT SCHEMA` round-trips the mode. Typical
+use: a vendor-refreshed replica (e.g. a Benchling Postgres copy) that must
+stay read-only through MemGQL even though the connector itself supports
+writes.
+
 ```
 -- Introspection
 SHOW CONNECTORS;                 -- registered connectors
@@ -171,9 +240,14 @@ SHOW CONNECTIONS;                -- live connections
 SHOW GRAPHS [ON CONNECTOR <c>];  -- registered graphs (name, connector(s), type, access, counts)
 SHOW GRAPH <name>;               -- one graph's details
 SHOW MAPPINGS;                   -- per-graph mappings
-SHOW SCHEMA [FOR <graph>];       -- unified routing index: labels, rel-types, properties
+SHOW SCHEMA [FOR <graph>] [AS GRAPH];  -- unified routing index: labels, rel-types, properties;
+                                 --   AS GRAPH returns it as Bolt nodes and relationships
 EXPORT SCHEMA [TO '<path>'];     -- merged catalog as canonical schema JSON (round-trippable)
 REFRESH SCHEMA;                  -- re-introspect live Cypher connections (Memgraph/Neo4j)
+
+-- Source onboarding (see below)
+DESCRIBE CONNECTOR <name>;       -- the source's physical catalog: tables, columns, types, keys
+GENERATE MAPPING FOR CONNECTOR <name> [GRAPH <g>] [TO '<path>'];  -- draft mapping from that catalog
 
 -- Query load per source
 SHOW STATS;                      -- source, queries, rows, errors, avg_latency_ms, max_latency_ms
@@ -203,6 +277,101 @@ Counters are keyed by connector. **Cache** efficacy is keyed by graph and lives
 in [`SHOW GRAPH CACHES`](/memgraph-zero/memgql/multiple-graphs#caching-a-graph-in-memgraph)
 (hits, misses, resident fragments).
 
+### Onboarding a source
+
+Writing a [mapping](/memgraph-zero/memgql/schema-file) shouldn't require
+out-of-band database access. `DESCRIBE CONNECTOR` reads a source's physical
+catalog **live through the connector** — tables, columns, types, nullability,
+primary keys, and single-column foreign keys as `→ table.column`
+(PostgreSQL and SAP HANA; a graph backend answers via `SHOW SCHEMA` /
+`REFRESH SCHEMA` instead and says so):
+
+```
+DESCRIBE CONNECTOR pgdemo;
+```
+
+```
++---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+| schema              | table               | column              | type                | nullable            | key                 |
++---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+| "public"            | "customers"         | "cid"               | "integer"           | "NO"                | "PRIMARY KEY"       |
+| "public"            | "customers"         | "full_name"         | "text"              | "NO"                | ""                  |
+| "public"            | "customers"         | "city"              | "text"              | "YES"               | ""                  |
+| "public"            | "orders"            | "oid"               | "integer"           | "NO"                | "PRIMARY KEY"       |
+| "public"            | "orders"            | "customer_id"       | "integer"           | "YES"               | "→ customers.cid" |
+| "public"            | "orders"            | "total"             | "numeric"           | "NO"                | ""                  |
++---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+```
+
+`GENERATE MAPPING FOR CONNECTOR <name>` turns that catalog into a **draft**
+mapping: tables with a single-column primary key become vertices
+(`metaFields.id` = the key), single-column foreign keys become table-backed
+edges, and `json`/`jsonb` columns are typed `Json` so they stay descendable.
+For the catalog above it emits:
+
+```json
+{
+  "name": "pgdemo_draft",
+  "_comment": "Draft mapping generated from the live 'pgdemo' catalog by GENERATE MAPPING. Review labels and attributes, then load explicitly: CREATE GRAPH pgdemo_draft FROM '<this JSON>'.",
+  "vertices": [
+    {
+      "label": "customers",
+      "mappedTableSource": { "connector": "pgdemo", "table": "customers", "metaFields": { "id": "cid" } },
+      "attributes": [
+        { "name": "cid", "type": "Int" },
+        { "name": "full_name" },
+        { "name": "city" }
+      ]
+    },
+    {
+      "label": "orders",
+      "mappedTableSource": { "connector": "pgdemo", "table": "orders", "metaFields": { "id": "oid" } },
+      "attributes": [
+        { "name": "oid", "type": "Int" },
+        { "name": "customer_id", "type": "Int" },
+        { "name": "total", "type": "Double" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "label": "ORDERS_CUSTOMER_ID",
+      "from": "orders",
+      "to": "customers",
+      "mappedTableSource": { "connector": "pgdemo", "table": "orders", "metaFields": { "id": "oid", "from": "oid", "to": "customer_id" } }
+    }
+  ]
+}
+```
+
+Edge labels are deliberately machine-looking (`ORDERS_CUSTOMER_ID` invites a
+rename; a guessed business name would invite trust), and anything the draft
+can't represent — composite keys, tables without a primary key, foreign keys
+to non-key columns — is named in `_comment` rather than silently dropped.
+The draft is **never loaded implicitly**: `TO '<path>'` writes it to a file,
+and `CREATE GRAPH <name> FROM FILE '<path>'` accepts it verbatim once
+reviewed.
+
+Once graphs are registered, the merged schema itself is queryable as a graph:
+`SHOW SCHEMA [FOR <graph>] AS GRAPH` returns one node per (source, label)
+carrying its property list and one relationship per edge type —
+cross-connector join edges included and marked — so an agent can plan a
+federated query by navigating the schema, and a graph UI can draw it:
+
+```
+SHOW SCHEMA FOR shop AS GRAPH;
+```
+
+```
++---------------------------------------------------------------------------------------------------------------------+
+| element                                                                                                             |
++---------------------------------------------------------------------------------------------------------------------+
+| (:Customer {name: "Customer", source: "shop/pgdemo", connector: "pgdemo", properties: ["cid", "full_name", "id"]})  |
+| (:Order {name: "Order", source: "shop/pgdemo", connector: "pgdemo", properties: ["id", "oid", "total"]})            |
+| [:PLACED_BY {name: "PLACED_BY", source: "shop/pgdemo"}]                                                             |
++---------------------------------------------------------------------------------------------------------------------+
+```
+
 ```
 -- Single graph
 USE <graph> <query>;
@@ -228,11 +397,12 @@ for property-level introspection. See
 
 ### General
 
-| Variable           | Default             | Description                          |
-|--------------------|---------------------|--------------------------------------|
-| `CONNECTOR_TYPE`   | `memgraph`          | Connector to use (see table below)   |
-| `CONNECTION_TYPE`  | _(none)_            | Alias for `CONNECTOR_TYPE`           |
-| `BOLT_LISTEN_ADDR` | `127.0.0.1:7688`    | Address the Bolt server binds to     |
+| Variable                  | Default          | Description                                                       |
+|---------------------------|------------------|-------------------------------------------------------------------|
+| `CONNECTOR_TYPE`          | `memgraph`       | Connector to use (see table below)                                |
+| `CONNECTION_TYPE`         | _(none)_         | Alias for `CONNECTOR_TYPE`                                        |
+| `BOLT_LISTEN_ADDR`        | `127.0.0.1:7688` | Address the Bolt server binds to                                  |
+| `MEMGQL_DEFAULT_LANGUAGE` | `gql`            | [Query language](/memgraph-zero/memgql/reference#query-languages) for bare (unprefixed) queries |
 
 ### Logging
 
@@ -243,10 +413,11 @@ CLI flags on the Bolt server binary.
 
 #### CLI Flags
 
-| Flag                   | Default            | Description                                          |
-|------------------------|--------------------|------------------------------------------------------|
-| `--log-level=<LEVEL>`  | `INFO`             | Logging verbosity for console and file (see below)   |
-| `--log-file=<PATH>`    | `bolt_server.log`  | File to mirror the (level-filtered) log output to    |
+| Flag                       | Default            | Description                                          |
+|----------------------------|--------------------|------------------------------------------------------|
+| `--log-level=<LEVEL>`      | `INFO`             | Logging verbosity for console and file (see below)   |
+| `--log-file=<PATH>`        | `bolt_server.log`  | File to mirror the (level-filtered) log output to    |
+| `--default-language=<L>`   | `gql`              | [Query language](/memgraph-zero/memgql/reference#query-languages) for bare queries (`gql` / `cypher`) |
 
 #### Log Levels
 
