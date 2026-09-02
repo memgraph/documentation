@@ -219,6 +219,20 @@ covered queries are served from that cache. See
 `TTL` is in seconds; `MAX_BYTES` accepts a plain byte count or a `K`/`M`/`G`/`T`
 binary suffix (e.g. `8G`).
 
+### Access modes
+
+A graph is `READ WRITE` by default. Set it `READ ONLY` — with
+`ALTER GRAPH <name> SET READ ONLY`, or `"accessMode": "readOnly"` in the
+[schema file](/memgraph-zero/memgql/schema-file#access-mode) — and any write
+(`INSERT` / `DELETE` / `SET` / `REMOVE`) routed to it, explicitly via `USE` or
+by label inference, is refused **before any backend sees the statement**, with
+a message naming `ALTER GRAPH <name> SET READ WRITE` as the way to lift it.
+The flip persists back to the boot `--schema` file, so a restart cannot
+quietly reopen a replica, and `EXPORT SCHEMA` round-trips the mode. Typical
+use: a vendor-refreshed replica (e.g. a Benchling Postgres copy) that must
+stay read-only through MemGQL even though the connector itself supports
+writes.
+
 ```
 -- Introspection
 SHOW CONNECTORS;                 -- registered connectors
@@ -226,9 +240,14 @@ SHOW CONNECTIONS;                -- live connections
 SHOW GRAPHS [ON CONNECTOR <c>];  -- registered graphs (name, connector(s), type, access, counts)
 SHOW GRAPH <name>;               -- one graph's details
 SHOW MAPPINGS;                   -- per-graph mappings
-SHOW SCHEMA [FOR <graph>];       -- unified routing index: labels, rel-types, properties
+SHOW SCHEMA [FOR <graph>] [AS GRAPH];  -- unified routing index: labels, rel-types, properties;
+                                 --   AS GRAPH returns it as Bolt nodes and relationships
 EXPORT SCHEMA [TO '<path>'];     -- merged catalog as canonical schema JSON (round-trippable)
 REFRESH SCHEMA;                  -- re-introspect live Cypher connections (Memgraph/Neo4j)
+
+-- Source onboarding (see below)
+DESCRIBE CONNECTOR <name>;       -- the source's physical catalog: tables, columns, types, keys
+GENERATE MAPPING FOR CONNECTOR <name> [GRAPH <g>] [TO '<path>'];  -- draft mapping from that catalog
 
 -- Query load per source
 SHOW STATS;                      -- source, queries, rows, errors, avg_latency_ms, max_latency_ms
@@ -257,6 +276,101 @@ counters, so a single query's cost can be measured in isolation.
 Counters are keyed by connector. **Cache** efficacy is keyed by graph and lives
 in [`SHOW GRAPH CACHES`](/memgraph-zero/memgql/multiple-graphs#caching-a-graph-in-memgraph)
 (hits, misses, resident fragments).
+
+### Onboarding a source
+
+Writing a [mapping](/memgraph-zero/memgql/schema-file) shouldn't require
+out-of-band database access. `DESCRIBE CONNECTOR` reads a source's physical
+catalog **live through the connector** — tables, columns, types, nullability,
+primary keys, and single-column foreign keys as `→ table.column`
+(PostgreSQL and SAP HANA; a graph backend answers via `SHOW SCHEMA` /
+`REFRESH SCHEMA` instead and says so):
+
+```
+DESCRIBE CONNECTOR pgdemo;
+```
+
+```
++---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+| schema              | table               | column              | type                | nullable            | key                 |
++---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+| "public"            | "customers"         | "cid"               | "integer"           | "NO"                | "PRIMARY KEY"       |
+| "public"            | "customers"         | "full_name"         | "text"              | "NO"                | ""                  |
+| "public"            | "customers"         | "city"              | "text"              | "YES"               | ""                  |
+| "public"            | "orders"            | "oid"               | "integer"           | "NO"                | "PRIMARY KEY"       |
+| "public"            | "orders"            | "customer_id"       | "integer"           | "YES"               | "→ customers.cid" |
+| "public"            | "orders"            | "total"             | "numeric"           | "NO"                | ""                  |
++---------------------+---------------------+---------------------+---------------------+---------------------+---------------------+
+```
+
+`GENERATE MAPPING FOR CONNECTOR <name>` turns that catalog into a **draft**
+mapping: tables with a single-column primary key become vertices
+(`metaFields.id` = the key), single-column foreign keys become table-backed
+edges, and `json`/`jsonb` columns are typed `Json` so they stay descendable.
+For the catalog above it emits:
+
+```json
+{
+  "name": "pgdemo_draft",
+  "_comment": "Draft mapping generated from the live 'pgdemo' catalog by GENERATE MAPPING. Review labels and attributes, then load explicitly: CREATE GRAPH pgdemo_draft FROM '<this JSON>'.",
+  "vertices": [
+    {
+      "label": "customers",
+      "mappedTableSource": { "connector": "pgdemo", "table": "customers", "metaFields": { "id": "cid" } },
+      "attributes": [
+        { "name": "cid", "type": "Int" },
+        { "name": "full_name" },
+        { "name": "city" }
+      ]
+    },
+    {
+      "label": "orders",
+      "mappedTableSource": { "connector": "pgdemo", "table": "orders", "metaFields": { "id": "oid" } },
+      "attributes": [
+        { "name": "oid", "type": "Int" },
+        { "name": "customer_id", "type": "Int" },
+        { "name": "total", "type": "Double" }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "label": "ORDERS_CUSTOMER_ID",
+      "from": "orders",
+      "to": "customers",
+      "mappedTableSource": { "connector": "pgdemo", "table": "orders", "metaFields": { "id": "oid", "from": "oid", "to": "customer_id" } }
+    }
+  ]
+}
+```
+
+Edge labels are deliberately machine-looking (`ORDERS_CUSTOMER_ID` invites a
+rename; a guessed business name would invite trust), and anything the draft
+can't represent — composite keys, tables without a primary key, foreign keys
+to non-key columns — is named in `_comment` rather than silently dropped.
+The draft is **never loaded implicitly**: `TO '<path>'` writes it to a file,
+and `CREATE GRAPH <name> FROM FILE '<path>'` accepts it verbatim once
+reviewed.
+
+Once graphs are registered, the merged schema itself is queryable as a graph:
+`SHOW SCHEMA [FOR <graph>] AS GRAPH` returns one node per (source, label)
+carrying its property list and one relationship per edge type —
+cross-connector join edges included and marked — so an agent can plan a
+federated query by navigating the schema, and a graph UI can draw it:
+
+```
+SHOW SCHEMA FOR shop AS GRAPH;
+```
+
+```
++---------------------------------------------------------------------------------------------------------------------+
+| element                                                                                                             |
++---------------------------------------------------------------------------------------------------------------------+
+| (:Customer {name: "Customer", source: "shop/pgdemo", connector: "pgdemo", properties: ["cid", "full_name", "id"]})  |
+| (:Order {name: "Order", source: "shop/pgdemo", connector: "pgdemo", properties: ["id", "oid", "total"]})            |
+| [:PLACED_BY {name: "PLACED_BY", source: "shop/pgdemo"}]                                                             |
++---------------------------------------------------------------------------------------------------------------------+
+```
 
 ```
 -- Single graph
