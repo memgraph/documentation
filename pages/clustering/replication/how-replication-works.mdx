@@ -145,6 +145,14 @@ aborted on all instances. The error message identifies the specific replica and
 the reason, for example:
 `Failed to replicate to STRICT_SYNC replica 'instance_2': replica is not reachable or not in sync with the main`.
 
+Both phases fan out across replicas in parallel: the prepare phase encodes and
+ships the transaction to every STRICT_SYNC replica at once (overlapping with the
+MAIN instance's WAL write, see [parallel WAL writes and delta
+shipping](#parallel-wal-writes-and-delta-shipping)), and the commit decision of
+the second phase is sent to all of them concurrently. The throughput cost of the
+protocol therefore comes from the extra round trip rather than from the number
+of replicas.
+
 **STRICT_SYNC mode ensures consistency and partition tolerance (CP).**
 
 ### ASYNC replication mode
@@ -154,11 +162,15 @@ without receiving confirmation from REPLICA instances that they have received
 the same transaction. This means that the **MAIN instance does not wait for the
 response from the REPLICA instances** in the main thread but in some other thread.
 
-Each REPLICA instance has one permanent thread connecting it with
-the MAIN instance for ASYNC replication. Using this background thread, the MAIN instance pushes
-replication tasks to the REPLICA instance, creates a custom thread pool pattern,
-and receives confirmations of successful replication from the REPLICATION
-instance.
+For each registered REPLICA, the MAIN instance keeps a permanent background
+worker that carries the commit-path work for that replica: it encodes the
+transaction, ships it, and receives the confirmation of successful replication.
+In ASYNC mode the commit thread does not wait for that worker, so confirmations
+are handled entirely off the main storage thread. A second per-replica worker
+runs the periodic state checks and recovery, so a long recovery cannot delay
+replication of new transactions. See [parallel WAL writes and delta
+shipping](#parallel-wal-writes-and-delta-shipping) for how the commit-path
+workers overlap with the MAIN instance's own WAL write.
 
 **ASYNC mode ensures system availability and partition tolerance (AP).**
 
@@ -341,6 +353,48 @@ any new data) is then written in a new WAL file that will be sent in the next
 synchronization process.
 
 ![](/pages/clustering/replication/memgraph-replication-buffer.png)
+
+### Parallel WAL writes and delta shipping
+
+When the MAIN instance commits a transaction, it has to do two things: make the
+transaction durable in its own WAL file, and hand the transaction's deltas to
+every registered REPLICA. Both happen on the commit path, but they do not happen
+one after another.
+
+The commit thread walks the transaction's deltas once and records everything
+that has to be written. It then schedules one task per streaming REPLICA — each
+task encodes the whole transaction (metadata deltas first, then data deltas)
+into that replica's RPC stream, on that replica's own background worker — and
+writes its own WAL inline, at the same time. Encoding for all replicas and the
+WAL write therefore overlap instead of running in sequence. This matters most on
+clusters with several replicas, where commit latency no longer grows linearly
+with the number of registered replicas.
+
+Shipping remains gated on durability. After it finishes encoding, each
+per-replica task waits for the MAIN instance's WAL write to complete before it
+sends the transaction end that allows the REPLICA to apply the transaction. If
+the WAL write fails, that gate never opens, the task drops its stream instead of
+shipping, and **no REPLICA can commit a transaction the MAIN instance did not
+make durable**.
+
+Ordering and failure containment are preserved:
+
+- Each replica has a single commit-path worker, so transactions reach a given
+  REPLICA in the same order the MAIN instance committed them.
+- WAL order still follows the MAIN instance's commit order, because the WAL
+  write happens while the commit holds the storage engine lock.
+- A failure while encoding or shipping to one REPLICA is contained to that
+  REPLICA: its stream is dropped, it is marked as behind, and it is picked up by
+  [recovery](#instance-synchronization). The MAIN instance and the remaining
+  replicas still commit, and the failure is reported for SYNC and STRICT_SYNC
+  replicas exactly as described in [replication
+  modes](#replication-modes).
+
+The commit thread collects every per-replica task before it publishes the
+transaction's commit timestamp, because encoding reads live node and edge state
+that later transactions may overwrite in place. Waiting for a replica's *reply*
+still follows the replica's replication mode: SYNC and STRICT_SYNC block the
+commit, ASYNC does not.
 
 ### Fixing timestamp consistency
 
