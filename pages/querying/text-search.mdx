@@ -635,3 +635,28 @@ Text search supports most usage modalities that are available in Memgraph. Refer
 | Replication             | ✅ Yes                                                  |
 | Concurrent transactions | ⚠️ Yes, but search results may vary within transactions |
 | Storage modes           | ❌ No (doesn't work in IN_MEMORY_ANALYTICAL)            |
+
+## Performance considerations for large imports
+
+When importing large datasets with a text index enabled, parallel imports can be significantly slower than imports without a text index.
+
+### Why text indexes slow down imports
+
+Text indexes take a unique lock during commits. When multiple transactions are importing data in parallel, only one transaction can write to the index at a time. These writes also persist data to disk, which can increase commit overhead.
+
+In practical testing, imports with a text index were up to 20x slower than imports without a text index.
+
+### Best practices for large imports
+
+For large imports with a text index:
+
+- **Use larger transaction batches.** Larger batches reduce the number of commits and associated index overhead.
+- **Avoid per-node transactions.** Creating each node in its own transaction resulted in the worst performance in testing.
+- **Limit excessive parallelism.** For a 100,000-node import, testing found that using 10,000 nodes per worker provided the best performance.
+
+In testing with 100,000 nodes, 10,000 nodes per worker was:
+
+- ~50% faster than importing everything in a single transaction.
+- ~30% faster than using 1,000-node batches with 10 parallel workers.
+
+For large imports, prefer fewer transactions with larger batches to balance parallelism and commit overhead.
