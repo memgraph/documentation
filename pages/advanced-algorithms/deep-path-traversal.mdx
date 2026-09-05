@@ -825,6 +825,33 @@ RETURN path;
 
 This will return at most 3 shortest paths between the source and target nodes.
 
+The limit applies **per source-target pair**, not to the query as a whole. A query
+that matches several pairs returns up to `k` paths for each of them, so the example
+below returns up to six paths across three pairs:
+
+```cypher
+MATCH (source:Node), (target:Node)
+WHERE source.group = target.group
+WITH source, target
+MATCH path=(source)-[*KSHORTEST|2]->(target)
+RETURN source, target, path;
+```
+
+The limit can be any expression that evaluates to an integer, including one that
+reads the current row, so different pairs can ask for a different number of paths:
+
+```cypher
+MATCH (source:Node), (target:Node)
+WITH source, target
+MATCH path=(source)-[*KSHORTEST|coalesce(source.paths_wanted, 1)]->(target)
+RETURN path;
+```
+
+The limit is evaluated once per pair and must be an integer on every one of them,
+so guard an optional property with `coalesce` as above - a `null` limit raises an
+error. A limit of `0` returns no paths for that pair without searching, and a
+negative limit raises an error.
+
 ### Example
 
 
@@ -876,6 +903,41 @@ RETURN path;
 
 This will only return paths with a length between 2 and 4 hops (inclusive).
 
+A negative minimum depth and a maximum depth below 1 both raise an error. A range
+whose minimum exceeds its maximum, such as `4..3`, is empty and returns no paths
+without searching.
+
+### Constraining the expansion based on property values
+
+K shortest paths expansion allows an arbitrary expression filter that determines
+if an expansion is allowed over a certain relationship to a certain node. The
+filter is defined as a lambda function over `r` and `n`, which denotes the
+relationship expanded over and the node expanded to. The paths returned are the
+K shortest paths of the subgraph the filter leaves behind.
+
+Using the dataset above, the following example allows expansion only to nodes
+other than `B`, which leaves a single path from `A` to `E`:
+
+```cypher
+MATCH (a:Node {name: "A"}), (e:Node {name: "E"})
+WITH a, e
+MATCH path=(a)-[*KSHORTEST (r, n | n.name <> "B")]->(e)
+RETURN path;
+```
+
+The filter can be combined with the path limit and the length constraints:
+
+```cypher
+MATCH (a:Node {name: "A"}), (e:Node {name: "E"})
+WITH a, e
+MATCH path=(a)-[*KSHORTEST 2..4 |3 (r, n | n.name <> "D")]->(e)
+RETURN path;
+```
+
+Unlike the other deep path traversal algorithms, K shortest paths does not
+support the three-argument `(r, n, p | ...)` form that exposes the already
+collected path. Using it raises an error.
+
 ### When to use K shortest paths?
 
 Use the K shortest paths algorithm when you need to:
@@ -893,8 +955,13 @@ Use the K shortest paths algorithm when you need to:
 
 - **Predefined nodes**: Both source and target nodes must be matched first using
   a `WITH` clause
-- **No filter lambdas**: K shortest paths does not support user-defined
-  filtering during expansion
+- **Unweighted**: Paths are ordered by the number of hops. Relationship
+  properties are never treated as weights, and no weight lambda is accepted
+- **No accumulated path in the filter lambda**: the two-argument
+  `(r, n | ...)` filter is supported, the three-argument `(r, n, p | ...)` form
+  is not
+- **Filter results**: the filter must evaluate to a boolean or `null`. `null`
+  prunes the expansion, as `false` does; any other type raises an error
 
 
 <CommunityLinks/>
