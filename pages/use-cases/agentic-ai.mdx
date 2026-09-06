@@ -67,11 +67,20 @@ Windows (PowerShell 5.1 or 7+), same steps, same output:
 .\agentic-ai.ps1 clean    # stop and remove everything the script created
 ```
 
+Or run it straight from the web, without downloading it first:
+
+```powershell
+iwr -UseBasicParsing https://raw.githubusercontent.com/memgraph/memgraph-platform/main/code-examples/agentic-ai.ps1 | iex
+```
+
+This does the same as the bare form above. `clean` needs the downloaded file, but
+the script also prints the equivalent `docker` commands when you run it this way.
+
 If Windows blocks the script, allow local scripts for the session first:
 `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`. The script
-bind-mounts two generated files into containers, so the drive it lives on must be
-shared with Docker Desktop (**Settings → Resources → File sharing**; `C:\Users` is
-shared by default).
+bind-mounts two generated files into containers, so the drive it lives on (your
+current directory, when run from the web) must be shared with Docker Desktop
+(**Settings → Resources → File sharing**; `C:\Users` is shared by default).
 
 ## Step-by-step
 
@@ -113,19 +122,24 @@ CONNECT pg AS pg_conn;
 ### 2. Seed the reasoning graph
 
 States are nodes, actions are scored edges. The score is the expected probability
-that the action moves the ticket toward resolution:
+that the action moves the ticket toward resolution. Six states and seven actions,
+including one loop (`Request more info` sends the ticket back to `Assess severity`),
+so plans can differ in length as well as score:
 
 ```cypher
 MERGE (s0:State {name:"Ticket received"});
 MERGE (s1:State {name:"Assess severity"});
 MERGE (a:State  {name:"Auto-resolve"});
 MERGE (e:State  {name:"Escalate to human"});
+MERGE (r:State  {name:"Request more info"});
 MERGE (d:State  {name:"Resolved"});
 MATCH (s0:State{name:"Ticket received"}),(s1:State{name:"Assess severity"})  MERGE (s0)-[:ACTION {name:"triage", score:1.0}]->(s1);
 MATCH (s1:State{name:"Assess severity"}),(a:State{name:"Auto-resolve"})      MERGE (s1)-[:ACTION {name:"auto_resolve", score:0.87}]->(a);
 MATCH (s1:State{name:"Assess severity"}),(e:State{name:"Escalate to human"}) MERGE (s1)-[:ACTION {name:"escalate", score:0.54}]->(e);
+MATCH (s1:State{name:"Assess severity"}),(r:State{name:"Request more info"}) MERGE (s1)-[:ACTION {name:"request_info", score:0.31}]->(r);
 MATCH (a:State{name:"Auto-resolve"}),(d:State{name:"Resolved"})              MERGE (a)-[:ACTION {name:"close", score:0.92}]->(d);
 MATCH (e:State{name:"Escalate to human"}),(d:State{name:"Resolved"})         MERGE (e)-[:ACTION {name:"human_fix", score:0.95}]->(d);
+MATCH (r:State{name:"Request more info"}),(s1:State{name:"Assess severity"}) MERGE (r)-[:ACTION {name:"reassess", score:0.60}]->(s1);
 ```
 
 ### 3. Read shared context through MemGQL
@@ -149,34 +163,67 @@ These run natively in Memgraph (MAGE and weighted shortest path).
 ```cypher
 MATCH path=(:State {name:"Ticket received"})-[rels:ACTION *1..6]->(:State {name:"Resolved"})
 RETURN [n IN nodes(path) | n.name] AS plan,
-       reduce(p=1.0, r IN rels | p * r.score) AS expected_value
+       round(reduce(p=1.0, r IN rels | p * r.score) * 1000) / 1000 AS expected_value
 ORDER BY expected_value DESC LIMIT 4;
 ```
 
-The top result, `Ticket received → Assess severity → Auto-resolve → Resolved`
-(expected value 0.8), is the **chosen path**; the next row is the scored
-**alternative**. Returning both is the audit trail the page describes.
+| plan | expected_value |
+| --- | --- |
+| Ticket received → Assess severity → Auto-resolve → Resolved | 0.8 |
+| Ticket received → Assess severity → Escalate to human → Resolved | 0.513 |
+| Ticket received → Assess severity → Request more info → Assess severity → Auto-resolve → Resolved | 0.149 |
+| Ticket received → Assess severity → Request more info → Assess severity → Escalate to human → Resolved | 0.095 |
 
-**Shortest path** finds the most efficient route to the goal (cost = `1 - score`):
+The top result is the **chosen path**; the rows below it are the scored
+**alternatives**, including the longer plans that loop through `Request more
+info`. Narrowing the same query to the chosen path and its runner-up is the
+audit trail the page describes, an inspectable trace of *why* this plan won:
+
+```cypher
+MATCH path=(:State {name:"Ticket received"})-[rels:ACTION *1..6]->(:State {name:"Resolved"})
+WITH [n IN nodes(path) | n.name] AS plan, reduce(p=1.0, r IN rels | p * r.score) AS ev
+ORDER BY ev DESC LIMIT 2
+RETURN plan, round(ev * 1000) / 1000 AS expected_value;
+```
+
+**Shortest path** finds the most efficient route to the goal (cost = `1 - score`).
+It agrees with the weighted traversal: `Ticket received → Assess severity →
+Auto-resolve → Resolved` at a total cost of 0.21:
 
 ```cypher
 MATCH path=(:State {name:"Ticket received"})-[:ACTION *WSHORTEST (e, n | 1.0 - e.score) total_cost]->(:State {name:"Resolved"})
-RETURN [x IN nodes(path) | x.name] AS route, total_cost AS cost;
+RETURN [x IN nodes(path) | x.name] AS route, round(total_cost * 1000) / 1000 AS cost;
 ```
 
-**Centrality** flags the critical intermediate state (here, `Assess severity`):
+**Centrality** flags the critical intermediate state. Here `Assess severity`
+(0.35) is far ahead of `Auto-resolve` and `Escalate to human` (0.075 each),
+because every plan, including the loop, passes through it:
 
 ```cypher
 CALL betweenness_centrality.get() YIELD node, betweenness_centrality
-RETURN node.name AS state, betweenness_centrality AS centrality
+RETURN node.name AS state, round(betweenness_centrality * 1000) / 1000 AS centrality
 ORDER BY centrality DESC LIMIT 5;
 ```
 
-**Community detection** groups sub-tasks a fleet of agents can take in parallel:
+**Community detection** groups sub-tasks a fleet of agents can take in parallel.
+On this graph it separates the intake states (`Ticket received`, `Assess
+severity`, `Request more info`) from the resolution states (`Auto-resolve`,
+`Escalate to human`, `Resolved`):
 
 ```cypher
 CALL community_detection.get() YIELD node, community_id
 RETURN community_id, collect(node.name) AS states ORDER BY community_id;
+```
+
+### 5. Explore the shared layer visually (optional)
+
+Point Memgraph Lab at MemGQL's endpoint, the same one every agent uses:
+
+```bash
+docker run -d --name memgql-lab --network zero-demo-net -p 3000:3000 \
+  -e QUICK_CONNECT_MG_HOST=zero-demo-memgql -e QUICK_CONNECT_MG_PORT=7688 \
+  memgraph/lab:3.12.0
+# open http://localhost:3000
 ```
 
 ## Give a Fleet of Agents MCP Access
