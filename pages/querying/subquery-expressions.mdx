@@ -1,0 +1,668 @@
+---
+title: Subquery expressions
+description: Use EXISTS, COUNT and COLLECT subquery expressions to test, count or gather the rows of a subquery inline in a Cypher query, without leaving the clause you are writing.
+---
+
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# Subquery expressions
+
+A subquery expression runs a query body once for every row of the enclosing query
+and reduces the rows that body produces to a single value. Memgraph supports three
+of them, which differ only in what they reduce to:
+
+| Expression      | Returns   | Body matched nothing |
+| --------------- | --------- | -------------------- |
+| `EXISTS { … }`  | Boolean   | `false`              |
+| `COUNT { … }`   | Integer   | `0`                  |
+| `COLLECT { … }` | List      | `[]`                 |
+
+None of them ever returns `null`, so the result is always safe to compare, sort or
+aggregate on.
+
+A subquery body can reference variables of the enclosing query, which makes it
+*correlated* — it is re-evaluated per row against the values that row holds.
+Variables the body introduces stay inside the body.
+
+1. [Dataset](#dataset)<br />
+2. [EXISTS](#2-exists)<br />
+   2.1. [EXISTS versus a pattern expression](#21-exists-versus-a-pattern-expression)<br />
+3. [COUNT](#3-count)<br />
+4. [COLLECT](#4-collect)<br />
+5. [Where you can use a subquery expression](#5-where-you-can-use-a-subquery-expression)<br />
+6. [The subquery body](#6-the-subquery-body)<br />
+   6.1. [Supported clauses](#61-supported-clauses)<br />
+   6.2. [Correlation with the enclosing query](#62-correlation-with-the-enclosing-query)<br />
+   6.3. [The body's RETURN decides the result](#63-the-bodys-return-decides-the-result)<br />
+   6.4. [UNION](#64-union)<br />
+7. [Nesting](#7-nesting)
+
+## Dataset
+
+The examples on this page run against the following dataset:
+
+```cypher
+CREATE (alice:Person {name: 'Alice'});
+CREATE (bob:Person {name: 'Bob'});
+CREATE (carol:Person {name: 'Carol'});
+CREATE (dave:Person {name: 'Dave'});
+CREATE (:Movie {title: 'The Matrix', released: 1999});
+CREATE (:Movie {title: 'Jumanji', released: 1995});
+CREATE (:Movie {title: 'Johnny Mnemonic', released: 1995});
+MATCH (a:Person {name: 'Alice'}), (b:Person {name: 'Bob'})
+CREATE (a)-[:KNOWS {since: 2010}]->(b);
+MATCH (a:Person {name: 'Alice'}), (c:Person {name: 'Carol'})
+CREATE (a)-[:KNOWS {since: 2015}]->(c);
+MATCH (b:Person {name: 'Bob'}), (c:Person {name: 'Carol'})
+CREATE (b)-[:KNOWS {since: 2018}]->(c);
+MATCH (a:Person {name: 'Alice'}), (m:Movie {title: 'The Matrix'})
+CREATE (a)-[:ACTED_IN]->(m);
+MATCH (a:Person {name: 'Alice'}), (m:Movie {title: 'Johnny Mnemonic'})
+CREATE (a)-[:ACTED_IN]->(m);
+MATCH (a:Person {name: 'Alice'}), (m:Movie {title: 'Jumanji'})
+CREATE (a)-[:ACTED_IN]->(m);
+MATCH (b:Person {name: 'Bob'}), (m:Movie {title: 'Jumanji'})
+CREATE (b)-[:ACTED_IN]->(m);
+```
+
+## 2. EXISTS
+
+`EXISTS { … }` is `true` when its body produces at least one row.
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name, EXISTS { MATCH (p)-[:ACTED_IN]->(m:Movie) } AS acted
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+-------+
+| name    | acted |
++---------+-------+
+| "Alice" | true  |
+| "Bob"   | true  |
+| "Carol" | false |
+| "Dave"  | false |
++---------+-------+
+```
+
+Used as a filter, with `NOT` to invert it:
+
+```cypher
+MATCH (p:Person)
+WHERE NOT EXISTS { MATCH (p)-[:KNOWS]->() }
+RETURN p.name AS name
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+
+| name    |
++---------+
+| "Carol" |
+| "Dave"  |
++---------+
+```
+
+`EXISTS` also accepts a bare pattern instead of a full body, which is a shorter
+way to write the same existence check. The nodes and relationships in it stay
+anonymous:
+
+```cypher
+MATCH (p:Person)
+WHERE EXISTS { (p)-[:KNOWS]->() }
+RETURN p.name AS name
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+
+| name    |
++---------+
+| "Alice" |
+| "Bob"   |
++---------+
+```
+
+### 2.1. EXISTS versus a pattern expression
+
+The [`exists(pattern)` function](/querying/functions#pattern-functions) and a bare
+pattern filter such as `MATCH (n) WHERE (n)-->()` are convenient for a simple
+existence check, but a pattern on its own cannot carry additional clauses. Reach
+for `EXISTS { … }` when the check needs a `WHERE`, a `WITH` with an aggregation,
+or more than one pattern part — as in [section 6.1](#61-supported-clauses).
+
+For `EXISTS` as a filter in the `WHERE` clause, see also [Existential
+subqueries](/querying/clauses/where#4-existential-subqueries) and [Filter with
+EXISTS expressions](/querying/clauses/where#17-filter-with-exists-expressions).
+
+## 3. COUNT
+
+`COUNT { … }` returns the number of rows its body produces.
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name, COUNT { MATCH (p)-[:KNOWS]->(f) } AS friends
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+---------+
+| name    | friends |
++---------+---------+
+| "Alice" | 2       |
+| "Bob"   | 1       |
+| "Carol" | 0       |
+| "Dave"  | 0       |
++---------+---------+
+```
+
+Because the result is an integer, it can be compared directly in a `WHERE`:
+
+```cypher
+MATCH (p:Person)
+WHERE COUNT { MATCH (p)-[:KNOWS]->(f) } > 1
+RETURN p.name AS name
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+
+| name    |
++---------+
+| "Alice" |
++---------+
+```
+
+`COUNT` accepts the same bare-pattern form as `EXISTS`:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name, COUNT { (p)-[:ACTED_IN]->() } AS movies
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+--------+
+| name    | movies |
++---------+--------+
+| "Alice" | 3      |
+| "Bob"   | 1      |
+| "Carol" | 0      |
+| "Dave"  | 0      |
++---------+--------+
+```
+
+`DISTINCT` in the body counts distinct rows. Alice acted in three movies, but
+they were released in two distinct years:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       COUNT { MATCH (p)-[:ACTED_IN]->(m) RETURN DISTINCT m.released } AS years
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+-------+
+| name    | years |
++---------+-------+
+| "Alice" | 2     |
+| "Bob"   | 1     |
+| "Carol" | 0     |
+| "Dave"  | 0     |
++---------+-------+
+```
+
+Prefer `COUNT { … }` to counting a [pattern
+comprehension](/querying/expressions#pattern-comprehension) with
+`size([(p)-[:KNOWS]->(f) | f])`, which builds the whole list before measuring it.
+
+## 4. COLLECT
+
+`COLLECT { … }` returns the body's single return column as a list, in the order
+the body produced its rows. Its body must end in a `RETURN` of exactly one
+column.
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       COLLECT { MATCH (p)-[:ACTED_IN]->(m) RETURN m.title } AS titles
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+----------------------------------------------+
+| name    | titles                                       |
++---------+----------------------------------------------+
+| "Alice" | ["The Matrix", "Johnny Mnemonic", "Jumanji"] |
+| "Bob"   | ["Jumanji"]                                  |
+| "Carol" | []                                           |
+| "Dave"  | []                                           |
++---------+----------------------------------------------+
+```
+
+Because the body's own order becomes the list's order, `ORDER BY` inside the body
+sorts the list:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       COLLECT { MATCH (p)-[:ACTED_IN]->(m) RETURN m.title ORDER BY m.title } AS titles
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+----------------------------------------------+
+| name    | titles                                       |
++---------+----------------------------------------------+
+| "Alice" | ["Johnny Mnemonic", "Jumanji", "The Matrix"] |
+| "Bob"   | ["Jumanji"]                                  |
+| "Carol" | []                                           |
+| "Dave"  | []                                           |
++---------+----------------------------------------------+
+```
+
+`SKIP` and `LIMIT` apply too, which is how you pick the top *n* per row:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       COLLECT {
+         MATCH (p)-[:ACTED_IN]->(m)
+         RETURN m.title ORDER BY m.released DESC LIMIT 1
+       } AS newest
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+----------------+
+| name    | newest         |
++---------+----------------+
+| "Alice" | ["The Matrix"] |
+| "Bob"   | ["Jumanji"]    |
+| "Carol" | []             |
+| "Dave"  | []             |
++---------+----------------+
+```
+
+`DISTINCT` deduplicates the list:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       COLLECT {
+         MATCH (p)-[:ACTED_IN]->(m)
+         RETURN DISTINCT m.released ORDER BY m.released
+       } AS years
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+--------------+
+| name    | years        |
++---------+--------------+
+| "Alice" | [1995, 1999] |
+| "Bob"   | [1995]       |
+| "Carol" | []           |
+| "Dave"  | []           |
++---------+--------------+
+```
+
+The `COLLECT` keyword does not reserve the name: `collect` remains usable as a
+variable, alias, property key and label, and `collect(x)` remains the [list
+aggregation function](/querying/functions#aggregation-functions).
+
+## 5. Where you can use a subquery expression
+
+`EXISTS { … }`, `COUNT { … }` and `COLLECT { … }` are accepted in the same
+positions:
+
+- a `WITH` or `RETURN` projection
+- a `WHERE`, whether it hangs off `MATCH`, `OPTIONAL MATCH` or `WITH`
+- an `ORDER BY`
+- a [`CASE` expression](/querying/expressions#case)
+- an argument of an [aggregation function](/querying/functions#aggregation-functions)
+- a per-element predicate such as `all()`, `any()`, `none()` or `single()`
+
+Ordering on one:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name
+ORDER BY COUNT { MATCH (p)-[:ACTED_IN]->() } DESC, name;
+```
+
+Output:
+
+```nocopy
++---------+
+| name    |
++---------+
+| "Alice" |
+| "Bob"   |
+| "Carol" |
+| "Dave"  |
++---------+
+```
+
+Inside a `CASE`:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       CASE WHEN EXISTS { MATCH (p)-[:ACTED_IN]->() } THEN 'actor' ELSE 'crew' END AS role
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+---------+
+| name    | role    |
++---------+---------+
+| "Alice" | "actor" |
+| "Bob"   | "actor" |
+| "Carol" | "crew"  |
+| "Dave"  | "crew"  |
++---------+---------+
+```
+
+As an aggregation argument:
+
+```cypher
+MATCH (p:Person)
+RETURN sum(COUNT { MATCH (p)-[:KNOWS]->(f) }) AS total;
+```
+
+Output:
+
+```nocopy
++-------+
+| total |
++-------+
+| 3     |
++-------+
+```
+
+## 6. The subquery body
+
+### 6.1. Supported clauses
+
+A body may use `MATCH`, `WHERE`, `WITH`, `RETURN` and `UNION`. A subquery
+expression is read-only, so the body does not write to the graph.
+
+`WITH` lets the body aggregate and then filter on the aggregate — here, people
+who acted in at least two movies:
+
+```cypher
+MATCH (p:Person)
+WHERE EXISTS {
+  MATCH (p)-[:ACTED_IN]->(m)
+  WITH count(*) AS c
+  WHERE c >= 2
+}
+RETURN p.name AS name
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+
+| name    |
++---------+
+| "Alice" |
++---------+
+```
+
+A `WHERE` in the body can test relationship properties:
+
+```cypher
+MATCH (p:Person)
+WHERE EXISTS { MATCH (p)-[r:KNOWS]->(f) WHERE r.since < 2015 }
+RETURN p.name AS name
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+
+| name    |
++---------+
+| "Alice" |
++---------+
+```
+
+### 6.2. Correlation with the enclosing query
+
+Variables of the enclosing query are visible throughout the body, including after
+a `WITH` inside it, and including in the body's `WHERE` alone:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       COUNT { MATCH (f:Person) WHERE (p)-[:KNOWS]->(f) } AS friends
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+---------+
+| name    | friends |
++---------+---------+
+| "Alice" | 2       |
+| "Bob"   | 1       |
+| "Carol" | 0       |
+| "Dave"  | 0       |
++---------+---------+
+```
+
+A body need not be correlated at all. An uncorrelated body produces the same
+value for every row:
+
+```cypher
+RETURN COUNT { MATCH (m:Movie) } AS movies,
+       COLLECT { MATCH (m:Movie) RETURN m.title ORDER BY m.title } AS titles;
+```
+
+Output:
+
+```nocopy
++--------+----------------------------------------------+
+| movies | titles                                       |
++--------+----------------------------------------------+
+| 3      | ["Johnny Mnemonic", "Jumanji", "The Matrix"] |
++--------+----------------------------------------------+
+```
+
+Variables introduced inside the body are scoped to it and are not available after
+the subquery expression.
+
+A body may also introduce a variable with the same name as one from the enclosing
+query, which shadows it: inside the body, the name refers to the inner value.
+Below, the outer `name` selects the people who know Carol, and the inner `name`
+asks which of them also know Bob:
+
+```cypher
+WITH 'Carol' AS name
+MATCH (p:Person)-[:KNOWS]->(f:Person {name: name})
+WHERE EXISTS {
+  WITH 'Bob' AS name
+  MATCH (p)-[:KNOWS]->(g)
+  WHERE g.name = name
+}
+RETURN p.name AS person
+ORDER BY person;
+```
+
+Output:
+
+```nocopy
++---------+
+| person  |
++---------+
+| "Alice" |
++---------+
+```
+
+### 6.3. The body's RETURN decides the result
+
+The body is a query, and its final `RETURN` shapes the row set that the
+expression reduces. `DISTINCT`, `SKIP`, `LIMIT` and aggregation in the body all
+count.
+
+This matters most for aggregation. An aggregating `RETURN` produces one row even
+when nothing matched, so an `EXISTS` over it is always `true`:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       EXISTS { MATCH (p)-[:ACTED_IN]->(m) RETURN count(m) } AS v
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+------+
+| name    | v    |
++---------+------+
+| "Alice" | true |
+| "Bob"   | true |
+| "Carol" | true |
+| "Dave"  | true |
++---------+------+
+```
+
+To test whether anything matched, leave the aggregation out and let the `MATCH`
+decide, as in [section 2](#2-exists).
+
+`EXISTS` and `COUNT` do not require a `RETURN` at all; `COLLECT` does, because it
+needs a column to gather.
+
+### 6.4. UNION
+
+A body may be a `UNION` of branches, and the expression reduces over the rows of
+all of them together:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       COUNT {
+         MATCH (p)-[:KNOWS]->(x) RETURN x
+         UNION
+         MATCH (p)-[:ACTED_IN]->(x) RETURN x
+       } AS related
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+---------+
+| name    | related |
++---------+---------+
+| "Alice" | 5       |
+| "Bob"   | 2       |
+| "Carol" | 0       |
+| "Dave"  | 0       |
++---------+---------+
+```
+
+For `COLLECT`, every branch returns its one column under the same name:
+
+```cypher
+MATCH (p:Person {name: 'Alice'})
+RETURN COLLECT {
+         MATCH (p)-[:KNOWS]->(f) RETURN f.name AS n
+         UNION
+         MATCH (p)-[:ACTED_IN]->(m) RETURN m.title AS n
+       } AS related;
+```
+
+Output:
+
+```nocopy
++--------------------------------------------------------------+
+| related                                                      |
++--------------------------------------------------------------+
+| ["Bob", "Carol", "The Matrix", "Johnny Mnemonic", "Jumanji"] |
++--------------------------------------------------------------+
+```
+
+## 7. Nesting
+
+A body may itself contain subquery expressions. Here `EXISTS` filters on a nested
+`EXISTS` — people who know an actor:
+
+```cypher
+MATCH (p:Person)
+WHERE EXISTS {
+  MATCH (p)-[:KNOWS]->(f)
+  WHERE EXISTS { MATCH (f)-[:ACTED_IN]->() }
+}
+RETURN p.name AS name
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+
+| name    |
++---------+
+| "Alice" |
++---------+
+```
+
+They can also be combined, for example collecting a per-friend count:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       COLLECT {
+         MATCH (p)-[:KNOWS]->(f)
+         RETURN COUNT { (f)-[:ACTED_IN]->() } ORDER BY f.name
+       } AS friendMovies
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+--------------+
+| name    | friendMovies |
++---------+--------------+
+| "Alice" | [1, 0]       |
+| "Bob"   | [0]          |
+| "Carol" | []           |
+| "Dave"  | []           |
++---------+--------------+
+```
+
+<CommunityLinks/>
