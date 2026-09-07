@@ -159,7 +159,7 @@ from the last node of the path to one of the nodes in the current relationship
 If subgraph is not specified, the algorithm is computed on the entire graph by default.
 
 - `start_node: Node` - The starting node of the path. A null value yields no rows.
-- `relationships: Map (default={})` - A map with the key `rel` that contains a list of the given
+- `relationships: Map (default={key: []})` - A map with the key `rel` that contains a list of the given
   relationships. A map without a `rel` key means no relationships to append, so `path.create(n)`
   returns a path made of the start node alone.
 
@@ -220,8 +220,9 @@ If subgraph is not specified, the algorithm is computed on the entire graph by d
 - `max_hops: int` ➡ The maximum number of hops for a path to be returned. `-1` means no limit; any
   other negative value is a real bound and matches nothing.
 
-A null `start` yields no rows instead of raising a type error, so a start node coming from an
-`OPTIONAL MATCH` does not have to be guarded by the caller.
+A null `start` yields no rows instead of raising a type error. A null *inside* a list of start nodes
+is still an error, as is an ID no node carries, so a list gathered from an `OPTIONAL MATCH` does need
+guarding.
 
 <Callout type="info">
 The expansion is bounded at a depth of 5000 hops and returns an error beyond it. An unbounded
@@ -267,7 +268,7 @@ config-map procedures, and is described under [`expand_config()`](#expand_config
 |Option              | Explanation                                                                  |
 |--------------------|------------------------------------------------------------------------------|
 | `+LABEL`           | Label is added to the whitelist. All nodes in the path must have a label in the whitelist. If the whitelist is empty, it is as if all nodes are whitelisted.  |
-| `>LABEL`           | Label is added to the end list. When end list has labels, only paths ending with these labels will be returned, but they can be expanded further, to return paths ending in nodes with end labels beyond it, but the expansion will only go through nodes with whitelisted labels. Labels in the end list do not have to respect the whitelist.            |
+| `>LABEL`           | Label is added to the end list. When end list has labels, only paths ending with these labels will be returned, but they can be expanded further, to return paths ending in nodes with end labels beyond it. An end-listed node is expanded through whether or not it is whitelisted; every other node on the path must satisfy the whitelist.            |
 | `-LABEL`           | Label is added to the blacklist. No node in the path will contain labels in the blacklist. The blacklist takes precedence over all other filters.                   |
 | `/LABEL`           | Label is added to the termination list. When termination list contains labels, only paths ending with these labels will be returned, and any further expansion is stopped. Labels in the termination list do not have to respect the whitelist.                            |
 | `*`                | Matches every label, under any of the four prefixes. `*` and `+*` whitelist every node, `-*` blacklists every one, `>*` makes every node an end node and `/*` a termination node. This is how one step of a [sequence](#sequences) says "any label in this position".         |
@@ -276,15 +277,17 @@ An empty entry, or a bare `+`, `-`, `>` or `/` with no label behind it, is an er
 filter that matches nothing.
 
 `*` is a label wildcard only. A relationship filter says "any type" with a bare direction marker
-instead — `'>'`, `'<'`, or `'<|>'` for either direction — and a relationship entry that is just `*`,
+instead — `'>'`, `'<'`, or `'<|>'` for either direction, that last one as a string rather than a list
+entry — and a relationship entry that is just `*`,
 once any `<`, `>` or `:` is discounted, is an error naming those spellings. A `*` alongside a type
 name is not: `'CATCHES*'` is read as a type of that literal name and matches nothing.
 
 With `filterStartNode` at its default the start node is exempt from the label filter entirely — its
 own labels are never consulted — so a label on the whitelist or blacklist that would exclude it does
 not stop it being returned. An end or termination filter is the exception: a `>` or `/` prefix decides which
-nodes come back at all, and an exempt start node is not one of them, whatever its labels are. Set
-`filterStartNode: true` to filter it like any other node — which is also what lets a start node
+nodes come back at all, and an exempt start node is not one of them, whatever its labels are. Setting
+`filterStartNode: true` on a config-map procedure filters it like any other node — the positional
+[`expand()`](#expand) has no such argument — which is also what lets a start node
 carrying an end or termination label be returned.
 
 A node in the termination list ends the walk only once it can actually be returned. Below the lower
@@ -418,7 +421,7 @@ If subgraph is not specified, the algorithm is computed on the entire graph by d
 
 - `start: Any` ➡ A node, node ID, or a list of nodes and/or node IDs from which the procedure will
   expand. A null value yields no rows.
-- `config: Map (default={})` ➡ The configuration parameters:
+- `config: Map` ➡ The configuration parameters. Required — pass `{}` to take every default:
 
  | Name 	             | Type   | Default	| Description 	                                                |
  |-	                   |-	      |-	      |-	                                                            |
@@ -427,9 +430,9 @@ If subgraph is not specified, the algorithm is computed on the entire graph by d
  | relationshipFilter  | List or String 	| [ ]    	| Relationships the expansion will follow, using the notation described under [`expand()`](#expand). 	|
  | labelFilter         | List or String 	| [ ]	    | Labels which will define filtering, using the notation described under [`expand()`](#expand). |
  | filterStartNode     | Bool 	| False	  | Whether the label and node-identity filters apply to the start node. 	|
- | bfs                 | Bool 	| True	  | Emit every path of one length before any longer one, so a `limit` returns the shortest paths. `false` expands depth-first instead, which is faster on a deep traversal. The result set is the same either way; only the order differs. 	|
+ | bfs                 | Bool 	| True	  | Emit every path of one length before any longer one, so a `limit` returns the shortest paths. `false` expands depth-first, holding only the current path rather than every partial one. Under `RELATIONSHIP_PATH` and `NODE_PATH` both modes return the same paths and differ only in order; under `NODE_GLOBAL` they return different paths, because a node is spent at the depth the walk first reaches it. 	|
  | limit               | Int   	| -1   	  | The maximum number of paths to return. The traversal stops once the cap is reached rather than building the rest of the result and discarding it, which a trailing Cypher `LIMIT` cannot do. With several start nodes they are walked in the order they were listed, so that order decides which paths a `limit` returns. `-1` means no limit; a value below `-1` is an error. 	|
- | uniqueness          | String 	| RELATIONSHIP_PATH	| What may not repeat. `RELATIONSHIP_PATH` and `NODE_PATH` forbid a repeat within a single path, and allow a node or relationship to appear in other paths. `NODE_GLOBAL` forbids a node repeating anywhere in the traversal, so exactly one path per reachable node is returned. 	|
+ | uniqueness          | String 	| RELATIONSHIP_PATH	| What may not repeat. `RELATIONSHIP_PATH` and `NODE_PATH` forbid a repeat within a single path, and allow a node or relationship to appear in other paths. `NODE_GLOBAL` forbids a node repeating anywhere in the traversal, so at most one path per reachable node is returned. 	|
  | sequence            | String 	| ""	    | One alternating string of label and relationship steps — a label step, then a relationship step, then a label step, and so on. Supersedes `labelFilter` and `relationshipFilter` when given. See [sequences](#sequences). 	|
  | beginSequenceAtStart | Bool 	| True	  | Whether a sequence begins at the start node or one hop out from it. See [sequences](#sequences). 	|
  | endNodes            | List 	| [ ]	    | Nodes, or node IDs, that are returned and expanded through — the node-identity counterpart of the `>LABEL` prefix. With either this or `terminatorNodes` set, only the nodes they name end a returned path. 	|
@@ -464,7 +467,7 @@ type of that literal name and matches nothing. The same string form works on
 [`subgraph_nodes()`](#subgraph_nodes) and [`subgraph_all()`](#subgraph_all); the positional
 [`expand()`](#expand) takes lists only.
 
-`uniqueness: NODE_GLOBAL` returns one path per reachable node. A node is spent by the first path that
+With the default `bfs: true`, `uniqueness: NODE_GLOBAL` returns at most one path per reachable node. A node is spent by the first path that
 reaches it, so a node reachable at two depths comes back only at the shorter one — and it is spent even
 if a filter then rejects it, which means a `minHops` above every reachable node's own depth returns no
 rows at all. Several start nodes are all marked before any of them is expanded, so a start reached from
@@ -719,7 +722,7 @@ procedure uses bfs.
 If subgraph is not specified, the algorithm is computed on the entire graph by default.
 
 - `start_node: Any` ➡ A node, node ID, or a list of nodes and/or node IDs from which the traversing will start.
-- `config: Map (default={})` ➡ The configuration parameters:
+- `config: Map` ➡ The configuration parameters. Required — pass `{}` to take every default:
 
  | Name 	             | Type   | Default	| Description 	                                                |
  |-	                   |-	      |-	      |-	                                                            |
@@ -783,7 +786,7 @@ Label filters are described in the table below:
 |Option              | Explanation                                                                  |
 |--------------------|------------------------------------------------------------------------------|
 | `+LABEL`           | Label is added to the whitelist. All nodes in the path must have a label in the whitelist. If the whitelist is empty, it is as if all nodes are whitelisted.  |
-| `>LABEL`           | Label is added to the end list. When end list has labels, only paths ending with these labels will be returned, but they can be expanded further, to return paths ending in nodes with end labels beyond it, but the expansion will only go through nodes with whitelisted labels. Labels in the end list do not have to respect the whitelist.            |
+| `>LABEL`           | Label is added to the end list. When end list has labels, only paths ending with these labels will be returned, but they can be expanded further, to return paths ending in nodes with end labels beyond it. An end-listed node is expanded through whether or not it is whitelisted; every other node on the path must satisfy the whitelist.            |
 | `-LABEL`           | Label is added to the blacklist. No node in the path will contain labels in the blacklist. The blacklist takes precedence over all other filters.                   |
 | `/LABEL`           | Label is added to the termination list. When termination list contains labels, only paths ending with these labels will be returned, and any further expansion is stopped. Labels in the termination list do not have to respect the whitelist.                            |
 | `*`                | Matches every label, under any of the four prefixes. `*` and `+*` whitelist every node, `-*` blacklists every one, `>*` makes every node an end node and `/*` a termination node. This is how one step of a [sequence](#sequences) says "any label in this position".         |
@@ -956,7 +959,7 @@ relationship and label filters, and ensures each node is visited only once.
 - `subgraph: Graph` (**OPTIONAL**) ➡ A specific subgraph, which is an [object of type Graph](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph) returned by the `project()` function, on which the algorithm is run. 
 If subgraph is not specified, the algorithm is computed on the entire graph by default.
 - `start_node: Any` ➡ A node, node ID, or a list of nodes and/or node IDs from which the traversing will start.
-- `config: Map (default={})` ➡ Configuration parameters:
+- `config: Map` ➡ Configuration parameters. Required — pass `{}` to take every default:
 
  | Name 	             | Type   | Default	| Description 	                                                |
  |-	                   |-	      |-	      |-	                                                            |
@@ -1019,7 +1022,7 @@ procedure also accepts the `|`-separated string form — see [`expand_config()`]
 |Option              | Explanation                                                                  |
 |--------------------|------------------------------------------------------------------------------|
 | `+LABEL`           | Label is added to the whitelist. All nodes in the path must have a label in the whitelist. If the whitelist is empty, it is as if all nodes are whitelisted.  |
-| `>LABEL`           | Label is added to the end list. When end list has labels, only paths ending with these labels will be returned, but they can be expanded further, to return paths ending in nodes with end labels beyond it, but the expansion will only go through nodes with whitelisted labels. Labels in the end list do not have to respect the whitelist.            |
+| `>LABEL`           | Label is added to the end list. When end list has labels, only paths ending with these labels will be returned, but they can be expanded further, to return paths ending in nodes with end labels beyond it. An end-listed node is expanded through whether or not it is whitelisted; every other node on the path must satisfy the whitelist.            |
 | `-LABEL`           | Label is added to the blacklist. No node in the path will contain labels in the blacklist. The blacklist takes precedence over all other filters.                   |
 | `/LABEL`           | Label is added to the termination list. When termination list contains labels, only paths ending with these labels will be returned, and any further expansion is stopped. Labels in the termination list do not have to respect the whitelist.                            |
 | `*`                | Matches every label, under any of the four prefixes. `*` and `+*` whitelist every node, `-*` blacklists every one, `>*` makes every node an end node and `/*` a termination node. This is how one step of a [sequence](#sequences) says "any label in this position".         |
