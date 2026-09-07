@@ -194,9 +194,9 @@ Result:
 +------------------------------------------------------------------------------------------------------------------+
 | path                                                                                                             |
 +------------------------------------------------------------------------------------------------------------------+
-| (:Club {name: 'Real Madrid'}-[:In_city]->(:City {name 'Madrid'}))                                                |
+| ((:Club {name: 'Real Madrid'})-[:In_city]->(:City {name: 'Madrid'}))                                                |
 +------------------------------------------------------------------------------------------------------------------+
-| (:Club {name: 'NK Moslavina'}-[:In_city]->(:City {name 'Kutina'})-[:In_country]->(:Country {name 'Croatia'}))    |
+| ((:Club {name: 'NK Moslavina'})-[:In_city]->(:City {name: 'Kutina'})-[:In_country]->(:Country {name: 'Croatia'}))    |
 +------------------------------------------------------------------------------------------------------------------+
 ```
 
@@ -250,10 +250,11 @@ relationship type whose name contains `<`, `>` or `:` cannot be filtered on by n
 Two entries for the same type merge rather than replace each other, so `['TYPE>', '<TYPE']` allows the
 type in both directions regardless of the order the entries were listed in.
 
-The filter can also be given as a single `|`-separated string instead of a list, so
-`'CATCHES>|<HATES'` and `['CATCHES>', '<HATES']` are equivalent. Empty pieces are ignored, so a
-trailing `|` is not an error. An entry that names neither a relationship type nor a direction is an
-error — an empty entry such as `['']`, or one made only of separators such as `':'`.
+An entry that names neither a relationship type nor a direction is an error — an empty entry such as
+`['']`, or one made only of separators such as `':'`.
+
+`path.expand` takes a list of strings; the single `|`-separated string form is available only on the
+config-map procedures, and is described under [`expand_config()`](#expand_config).
 
 **Examples:**
 
@@ -275,8 +276,9 @@ An empty entry, or a bare `+`, `-`, `>` or `/` with no label behind it, is an er
 filter that matches nothing.
 
 `*` is a label wildcard only. A relationship filter says "any type" with a bare direction marker
-instead — `'>'`, `'<'`, or `'<|>'` for either direction — and a relationship entry containing `*` is
-an error naming those spellings.
+instead — `'>'`, `'<'`, or `'<|>'` for either direction — and a relationship entry that is just `*`,
+once any `<`, `>` or `:` is discounted, is an error naming those spellings. A `*` alongside a type
+name is not: `'CATCHES*'` is read as a type of that literal name and matches nothing.
 
 With `filterStartNode` at its default the start node is exempt from the label filter entirely — its
 own labels are never consulted — so a label on the whitelist or blacklist that would exclude it does
@@ -290,8 +292,6 @@ hop bound the node is left out of the results and the walk continues through it,
 `/LABEL` with a `minHops` or `minLevel` above 1 no longer discards every path beyond the first
 matching node.
 
-Like the relationship filter, the label filter can be given as a single `|`-separated string instead
-of a list: `'-Human|+Dog'` is the same as `['-Human', '+Dog']`.
 
 Any other label syntax is added to the whitelist. For example, `LABEL` will be
 added to the whitelist as `LABEL`, and `!LABEL` will be added to the whitelist
@@ -386,7 +386,7 @@ CALL path.expand(d,["<"],["-Human"],0,4) YIELD result RETURN result;
 |------------------------------------------------------------------------------------------------------------------------------------------|
 | `{"nodes":[{"id":1,"labels":["Dog"],"properties":{},"type":"node"},{"id":0,"labels":["Wolf"],"properties":{},"type":"node"}],"relationships":[{"id":0,"start":0,"end":1,"label":"CATCHES","properties":{},"type":"relationship"}],"type":"path"}`|
 
-**Example 2**
+**Example 3**
 
 The query will expand from `Dog` and `Mouse` labeled nodes. `Cat` is the
 termination label, and the maximum number of hops is 1. Also, `Mouse` is passed
@@ -455,6 +455,14 @@ it, and any one of them can stop the walk. So a `labelFilter` and a
 `denylistNodes` given together both apply, rather than one overriding the other. The prefixes *within*
 the label filter are ordered rather than combined — a blacklisted label wins over every other prefix,
 and an end or termination label is returned without having to satisfy the whitelist.
+
+Both `relationshipFilter` and `labelFilter` accept a single `|`-separated string in place of a list —
+`'CATCHES>|<HATES'` is `['CATCHES>', '<HATES']`, and `'-Human|+Dog'` is `['-Human', '+Dog']`. Empty
+pieces are ignored, so a trailing `|` is not an error. A `|` inside a **list** entry is not a
+separator: a list entry is one whole alternative, so `['CATCHES>|<HATES']` asks for a relationship
+type of that literal name and matches nothing. The same string form works on
+[`subgraph_nodes()`](#subgraph_nodes) and [`subgraph_all()`](#subgraph_all); the positional
+[`expand()`](#expand) takes lists only.
 
 `uniqueness: NODE_GLOBAL` returns one path per reachable node. A node is spent by the first path that
 reaches it, so a node reachable at two depths comes back only at the shorter one — and it is spent even
@@ -690,6 +698,13 @@ Because that first step is consumed, a relationship filter of only **one** step 
 repeat, and `beginSequenceAtStart: false` alongside one is an error naming the key. The same applies to
 a `sequence` whose relationship half has a single step.
 
+<Callout type="warning">
+A `sequence` is written **relationship-first** when `beginSequenceAtStart` is false, since its leading
+step is the hop out of the start node: `'CATCHES>, Dog, FRIENDS_WITH>, Mouse'`, not
+`'Dog, CATCHES>, Mouse'`. Written label-first, the leading label step is read as the initial
+relationship step and nothing expands — the call returns the start node alone, with no error.
+</Callout>
+
 ### `subgraph_all()`
 
 Returns a subgraph in a form of nodes and relationships that can be reached from
@@ -752,8 +767,8 @@ The filters combine as they do on [`expand_config()`](#expand_config).
 If the relationship filter is empty, all relationship types are allowed.
 
 The notation is described in full under [`expand()`](#expand): where a direction marker may appear
-and which one wins, how two entries for the same type merge, the `|`-separated string form, and
-which entries are errors.
+and which one wins, how two entries for the same type merge, and which entries are errors. This
+procedure also accepts the `|`-separated string form — see [`expand_config()`](#expand_config).
 
 **Examples:**
 
@@ -813,7 +828,9 @@ hops is increased to 4.
 {<h4 className="custom-header"> Output: </h4>}
 
 - `nodes: List[Node]` ➡ A list of nodes which form the subgraph.
-- `rels: List[Relationship]` ➡ A list of relationships which form the subgraph.
+- `rels: List[Relationship]` ➡ A list of relationships which form the subgraph. This is every
+  relationship between the returned nodes, so a relationship whose type `relationshipFilter`
+  excluded is still returned when both its endpoints are in `nodes`.
 
 {<h4 className="custom-header"> Usage: </h4>}
 
@@ -988,8 +1005,8 @@ The filters combine as they do on [`expand_config()`](#expand_config).
 If the relationship filter is empty, all relationship types are allowed.
 
 The notation is described in full under [`expand()`](#expand): where a direction marker may appear
-and which one wins, how two entries for the same type merge, the `|`-separated string form, and
-which entries are errors.
+and which one wins, how two entries for the same type merge, and which entries are errors. This
+procedure also accepts the `|`-separated string form — see [`expand_config()`](#expand_config).
 
 **Examples:**
 
@@ -1042,8 +1059,6 @@ hops is increased to 4.
 {<h4 className="custom-header"> Output: </h4>}
 
 - `nodes: Node` ➡ The nodes that form the subgraph.
-
-{<h4 className="custom-header"> Usage: </h4>}
 
 {<h4 className="custom-header"> Usage: </h4>}
 
