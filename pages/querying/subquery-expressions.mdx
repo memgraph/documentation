@@ -24,45 +24,44 @@ A subquery body can reference variables of the enclosing query, which makes it
 *correlated* — it is re-evaluated per row against the values that row holds.
 Variables the body introduces stay inside the body.
 
-- [EXISTS](#exists) — and [how it compares with a pattern expression](#exists-versus-a-pattern-expression)<br />
-- [COUNT](#count)<br />
-- [COLLECT](#collect) — and [how it compares with `collect()`](#collect-compared-with-collect)<br />
-- [Where you can use a subquery expression](#where-you-can-use-a-subquery-expression)<br />
-- [The subquery body](#the-subquery-body) — [clauses](#supported-clauses),
-  [correlation](#correlation-with-the-enclosing-query), [the body's
-  RETURN](#the-bodys-return-decides-the-result), [UNION](#union)<br />
-- [Nesting](#nesting)
-
 ## Dataset
 
 The examples on this page run against a small graph of `Person` nodes joined by `KNOWS`, and `Movie`
 nodes they are joined to by `ACTED_IN`. Only some of the people have a `nickname`. You can create it locally by executing the queries at the end of
 the page: [Dataset queries](#dataset-queries).
 
-## EXISTS
+## The three side by side
 
-`EXISTS { … }` is `true` when its body produces at least one row.
+The same body, reduced three ways. Carol and Dave match nothing, so each
+expression falls back to its empty value rather than to `null`:
 
 ```cypher
 MATCH (p:Person)
-RETURN p.name AS name, EXISTS { MATCH (p)-[:ACTED_IN]->(m:Movie) } AS acted
+RETURN p.name AS name,
+       EXISTS  { MATCH (p)-[:ACTED_IN]->(m) }                AS acted,
+       COUNT   { MATCH (p)-[:ACTED_IN]->(m) }                AS credits,
+       COLLECT { MATCH (p)-[:ACTED_IN]->(m) RETURN m.title } AS titles
 ORDER BY name;
 ```
 
 Output:
 
 ```nocopy
-+---------+-------+
-| name    | acted |
-+---------+-------+
-| "Alice" | true  |
-| "Bob"   | true  |
-| "Carol" | false |
-| "Dave"  | false |
-+---------+-------+
++---------+-------+---------+----------------------------------------------+
+| name    | acted | credits | titles                                       |
++---------+-------+---------+----------------------------------------------+
+| "Alice" | true  | 3       | ["The Matrix", "Johnny Mnemonic", "Jumanji"] |
+| "Bob"   | true  | 1       | ["Jumanji"]                                  |
+| "Carol" | false | 0       | []                                           |
+| "Dave"  | false | 0       | []                                           |
++---------+-------+---------+----------------------------------------------+
 ```
 
-Used as a filter, with `NOT` to invert it:
+## EXISTS
+
+`EXISTS { … }` is `true` when its body produces at least one row. Over a single
+pattern it can be written as a [bare pattern](#the-bare-pattern-shorthand). With
+`NOT` it filters for the absence of a match:
 
 ```cypher
 MATCH (p:Person)
@@ -82,28 +81,6 @@ Output:
 +---------+
 ```
 
-`EXISTS` also accepts a bare pattern instead of a full body, which is a shorter
-way to write the same existence check. The pattern cannot introduce names of its
-own — a variable already bound outside may appear in it, and acts as a join:
-
-```cypher
-MATCH (p:Person)
-WHERE EXISTS { (p)-[:KNOWS]->() }
-RETURN p.name AS name
-ORDER BY name;
-```
-
-Output:
-
-```nocopy
-+---------+
-| name    |
-+---------+
-| "Alice" |
-| "Bob"   |
-+---------+
-```
-
 ### EXISTS versus a pattern expression
 
 The [`exists(pattern)` function](/querying/functions#pattern-functions) and a bare
@@ -117,27 +94,8 @@ subqueries](/querying/clauses/where#4-existential-subqueries).
 
 ## COUNT
 
-`COUNT { … }` returns the number of rows its body produces.
-
-```cypher
-MATCH (p:Person)
-RETURN p.name AS name, COUNT { MATCH (p)-[:KNOWS]->(f) } AS friends
-ORDER BY name;
-```
-
-Output:
-
-```nocopy
-+---------+---------+
-| name    | friends |
-+---------+---------+
-| "Alice" | 2       |
-| "Bob"   | 1       |
-| "Carol" | 0       |
-| "Dave"  | 0       |
-+---------+---------+
-```
-
+`COUNT { … }` returns the number of rows its body produces, and over a single
+pattern it can be written as a [bare pattern](#the-bare-pattern-shorthand).
 Because the result is an integer, it can be compared directly in a `WHERE`:
 
 ```cypher
@@ -155,27 +113,6 @@ Output:
 +---------+
 | "Alice" |
 +---------+
-```
-
-`COUNT` accepts the same bare-pattern form as `EXISTS`:
-
-```cypher
-MATCH (p:Person)
-RETURN p.name AS name, COUNT { (p)-[:ACTED_IN]->() } AS movies
-ORDER BY name;
-```
-
-Output:
-
-```nocopy
-+---------+--------+
-| name    | movies |
-+---------+--------+
-| "Alice" | 3      |
-| "Bob"   | 1      |
-| "Carol" | 0      |
-| "Dave"  | 0      |
-+---------+--------+
 ```
 
 `DISTINCT` in the body counts distinct rows. Alice acted in three movies, but
@@ -210,26 +147,6 @@ comprehension](/querying/expressions#pattern-comprehension) with
 `COLLECT { … }` returns the body's single return column as a list, in the order
 the body produced its rows. Its body must end in a `RETURN` of exactly one
 column.
-
-```cypher
-MATCH (p:Person)
-RETURN p.name AS name,
-       COLLECT { MATCH (p)-[:ACTED_IN]->(m) RETURN m.title } AS titles
-ORDER BY name;
-```
-
-Output:
-
-```nocopy
-+---------+----------------------------------------------+
-| name    | titles                                       |
-+---------+----------------------------------------------+
-| "Alice" | ["The Matrix", "Johnny Mnemonic", "Jumanji"] |
-| "Bob"   | ["Jumanji"]                                  |
-| "Carol" | []                                           |
-| "Dave"  | []                                           |
-+---------+----------------------------------------------+
-```
 
 Because the body's own order becomes the list's order, `ORDER BY` inside the body
 sorts the list:
@@ -277,31 +194,6 @@ Output:
 | "Carol" | []                  |
 | "Dave"  | []                  |
 +---------+---------------------+
-```
-
-`DISTINCT` deduplicates the list:
-
-```cypher
-MATCH (p:Person)
-RETURN p.name AS name,
-       COLLECT {
-         MATCH (p)-[:ACTED_IN]->(m)
-         RETURN DISTINCT m.released ORDER BY m.released
-       } AS years
-ORDER BY name;
-```
-
-Output:
-
-```nocopy
-+---------+--------------+
-| name    | years        |
-+---------+--------------+
-| "Alice" | [1995, 1999] |
-| "Bob"   | [1995]       |
-| "Carol" | []           |
-| "Dave"  | []           |
-+---------+--------------+
 ```
 
 ### COLLECT compared with collect()
@@ -506,6 +398,39 @@ Output:
 | "Alice" |
 +---------+
 ```
+
+### The bare pattern shorthand
+
+`EXISTS` and `COUNT` accept a bare pattern in place of a full body, which is a
+shorter way to write a check or a count over one pattern. The pattern cannot
+introduce names of its own — a variable already bound outside may appear in it,
+and acts as a join:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       EXISTS { (p)-[:KNOWS]->() } AS knows,
+       COUNT  { (p)-[:ACTED_IN]->() } AS credits
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+-------+---------+
+| name    | knows | credits |
++---------+-------+---------+
+| "Alice" | true  | 3       |
+| "Bob"   | true  | 1       |
+| "Carol" | false | 0       |
+| "Dave"  | false | 0       |
++---------+-------+---------+
+```
+
+The shorthand holds a pattern and nothing else, so a filter or any other clause
+needs the `MATCH` form — `COUNT { MATCH (p)-[r:KNOWS]->() WHERE r.since < 2015 }`.
+`COLLECT` has no shorthand, since a bare pattern returns no column for it to
+gather.
 
 ### Correlation with the enclosing query
 
