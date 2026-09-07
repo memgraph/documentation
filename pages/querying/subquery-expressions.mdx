@@ -24,25 +24,22 @@ A subquery body can reference variables of the enclosing query, which makes it
 *correlated* — it is re-evaluated per row against the values that row holds.
 Variables the body introduces stay inside the body.
 
-1. [EXISTS](#1-exists)<br />
-   1.1. [EXISTS versus a pattern expression](#11-exists-versus-a-pattern-expression)<br />
-2. [COUNT](#2-count)<br />
-3. [COLLECT](#3-collect)<br />
-4. [Where you can use a subquery expression](#4-where-you-can-use-a-subquery-expression)<br />
-5. [The subquery body](#5-the-subquery-body)<br />
-   5.1. [Supported clauses](#51-supported-clauses)<br />
-   5.2. [Correlation with the enclosing query](#52-correlation-with-the-enclosing-query)<br />
-   5.3. [The body's RETURN decides the result](#53-the-bodys-return-decides-the-result)<br />
-   5.4. [UNION](#54-union)<br />
-6. [Nesting](#6-nesting)
+- [EXISTS](#exists) — and [how it compares with a pattern expression](#exists-versus-a-pattern-expression)<br />
+- [COUNT](#count)<br />
+- [COLLECT](#collect) — and [how it compares with `collect()`](#collect-compared-with-collect)<br />
+- [Where you can use a subquery expression](#where-you-can-use-a-subquery-expression)<br />
+- [The subquery body](#the-subquery-body) — [clauses](#supported-clauses),
+  [correlation](#correlation-with-the-enclosing-query), [the body's
+  RETURN](#the-bodys-return-decides-the-result), [UNION](#union)<br />
+- [Nesting](#nesting)
 
 ## Dataset
 
 The examples on this page run against a small graph of `Person` nodes joined by `KNOWS`, and `Movie`
-nodes they are joined to by `ACTED_IN`. You can create it locally by executing the queries at the end of
+nodes they are joined to by `ACTED_IN`. Only some of the people have a `nickname`. You can create it locally by executing the queries at the end of
 the page: [Dataset queries](#dataset-queries).
 
-## 1. EXISTS
+## EXISTS
 
 `EXISTS { … }` is `true` when its body produces at least one row.
 
@@ -107,18 +104,18 @@ Output:
 +---------+
 ```
 
-### 1.1. EXISTS versus a pattern expression
+### EXISTS versus a pattern expression
 
 The [`exists(pattern)` function](/querying/functions#pattern-functions) and a bare
 pattern filter such as `MATCH (n) WHERE (n)-->()` are convenient for a simple
 existence check, but a pattern on its own cannot carry additional clauses. Reach
 for `EXISTS { … }` when the check needs a `WHERE`, a `WITH` with an aggregation,
-or more than one pattern part — as in [section 5.1](#51-supported-clauses).
+or more than one pattern part — as in [supported clauses](#supported-clauses).
 
 For `EXISTS` as a filter in the `WHERE` clause, see also [Existential
 subqueries](/querying/clauses/where#4-existential-subqueries).
 
-## 2. COUNT
+## COUNT
 
 `COUNT { … }` returns the number of rows its body produces.
 
@@ -208,7 +205,7 @@ Prefer `COUNT { … }` to counting a [pattern
 comprehension](/querying/expressions#pattern-comprehension) with
 `size([(p)-[:KNOWS]->(f) | f])`, which builds the whole list before measuring it.
 
-## 3. COLLECT
+## COLLECT
 
 `COLLECT { … }` returns the body's single return column as a list, in the order
 the body produced its rows. Its body must end in a `RETURN` of exactly one
@@ -307,11 +304,66 @@ Output:
 +---------+--------------+
 ```
 
+### COLLECT compared with collect()
+
+`COLLECT { … }` gathers every row its body returns, including the rows whose
+value is `null`. The [`collect()` aggregation
+function](/querying/functions#aggregation-functions) drops them. Two of the four
+people have a `nickname`:
+
+```cypher
+MATCH (p:Person)
+RETURN collect(p.nickname) AS nicknames;
+```
+
+Output:
+
+```nocopy
++-----------------+
+| nicknames       |
++-----------------+
+| ["Al", "Bobby"] |
++-----------------+
+```
+
+```cypher
+RETURN COLLECT { MATCH (p:Person) RETURN p.nickname ORDER BY p.name } AS nicknames;
+```
+
+Output:
+
+```nocopy
++-----------------------------+
+| nicknames                   |
++-----------------------------+
+| ["Al", "Bobby", Null, Null] |
++-----------------------------+
+```
+
+Filter in the body to leave them out:
+
+```cypher
+RETURN COLLECT {
+         MATCH (p:Person) WHERE p.nickname IS NOT NULL
+         RETURN p.nickname ORDER BY p.name
+       } AS nicknames;
+```
+
+Output:
+
+```nocopy
++-----------------+
+| nicknames       |
++-----------------+
+| ["Al", "Bobby"] |
++-----------------+
+```
+
 The `COLLECT` keyword does not reserve the name: `collect` remains usable as a
 variable, alias, property key and label, and `collect(x)` remains the [list
 aggregation function](/querying/functions#aggregation-functions).
 
-## 4. Where you can use a subquery expression
+## Where you can use a subquery expression
 
 `EXISTS { … }`, `COUNT { … }` and `COLLECT { … }` are accepted in the same
 positions:
@@ -365,6 +417,28 @@ Output:
 +---------+---------+
 ```
 
+A subquery expression in a projection alongside an aggregation becomes part of the
+grouping key, so it decides how the rows are grouped — here, people grouped by how
+many credits they have:
+
+```cypher
+MATCH (p:Person)
+RETURN COUNT { (p)-[:ACTED_IN]->() } AS credits, collect(p.name) AS people
+ORDER BY credits;
+```
+
+Output:
+
+```nocopy
++---------+-------------------+
+| credits | people            |
++---------+-------------------+
+| 0       | ["Carol", "Dave"] |
+| 1       | ["Bob"]           |
+| 3       | ["Alice"]         |
++---------+-------------------+
+```
+
 As an aggregation argument:
 
 ```cypher
@@ -382,13 +456,13 @@ Output:
 +-------+
 ```
 
-## 5. The subquery body
+## The subquery body
 
-### 5.1. Supported clauses
+### Supported clauses
 
 A body is a read-only query — it never writes to the graph. It matches with
 `MATCH`, filters with `WHERE`, aggregates through `WITH`, and may end in a
-`RETURN`; it may also be a [`UNION`](#54-union) of such branches.
+`RETURN`; it may also be a [`UNION`](#union) of such branches.
 
 `WITH` lets the body aggregate and then filter on the aggregate — here, people
 who acted in at least two movies:
@@ -433,7 +507,7 @@ Output:
 +---------+
 ```
 
-### 5.2. Correlation with the enclosing query
+### Correlation with the enclosing query
 
 Variables of the enclosing query are visible throughout the body, including after
 a `WITH` inside it. The correlation may live in the body's `WHERE` rather than in
@@ -480,7 +554,7 @@ Output:
 Variables introduced inside the body are scoped to it and are not available after
 the subquery expression.
 
-### 5.3. The body's RETURN decides the result
+### The body's RETURN decides the result
 
 The body is a query, and its final `RETURN` shapes the row set that the
 expression reduces. `DISTINCT`, `SKIP`, `LIMIT` and aggregation in the body all
@@ -510,12 +584,12 @@ Output:
 ```
 
 To test whether anything matched, leave the aggregation out and let the `MATCH`
-decide, as in [section 1](#1-exists).
+decide, as in the [EXISTS section](#exists).
 
 `EXISTS` and `COUNT` do not require a `RETURN` at all; `COLLECT` does, because it
 needs a column to gather.
 
-### 5.4. UNION
+### UNION
 
 A body may be a `UNION` of branches. `UNION` reduces over the branches' rows with
 duplicates removed, while `UNION ALL` keeps every row — so for `COUNT` and
@@ -588,7 +662,7 @@ Output:
 +---------------------------+
 ```
 
-## 6. Nesting
+## Nesting
 
 A body may itself contain subquery expressions. Here `EXISTS` filters on a nested
 `EXISTS` — people who know an actor:
@@ -646,8 +720,8 @@ You can get the dataset locally by executing the following query block.
 ```cypher
 MATCH (n) DETACH DELETE n;
 
-CREATE (alice:Person {name: 'Alice'});
-CREATE (bob:Person {name: 'Bob'});
+CREATE (alice:Person {name: 'Alice', nickname: 'Al'});
+CREATE (bob:Person {name: 'Bob', nickname: 'Bobby'});
 CREATE (carol:Person {name: 'Carol'});
 CREATE (dave:Person {name: 'Dave'});
 CREATE (:Movie {title: 'The Matrix', released: 1999});

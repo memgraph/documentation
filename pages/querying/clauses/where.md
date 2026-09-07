@@ -175,7 +175,7 @@ ORDER BY p.name;
 
 The [`exists()` function](/querying/functions#pattern-functions) is not limited to `WHERE` — see [where
 you can use a subquery
-expression](/querying/subquery-expressions#4-where-you-can-use-a-subquery-expression).
+expression](/querying/subquery-expressions#where-you-can-use-a-subquery-expression).
 
 Output:
 
