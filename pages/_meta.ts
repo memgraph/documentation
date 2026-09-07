@@ -3,6 +3,7 @@ export default {
   "getting-started": "Getting started",
   "client-libraries": "Client libraries",
   "ai-ecosystem": "AI ecosystem",
+  "use-cases": "Use cases",
   "fundamentals": "Fundamentals",
   "data-modeling": "Data modeling",
   "data-migration": "Data migration",
