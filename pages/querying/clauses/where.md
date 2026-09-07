@@ -173,9 +173,9 @@ RETURN p.name
 ORDER BY p.name;
 ```
 
-The [`exists()` function](/querying/functions#pattern-functions) is also accepted in a `WITH`/`RETURN`
-projection, an `ORDER BY`, a `CASE` and an aggregation argument — see [Subquery
-expressions](/querying/subquery-expressions#4-where-you-can-use-a-subquery-expression).
+The [`exists()` function](/querying/functions#pattern-functions) is not limited to `WHERE` — see [where
+you can use a subquery
+expression](/querying/subquery-expressions#4-where-you-can-use-a-subquery-expression).
 
 Output:
 
@@ -268,7 +268,7 @@ document](https://en.cppreference.com/w/cpp/regex/ecmascript).
 
 ## 4. Existential subqueries
 
-`EXISTS { ... }` tests whether a subquery returns at least one row, and can be used as a filter here.
+`EXISTS { … }` tests whether a subquery returns at least one row, and can be used as a filter here.
 The subquery can reference variables from the outer scope (correlated subquery), while variables created
 inside it are not visible outside of it.
 
@@ -292,9 +292,9 @@ Output:
 +---------+
 ```
 
-`EXISTS { ... }` is documented in full, together with its `COUNT { ... }` and `COLLECT { ... }` siblings,
-on the [Subquery expressions](/querying/subquery-expressions) page — the positions all three are accepted
-in, the clauses their bodies support, correlation and shadowing rules, `UNION` bodies, and nesting.
+`EXISTS { … }` is documented in full, together with its `COUNT { … }` and `COLLECT { … }` siblings, on
+the [Subquery expressions](/querying/subquery-expressions) page — the positions all three are accepted
+in, the clauses their bodies follow, correlation, `UNION` bodies, and nesting.
 
 
 ## Dataset queries

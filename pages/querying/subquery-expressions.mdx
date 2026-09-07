@@ -86,8 +86,8 @@ Output:
 ```
 
 `EXISTS` also accepts a bare pattern instead of a full body, which is a shorter
-way to write the same existence check. The nodes and relationships in it stay
-anonymous:
+way to write the same existence check. The pattern cannot introduce names of its
+own — a variable already bound outside may appear in it, and acts as a join:
 
 ```cypher
 MATCH (p:Person)
@@ -116,8 +116,7 @@ for `EXISTS { … }` when the check needs a `WHERE`, a `WITH` with an aggregatio
 or more than one pattern part — as in [section 5.1](#51-supported-clauses).
 
 For `EXISTS` as a filter in the `WHERE` clause, see also [Existential
-subqueries](/querying/clauses/where#4-existential-subqueries) and [Filter with
-EXISTS expressions](/querying/clauses/where#17-filter-with-exists-expressions).
+subqueries](/querying/clauses/where#4-existential-subqueries).
 
 ## 2. COUNT
 
@@ -265,22 +264,22 @@ MATCH (p:Person)
 RETURN p.name AS name,
        COLLECT {
          MATCH (p)-[:ACTED_IN]->(m)
-         RETURN m.title ORDER BY m.released DESC LIMIT 1
-       } AS newest
+         RETURN m.title ORDER BY m.title LIMIT 1
+       } AS first
 ORDER BY name;
 ```
 
 Output:
 
 ```nocopy
-+---------+----------------+
-| name    | newest         |
-+---------+----------------+
-| "Alice" | ["The Matrix"] |
-| "Bob"   | ["Jumanji"]    |
-| "Carol" | []             |
-| "Dave"  | []             |
-+---------+----------------+
++---------+---------------------+
+| name    | first               |
++---------+---------------------+
+| "Alice" | ["Johnny Mnemonic"] |
+| "Bob"   | ["Jumanji"]         |
+| "Carol" | []                  |
+| "Dave"  | []                  |
++---------+---------------------+
 ```
 
 `DISTINCT` deduplicates the list:
@@ -322,14 +321,13 @@ positions:
 - an `ORDER BY`
 - a [`CASE` expression](/querying/expressions#case)
 - an argument of an [aggregation function](/querying/functions#aggregation-functions)
-- a per-element predicate such as `all()`, `any()`, `none()` or `single()`
 
-Ordering on one:
+Ordering on one — fewest credits first:
 
 ```cypher
 MATCH (p:Person)
 RETURN p.name AS name
-ORDER BY COUNT { MATCH (p)-[:ACTED_IN]->() } DESC, name;
+ORDER BY COUNT { MATCH (p)-[:ACTED_IN]->() } ASC, name;
 ```
 
 Output:
@@ -338,10 +336,10 @@ Output:
 +---------+
 | name    |
 +---------+
-| "Alice" |
-| "Bob"   |
 | "Carol" |
 | "Dave"  |
+| "Bob"   |
+| "Alice" |
 +---------+
 ```
 
@@ -388,8 +386,9 @@ Output:
 
 ### 5.1. Supported clauses
 
-A body may use `MATCH`, `WHERE`, `WITH`, `RETURN` and `UNION`. A subquery
-expression is read-only, so the body does not write to the graph.
+A body is a read-only query — it never writes to the graph. It matches with
+`MATCH`, filters with `WHERE`, aggregates through `WITH`, and may end in a
+`RETURN`; it may also be a [`UNION`](#54-union) of such branches.
 
 `WITH` lets the body aggregate and then filter on the aggregate — here, people
 who acted in at least two movies:
@@ -437,7 +436,8 @@ Output:
 ### 5.2. Correlation with the enclosing query
 
 Variables of the enclosing query are visible throughout the body, including after
-a `WITH` inside it, and including in the body's `WHERE` alone:
+a `WITH` inside it. The correlation may live in the body's `WHERE` rather than in
+its pattern:
 
 ```cypher
 MATCH (p:Person)
@@ -480,33 +480,6 @@ Output:
 Variables introduced inside the body are scoped to it and are not available after
 the subquery expression.
 
-A body may also introduce a variable with the same name as one from the enclosing
-query, which shadows it: inside the body, the name refers to the inner value.
-Below, the outer `name` selects the people who know Carol, and the inner `name`
-asks which of them also know Bob:
-
-```cypher
-WITH 'Carol' AS name
-MATCH (p:Person)-[:KNOWS]->(f:Person {name: name})
-WHERE EXISTS {
-  WITH 'Bob' AS name
-  MATCH (p)-[:KNOWS]->(g)
-  WHERE g.name = name
-}
-RETURN p.name AS person
-ORDER BY person;
-```
-
-Output:
-
-```nocopy
-+---------+
-| person  |
-+---------+
-| "Alice" |
-+---------+
-```
-
 ### 5.3. The body's RETURN decides the result
 
 The body is a query, and its final `RETURN` shapes the row set that the
@@ -544,8 +517,9 @@ needs a column to gather.
 
 ### 5.4. UNION
 
-A body may be a `UNION` of branches, and the expression reduces over the rows of
-all of them together:
+A body may be a `UNION` of branches. `UNION` reduces over the branches' rows with
+duplicates removed, while `UNION ALL` keeps every row — so for `COUNT` and
+`COLLECT` the choice decides the answer:
 
 ```cypher
 MATCH (p:Person)
@@ -571,25 +545,47 @@ Output:
 +---------+---------+
 ```
 
-For `COLLECT`, every branch returns its one column under the same name:
+Every branch must return its one column under the same name. Alice and Bob both
+know Carol, so `UNION` reports her once:
 
 ```cypher
 MATCH (p:Person {name: 'Alice'})
 RETURN COLLECT {
          MATCH (p)-[:KNOWS]->(f) RETURN f.name AS n
          UNION
-         MATCH (p)-[:ACTED_IN]->(m) RETURN m.title AS n
-       } AS related;
+         MATCH (:Person {name: 'Bob'})-[:KNOWS]->(f) RETURN f.name AS n
+       } AS people;
 ```
 
 Output:
 
 ```nocopy
-+--------------------------------------------------------------+
-| related                                                      |
-+--------------------------------------------------------------+
-| ["Bob", "Carol", "The Matrix", "Johnny Mnemonic", "Jumanji"] |
-+--------------------------------------------------------------+
++------------------+
+| people           |
++------------------+
+| ["Bob", "Carol"] |
++------------------+
+```
+
+The same body with `UNION ALL` keeps the repeat:
+
+```cypher
+MATCH (p:Person {name: 'Alice'})
+RETURN COLLECT {
+         MATCH (p)-[:KNOWS]->(f) RETURN f.name AS n
+         UNION ALL
+         MATCH (:Person {name: 'Bob'})-[:KNOWS]->(f) RETURN f.name AS n
+       } AS people;
+```
+
+Output:
+
+```nocopy
++---------------------------+
+| people                    |
++---------------------------+
+| ["Bob", "Carol", "Carol"] |
++---------------------------+
 ```
 
 ## 6. Nesting
@@ -648,6 +644,8 @@ We encourage you to try out the examples by yourself.
 You can get the dataset locally by executing the following query block.
 
 ```cypher
+MATCH (n) DETACH DELETE n;
+
 CREATE (alice:Person {name: 'Alice'});
 CREATE (bob:Person {name: 'Bob'});
 CREATE (carol:Person {name: 'Carol'});
