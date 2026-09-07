@@ -1367,24 +1367,33 @@ Memgraph HA integrates with Kubernetes monitoring tools through:
 - The [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart
 - [Memgraph’s Prometheus exporter](https://github.com/memgraph/prometheus-exporter)
 
-The chart `kube-prometheus-stack` should be installed independently from HA
-chart with the following command:
+The chart `kube-prometheus-stack` should be installed independently from the HA
+chart. Add the `prometheus-community` Helm repository and install (or upgrade) the
+release into the `monitoring` namespace:
 
 ```bash
-helm install kube-prometheus-stack oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack \
-  -f kube_prometheus_stack_values.yaml \
-  -f kube_prometheus_stack_memgraph_dashboard.yaml \
-  --namespace monitoring \
-  --create-namespace
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace
 ```
 
-`kube_prometheus_stack_values.yaml` is optional. A template is available in the
-upstream [chart’s
-repository]((https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml)).
+Remember the release name (`kube-prometheus-stack`) and the namespace (`monitoring`):
+the HA chart needs both to wire its `ServiceMonitor` and Grafana dashboard to this
+stack (see [`prometheus.serviceMonitor.kubePrometheusStackReleaseName`](#configuration-options)
+and `prometheus.namespace` below).
 
-`kube_prometheus_stack_memgraph_dashboard.yaml` is also optional - it provides a generic dashboard which shows the metrics
-that Memgraph exports for both standalone and HA deployments. This dashboard file can be downloaded from 
+To customize the stack, pass your own values file with `-f kube_prometheus_stack_values.yaml`.
+A template is available in the upstream [chart’s
+repository](https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml).
+
+If you scrape through `mg-exporter` (see the next section) you can additionally pass
+`-f kube_prometheus_stack_memgraph_dashboard.yaml`, a generic dashboard which shows the metrics
+that the exporter exposes for both standalone and HA deployments. The dashboard file can be downloaded from
 [here](https://github.com/memgraph/prometheus-exporter/blob/main/kube_prometheus_stack_memgraph_dashboard.yaml).
+When scraping Memgraph directly, use the bundled **Memgraph OpenMetrics** dashboard
+instead (see [Grafana dashboard for direct scraping](#grafana-dashboard-for-direct-scraping)).
 
 If you install the `kube-prometheus-stack` in a **non-default namespace**, allow
 cross-namespace scraping. You can allow this by adding the following
@@ -1471,7 +1480,25 @@ From Memgraph 3.11, Memgraph can serve metrics in Prometheus
 HTTP monitoring port, so the cluster can be scraped directly and `mg-exporter` can be
 skipped entirely.
 
-Set the top-level `scrapeMemgraphDirectly: true` and leave `prometheus.enabled: false`:
+To start the HA chart with direct scraping you need:
+
+1. **A Prometheus Operator in the cluster** – for example `kube-prometheus-stack`
+   installed as shown [above](#monitoring). The HA chart only creates a
+   `ServiceMonitor`; something must consume it.
+2. **`scrapeMemgraphDirectly: true`** – the chart appends `--metrics-format=OpenMetrics`
+   to every coordinator and data instance and adds a `tcp-metrics-port` to each
+   instance `Service` so it can be discovered.
+3. **`prometheus.enabled: false`** – no `mg-exporter` is deployed.
+4. **`prometheus.serviceMonitor.enabled: true`** – provisions the `ServiceMonitor`
+   that targets each instance `Service` directly.
+5. **Matching release name and namespace** – the `ServiceMonitor` is labelled
+   `release: <prometheus.serviceMonitor.kubePrometheusStackReleaseName>`, which is how
+   `kube-prometheus-stack` selects it, and it is created in `prometheus.namespace`
+   (falls back to the release namespace). Both must match the `kube-prometheus-stack`
+   Helm release name and namespace you used when installing the stack.
+
+A minimal values file for the default installation of `kube-prometheus-stack`
+(release `kube-prometheus-stack` in namespace `monitoring`) looks like this:
 
 ```yaml
 # Every coordinator and data instance serves OpenMetrics; the chart exposes their
@@ -1479,10 +1506,20 @@ Set the top-level `scrapeMemgraphDirectly: true` and leave `prometheus.enabled: 
 scrapeMemgraphDirectly: true
 
 prometheus:
-  enabled: false       # no mg-exporter is deployed
+  enabled: false          # no mg-exporter is deployed
+  namespace: monitoring   # where kube-prometheus-stack lives; the ServiceMonitor is created here
   serviceMonitor:
-    enabled: true      # in-cluster: kube-prometheus-stack scrapes each instance directly
+    enabled: true         # in-cluster: kube-prometheus-stack scrapes each instance directly
+    kubePrometheusStackReleaseName: kube-prometheus-stack  # must equal the Helm release name
+    interval: 15s
+  grafanaDashboard:
+    enabled: true         # optional: ship the "Memgraph OpenMetrics" dashboard
+    namespace: monitoring # a namespace the Grafana sidecar watches
 ```
+
+The `ServiceMonitor` selects the instance `Services` in the HA chart's release
+namespace through its `namespaceSelector`, so the HA chart and `kube-prometheus-stack`
+can live in different namespaces without any extra configuration.
 
 `scrapeMemgraphDirectly` only selects the metrics *format and target* — on its own it
 does not scrape anything. You still enable a scraper:
@@ -1501,6 +1538,19 @@ chart runs every coordinator and data instance with `--metrics-format=OpenMetric
 exposes their monitoring ports automatically. The metric names differ from the legacy
 JSON exporter, so use the bundled **Memgraph OpenMetrics** dashboard.
 </Callout>
+
+After installing the HA chart, verify that the `ServiceMonitor` exists and that
+Prometheus picked up the targets:
+
+```bash
+kubectl get servicemonitor -n monitoring
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
+```
+
+Open `http://localhost:9090/targets` and look for the
+`serviceMonitor/monitoring/<release-name>-memgraph/0` job; every coordinator and data
+instance should be listed as `UP`. If the job is missing, the `release` label or
+namespace does not match your `kube-prometheus-stack` installation.
 
 #### Grafana dashboard for direct scraping
 
@@ -1848,7 +1898,7 @@ and their default values.
 | `resources.data`                                           | CPU/Memory resource requests/limits for data instances. Left empty by default.                               | `{}`                           |
 | `scrapeMemgraphDirectly`                                   | Serve metrics in OpenMetrics format and scrape Memgraph directly instead of `mg-exporter` (requires Memgraph >= 3.11). Only selects the format/target — still enable a scraper via `prometheus.serviceMonitor.enabled` and/or `vmagentRemote.enabled`. | `false`                        |
 | `prometheus.enabled`                                       | If set to `true`, K8s resources representing Memgraph's Prometheus exporter will be deployed.                | `false`                        |
-| `prometheus.namespace`                                     | Namespace in which `kube-prometheus-stack` and Memgraph's Prometheus exporter are installed. When empty, the release namespace is used. | `""`         |
+| `prometheus.namespace`                                     | Namespace in which `kube-prometheus-stack` is installed. The `ServiceMonitor`, the Grafana dashboard `ConfigMap` and (when `prometheus.enabled` is `true`) the exporter resources are created here. When empty, the release namespace is used. | `""`         |
 | `prometheus.memgraphExporter.port`                         | The port on which Memgraph's Prometheus exporter is available.                                               | `9115`                         |
 | `prometheus.memgraphExporter.pullFrequencySeconds`         | How often will Memgraph's Prometheus exporter pull data from Memgraph instances.                             | `5`                            |
 | `prometheus.memgraphExporter.repository`                   | The repository where Memgraph's Prometheus exporter image is available.                                      | `docker.io/memgraph/prometheus-exporter` |                      
@@ -1859,7 +1909,7 @@ and their default values.
 | `prometheus.memgraphExporter.extraVolumes`                 | Additional volumes mounted on the `mg-exporter` Deployment (e.g. ConfigMaps with custom exporter configs).   | `[]`                           |
 | `prometheus.memgraphExporter.extraVolumeMounts`            | Additional volume mounts for the `mg-exporter` container.                                                    | `[]`                           |
 | `prometheus.serviceMonitor.enabled`                        | If enabled, a `ServiceMonitor` object will be deployed.                                                      | `false`                        |
-| `prometheus.serviceMonitor.kubePrometheusStackReleaseName` | The release name under which `kube-prometheus-stack` chart is installed.                                     | `kube-prometheus-stack`        |
+| `prometheus.serviceMonitor.kubePrometheusStackReleaseName` | The release name under which `kube-prometheus-stack` chart is installed. Rendered as the `release` label on the `ServiceMonitor`, which is how the stack discovers it. | `kube-prometheus-stack`        |
 | `prometheus.serviceMonitor.interval`                       | How often will Prometheus pull data from Memgraph's Prometheus exporter.                                     | `15s`                          |
 | `prometheus.grafanaDashboard.enabled`                      | Ship the bundled "Memgraph OpenMetrics" Grafana dashboard as a `ConfigMap` for a Grafana sidecar to auto-load. | `false`                      |
 | `prometheus.grafanaDashboard.namespace`                    | Namespace for the dashboard `ConfigMap`; must be one the Grafana sidecar watches. Defaults to `prometheus.namespace`, else release namespace. | `""`           |
