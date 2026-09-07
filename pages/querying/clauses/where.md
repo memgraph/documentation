@@ -175,7 +175,7 @@ ORDER BY p.name;
 
 The [`exists()` function](/querying/functions#pattern-functions) is also accepted in a `WITH`/`RETURN`
 projection, an `ORDER BY`, a `CASE` and an aggregation argument — see [Subquery
-expressions](/querying/subquery-expressions#5-where-you-can-use-a-subquery-expression).
+expressions](/querying/subquery-expressions#4-where-you-can-use-a-subquery-expression).
 
 Output:
 
