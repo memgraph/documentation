@@ -129,6 +129,10 @@ guide.
   or set `--metrics-format=JSON` explicitly. The deprecated JSON endpoint
   remains available for several releases.
   [#4678](https://github.com/memgraph/memgraph/pull/4678)
+- The `cross_database` module (and the deprecated `migrate.*` aliases) now
+  requires Memgraph Enterprise. Community deployments that called these
+  procedures need an Enterprise license after upgrading.
+  [#4726](https://github.com/memgraph/memgraph/pull/4726)
 
 {<h4 className="custom-header">🐞 Bug fixes</h4>}
 
@@ -148,11 +152,12 @@ guide.
   `text_search.aggregate` / `text_search.aggregate_edges` return an error unless
   every indexed property is readable.
   [#4316](https://github.com/memgraph/memgraph/pull/4316)
-- Fixed unbounded memory growth from the query AST cache when many
-  structurally unique queries were run (for example streams of inlined
-  embeddings). The cache is now a bounded LRU controlled by
-  `--query-ast-cache-max-size` (default `1000`; `0` disables it).
+- Running many one-off queries that differ only in large inlined values (for
+  example embeddings) no longer lets the query cache grow without bound and
+  exhaust memory. The cache is capped by `--query-ast-cache-max-size` (default
+  `1000`; `0` disables it), and each entry also uses less memory.
   [#4334](https://github.com/memgraph/memgraph/pull/4334)
+  [#4445](https://github.com/memgraph/memgraph/pull/4445)
 - Fixed parallel index scans (`USING PARALLEL EXECUTION`) so a filter that
   evaluates to `null` returns no rows instead of treating the filter as absent
   and returning every matching edge or node.
@@ -196,6 +201,12 @@ guide.
 - Fixed a crash when multiple sessions printed query plans at the same time
   (for example concurrent `EXPLAIN` / `PROFILE`, or query-plan logging).
   [#4489](https://github.com/memgraph/memgraph/pull/4489)
+- Pattern comprehensions now see writes made earlier in the same query part.
+  Reading a list like `[(p)-[:ACTED_IN]->(m) | m]` after a `SET` / `CREATE` no
+  longer returns empty or wrong results. Expanding from a node that a preceding
+  clause deleted now raises an error instead of counting relationships that no
+  longer exist.
+  [#4499](https://github.com/memgraph/memgraph/pull/4499)
 - Fixed TTL sometimes never running after it was configured or enabled, so
   expired data is cleaned up as scheduled.
   [#4513](https://github.com/memgraph/memgraph/pull/4513)
@@ -330,6 +341,19 @@ guide.
   crashes the server when the node already has a typed-list constraint. The
   value is checked like any other list.
   [#4653](https://github.com/memgraph/memgraph/pull/4653)
+- List comprehensions whose `WHERE` predicate is `NULL` for an element now
+  omit that element and keep the rest of the list, instead of returning
+  `NULL` for the whole result. A `WHERE` predicate that is neither a boolean
+  nor `NULL` is rejected with an error.
+  [#4665](https://github.com/memgraph/memgraph/pull/4665)
+- `LOAD PARQUET` and `LOAD JSONL` accept URLs of any length, including long
+  signed URLs. A download in progress can be stopped with
+  `TERMINATE TRANSACTIONS`, and failures that cannot succeed on retry are
+  reported as client errors rather than transient ones.
+  [#4672](https://github.com/memgraph/memgraph/pull/4672)
+- Lists that hold large integers are compared and sorted correctly. Values that
+  differed only in the high bits no longer compared equal.
+  [#4712](https://github.com/memgraph/memgraph/pull/4712)
 
 {<h4 className="custom-header">🛠️ Improvements</h4>}
 
@@ -350,9 +374,6 @@ guide.
   example `--target memgraph memgraph__unit`), so you can build multiple
   targets with a single configure step instead of one run per target.
   [#4404](https://github.com/memgraph/memgraph/pull/4404)
-- Reduced memory used by the query abstract syntax tree and plan caches by
-  storing each LRU cache key once instead of twice per entry.
-  [#4445](https://github.com/memgraph/memgraph/pull/4445)
 - Queries that use query-module functions or `CALL` procedures are now
   plan-cached instead of being re-parsed and re-planned on every run. Module
   reloads stay safe; only module-dependent queries are invalidated, and the
@@ -426,17 +447,9 @@ guide.
 - Indexed `STARTS WITH` filters no longer re-check the prefix after the index
   scan, so those queries do less work per row. Results are unchanged.
   [#4643](https://github.com/memgraph/memgraph/pull/4643)
-- Commits on a MAIN instance with replicas are faster: the MAIN instance now
-  encodes a transaction for every replica in parallel with writing its own WAL,
-  instead of doing the WAL write and each replica in turn. Commit latency no
-  longer grows linearly with the number of registered replicas. Durability is
-  still what gates replication — a replica only receives the transaction end
-  after the WAL write succeeded — and per-replica ordering, WAL order, and the
-  reported SYNC / STRICT_SYNC failures are unchanged. Each replica also gets a
-  separate background worker for state checks and recovery, so a long recovery
-  no longer delays replication of new transactions. See [parallel WAL writes and
-  delta
-  shipping](/clustering/replication/how-replication-works#parallel-wal-writes-and-delta-shipping).
+- Commits on MAIN with replicas are faster: encoding work for replicas runs in
+  parallel with writing the local WAL, so commit time no longer grows as
+  steeply with the number of registered replicas.
   [#4645](https://github.com/memgraph/memgraph/pull/4645)
 - Indexed `CONTAINS`, `ENDS WITH`, and `REGEX` filters are faster when many
   nodes share the same property value: after one value fails the filter, the
@@ -446,6 +459,10 @@ guide.
   without a grouping key, because they do less work per input row. Results are
   unchanged.
   [#4655](https://github.com/memgraph/memgraph/pull/4655)
+- `path.expand_config`, `path.expand`, `path.subgraph_nodes`, and
+  `path.subgraph_all` are substantially faster, especially with selective
+  filters or a single relationship direction.
+  [#4727](https://github.com/memgraph/memgraph/pull/4727)
 - Cluster management queries forwarded from a follower coordinator to the leader
   now have [explicit RPC
   timeouts](/clustering/high-availability/how-high-availability-works#rpc-timeouts),
@@ -487,6 +504,10 @@ guide.
   compares two strings for equality after keeping only ASCII letters and digits
   (lowercased) and dropping everything else; `NULL` arguments return `false`.
   [#4435](https://github.com/memgraph/memgraph/pull/4435)
+- C++ query-module authors can return a value whose type is only known at
+  runtime with a single `Result::SetValue(value)` call, instead of switching
+  on the value's type to pick a typed overload.
+  [#4436](https://github.com/memgraph/memgraph/pull/4436)
 - Added `convert.from_json_map`, `convert.from_json_list`, `convert.to_map`, and
   `convert.to_json` for parsing and serializing JSON, with an optional `path`
   selector on the from_* helpers and structured output for graph and temporal
@@ -577,6 +598,17 @@ guide.
   example `RETURN COUNT { MATCH (p)-[:KNOWS]->(f) }`). Use it instead of
   building a list with a pattern comprehension and calling `size()`.
   [#4598](https://github.com/memgraph/memgraph/pull/4598)
+- If a write cannot reach every SYNC replica but still commits on MAIN (and
+  reachable replicas), the query no longer fails with an exception. A WARNING
+  notification is returned instead, so the client result matches what was
+  actually committed. Writes that are rolled back everywhere (for example
+  STRICT_SYNC) still raise an error as before.
+  [#4601](https://github.com/memgraph/memgraph/pull/4601)
+- Added `COLLECT { ... }`, which returns a list built from a subquery body's
+  single return column, evaluated once per outer row (for example
+  `RETURN COLLECT { MATCH (p)-[:KNOWS]->(f) RETURN f.name }`). An empty match
+  yields `[]` rather than `null`.
+  [#4632](https://github.com/memgraph/memgraph/pull/4632)
 - Added
   [`--storage-rocksdb-keep-log-file-num`](/database-management/configuration#storage)
   (default `1000`), which caps how many RocksDB info log files are kept per
