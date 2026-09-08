@@ -204,10 +204,11 @@ synthetic `gc` row may appear at once, distinguished by `trigger`.
 </Callout>
 
 <Callout type="warning">
-Synthetic rows cannot be terminated. Passing `"snapshot"` or `"gc"` to
-`TERMINATE TRANSACTIONS` has no effect — background snapshot creation and
-garbage collection run outside the normal transaction lifecycle and cannot be
-interrupted via Cypher.
+Synthetic rows cannot be terminated. Background snapshot creation and garbage
+collection run outside the normal transaction lifecycle and cannot be
+interrupted via Cypher. Passing `"snapshot"` or `"gc"` to `TERMINATE
+TRANSACTIONS` raises an error because they are not valid transaction ids, and
+`TERMINATE TRANSACTIONS "*"` skips them.
 </Callout>
 
 Because snapshot and garbage-collection rows always have `status` `"running"`,
@@ -284,6 +285,77 @@ TRANSACTIONS;` query.
 The `TERMINATE TRANSACTIONS` query signalizes to the thread executing the
 transaction that it should stop the execution. No violent interruption will
 happen, and the whole system will stay in a consistent state. 
+
+The result has two columns, `transaction_id` and `killed`. A transaction
+reports `killed: true` only if it was actually found, the caller was allowed to
+terminate it, and it was still running. Ids that do not match a running
+transaction, and matches the caller is not authorized to terminate, both report
+`killed: false` — an unauthorized match is indistinguishable from a missing id,
+so the query never reveals that somebody else's transaction exists.
+
+<Callout type="warning">
+**Breaking change in Memgraph 3.13**: transaction ids must now parse as a whole
+number. Previously an id with trailing characters (for example
+`TERMINATE TRANSACTIONS "9223372036854794885abc"`) silently terminated the
+transaction matching the numeric prefix, and a completely unparseable id was
+reported back as a termination attempt on `18446744073709551615`. Both cases
+now raise an error instead.
+
+In the same release, naming a transaction you are not authorized to terminate
+reports `killed: false` instead of `true`. Previously such a query claimed a
+kill that never happened.
+</Callout>
+
+#### Terminate all transactions
+
+Instead of copying ids out of `SHOW TRANSACTIONS` one at a time, you can
+terminate everything at once with the `"*"` wildcard:
+
+```cypher
+TERMINATE TRANSACTIONS "*";
+```
+
+This terminates every transaction the caller is authorized to terminate,
+following the same rules as the id list form:
+
+- **Scope**: all transactions visible through `SHOW TRANSACTIONS`, across all
+  databases — not just the caller's current database.
+- **Authorization**: a transaction is terminated if the caller owns it, or holds
+  the **TRANSACTION_MANAGEMENT** privilege on the database that transaction is
+  running on. A user without the privilege terminates only its own
+  transactions; the query does not fail, it simply returns fewer rows.
+  Transactions the caller may not terminate are absent from the output rather
+  than reported as `killed: false`, so no transaction id is leaked.
+- **The caller's own transaction is skipped**, so the session issuing the sweep
+  survives it and can read back the result.
+- **Output**: the usual `transaction_id` and `killed` columns, one row per
+  terminated transaction ordered by ascending transaction id (oldest first),
+  and zero rows if nothing matched.
+- Transactions that are already committing or aborting are skipped, the same as
+  with the id list form.
+
+The wildcard must be the only argument. Mixing it with ids, such as
+`TERMINATE TRANSACTIONS "*", "9223372036854794885"`, raises an error.
+
+A parameterized id is treated exactly like a literal one, so running
+`TERMINATE TRANSACTIONS $id` with `$id = "*"` also terminates everything.
+
+<Callout type="info">
+System transactions (for example an in-flight `CREATE DATABASE` or `GRANT`) are
+reported as terminated but run to completion — they are not abortable. This
+applies to the id list form as well.
+</Callout>
+
+```copy=false
+memgraph> TERMINATE TRANSACTIONS "*";
++-----------------------+-----------------------+
+| transaction_id        | killed                |
++-----------------------+-----------------------+
+| "9223372036854794885" | true                  |
+| "9223372036854794891" | true                  |
++-----------------------+-----------------------+
+2 rows in set (round trip in 0.001 sec)
+```
 
 
 ### Terminate custom procedures

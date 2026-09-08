@@ -257,6 +257,66 @@ kubectl patch pvc PVC_NAME -p '{"metadata":{"finalizers": []}}' --type=merge
 
 </Callout>
 
+### Extra volumes
+
+Besides the PVCs the chart creates for database files and logs, you can attach
+your own volumes to Memgraph pods at two levels:
+
+- **Per role** — `storage.data.extraVolumes` / `storage.data.extraVolumeMounts`
+  apply to every data instance, and `storage.coordinators.extraVolumes` /
+  `storage.coordinators.extraVolumeMounts` apply to every coordinator.
+- **Per instance** — `extraVolumes` / `extraVolumeMounts` on an individual entry
+  in `data[]` or `coordinators[]` apply only to that one instance.
+
+The two levels are additive: a pod gets the volumes defined for its role plus
+the ones defined on its own instance entry. Volume names must be unique across
+both levels, otherwise Kubernetes rejects the pod spec because of duplicate
+volume names. Both levels are rendered through `tpl`, so Helm templating such as
+`{{ .Release.Name }}` works inside the volume definitions.
+
+A typical use case for per-instance volumes is mounting a dataset that only one
+instance needs, for example a PVC holding CSV files to import. First create the
+claim:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-csv-import
+  namespace: memgraph
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+Then mount it on a single data instance:
+
+```yaml
+data:
+  - id: "0"
+    extraVolumes:
+      - name: csv-import
+        persistentVolumeClaim:
+          claimName: pvc-csv-import
+    extraVolumeMounts:
+      - name: csv-import
+        mountPath: /import
+        readOnly: true
+  - id: "1"
+```
+
+<Callout type="info">
+With the `ReadWriteOnce` access mode, only one pod can mount the claim at a
+time, so attach it to a single instance. If several instances need the same
+data, use a claim with the `ReadWriteMany` access mode, or define the volume at
+the role level instead.
+</Callout>
+
 ### Network configuration
 
 All Memgraph HA components communicate internally using ClusterIP network for
@@ -287,7 +347,7 @@ from outside the cluster. Our HA supports out of the box following K8s resources
 - **NodePort** - exposes ports on each node (requires public node IPs).
 - **LoadBalancer** - one LoadBalancer per instance (highest cost).
 - **CommonLoadBalancer (coordinators only)** - single LB for all coordinators.
-- **Gateway API** - uses Kubernetes Gateway API resources (Gateway + TCPRoute). Configured under `externalAccessConfig.gateway`.
+- **Gateway API** - uses Kubernetes Gateway API resources (Gateway + TCPRoute), with one listener per data instance and a single shared listener load balancing across all coordinators. Configured under `externalAccessConfig.gateway`.
 
 For coordinators, there is an additional option of using `CommonLoadBalancer`.
 In this scenario, there is one load balancer sitting in front of coordinators.
@@ -363,7 +423,7 @@ for example:
 - `CommonLoadBalancer` + `LoadBalancer`
 - `LoadBalancer` + `LoadBalancer`
 - `IngressNginx` + `IngressNginx` (everything behind the single ingress-nginx load balancer)
-- Gateway API for everything (leave both `serviceType` fields empty and enable the gateway)
+- Gateway API for everything (leave both `serviceType` fields empty and enable the gateway) — data instances get a port each, all coordinators share the Bolt port
 - `NodePort` for either tier, combined with any of the above
 
 The only invalid combination is enabling the Gateway API
@@ -479,6 +539,20 @@ kubectl label nodes <node-name> role=data-node
 A full AKS example is available in the [chart
 repository]((https://github.com/memgraph/helm-charts/tree/main/charts/memgraph-high-availability/aks)). 
 </Callout>
+
+All strategies above spread pods across a topology domain defined by
+`affinity.topologyKey`. The default, `kubernetes.io/hostname`, treats every
+node as its own domain. Set it to a different node label to spread pods across
+a wider domain, for example across availability zones:
+
+```yaml
+affinity:
+  topologyKey: topology.kubernetes.io/zone
+  unique: true
+```
+
+The same topology key is applied to both coordinator and data pod rules, so the
+label must be present on every node that should take part in scheduling.
 
 ### Sysctl options
 
@@ -835,7 +909,19 @@ for the full set of commands and usage patterns.
 
 ### Use Memgraph HA chart with Gateway API
 
-The Memgraph HA Helm chart has native support for the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/). When enabled, the chart automatically creates TCPRoute resources for each data and coordinator instance. You can either let the chart create its own Gateway or attach routes to a pre-existing one.
+The Memgraph HA Helm chart has native support for the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/). When enabled, the chart automatically creates a TCPRoute for each data instance and a single TCPRoute shared by all coordinators. You can either let the chart create its own Gateway or attach routes to a pre-existing one.
+
+<Callout type="warning">
+**Breaking change in HA chart versions after 1.3.3**: coordinators are no
+longer exposed on one Gateway listener each. They now share a single listener
+and a single TCPRoute on `ports.boltPort`, so
+`externalAccessConfig.gateway.coordinatorPortBase` no longer exists and chart
+rendering fails if you still set it. Remove the value from your `values.yaml`,
+point clients at `<gateway-host>:<boltPort>` instead of the old per-coordinator
+ports, and if you use an existing Gateway, replace the `coordinator-{id}-bolt`
+listeners with a single `coordinators-bolt` listener on `ports.boltPort`. Change
+`ports.boltPort` if you need the coordinators on a different port.
+</Callout>
 
 <Callout type="info">
 The Gateway only exposes tiers whose `serviceType` is **empty**: a tier with
@@ -859,7 +945,8 @@ Before enabling Gateway API in the chart, you need:
    cover both cases.
 
 2. **A Gateway API controller** installed in your cluster. Examples include
-   [Envoy Gateway](https://gateway.envoyproxy.io/), [Istio](https://istio.io/),
+   [Envoy Gateway](https://gateway.envoyproxy.io/), [Istio](https://istio.io/)
+   (see also: [Use Istio as the Gateway API controller](#use-istio-as-the-gateway-api-controller)),
    [Cilium](https://cilium.io/), [Traefik](https://traefik.io/), and
    [Kong](https://konghq.com/). Step-by-step guides are available for two of
    them: [Envoy Gateway](#deploy-with-envoy-gateway) and
@@ -871,6 +958,7 @@ Before enabling Gateway API in the chart, you need:
    **not** create a GatewayClass; you must create one yourself or use one
    provided by your controller installation (the Envoy Gateway chart does not
    create one, the Traefik chart does).
+
 
 <Callout type="warning">
 The chart exposes Bolt through `TCPRoute`, which is part of the Gateway API
@@ -895,11 +983,24 @@ externalAccessConfig:
     gatewayClassName: "eg"
 ```
 
-The chart will create:
-- A **Gateway** (`gateway.networking.k8s.io/v1`) with TCP listeners auto-generated for each data and coordinator instance whose tier has an empty `serviceType`.
-- A **TCPRoute** (`gateway.networking.k8s.io/v1alpha2`) per such instance, routing traffic from the Gateway listener to the instance's Bolt port.
+The chart will create, for every tier whose `serviceType` is empty:
+- A **Gateway** (`gateway.networking.k8s.io/v1`) with one TCP listener per data instance, plus a single shared listener for all coordinators.
+- A **TCPRoute** (`gateway.networking.k8s.io/v1alpha2`) per data instance, plus one TCPRoute for the whole coordinator tier that lists every coordinator Service as a backend.
 
-Data instance ports are assigned as `dataPortBase + data instance id` (default: 9000, 9001, ...) and coordinator ports as `coordinatorPortBase + coordinator id` (default: 10001, 10002, 10003). The coordinator base port is kept well above the data base port so the two ranges never overlap. You can customize the base ports:
+Each data instance gets its own port, assigned as `dataPortBase + data instance
+id` (default: 9000, 9001, ...), because clients must be able to reach a
+specific data instance. Coordinators instead share **one** listener on
+`ports.boltPort` (default 7687): the single coordinator TCPRoute has every
+coordinator Service as an equally weighted backend, so the Gateway distributes
+new connections round-robin across them. Clients therefore need only one
+coordinator address, connections keep working when the coordinator they landed
+on goes away, and scaling the coordinator tier does not add a listener or a
+port. When an `external-dns` hostname is set on the Gateway, the
+`cluster-setup` Job registers that shared `<hostname>:<boltPort>` as the routing
+`bolt_server` of every coordinator, the same way it does for a coordinator
+`CommonLoadBalancer` (see [Update bolt server](#update-bolt-server)).
+
+You can customize the data instance base port:
 
 ```yaml
 externalAccessConfig:
@@ -907,8 +1008,12 @@ externalAccessConfig:
     enabled: true
     gatewayClassName: "eg"
     dataPortBase: 9000
-    coordinatorPortBase: 10000
 ```
+
+Keep the resulting data instance ports away from `ports.boltPort`: when both
+tiers are exposed through the Gateway and `dataPortBase + id` of some data
+instance equals `ports.boltPort`, that listener would collide with the shared
+coordinator listener and chart rendering fails.
 
 You can also set annotations and labels on the Gateway resource:
 
@@ -969,16 +1074,17 @@ helm install memgraph-ha memgraph/memgraph-high-availability \
 <Callout type="warning">
 When using an existing Gateway, ensure it has listeners whose **names** match the
 TCPRoute `sectionName` references. The chart expects listener names in the format
-`data-{id}-bolt` for data instances and `coordinator-{id}-bolt` for coordinators.
-The listener ports are your choice in this mode, but keeping them aligned with the
-chart defaults avoids surprises. For example, the default HA setup (2 data
-instances, 3 coordinators) needs these listeners:
+`data-{id}-bolt` for data instances and a single listener named `coordinators-bolt`
+for the entire coordinator tier. The listener ports are your choice in this mode, 
+but keeping them aligned with the chart defaults avoids surprises. For example,
+the default HA setup (2 data instances, 3 coordinators) needs these listeners:
 
 - `data-0-bolt` on port 9000
 - `data-1-bolt` on port 9001
-- `coordinator-1-bolt` on port 10001
-- `coordinator-2-bolt` on port 10002
-- `coordinator-3-bolt` on port 10003
+- `coordinators-bolt` on port 7687 (`ports.boltPort`)
+
+Adding coordinators needs no new listener, while every new data instance needs
+one on `dataPortBase + id`.
 
 A standalone Gateway manifest with these pre-configured listeners is available in the [Helm charts repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/gateway.yaml).
 </Callout>
@@ -1028,7 +1134,7 @@ kubectl apply -f gatewayclass.yaml
 
 Assuming the `memgraph-secrets` Secret with the license and organization name
 already exists (see [Install Memgraph HA](#install-memgraph-ha)):
-
+ 
 ```bash
 helm install memgraph-ha memgraph/memgraph-high-availability \
   --set externalAccessConfig.gateway.enabled=true \
@@ -1179,6 +1285,98 @@ the `traefik` Service in the `traefik` namespace.
 
 </Steps>
 
+#### Use Istio as the Gateway API controller
+
+[Istio](https://istio.io/) implements the Gateway API and works with the HA
+chart out of the box — only Istio's `base` and `istiod` Helm charts are needed,
+because istiod deploys a gateway for every Gateway resource automatically (the
+`istio/gateway` chart is not used), and the installation creates the `istio`
+GatewayClass for you.
+
+Since the chart exposes Bolt through TCPRoute, which is an **alpha** Gateway
+API resource, two extra steps are required compared to a plain Istio
+installation: the Gateway API CRDs must come from the **experimental** channel,
+and istiod must run with `PILOT_ENABLE_ALPHA_GATEWAY_API=true`.
+
+Install the experimental Gateway API CRDs first — istiod detects the alpha CRDs
+at startup, so if it is already running, restart it afterwards with `kubectl
+rollout restart deploy/istiod -n istio-system`:
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
+```
+
+Then install Istio with the alpha Gateway API flag enabled:
+
+```bash
+helm repo add istio https://istio-release.storage.googleapis.com/charts
+helm repo update
+helm install istio-base istio/base -n istio-system --create-namespace
+helm install istiod istio/istiod -n istio-system --wait \
+  --set pilot.env.PILOT_ENABLE_ALPHA_GATEWAY_API=true
+```
+
+<Callout type="warning">
+Without `PILOT_ENABLE_ALPHA_GATEWAY_API=true`, istiod rejects the chart's TCP
+listeners (`protocol "TCP" is supported, but only when
+PILOT_ENABLE_ALPHA_GATEWAY_API=true is configured`) and the failure is easy to
+misread: the Gateway still shows `Programmed=True` and its LoadBalancer Service
+still lists all the ports, but the TCPRoutes get **no status at all** and every
+connection times out. If you hit this, set the flag with `helm upgrade istiod
+istio/istiod -n istio-system --reuse-values --set
+pilot.env.PILOT_ENABLE_ALPHA_GATEWAY_API=true --wait` and check that the
+TCPRoutes report `Accepted`.
+</Callout>
+
+Finally, install the HA chart with the `istio` GatewayClass:
+
+```bash
+helm install memgraph-ha memgraph/memgraph-high-availability \
+  --set externalAccessConfig.gateway.enabled=true \
+  --set externalAccessConfig.gateway.gatewayClassName=istio
+```
+
+Istio provisions a Deployment and a LoadBalancer Service named
+`<gateway-name>-istio` carrying every listener port: clients reach all
+coordinators through the shared listener at `<external-ip>:<boltPort>` (default
+7687) and each data instance at `<external-ip>:<dataPortBase + id>` (default
+9000, 9001, ...). Unlike some controllers (for example Traefik, which requires
+every listener port to be declared as an entryPoint), Istio programs listener
+ports automatically, so scaling the data tier needs no controller
+configuration.
+
+Drivers should connect with `bolt://` directly to the port they want, or, when
+using `neo4j://` routing mode, set an `external-dns` hostname on the Gateway so
+the coordinators register the external `<hostname>:<boltPort>` as their routing
+`bolt_server` (see [Update bolt server](#update-bolt-server)):
+
+```yaml
+externalAccessConfig:
+  gateway:
+    enabled: true
+    gatewayClassName: "istio"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: "memgraph.example.com"
+```
+
+Istio copies the LoadBalancer address into the Gateway's `.status.addresses`,
+which is where `external-dns` reads it from, so no extra Istio configuration is
+needed.
+
+<Callout type="info">
+Using Istio as the Gateway API controller does **not** require adding the
+Memgraph pods to the Istio service mesh. If you do sidecar-inject them
+(namespace label `istio-injection=enabled`), use native sidecars (Kubernetes >=
+1.28 and `--set pilot.env.ENABLE_NATIVE_SIDECARS=true` on istiod) — a classic
+`istio-proxy` sidecar keeps the `cluster-setup` Job pod running forever, which
+hangs the chart's post-install hook, and native sidecars also start the proxy
+before Memgraph so coordinators don't fail their initial connections to each
+other. On older clusters, exclude the Job from the mesh instead with `--set
+clusterSetup.labels."sidecar\.istio\.io/inject"=false`.
+</Callout>
+
+A ready-made istiod values file with these settings is available in the [Helm
+charts repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/istio-values.yaml).
 
 ### Use Memgraph HA chart with IngressNginx
 
@@ -1845,14 +2043,14 @@ and their default values.
 | `externalAccessConfig.gateway.existingGatewayNamespace`    | Namespace of the existing Gateway. Defaults to release namespace.                                            | `""`                           |
 | `externalAccessConfig.gateway.annotations`                 | Annotations for the Gateway resource.                                                                        | `{}`                           |
 | `externalAccessConfig.gateway.labels`                      | Labels for the Gateway resource.                                                                             | `{}`                           |
-| `externalAccessConfig.gateway.dataPortBase`                | Base port for data instance Gateway listeners (`dataPortBase + data instance id`).                           | `9000`                         |
-| `externalAccessConfig.gateway.coordinatorPortBase`         | Base port for coordinator Gateway listeners (`coordinatorPortBase + coordinator id`). Kept well above `dataPortBase` so the data and coordinator port ranges never overlap. | `10000`                        |
+| `externalAccessConfig.gateway.dataPortBase`                | Base port for data instance Gateway listeners (`dataPortBase + data instance id`). Must not resolve to `ports.boltPort`, which the shared coordinators listener uses. | `9000`                         |
 | `headlessService.enabled`                                  | Specifies whether headless services will be used inside K8s network on all instances.                        | `false`                        |
-| `ports.boltPort`                                           | Bolt port used on coordinator and data instances.                                                            | `7687`                         |
+| `ports.boltPort`                                           | Bolt port used on coordinator and data instances. Also the port of the shared coordinators Gateway listener. | `7687`                         |
 | `ports.managementPort`                                     | Management port used on coordinator and data instances.                                                      | `10000`                        |
 | `ports.replicationPort`                                    | Replication port used on data instances.                                                                     | `20000`                        |
 | `ports.coordinatorPort`                                    | Coordinator port used on coordinators.                                                                       | `12000`                        |
 | `ports.metricsPort`                                        | Metrics port for coordinators and data instances. Opened only if `prometheus.enabled` is set to `true`.      | `9091`                         |
+| `affinity.topologyKey`                                     | Topology domain used by all pod affinity and anti-affinity rules (for example a node or an availability zone) | `kubernetes.io/hostname`       |
 | `affinity.unique`                                          | Schedule pods on different nodes in the cluster                                                              | `false`                        |
 | `affinity.parity`                                          | Schedule pods on the same node with maximum one coordinator and one data node                                | `false`                        |
 | `affinity.nodeSelection`                                   | Schedule pods on nodes with specific labels                                                                  | `false`                        |
@@ -2008,6 +2206,8 @@ following parameters:
 | `id`                                        | ID of the instance                                                                                  | `0` for data, `1` for coordinators      |
 | `internalAccessAnnotations`                 | Per-instance annotations for the internal ClusterIP Service.                                        | `{}`                                    |
 | `externalAccessAnnotations`                 | Per-instance annotations for the external access Service, merged with global annotations.           | `{}`                                    |
+| `extraVolumes`                              | Additional volumes available only to this instance's pod, added on top of `storage.<role>.extraVolumes`. Rendered through `tpl`, so Helm templating is supported.| `[]`                                    |
+| `extraVolumeMounts`                         | Additional volume mounts for this instance's Memgraph container. Each `name` must match an entry in this instance's `extraVolumes` or in `storage.<role>.extraVolumes`.| `[]`                                    |
 | `tls.bolt.enabled`                          | Enable Bolt TLS termination on this instance. The chart auto-appends `--bolt-cert-file` / `--bolt-key-file` and mounts the certificate Secret at `/etc/memgraph/ssl`. | `false`                  |
 | `tls.bolt.secretName`                       | Name of a pre-existing Kubernetes Secret holding the Bolt TLS certificate and private key. Required when `tls.bolt.enabled=true`. | `bolt-tls-secret`     |
 | `tls.bolt.certSecretPath`                   | Key inside the Secret holding the TLS certificate.                                                  | `tls.crt`                               |
@@ -2182,13 +2382,17 @@ What they will observe depends on the query type and the replication mode:
   ```
 - **Write queries depend on the replication mode:**
   - **ASYNC** — writes keep working without errors.
-  - **SYNC** — writes keep working, but a **ReplicationException** can happen
-    because a commit couldn't be replicated to the instance that is being
-    restarted (e.g. the old main while it is coming back up). The transaction
-    is still committed on the MAIN, so your application should catch the
-    exception and continue. You can parse the error and check for the exact
-    message, for example: `Failed to replicate to SYNC replica 'instance_1':
-    replica is not reachable or not in sync with the main`.
+  - **SYNC** — writes keep working. A commit that couldn't be replicated to the
+    instance being restarted (e.g. the old main while it is coming back up) is
+    still committed on the MAIN, and the failure is reported as a
+    `SyncReplicationFailure` warning
+    [notification](/database-management/query-metadata#notifications) in the
+    query summary rather than as an error. Your application doesn't need to
+    handle anything to keep working; read the notification if you want to log
+    which replica fell behind, for example: `Failed to replicate to SYNC replica
+    'instance_1': replica is not reachable or not in sync with the main`. Before
+    Memgraph 3.13, the same situation raised a `ReplicationException` that
+    applications had to catch.
   - **STRICT_SYNC** — writes won't work while a data instance is being
     restarted. Because of the two-phase commit protocol, a transaction cannot
     be committed unless every STRICT_SYNC replica confirms it, so writes are
