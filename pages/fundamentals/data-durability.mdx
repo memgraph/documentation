@@ -103,6 +103,11 @@ Per-transaction WAL checksums were introduced in Memgraph v3.12.
 WAL files written by older versions do not contain checksums and are recovered
 without integrity verification. Checksum verification applies only to WAL files
 written by Memgraph v3.12 or newer.
+
+Before Memgraph v3.13, a checksum mismatch anywhere in the WAL chain recovered
+the readable prefix of that file and then continued with the files after it,
+which could bring the database up with an incomplete dataset without reporting
+it. Since v3.13, damage in a completed WAL file fails recovery instead.
 </Callout>
 
 To guard against silent on-disk corruption, Memgraph protects WAL files with
@@ -113,16 +118,37 @@ To guard against silent on-disk corruption, Memgraph protects WAL files with
 - **Each transaction** is protected by a 4-byte checksum covering the
   transaction's bytes (transaction start, deltas and transaction end).
 
-Checksums are verified automatically during recovery. If a transaction's stored
-checksum does not match the recomputed value, the WAL is considered corrupted at
-that point and recovery stops, so corrupted data is never applied to the
-database. A mismatch in the WAL header causes recovery from that file to fail.
+Checksums are verified automatically during recovery, so corrupted data is never
+applied to the database. A mismatch in the WAL header causes recovery from that
+file to fail. What happens on a transaction checksum mismatch depends on whether
+the file was completed:
+
+- A **completed (finalized) WAL file** — one Memgraph finished writing and
+  rotated away from — was flushed to disk before it was closed, so every
+  transaction in it is durable and was already acknowledged. A mismatch there
+  means the bytes on disk rotted, and recovery fails rather than continuing with
+  part of the file. Recovering only a prefix would be unsound, because the WAL
+  files that follow were written on top of the transactions that went missing.
+- A **WAL file that was still being written** when the process stopped may
+  legitimately have a torn tail. Recovery applies its transactions up to the
+  last whole one and stops there, which is how an interrupted write degrades
+  gracefully.
+
+Files that the newest snapshot already covers are skipped without being read, so
+corruption in those is harmless. If a WAL file written after the newest snapshot
+is damaged, the database fails to recover; use
+[`--storage-allow-recovery-failure`](/database-management/configuration) together
+with `RECOVER SNAPSHOT` (see [recovery failure
+handling](#recovery-failure-handling)), or restore from a backup.
 
 The same checksums protect WAL files that are buffered on disk on a replica
 before being applied, so corruption introduced between the main and the replica
-is detected before the data is committed. Deltas streamed during the commit
-(`PrepareCommitRpc`) are not checksummed because the TCP transport already
-provides integrity guarantees.
+is detected before the data is committed. When a replica hits damage in a
+finalized file it reports the failure and stops applying the rest of the batch
+instead of skipping ahead; the in-flight transaction is aborted, main does not
+advance its view of the replica, and the transfer is retried later. Deltas
+streamed during the commit (`PrepareCommitRpc`) are not checksummed because the
+TCP transport already provides integrity guarantees.
 
 <Callout type="info">
 Snapshots are not yet protected by checksums.
@@ -295,6 +321,24 @@ test, remove the file.
 You can also monitor real-time disk utilization during snapshot creation using
 tools like `iostat`, `iotop`, or `dstat`.
 
+### Limiting the impact of snapshots on queries
+
+A snapshot writes the whole dataset to disk, and on larger datasets that can
+slow down the queries running at the same time. Memgraph therefore writes
+snapshots out in small chunks, so a snapshot in progress doesn't take memory
+away from your workload.
+
+The chunk size is set with `--storage-snapshot-writeback-window-mib` and
+defaults to 32 MiB. Each snapshot thread uses its own chunk, so with
+`--storage-parallel-snapshot-creation=true` the total is the chunk size times
+`--storage-snapshot-thread-count`.
+
+The default suits most deployments. Tuning it trades off snapshot duration
+against the performance of queries running at the same time, but the balance
+depends on your hardware, your operating system and your workload, so treat any
+change as something to measure on your own deployment. Setting it to `0` turns
+the behavior off and lets the operating system decide.
+
 ## Recovery failure handling
 
 By default, if a database fails durability recovery on startup — because of a
@@ -401,7 +445,7 @@ RECOVER SNAPSHOT "/path/to/good.snapshot";
 On success, Memgraph clears the broken flag and the database resumes normal
 operation and background durability. The existing `RECOVER SNAPSHOT` behavior
 moves all prior/corrupt snapshots and WAL files to the `.old` directory (or
-deletes them when [`--storage-enable-backup-dir`](/database-management/configuration)
+deletes them when [`--storage-backup-dir-enabled`](/database-management/configuration)
 is off), leaving a clean single-snapshot directory. As a result, the database **recovers cleanly on the
 next restart and does not re-enter the broken state**.
 

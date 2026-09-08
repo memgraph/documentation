@@ -1,0 +1,592 @@
+---
+title: Coordinator authentication and authorization
+description: Learn how to secure Memgraph high availability coordinators with single sign-on, Raft-replicated roles and the COORDINATOR_READ and COORDINATOR_WRITE privileges.
+---
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# Coordinator authentication and authorization <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+Coordinators are the control plane of a [high availability
+cluster](/clustering/high-availability): they register and unregister data
+instances, promote and demote MAIN, hand out the routing table, and change
+cluster-wide settings. From Memgraph 3.13, that control plane can be protected
+with [single sign-on (SSO)](/database-management/authentication-and-authorization/auth-system-integrations#single-sign-on)
+against your corporate identity provider (IdP), backed by a small set of
+Raft-replicated roles.
+
+<Callout type="info">
+SSO authentication on coordinators, coordinator role management, privilege
+grants and privilege enforcement are **Memgraph Enterprise** features and
+require a valid license. Without a valid license, coordinators keep the
+pre-3.13 behavior: username/password connections are accepted as a passthrough
+with full access.
+</Callout>
+
+Before continuing, read [how high availability
+works](/clustering/high-availability/how-high-availability-works) and [querying
+the cluster in high
+availability](/clustering/high-availability/querying-the-cluster-in-high-availability).
+
+## How coordinator auth differs from data instances
+
+Coordinators do **not** store users. There is no auth key-value store on a
+coordinator, no `CREATE USER`, no passwords, and no fine-grained access control.
+The only authorization state a coordinator keeps is a list of **roles**, each
+carrying a coordinator privilege mask.
+
+| | Data instance | Coordinator |
+|---|---|---|
+| Users | Stored in the auth store | Not supported |
+| Roles | Stored in the auth store | Stored in the **Raft-replicated cluster state** |
+| Privileges | Full privilege set + fine-grained access control | Exactly two: `COORDINATOR_READ`, `COORDINATOR_WRITE` |
+| Basic auth | Username and password are validated | Passthrough — credentials are ignored (see [below](#basic-authentication-passthrough)) |
+| SSO | Supported (OIDC, SAML, Kerberos) | Supported (OIDC, SAML, Kerberos) |
+
+Because roles live in the Raft log, they survive coordinator restarts, are
+replicated to every coordinator, are reconstructed by a follower that rejoins
+after being down, and survive leader failover.
+
+<Callout type="warning">
+**Breaking change in Memgraph 3.13:** the `COORDINATOR` privilege has been
+removed. It never gated any operation. It is no longer accepted in `GRANT` /
+`DENY` / `REVOKE` statements and is no longer reported by `SHOW PRIVILEGES`. A
+stale `COORDINATOR` grant in an existing deployment is simply never reported and
+never checked — no migration is required. Coordinator access is now controlled
+by the new `COORDINATOR_READ` and `COORDINATOR_WRITE` privileges described
+below, which are granted **on the coordinators themselves**, not on data
+instances.
+</Callout>
+
+## Coordinator privileges
+
+Coordinators enforce exactly two privileges:
+
+| Privilege | Grants |
+|---|---|
+| `COORDINATOR_READ` | Reading the routing table and all read-only introspection queries. |
+| `COORDINATOR_WRITE` | Every query runnable on a coordinator. `COORDINATOR_WRITE` is a **superset** of `COORDINATOR_READ`. |
+
+These names were chosen because bare `READ` and `WRITE` already exist as
+data-instance fine-grained privileges. They are meaningful **only on
+coordinators** and are deliberately excluded from the data-instance privilege
+set, so `GRANT ALL PRIVILEGES` on a data instance does not grant them.
+
+A session's effective privilege is the **union** of the masks of all its roles.
+A role with no grant confers nothing.
+
+### Which privilege each query requires
+
+Read-only introspection requires `COORDINATOR_READ`; every mutating or
+administrative query requires `COORDINATOR_WRITE`. A `COORDINATOR_WRITE` grant
+satisfies a `COORDINATOR_READ` requirement, but not the other way round.
+
+| Query | Required privilege |
+|---|---|
+| Routing table (Bolt `ROUTE` message) | `COORDINATOR_READ` |
+| [`SHOW INSTANCE`](/clustering/high-availability/ha-commands-reference#show-instance) | `COORDINATOR_READ` |
+| [`SHOW INSTANCES`](/clustering/high-availability/ha-commands-reference#show-instances) | `COORDINATOR_READ` |
+| [`SHOW COORDINATOR SETTINGS`](/clustering/high-availability/ha-commands-reference#coordinator-runtime-settings) | `COORDINATOR_READ` |
+| [`SHOW REPLICATION LAG`](/clustering/high-availability/ha-commands-reference#show-replication-lag) | `COORDINATOR_READ` |
+| `SHOW ROLES` | `COORDINATOR_READ` |
+| `SHOW PRIVILEGES FOR ROLE <role>` | `COORDINATOR_READ` |
+| `SHOW CONFIG`, `SHOW SETTING`, system info queries | `COORDINATOR_READ` |
+| [`SHOW VERSION`](/database-management/server-stats#instance-version) | `COORDINATOR_READ` |
+| `SHOW CURRENT USER`, `SHOW CURRENT ROLE` | **None** (self-service, see [below](#self-service-identity-queries)) |
+| [`REGISTER INSTANCE`](/clustering/high-availability/ha-commands-reference#register-instance) / [`UNREGISTER INSTANCE`](/clustering/high-availability/ha-commands-reference#unregister-instance) | `COORDINATOR_WRITE` |
+| [`SET INSTANCE ... TO MAIN`](/clustering/high-availability/ha-commands-reference#set-instance--to-main) / [`DEMOTE INSTANCE`](/clustering/high-availability/ha-commands-reference#demote-instance) | `COORDINATOR_WRITE` |
+| [`ADD COORDINATOR`](/clustering/high-availability/ha-commands-reference#add-coordinator) / [`REMOVE COORDINATOR`](/clustering/high-availability/ha-commands-reference#remove-coordinator) | `COORDINATOR_WRITE` |
+| [`UPDATE CONFIG`](/clustering/high-availability/ha-commands-reference#update-config) | `COORDINATOR_WRITE` |
+| [`YIELD LEADERSHIP`](/clustering/high-availability/ha-commands-reference#yield-leadership) | `COORDINATOR_WRITE` |
+| [`SET COORDINATOR SETTING`](/clustering/high-availability/ha-commands-reference#coordinator-runtime-settings) | `COORDINATOR_WRITE` |
+| [`FORCE RESET CLUSTER STATE`](/clustering/high-availability/ha-commands-reference#force-reset-cluster-state) | `COORDINATOR_WRITE` |
+| `SET SETTING` | `COORDINATOR_WRITE` |
+| [`RELOAD BOLT_SERVER TLS` / `RELOAD INTRA_CLUSTER TLS`](/database-management/ssl-encryption#reload-ssl-certificates-at-runtime) | `COORDINATOR_WRITE` |
+| `CREATE ROLE`, `DROP ROLE`, `GRANT`, `REVOKE` | `COORDINATOR_WRITE` |
+
+Anything not recognized fails closed and requires `COORDINATOR_WRITE`.
+
+## Authentication modes
+
+A coordinator accepts exactly two kinds of Bolt connection: **basic/none** and
+an **SSO scheme listed in `--auth-module-mappings`**. Any other scheme is
+rejected with:
+
+```
+The "<scheme>" authentication scheme isn't supported on this coordinator;
+connect with basic auth or an SSO scheme listed in the auth-module-mappings flag.
+```
+
+### Basic authentication passthrough
+
+When SSO is not in effect, connecting with a username and password (or with no
+auth at all) **succeeds and the credentials are ignored**. The session gets full
+`COORDINATOR_WRITE` access. This is the pre-3.13 behavior, it requires no
+license, and it keeps existing admin tooling working unchanged.
+
+Basic/none authentication is **denied** only when **all three** of the following
+hold:
+
+1. SSO is configured — `--auth-module-mappings` is non-empty.
+2. The enterprise license is valid.
+3. The committed role set contains at least one role holding
+   `COORDINATOR_WRITE`.
+
+In that case the connection is rejected with:
+
+```
+Basic authentication is disabled on this coordinator because SSO is configured;
+connect with an SSO scheme listed in the auth-module-mappings flag.
+```
+
+<Callout type="info">
+**Anybody can log in until a `COORDINATOR_WRITE` role exists.** Condition 3 is
+what makes coordinator SSO self-bootstrapping. On a coordinator that starts with
+`--auth-module-mappings` set but an empty role set, SSO cannot yet grant a
+privileged session to anybody — so basic auth stays open, and you use it to
+create the first role and grant it `COORDINATOR_WRITE`. The moment that grant
+commits to Raft, basic auth closes on the next login attempt and SSO takes over.
+**No coordinator restart is required.**
+
+The same rule applies in reverse: if you drop or revoke the last
+`COORDINATOR_WRITE` role on a live cluster, basic auth reopens rather than
+leaving the cluster unadministrable.
+</Callout>
+
+<Callout type="warning">
+**Break-glass on license loss.** If the enterprise license is missing, expired
+or invalid, SSO rejects every login. Condition 2 above means basic auth falls
+back to the passthrough in exactly that case, so a license transition can never
+lock every Bolt session out of a coordinator. Use that session to re-install the
+license over Bolt:
+
+```cypher
+SET DATABASE SETTING 'enterprise.license' TO 'License';
+SET DATABASE SETTING 'organization.name' TO 'Organization';
+```
+
+The license check for this decision is the full, non-cached check — a license
+that expires by date takes effect immediately rather than at the next cache
+refresh.
+</Callout>
+
+### A follower without quorum cannot be logged into
+
+Both the basic-auth decision and the SSO role check need the **leader's**
+committed role set, and both are **fail-closed**: when the leader cannot be
+reached, the login is rejected rather than validated against possibly-stale
+local replicated state, which could still list a dropped role or an
+already-revoked privilege mask.
+
+So on a coordinator that has lost quorum (it is a follower, no leader is
+elected, or the leader is unreachable) and has SSO configured with a valid
+license:
+
+- **SSO logins are rejected** with:
+
+  ```
+  SSO authentication failed: the coordinator leader is unreachable, so roles
+  can't be validated. Retry once a leader is elected.
+  ```
+
+- **Basic/none logins are also rejected.** An unknown role set is not treated as
+  "no writable role", so the break-glass path does not open during a transient
+  leader outage.
+
+This is intentional and temporary: SSO is unavailable in that window anyway, and
+access returns as soon as a leader is elected. If SSO is **not** configured, the
+basic-auth passthrough never contacts the leader, so it keeps working on a
+partitioned follower.
+
+### SSO authentication
+
+For a scheme present in `--auth-module-mappings`, the coordinator runs the
+corresponding auth module and genuinely authenticates the connection. The same
+[built-in and custom auth
+modules](/database-management/authentication-and-authorization/auth-system-integrations)
+used on data instances work here, and `MEMGRAPH_SSO_*` environment variables are
+inherited by the module subprocess exactly as they are on data instances — there
+is no separate coordinator-side SSO configuration.
+
+The login is accepted only when **all** of the following hold:
+
+1. The module authenticates the identity (valid, unexpired IdP token).
+2. The module returns at least one role.
+3. **Every** role the module returns exists in the coordinator's committed role
+   set. A multi-role response succeeds only when all of its roles exist.
+4. The union of those roles' masks grants at least `COORDINATOR_READ`.
+
+<Callout type="warning">
+**A role without privileges cannot be used to log in.** If the roles all exist
+but none of them has been granted `COORDINATOR_READ` or `COORDINATOR_WRITE`, the
+connection is **rejected at login** rather than admitted as a session that would
+be denied every query — including the routing table. Grant a privilege to the
+role before mapping identities onto it.
+</Callout>
+
+Each rejection reason has its own message, so an operator rolling SSO out can
+tell a bad token apart from a misconfigured role mapping:
+
+| Situation | Error returned to the client |
+|---|---|
+| Invalid/expired token, module failure, or missing license | `SSO authentication failed: the identity provider token was rejected, the auth module failed, or the enterprise license is missing.` |
+| Module returned no roles | `SSO authentication failed: the identity provider returned no roles for this identity. Map the identity's group to a coordinator role.` |
+| A returned role does not exist on the coordinator | `SSO authentication failed: the identity provider returned a role that doesn't exist on this coordinator. Create it with CREATE ROLE, or fix the identity provider mapping.` |
+| Roles exist but carry no privilege | `SSO authentication failed: this identity's role(s) exist but carry no coordinator privilege. Grant COORDINATOR_READ or COORDINATOR_WRITE to one of them.` |
+| Leader unreachable | `SSO authentication failed: the coordinator leader is unreachable, so roles can't be validated. Retry once a leader is elected.` |
+
+The offending role name is written to the coordinator log, **not** returned to
+the client, so a rejected login cannot be used to enumerate the coordinator's
+role set.
+
+The username the module reports is recorded as the session principal and is used
+for [audit logging](/database-management/logs) and `SHOW CURRENT USER`. A module
+that omits the username still logs in — the coordinator authorizes by role — but
+its queries cannot be attributed to a person, and a warning is logged once at
+login.
+
+## Managing coordinator roles and privileges
+
+All role and privilege queries are documented in the [HA reference
+commands](/clustering/high-availability/ha-commands-reference#coordinator-role-and-privilege-management)
+guide. In short:
+
+```cypher
+CREATE ROLE ops;
+CREATE ROLE IF NOT EXISTS ops;
+DROP ROLE ops;
+SHOW ROLES;
+
+GRANT COORDINATOR_READ TO ops;
+GRANT COORDINATOR_WRITE TO ops;
+GRANT ALL PRIVILEGES TO ops;          -- grants both coordinator privileges
+REVOKE COORDINATOR_WRITE FROM ops;
+REVOKE ALL PRIVILEGES FROM ops;       -- removes both
+
+SHOW PRIVILEGES FOR ROLE ops;
+```
+
+All of these can be run on **any** coordinator: on a follower they are
+transparently forwarded to the leader. Writes are committed through the Raft
+log; `SHOW ROLES` and `SHOW PRIVILEGES FOR ROLE` are strong reads served by the
+leader.
+
+### Self-service identity queries
+
+`SHOW CURRENT USER` and `SHOW CURRENT ROLE` are exempt from the privilege check
+and from the license gate — they only reveal the session's own identity, so even
+a session whose roles were revoked mid-flight can still inspect who it is.
+
+- `SHOW CURRENT USER` returns the principal the identity provider authenticated.
+  It is purely session-local and works even when the leader is unreachable. A
+  basic-auth passthrough session authenticated no principal and returns `null`.
+- `SHOW CURRENT ROLE` returns the session's roles **filtered against the
+  leader's committed role set**, so it stops naming a role that `DROP ROLE`
+  already removed. A basic-auth passthrough session has no roles and returns
+  `null`.
+
+### Auth queries rejected on coordinators
+
+Everything outside the small surface above is rejected with:
+
+```
+Coordinator can run only coordinator queries!
+```
+
+That includes:
+
+- User management: `CREATE USER`, `SET PASSWORD`, `SHOW USERS`, `SET ROLE`,
+  `GRANT ROLE`.
+- `DENY` in **any** form.
+- `GRANT` / `REVOKE` targeting a `USER` (`GRANT COORDINATOR_READ TO USER foo`).
+- Privilege lists containing any non-coordinator privilege
+  (`GRANT MATCH TO ops`).
+- [Fine-grained access
+  control](/database-management/authentication-and-authorization/role-based-access-control#fine-grained-access-control)
+  — `GRANT ... ON NODES ...` / `ON EDGES ...` — coordinators have no graph.
+- Property permissions.
+- [Multi-tenancy](/database-management/multi-tenancy) database access:
+  `GRANT DATABASE`, `REVOKE DATABASE`, `SET MAIN DATABASE`.
+- `SHOW PRIVILEGES FOR USER <user>`.
+- `SHOW PRIVILEGES FOR ROLE <role>` with a trailing `ON MAIN`, `ON CURRENT` or
+  `ON DATABASE <db>` clause — coordinators have no databases.
+
+## Privileges are re-checked on every query
+
+An SSO session does **not** cache the privilege mask it was given at login. On
+**every** query — and on every routing-table request — the coordinator
+re-derives the session's effective mask from the **leader's** committed role set:
+if this coordinator is the ready leader it reads locally, otherwise it sends a
+`GetRolesRpc` to the leader.
+
+This has three consequences worth planning for:
+
+- **`REVOKE` and `DROP ROLE` take effect immediately**, without the client
+  reconnecting. Long-lived connections — driver routing pools, open admin shells
+  — are downgraded on their very next query. A session whose roles were all
+  dropped keeps its connection but is denied every privileged query.
+- **A leader outage denies queries on SSO sessions.** With no readable role set
+  the effective mask is empty (fail-closed), so queries fail until a leader is
+  elected. Retry once `SHOW INSTANCES` reports a leader again.
+- **Basic-auth passthrough sessions are unaffected.** They carry no roles, so
+  they keep their login-time full `COORDINATOR_WRITE` mask and never contact the
+  leader for a privilege check.
+
+Denied queries fail with:
+
+```
+You don't have the required privilege to run this query on the coordinator!
+```
+
+and a denied routing-table request fails with:
+
+```
+You don't have permission to read the routing table on the coordinator!
+```
+
+The routing-table denial is reported as a non-retryable client error, so drivers
+do not retry it as if it were a transient failure.
+
+## Bolt+routing with SSO
+
+<Callout type="warning">
+**A `neo4j://` routing connection works only if the same roles exist on both the
+coordinators and the data instances.**
+</Callout>
+
+[Bolt+routing](/clustering/high-availability/querying-the-cluster-in-high-availability)
+is entirely client-side, and the driver reuses **one set of credentials for both
+legs** of the connection. With SSO in the picture, a single `neo4j://` session
+therefore performs two independent authentications:
+
+<Steps>
+
+{<h3 className="custom-header">The driver authenticates against a coordinator</h3>}
+
+It sends the SSO scheme and IdP token to a coordinator and issues a `ROUTE`
+message. The coordinator runs the auth module, requires every returned role to
+exist **in the Raft-replicated coordinator role set**, and requires the union of
+their masks to grant at least `COORDINATOR_READ` — otherwise the routing table
+request is denied.
+
+{<h3 className="custom-header">The driver authenticates against a data instance</h3>}
+
+Using the routing table, the driver opens a connection to MAIN or a REPLICA with
+the **same scheme and the same token**. The data instance runs its own auth
+module and requires every returned role to exist **in its auth store**, with
+whatever data privileges (`MATCH`, `CREATE`, …) the query needs.
+
+</Steps>
+
+For that to work end to end:
+
+| Requirement | Why |
+|---|---|
+| The **same SSO scheme** is listed in `--auth-module-mappings` on coordinators *and* on every data instance | The driver sends one scheme to both; a scheme absent from a node's mappings is rejected there. |
+| The **same role names** the IdP returns exist on coordinators *and* on data instances | Each side validates the returned roles against its own role store, and any missing role rejects the whole login on that side. |
+| Those roles hold `COORDINATOR_READ` (or `COORDINATOR_WRITE`) **on the coordinators** | Otherwise the `ROUTE` message is denied and the driver never obtains a routing table. |
+| Those roles hold the needed **data privileges on the data instances** | The coordinator privileges are not visible to, and mean nothing on, a data instance. |
+
+The privilege *values* are necessarily different on the two sides — coordinators
+know only `COORDINATOR_READ` / `COORDINATOR_WRITE`, data instances know only the
+data privilege set — but the **role names must match**. A typical setup mirrors
+each IdP group into a role of the same name on both sides:
+
+```cypher
+-- On any coordinator
+CREATE ROLE analyst;
+GRANT COORDINATOR_READ TO analyst;
+
+CREATE ROLE dba;
+GRANT ALL PRIVILEGES TO dba;   -- COORDINATOR_READ + COORDINATOR_WRITE
+```
+
+```cypher
+-- On the MAIN data instance (replicated to REPLICAs)
+CREATE ROLE analyst;
+GRANT MATCH TO analyst;
+
+CREATE ROLE dba;
+GRANT ALL PRIVILEGES TO dba;   -- the full data-instance privilege set
+```
+
+<Callout type="info">
+A role that exists on the data instances but not on the coordinators produces a
+confusing failure mode: direct `bolt://` connections to MAIN work, but every
+`neo4j://` routing connection fails at the coordinator. Check `SHOW ROLES` on a
+coordinator and `SHOW ROLES` on MAIN and reconcile the two lists.
+</Callout>
+
+## Rolling SSO out
+
+The bootstrap order differs between coordinators and data instances, and getting
+it wrong is the most common way to lock yourself out.
+
+### On coordinators — no restart needed
+
+Coordinators can be started with `--auth-module-mappings` from the very
+beginning. Because basic auth stays open until a `COORDINATOR_WRITE` role
+exists, you can create the roles over Bolt on the running cluster.
+
+<Steps>
+
+{<h3 className="custom-header">Start the coordinators with the SSO mapping</h3>}
+
+```
+--auth-module-mappings=oidc-entra-id
+```
+
+Set the `MEMGRAPH_SSO_*` environment variables the module needs, exactly as you
+would on a data instance.
+
+{<h3 className="custom-header">Connect with basic auth</h3>}
+
+No `COORDINATOR_WRITE` role exists yet, so username/password (or no credentials
+at all) is still accepted with full access:
+
+```
+mgconsole --host <coordinator-host> --port 7687
+```
+
+{<h3 className="custom-header">Create the roles and grant privileges</h3>}
+
+```cypher
+CREATE ROLE dba;
+GRANT ALL PRIVILEGES TO dba;
+
+CREATE ROLE analyst;
+GRANT COORDINATOR_READ TO analyst;
+```
+
+The role names must match what your IdP returns — see [role
+mapping](/database-management/authentication-and-authorization/auth-system-integrations#role-mapping).
+
+{<h3 className="custom-header">SSO is now enforced</h3>}
+
+As soon as `GRANT ALL PRIVILEGES TO dba` commits to Raft, all three deny
+conditions hold and the **next** basic-auth login attempt is rejected. Existing
+basic-auth sessions keep their full mask until they disconnect. Verify with:
+
+```cypher
+SHOW ROLES;
+SHOW PRIVILEGES FOR ROLE dba;
+```
+
+</Steps>
+
+### On data instances — restart required
+
+<Callout type="info">
+This only concerns data instances where SSO is **not** set up yet. If your data
+instances already authenticate through SSO, nothing changes for them — enabling
+SSO on the coordinators does not require any modification on the data-instance
+side, beyond using the [same role names](#boltrouting-with-sso) on both sides.
+</Callout>
+
+Data instances have no equivalent escape hatch. Their SSO path validates the
+IdP's roles against the auth store, and a role that does not exist means the
+login fails. If you enable the module before the roles exist, SSO users cannot
+log in and — when the mapped scheme is `basic` (LDAP) — username/password
+authentication is delegated to the module too, so you may have no way in at all
+to create them.
+
+The safe order is therefore:
+
+<Steps>
+
+{<h3 className="custom-header">Start the data instance *without* `--auth-module-mappings`</h3>}
+
+{<h3 className="custom-header">Log in and create the roles</h3>}
+
+```cypher
+CREATE ROLE dba;
+GRANT ALL PRIVILEGES TO dba;
+
+CREATE ROLE analyst;
+GRANT MATCH TO analyst;
+```
+
+{<h3 className="custom-header">Restart the data instance with `--auth-module-mappings` set</h3>}
+
+SSO logins now find their roles and succeed.
+
+</Steps>
+
+<Callout type="warning">
+Do the coordinator side and the data-instance side with the **same role names**,
+or [Bolt+routing](#boltrouting-with-sso) connections will fail even though
+direct connections to each node work.
+</Callout>
+
+## Rolling upgrades
+
+The new role and privilege queries are carried by new coordinator-to-coordinator
+RPCs. There is no RPC version negotiation. During a rolling upgrade, if a
+new follower forwards a role or privilege query to a leader that has not been
+upgraded yet, the query **fails with an error** rather than crashing the
+coordinator:
+
+```
+Query forwarded to the leader but it failed to process the request!
+Check the logs on the leader to find out what happened.
+```
+
+Complete the upgrade of all coordinators before managing roles, or run the role
+queries directly against an upgraded leader.
+
+The Raft cluster state itself is version-safe in both directions: an older
+coordinator ignores the unknown roles key, and a newer coordinator reading an
+older log or snapshot sees an empty role set. No log store version bump is
+involved.
+
+## Timeouts
+
+Role and privilege queries — like all forwarded coordinator queries — run on the
+caller's Bolt session thread, so they carry explicit RPC timeouts to prevent a
+session blocking forever against a reachable-but-stuck leader. See [RPC
+timeouts](/clustering/high-availability/how-high-availability-works#rpc-timeouts)
+for the full table. The values relevant to authentication are:
+
+| RPC | Timeout | Used by |
+|---|---|---|
+| `GetRolesReq` | 10s | SSO login role validation, the per-query privilege re-check, `SHOW ROLES`, `SHOW CURRENT ROLE` |
+| `GetRolePrivilegesReq` | 10s | `SHOW PRIVILEGES FOR ROLE` |
+| `CreateRoleReq` / `DropRoleReq` | 10s | `CREATE ROLE`, `DROP ROLE` |
+| `GrantPrivilegeReq` / `RevokePrivilegeReq` | 10s | `GRANT`, `REVOKE` |
+
+Each of these budgets covers a Raft commit, which is itself capped at 3 seconds,
+plus headroom. Hitting the timeout surfaces as a query error; retry the
+operation.
+
+Independently of the RPC timeout, the auth module subprocess is bounded by
+[`--auth-module-timeout-ms`](/database-management/authentication-and-authorization/auth-system-integrations#configuration-flags),
+the same flag used on data instances. A module that exceeds it fails the login.
+
+## Limitations
+
+- **No users on coordinators.** Only the role set and each role's privilege mask
+  are persisted. There is no way to create a coordinator-local account.
+- **No SSO auto-provisioning of roles.** Unlike some data-instance setups, an
+  SSO identity does not implicitly create `readonly` / `readwrite` / `admin`
+  roles on a coordinator. Roles must be created explicitly with `CREATE ROLE`.
+- **Only two privileges.** The fine-grained data-instance privilege set is not
+  modeled on coordinators.
+- **Role names** must match the
+  [`--auth-user-or-role-name-regex`](/database-management/configuration) pattern,
+  the same as on data instances.
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| Basic auth suddenly rejected after a `GRANT` | Expected — a `COORDINATOR_WRITE` role now exists, so SSO is enforced. Connect with an SSO scheme. |
+| Basic auth unexpectedly accepted while SSO is configured | Either the license is invalid, or no role holds `COORDINATOR_WRITE`. Check `SHOW PRIVILEGES FOR ROLE` and the license status. |
+| Every login rejected on one coordinator | That coordinator cannot reach a leader. Check `SHOW INSTANCES` from another coordinator and wait for the election to finish. |
+| SSO login rejected with "role that doesn't exist" | `CREATE ROLE` on the coordinator, or fix the IdP group mapping. Check `SHOW ROLES`. |
+| SSO login rejected with "carry no coordinator privilege" | `GRANT COORDINATOR_READ` or `GRANT COORDINATOR_WRITE` to the role. |
+| `neo4j://` fails but `bolt://` to MAIN works | The role exists on the data instances but not on the coordinators, or it lacks `COORDINATOR_READ`. |
+| A session was working and now every query is denied | Its roles were revoked or dropped — privileges are re-checked on every query. Reconnect after fixing the grant. |
+
+<CommunityLinks/>
