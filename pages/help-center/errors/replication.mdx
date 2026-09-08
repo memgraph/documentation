@@ -19,13 +19,14 @@ import {CommunityLinks} from '/components/social-card/CommunityLinks'
 3. [Write query forbidden on the replica!](#error-2)
 4. [Query forbidden on the replica!](#error-2)
 5. [Replication clause not allowed in multicommand transactions.](#error-3)
-6. [Failed to replicate to SYNC/STRICT_SYNC replica 'replica_name': reason.](#error-4)
+6. [Failed to replicate to STRICT_SYNC replica 'replica_name': reason.](#error-4)
 
 
 ## Warning
 
 1. [Snapshots are disabled for replicas. For more details, visit: memgr.ph/replication.](#warning-1)
 2. [Multi-tenant replication is currently not supported!](#warning-2)
+3. [Failed to replicate to SYNC replica 'replica_name': reason.](#error-4)
 
 ## Troubleshooting replication errors [#error-1]
 
@@ -44,16 +45,38 @@ MAIN is the only source of truth.
 
 System queries cannot be executed inside a multicommand/explicit transaction.
 
-## Replication failure error [#error-4]
+## Replication failure [#error-4]
 
 When a transaction fails to replicate to one or more SYNC or STRICT_SYNC
-replicas, Memgraph returns an error that identifies exactly which replicas
-failed and why. The error message follows this format:
+replicas, Memgraph reports exactly which replicas failed and why. Whether that
+report is a warning or an error depends on what happened to the transaction:
+
+| Situation | How it is reported |
+|-----------|--------------------|
+| The transaction is committed on MAIN, but one or more **SYNC** replicas couldn't confirm it | A `WARNING` [notification](/database-management/query-metadata#notifications) with the code `SyncReplicationFailure`. The query **succeeds**. |
+| The transaction is rolled back on all instances because a **STRICT_SYNC** replica couldn't confirm it | A `ReplicationException`. The query **fails**. |
+
+What decides between the two is the outcome of the transaction: if the write is
+committed on MAIN, it is a notification, and if it was rolled back everywhere,
+it is an exception.
+
+<Callout type="warning">
+
+**Breaking change in Memgraph 3.13**: a SYNC replication failure used to be
+reported as a `ReplicationException` as well, even though the write had already
+been committed on MAIN. It is now reported as a notification. If your
+application caught the replication exception around writes, read the
+`SyncReplicationFailure` notification from the query summary instead.
+
+</Callout>
+
+The message text is the same in both cases and follows this format:
 
 ```
 Failed to replicate to SYNC replica 'instance_1': <reason>.
 Replica will be recovered automatically.
 Transaction is still committed on the main instance and other alive replicas.
+Check the status of the replicas using 'SHOW REPLICAS' query.
 ```
 
 When multiple replicas fail, each failure is listed with its replica name, 
@@ -63,6 +86,7 @@ replication mode, and specific reason:
 Failed to replicate to SYNC replicas 'instance_1' and 'instance_2': <reason>.
 Replicas will be recovered automatically.
 Transaction is still committed on the main instance and other alive replicas.
+Check the status of the replicas using 'SHOW REPLICAS' query.
 ```
 
 The possible failure reasons are:
@@ -75,20 +99,22 @@ The possible failure reasons are:
 | `replica has diverged from main` | The replica's data has diverged and manual recovery may be needed. |
 | `RPC timeout while replicating` | The MAIN timed out waiting for a response from the replica. |
 
-The error message also indicates the transaction outcome:
+The message also indicates the transaction outcome:
 - **"Transaction is still committed on the main instance and other alive replicas."** — 
   This appears for SYNC replicas. The transaction succeeded on MAIN despite the
-  replica failure.
+  replica failure, and it is delivered as a `SyncReplicationFailure` warning
+  notification.
 - **"Transaction was aborted on all instances."** — This appears for STRICT_SYNC
   replicas. The two-phase commit protocol ensures that if any STRICT_SYNC replica
-  fails, the transaction is rolled back everywhere.
+  fails, the transaction is rolled back everywhere, and the query fails with a
+  `ReplicationException`.
 
 <Callout type="info">
 Failed replicas will be recovered automatically. Check the status of replicas
 using the `SHOW REPLICAS` query.
 </Callout>
 
-If the failure reason is an RPC timeout, the error message may include guidance
+If the failure reason is an RPC timeout, the message may include guidance
 about adjusting the `deltas_batch_progress_size` coordinator setting. As of 3.13
 [that setting no longer has any
 effect](/clustering/high-availability/ha-commands-reference#deltas_batch_progress_size)
