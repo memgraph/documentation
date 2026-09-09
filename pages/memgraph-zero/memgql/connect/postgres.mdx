@@ -90,6 +90,73 @@ MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
 
 For environment variables, see [Reference](../reference.mdx#postgresql-postgres).
 
+## TLS connections
+
+For a cloud-hosted PostgreSQL, the connection **mode** goes in the connection
+string as libpq's `sslmode=`, and the connector declares what a URI cannot
+express — which certificates to trust:
+
+```json
+{
+  "name": "pg",
+  "type": "postgres",
+  "connection": {
+    "uri": "postgresql://user:pass@db.example.com:5432/app?sslmode=require",
+    "sslRootCert": "/etc/ssl/certs/customer-ca.pem",
+    "trustServerCertificate": false
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `sslmode=` (in `uri`) | libpq semantics, including the default: `disable` never attempts TLS, `prefer` uses it when it works, `require` makes it mandatory. |
+| `sslRootCert` | Path to a PEM bundle of CA certificates to trust **instead of** the system roots. Omit it to use the system trust store. |
+| `trustServerCertificate` | Encrypt without verifying the server's identity. |
+
+TLS is implemented with [rustls](https://github.com/rustls/rustls), so there is
+no OpenSSL or other C library to install.
+
+`trustServerCertificate` protects against passive eavesdropping but **not**
+against an active man-in-the-middle, and it logs a warning on every use. It
+exists because managed instances are routinely fronted by a certificate that
+doesn't match the hostname you dial; prefer `sslRootCert` where you can. The two
+are mutually exclusive — a CA bundle plus "trust anything" is a contradiction
+and is rejected.
+
+Two more guardrails:
+
+- Declaring TLS settings alongside `sslmode=disable` is **refused** rather than
+  silently connecting in plaintext.
+- Under `sslmode=prefer`, a failed handshake retries in plaintext and warns — so
+  enabling TLS support doesn't strand a connector pointed at a server whose
+  certificate you have no reason to trust. A connector that *declared*
+  `sslRootCert` or `trustServerCertificate` never falls back; it named a trust
+  anchor, so the failure is an error. Under `require` it is always an error.
+
+These fields round-trip through `EXPORT SCHEMA`, so a dumped and reloaded
+catalog reconnects with the same trust settings.
+
+## JSONB columns
+
+A `JSONB` column can be mapped as typed properties at fixed paths, or passed
+through as a document whose undeclared keys stay queryable:
+
+```json
+"attributes": [
+  { "name": "voltage", "column": "props", "path": "electrical.voltage", "type": "Double" },
+  { "name": "props", "type": "Json" }
+]
+```
+
+```gql
+MATCH (c:Component) WHERE c.voltage > 100 RETURN c.sku, c.props.rohs;
+```
+
+Both forms push the extraction down to PostgreSQL, and a declared `type` makes
+the comparison numeric instead of lexicographic. See
+[Schema File → JSON / JSONB columns](/memgraph-zero/memgql/schema-file#json--jsonb-columns).
+
 ## Supported GQL features
 
 | Feature                                       | Postgres |

@@ -1,0 +1,251 @@
+---
+title: Microsoft Fabric
+description: Connect MemGQL to Microsoft Fabric.
+---
+
+# Microsoft Fabric
+
+The Fabric connector (type `fabric`) translates GQL queries into T-SQL and runs
+them over a Fabric Warehouse's SQL endpoint (TDS, port 1433). It requires a
+[mapping file](/memgraph-zero/memgql/reference#mapping-schema) that maps graph
+patterns to relational tables — the same format as every other SQL backend —
+and references tables with three-part `item.schema.table` names.
+
+**One connector, four surfaces.** Fabric exposes the same T-SQL endpoint shape
+for a **Warehouse**, a **Lakehouse SQL analytics endpoint** (read-only), a **SQL
+database in Fabric**, and every **mirrored database** (Snowflake, Azure SQL,
+Cosmos DB, Databricks, Oracle, SQL Server replicated into OneLake). All four are
+reachable through this one connector — a mirrored database needs no connector of
+its own.
+
+The driver is **pure-Rust**: there is no ODBC layer or SQL client to install.
+The connector supports **both reads and writes**. Fabric is cloud-only, so there
+is no local container to run. It is available both in
+[`multi` mode](/memgraph-zero/memgql/multiple-graphs) (`ADD CONNECTOR … TYPE
+fabric`) and as the standalone `CONNECTOR_TYPE=fabric` mode.
+
+## 1. Prepare your Fabric workspace
+
+Create a workspace and a warehouse in the Fabric portal, then note two values
+from the warehouse's **Settings → SQL endpoint**:
+
+- the **connection string**, e.g. `abc123….datawarehouse.fabric.microsoft.com`
+- the **item name** of the warehouse (or lakehouse) you want to query
+
+Fabric accepts **Microsoft Entra ID only** — there is no SQL authentication, so
+there is no username/password to create. For an unattended service such as
+MemGQL, register an Entra **application (service principal)** and grant it
+access to the workspace:
+
+1. In Entra ID, register an application and create a client secret. Note the
+   **tenant ID**, **application (client) ID**, and **secret value**.
+2. In the Fabric admin portal, enable **Service principals can use Fabric
+   APIs** (tenant setting), optionally scoped to a security group containing
+   your application.
+3. In the workspace, add the service principal with at least the **Viewer**
+   role, then grant it rights on the warehouse:
+
+```sql
+CREATE USER [memgql-app] FROM EXTERNAL PROVIDER;
+GRANT SELECT ON SCHEMA::dbo TO [memgql-app];
+-- Only if MemGQL should write:
+GRANT INSERT, UPDATE, DELETE ON SCHEMA::dbo TO [memgql-app];
+```
+
+A warehouse's **collation is fixed when it is created** and cannot be changed
+afterwards. The default, `Latin1_General_100_BIN2_UTF8`, is case-sensitive —
+which matches Cypher's case-sensitive string comparison more closely than SQL
+Server's case-insensitive default. Choose deliberately: the alternative is
+`Latin1_General_100_CI_AS_KS_WS_SC_UTF8`.
+
+## 2. Write the mapping
+
+Save as `mapping.json`, the standard
+[mapping format](/memgraph-zero/memgql/reference#mapping-schema). Table
+references resolve against the connector's item and schema (default `dbo`);
+declare every property you plan to query — in `multi` mode the mapping is also
+the routing schema, so an undeclared property is a routing error, not a
+passthrough.
+
+```json
+{
+  "vertices": [
+    {
+      "label": "Person",
+      "mappedTableSource": {
+        "connector": "fab",
+        "table": "persons",
+        "metaFields": { "id": "id" }
+      },
+      "attributes": [
+        { "name": "name" },
+        { "name": "age", "type": "Int" }
+      ]
+    },
+    {
+      "label": "Company",
+      "mappedTableSource": {
+        "connector": "fab",
+        "table": "companies",
+        "metaFields": { "id": "id" }
+      },
+      "attributes": [ { "name": "name" } ]
+    }
+  ],
+  "edges": [
+    {
+      "label": "KNOWS",
+      "from": "Person",
+      "to": "Person",
+      "mappedTableSource": {
+        "connector": "fab",
+        "table": "knows",
+        "metaFields": { "id": "id", "from": "from_id", "to": "to_id" }
+      }
+    },
+    {
+      "label": "WORKS_AT",
+      "from": "Person",
+      "to": "Company",
+      "mappedTableSource": {
+        "connector": "fab",
+        "table": "works_at",
+        "metaFields": { "id": "id", "from": "person_id", "to": "company_id" }
+      }
+    }
+  ]
+}
+```
+
+## 3. Start MemGQL in multi mode
+
+Mount your mapping. Every connection parameter is given on the `ADD CONNECTOR`
+statement in the next step, so no Fabric environment variables are required
+here:
+
+```bash
+docker run --rm \
+    --name memgql \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTOR_TYPE=multi \
+    --env BOLT_LISTEN_ADDR=0.0.0.0:7688 \
+    -v ./mapping.json:/data/mapping.json \
+    memgraph/memgql:latest
+```
+
+## 4. Connect and register the backend
+
+```bash
+mgconsole --port 7688
+```
+
+Provide the endpoint, the warehouse item, and the service principal inline:
+
+```gql
+ADD CONNECTOR fab TYPE fabric
+    URI 'abc123.datawarehouse.fabric.microsoft.com'
+    DATABASE 'memgql_wh' SCHEMA 'dbo'
+    TENANT_ID '<tenant-guid>' CLIENT_ID '<app-guid>' CLIENT_SECRET '<secret>';
+CREATE GRAPH social FROM FILE '/data/mapping.json';
+MATCH (n:Person) RETURN n.name LIMIT 5;
+```
+
+Options: `URI` (the SQL endpoint host), `DATABASE` (the warehouse or lakehouse
+item), `SCHEMA` (default `dbo`), and either `TOKEN` or the
+`TENANT_ID`/`CLIENT_ID`/`CLIENT_SECRET` triple. Any option you omit falls back
+to the corresponding `FABRIC_*` environment variable, so you can mix inline
+values with env defaults.
+
+Because the parameters live on the connector, **rotating a secret needs no
+MemGQL restart** — re-register the connector:
+
+```gql
+DROP CONNECTOR fab;
+ADD CONNECTOR fab TYPE fabric
+    URI 'abc123.datawarehouse.fabric.microsoft.com'
+    DATABASE 'memgql_wh'
+    TENANT_ID '<tenant-guid>' CLIENT_ID '<app-guid>' CLIENT_SECRET '<new-secret>';
+```
+
+Point a connector at a **Lakehouse SQL analytics endpoint** the same way, using
+the lakehouse item name. That endpoint is read-only, so declare the graph read
+only and let MemGQL reject writes before they reach Fabric:
+
+```gql
+ALTER GRAPH social SET READ ONLY;
+```
+
+## 5. Query
+
+```gql
+MATCH (p:Person) RETURN p.name, p.age;
+```
+
+```gql
+MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
+```
+
+```gql
+MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
+```
+
+## Authentication
+
+Fabric supports Microsoft Entra ID only. Supply exactly one method (precedence:
+token → service principal). Each can be given inline on `ADD CONNECTOR` or via
+an environment variable; the inline option wins when both are set:
+
+| Method | Inline option | Environment fallback |
+|---|---|---|
+| **Service principal** — recommended | `TENANT_ID` / `CLIENT_ID` / `CLIENT_SECRET` | `FABRIC_TENANT_ID` / `FABRIC_CLIENT_ID` / `FABRIC_CLIENT_SECRET` |
+| **Access token** | `TOKEN '<entra-access-token>'` | `FABRIC_TOKEN` |
+
+**Tokens expire.** Entra access tokens are short-lived (about an hour). A token
+is consumed when the SQL session logs in, so an open session keeps working after
+its token expires — but the next reconnect needs a fresh one. Only the service
+principal can mint a new token by itself; a connector given a bare `TOKEN` stops
+working once that token expires and has to be re-registered. Use the service
+principal for anything unattended.
+
+The standalone `CONNECTOR_TYPE=fabric` mode has no `ADD CONNECTOR`, so it takes
+all of these from the environment.
+
+## Dialect notes
+
+- Table references are three-part `item.schema.table`, where the item is the
+  warehouse or lakehouse. Set `catalog` / `schema` on a `mappedTableSource` to
+  pin a table explicitly; the schema defaults to `dbo`.
+- Because the item is part of the name, a single query can **join across items
+  in one workspace** — a Warehouse table to a Lakehouse SQL analytics endpoint
+  table — and MemGQL pushes that join down as one statement.
+- Parameters are TDS binds (`@P1`, `@P2`, …); booleans are `BIT` `1`/`0`.
+- Pagination uses `ORDER BY … OFFSET … ROWS FETCH NEXT … ROWS ONLY`.
+- `AVG()` over integers is cast to `FLOAT` so results arrive as floats.
+- Fabric is billed in capacity units, so pushing filters, aggregations and joins
+  down saves cost as well as latency. Expect the first query after an idle
+  period to be slower.
+
+## Known limitations
+
+These are Fabric engine limits, not MemGQL gaps:
+
+- **Variable-length paths** (`(){1,3}`, `-[:R*]-`) are **not supported**: Fabric
+  Warehouse does not support recursive queries. MemGQL rejects such a query with
+  a clear error rather than returning a partial answer — use a fixed number of
+  hops, or run it against a Cypher backend.
+- **`collect()` and map projections** (`RETURN n {.a, .b}`) are not pushed down:
+  Fabric's `FOR JSON` must be the last operator in a statement and is invalid in
+  subqueries.
+- **Generated ids are not returned** on insert. Fabric has no usable
+  `IDENTITY_INSERT`, so write a natural key and read the row back by it.
+- **Column types** are limited to what a Fabric table can store: `nvarchar`,
+  `text`, `xml`, `json`, `money`, `datetime`, `datetimeoffset`, `tinyint` and
+  the spatial types do not exist there. Use `varchar` in a UTF-8 collation and
+  `datetime2`.
+- **Constraints are metadata only** — `PRIMARY KEY`, `UNIQUE` and
+  `FOREIGN KEY` must be declared `NOT ENFORCED`, so Fabric will not reject a row
+  that violates them.
+
+For connector configuration, see the
+[mapping reference](/memgraph-zero/memgql/reference#mapping-schema).

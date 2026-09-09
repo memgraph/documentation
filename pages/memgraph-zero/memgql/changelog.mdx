@@ -5,6 +5,131 @@ description: MemGQL release notes
 
 # MemGQL Changelog
 
+## MemGQL v0.11.0 - September 2nd, 2026
+
+### 🍃 New features & Improvements
+
+- **Cypher queries.** MemGQL speaks Cypher alongside GQL: per query with the
+  Neo4j-style `CYPHER [25]` prefix, per session with
+  `SET SESSION LANGUAGE CYPHER`, per connector with `LANGUAGE 'cypher'`, or
+  server-wide with `--default-language`. On Memgraph/Neo4j the text executes
+  **verbatim** — an existing corpus keeps working unchanged, `CALL`
+  subqueries, pattern predicates and all; on every other backend the same
+  Cypher runs through the regular plan/translation path. The default stays
+  GQL. See [Query languages](/memgraph-zero/memgql/reference#query-languages).
+- **Read-only graphs.** `"accessMode": "readOnly"` (schema file) or
+  `ALTER GRAPH <name> SET READ ONLY` refuses any write to that graph before a
+  backend sees it. The flip persists to the boot `--schema` file, so a
+  restart cannot quietly reopen a replica. See
+  [Access modes](/memgraph-zero/memgql/reference#access-modes).
+- **Source onboarding through the engine.** `DESCRIBE CONNECTOR` reads a
+  source's live catalog — tables, columns, types, keys (PostgreSQL, SAP
+  HANA); `GENERATE MAPPING FOR CONNECTOR … [TO '<path>']` turns it into a
+  draft mapping (tables → vertices, foreign keys → edges) for review —
+  loading stays explicit, and anything unrepresentable is named in
+  `_comment`. See
+  [Onboarding a source](/memgraph-zero/memgql/reference#onboarding-a-source).
+- **The schema is a graph.** `SHOW SCHEMA [FOR <graph>] AS GRAPH` returns the
+  merged schema as Bolt nodes and relationships (cross-connector join edges
+  marked), so agents plan federated queries by navigating it and graph UIs
+  draw it. `EXPORT SCHEMA` now round-trips join edges and `accessMode`.
+
+## MemGQL v0.10.0 - August 16th, 2026
+
+### 🍃 New features & Improvements
+
+- **Cross-connector edges.** An edge declared with
+  `mappedJoinSource { "fromKey": …, "toKey": … }` links two labels in *different*
+  backends, so one pattern traverses the boundary:
+  `MATCH (c:Component)-[:MANUFACTURED_BY]->(m:Manufacturer)` reads components from
+  PostgreSQL and manufacturers from Memgraph. `RETURN c, r, m` packs real nodes and
+  a relationship, so graph clients can draw and expand the result. See
+  [Cross-connector edges](/memgraph-zero/memgql/schema-file#cross-connector-edges).
+- **JSON / JSONB columns are queryable.** An attribute can declare a `path` into a
+  document column (`"column": "props", "path": "electrical.voltage", "type": "Double"`),
+  giving it its own typed property; or type the column `Json`, which returns it as a
+  map and keeps *undeclared* keys reachable as `c.props.rohs`. Both push the
+  extraction down to the source, and a declared type keeps comparisons numeric
+  rather than lexicographic. PostgreSQL, MySQL, DuckDB, SQL Server, Microsoft
+  Fabric and Snowflake. See
+  [JSON / JSONB columns](/memgraph-zero/memgql/schema-file#json--jsonb-columns).
+- **TLS for PostgreSQL connections.** The mode stays in the URI (`sslmode=`, libpq
+  semantics); the connector adds `sslRootCert` (PEM bundle to trust instead of the
+  system roots) and `trustServerCertificate` (encrypt without verifying the server).
+  Built on rustls, so there's no OpenSSL to install. Declaring TLS settings
+  alongside `sslmode=disable` is refused rather than silently connecting in
+  plaintext. See
+  [TLS connections](/memgraph-zero/memgql/connect/postgres#tls-connections).
+- **`SHOW STATS` reports query load per source.** One row per connector —
+  `queries`, `rows`, `errors`, `avg_latency_ms`, `max_latency_ms` — counting what
+  the source itself saw, so federation's impact on a production backend can be
+  measured. `RESET STATS` zeroes the counters. See
+  [Load per source](/memgraph-zero/memgql/multiple-graphs#load-per-source).
+- **SAP HANA connector.** `ADD CONNECTOR … TYPE hana URI 'hdbsql://host:39017'`
+  brings SAP HANA 2.0, HANA Cloud and HANA Express into the federation, reads and
+  writes both, over a **pure-Rust** driver — no ODBC, no JDBC, no SAP client
+  installation. TLS is chosen by the URL scheme (`hdbsqls://`), so HANA Cloud
+  needs nothing beyond the `s`. A mapping written for PostgreSQL works against
+  HANA unchanged. See
+  [Connect to SAP HANA](/memgraph-zero/memgql/connect/hana).
+
+## MemGQL v0.9.0 - August 9th, 2026
+
+### 🍃 New features & Improvements
+
+- **Microsoft Fabric connector.** New `fabric` connector type translates GQL to
+  T-SQL over a Fabric Warehouse's SQL endpoint — a pure-Rust driver, so there's no
+  ODBC layer to install. The same connector also reaches Lakehouse SQL analytics
+  endpoints, SQL databases in Fabric, and mirrored databases, which need no
+  connector of their own. It uses the same
+  [mapping](/memgraph-zero/memgql/reference#mapping-schema) format as every other
+  SQL backend, references tables with three-part `item.schema.table` names — so one
+  query can join across items in a workspace — and supports **both reads and
+  writes**. Authenticate with a Microsoft Entra ID access token or a service
+  principal. Variable-length paths are rejected, since Fabric has no recursive
+  queries. See the
+  [Microsoft Fabric connector page](/memgraph-zero/memgql/connect/fabric) for setup.
+
+- **MongoDB connector.** New `mongodb` connector type brings a document store into
+  the federation — the first backend that is neither SQL nor Cypher. Queries
+  translate to **MongoDB aggregation pipelines** and run server-side: a single hop
+  becomes `$lookup`, a variable-length hop `$graphLookup`, so unlike the SQL
+  backends the unbounded `*` form works too. Labels map to collections and
+  relationship types to their own collections, using the same
+  [mapping](/memgraph-zero/memgql/reference#mapping-schema) format as every other
+  backend, and **both reads and writes** are supported, including `DETACH DELETE`.
+  Connect with a standard connection string, so replica sets and MongoDB Atlas work
+  as-is; `UNION` and scalar functions inside `RETURN` are the notable gaps. See the
+  [MongoDB connector page](/memgraph-zero/memgql/connect/mongodb) for setup.
+
+### ⚠️ Behavior changes
+
+- **A vertex's or edge's `metaFields.id` is now exposed as a property.** `RETURN n`
+  / `RETURN r` include it, and `n.<id_column>` reads it by name — including after a
+  `WITH n` boundary, which previously worked only when the column was called `id`.
+- **The cache answers only for properties it holds.** A fragment holds a label's id
+  and its declared `attributes`; a query reading anything else misses and reads the
+  source, so results never differ from the uncached run. `SHOW GRAPH CACHES` gained
+  `hits`, `misses` and `cached_properties` columns. See
+  [Caching a graph in Memgraph](/memgraph-zero/memgql/multiple-graphs#caching-a-graph-in-memgraph).
+
+### 🐞 Bug fixes
+
+- **ClickHouse returned result columns in alphabetical order** rather than the order
+  the query projected them. Names travelled with their values, so most clients were
+  unaffected — but anything reading positionally was not.
+- **The Memgraph cache returned different rows than its source.** Cached edges
+  pointed at the wrong endpoints or were missing, edge properties were never copied,
+  and a cache holding only a label's id answered property reads with `NULL`.
+- **`count(DISTINCT <node>)` and `count(DISTINCT <relationship>)` produced invalid
+  SQL** on relational backends. Counting distinct properties was unaffected.
+- **Grouping by a whole element produced invalid SQL** — `WITH n, count(…)` and
+  `WITH r, count(…)` on relational backends.
+- **A warm table was re-scanned from the source** whenever a newly-touched edge type
+  pulled it in as an endpoint.
+- **The cache's warm-up log counted rows read from the source**, reporting success
+  even when no rows reached the cache.
+
 ## MemGQL v0.8.0 - July 19th, 2026
 
 ### ⚠️ Breaking changes

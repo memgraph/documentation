@@ -939,22 +939,34 @@ rendering, since the Gateway would then apply to nothing.
 
 Before enabling Gateway API in the chart, you need:
 
-1. **A Gateway API controller** installed in your cluster. Examples include [Envoy Gateway](https://gateway.envoyproxy.io/), [Istio](https://istio.io/), [Cilium](https://cilium.io/), [Traefik](https://traefik.io/), and [Kong](https://konghq.com/). This guide uses Envoy Gateway as an example (for Istio, see [Use Istio as the Gateway API controller](#use-istio-as-the-gateway-api-controller)):
+1. **The Gateway API CRDs** installed in your cluster. Some controllers ship them
+   with their own Helm chart (Envoy Gateway does), while others expect you to
+   install them yourself (Traefik does). The controller-specific guides below
+   cover both cases.
 
-   ```bash
-   helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.4 -n envoy-gateway-system --create-namespace
-   ```
+2. **A Gateway API controller** installed in your cluster. Examples include
+   [Envoy Gateway](https://gateway.envoyproxy.io/), [Istio](https://istio.io/)
+   (see also: [Use Istio as the Gateway API controller](#use-istio-as-the-gateway-api-controller)),
+   [Cilium](https://cilium.io/), [Traefik](https://traefik.io/), and
+   [Kong](https://konghq.com/). Step-by-step guides are available for two of
+   them: [Envoy Gateway](#deploy-with-envoy-gateway) and
+   [Traefik](#deploy-with-traefik).
 
-2. **A GatewayClass resource** that references your controller. A GatewayClass is a cluster-scoped resource that defines which controller manages Gateways — each Gateway references a GatewayClass by name. The Helm chart does **not** create a GatewayClass; you must create one yourself or use one provided by your controller installation. For Envoy Gateway:
+3. **A GatewayClass resource** that references your controller. A GatewayClass is
+   a cluster-scoped resource that defines which controller manages Gateways —
+   each Gateway references a GatewayClass by name. The Memgraph Helm chart does
+   **not** create a GatewayClass; you must create one yourself or use one
+   provided by your controller installation (the Envoy Gateway chart does not
+   create one, the Traefik chart does).
 
-   ```yaml
-   apiVersion: gateway.networking.k8s.io/v1
-   kind: GatewayClass
-   metadata:
-     name: eg
-   spec:
-     controllerName: gateway.envoyproxy.io/gatewayclass-controller
-   ```
+
+<Callout type="warning">
+The chart exposes Bolt through `TCPRoute`, which is part of the Gateway API
+**experimental** channel. A standard-channel CRD bundle is not enough — whatever
+you install must include `tcproutes.gateway.networking.k8s.io`, and the
+controller itself may need experimental support turned on (Traefik does, see
+[Deploy with Traefik](#deploy-with-traefik)).
+</Callout>
 
 <Callout type="warning">
 You must ensure the GatewayClass exists before enabling the gateway feature in the chart. If you create your own Gateway (Option 1 below), the chart requires `gatewayClassName` to reference an existing GatewayClass, and will fail with an error if it is not set.
@@ -1060,7 +1072,12 @@ helm install memgraph-ha memgraph/memgraph-high-availability \
 ```
 
 <Callout type="warning">
-When using an existing Gateway, ensure it has listeners configured with the correct names and ports that match the TCPRoute `sectionName` references. The chart expects one listener named `data-{id}-bolt` per data instance and a single listener named `coordinators-bolt` for the entire coordinator tier. For example, the default HA setup (2 data instances, 3 coordinators) needs these listeners:
+When using an existing Gateway, ensure it has listeners whose **names** match the
+TCPRoute `sectionName` references. The chart expects listener names in the format
+`data-{id}-bolt` for data instances and a single listener named `coordinators-bolt`
+for the entire coordinator tier. The listener ports are your choice in this mode, 
+but keeping them aligned with the chart defaults avoids surprises. For example,
+the default HA setup (2 data instances, 3 coordinators) needs these listeners:
 
 - `data-0-bolt` on port 9000
 - `data-1-bolt` on port 9001
@@ -1075,6 +1092,198 @@ A standalone Gateway manifest with these pre-configured listeners is available i
 <Callout type="info">
 **TCPRoute API version**: TCPRoute uses `v1alpha2`, which is the latest available API version. It is supported by Envoy Gateway and other major implementations but is not yet GA. Gateway and HTTPRoute are both GA (`v1`).
 </Callout>
+
+#### Deploy with Envoy Gateway
+
+[Envoy Gateway](https://gateway.envoyproxy.io/) is the controller used in the
+examples above. Its Helm chart bundles the Gateway API CRDs, so no separate CRD
+installation is needed, and it programs listener ports dynamically — the Bolt
+ports only have to be configured in the Memgraph chart.
+
+<Steps>
+
+{<h4 className="custom-header"> Install Envoy Gateway </h4>}
+
+```bash
+helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.4 \
+  -n envoy-gateway-system --create-namespace
+```
+
+Chart version `v1.2.4` ships Gateway API bundle version `v1.2.1`, which includes
+the `TCPRoute` CRD.
+
+{<h4 className="custom-header"> Create the GatewayClass </h4>}
+
+The Envoy Gateway chart does not create a GatewayClass, so create one that points
+at its controller:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+```
+
+```bash
+kubectl apply -f gatewayclass.yaml
+```
+
+{<h4 className="custom-header"> Install the Memgraph HA chart </h4>}
+
+Assuming the `memgraph-secrets` Secret with the license and organization name
+already exists (see [Install Memgraph HA](#install-memgraph-ha)):
+ 
+```bash
+helm install memgraph-ha memgraph/memgraph-high-availability \
+  --set externalAccessConfig.gateway.enabled=true \
+  --set externalAccessConfig.gateway.gatewayClassName=eg
+```
+
+{<h4 className="custom-header"> Verify the setup </h4>}
+
+```bash
+kubectl get gatewayclass eg
+kubectl get gateway -o wide
+kubectl get tcproute
+```
+
+The GatewayClass should be `ACCEPTED=True` and the Gateway `PROGRAMMED=True` with
+an external address. Envoy Gateway provisions a separate Envoy deployment and
+LoadBalancer Service for the Gateway.
+
+</Steps>
+
+#### Deploy with Traefik
+
+[Traefik](https://traefik.io/) can serve the same setup, but its Gateway API
+support differs from Envoy Gateway in two ways that affect the Memgraph chart:
+
+- Its Helm chart ships **no Gateway API CRDs**, so you install them yourself, and
+  `TCPRoute` support has to be explicitly enabled.
+- Traefik does **not** open arbitrary listener ports. Every port used by a Gateway
+  listener must also be declared as a Traefik entryPoint, otherwise the listener
+  is silently ignored.
+
+<Steps>
+
+{<h4 className="custom-header"> Install the Gateway API CRDs </h4>}
+
+Install the experimental channel, which is where `TCPRoute` lives:
+
+```bash
+kubectl apply --server-side --force-conflicts \
+  -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
+```
+
+<Callout type="info">
+Use `--server-side`. A plain `kubectl apply` stores the whole manifest in the
+`kubectl.kubernetes.io/last-applied-configuration` annotation and the HTTPRoute
+CRD exceeds the 256 KB annotation limit, failing with
+`metadata.annotations: Too long: may not be more than 262144 bytes`.
+`--force-conflicts` is needed only when the CRDs were previously created with a
+client-side apply.
+</Callout>
+
+{<h4 className="custom-header"> Configure Traefik </h4>}
+
+Create a `traefik-values.yaml` file. The `ports` entries are the entryPoints
+backing the Gateway listeners the Memgraph chart creates — data instances on
+`dataPortBase + data instance id`, coordinators on
+`coordinatorPortBase + coordinator id`:
+
+```yaml
+providers:
+  kubernetesGateway:
+    enabled: true
+    # Required for TCPRoute support.
+    experimentalChannel: true
+    statusAddress:
+      service:
+        # Copies the Traefik LoadBalancer address into Gateway .status.addresses,
+        # which is what external-dns reads.
+        enabled: true
+
+# The Memgraph chart creates its own Gateway, so Traefik's default one is not needed.
+gateway:
+  enabled: false
+
+# Creates the GatewayClass "traefik" (controller traefik.io/gateway-controller).
+gatewayClass:
+  enabled: true
+
+service:
+  type: LoadBalancer
+
+ports:
+  data-0:
+    port: 9000
+    exposedPort: 9000
+    protocol: TCP
+    expose:
+      default: true
+  data-1:
+    port: 9001
+    exposedPort: 9001
+    protocol: TCP
+    expose:
+      default: true
+```
+
+A ready-to-use version of this file is available in the [Helm charts
+repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/traefik-values.yaml).
+
+<Callout type="warning">
+Declare one entryPoint per Gateway listener, and remember to add new ones when
+you [scale the cluster](#scale-the-cluster-up-and-down) — a third data instance
+needs port 9002, a fourth coordinator needs port 10004. If a tier is exposed
+through a `serviceType` instead of the Gateway, it has no listeners and needs no
+entryPoints; with the [recommended setup](#recommended-external-access-setup)
+(coordinators via `CommonLoadBalancer`, data instances via the Gateway) only the
+`data-*` entryPoints are required.
+</Callout>
+
+{<h4 className="custom-header"> Install Traefik </h4>}
+
+```bash
+helm repo add traefik https://traefik.github.io/charts
+helm repo update
+helm install traefik traefik/traefik -n traefik --create-namespace \
+  -f traefik-values.yaml
+```
+
+The values above were verified against Traefik chart `41.0.2` (Traefik `v3.7.6`).
+The `providers.kubernetesGateway.*` options require Traefik 3.x.
+
+{<h4 className="custom-header"> Install the Memgraph HA chart </h4>}
+
+Point `gatewayClassName` at the GatewayClass created by the Traefik chart.
+Assuming the `memgraph-secrets` Secret with the license and organization name
+already exists (see [Install Memgraph HA](#install-memgraph-ha)):
+
+```bash
+helm install memgraph-ha memgraph/memgraph-high-availability \
+  --set externalAccessConfig.gateway.enabled=true \
+  --set externalAccessConfig.gateway.gatewayClassName=traefik
+```
+
+{<h4 className="custom-header"> Verify the setup </h4>}
+
+```bash
+kubectl get gatewayclass traefik
+kubectl get gateway -o wide
+kubectl get tcproute
+# The chart names the Gateway <release-name>-memgraph-high-availability-gateway
+kubectl describe gateway memgraph-ha-memgraph-high-availability-gateway
+```
+
+If a listener reports `Detached` or `UnsupportedProtocol`, the matching entryPoint
+is missing from the Traefik values. Unlike Envoy Gateway, Traefik routes all
+Gateways through the single Traefik Service, so the external address comes from
+the `traefik` Service in the `traefik` namespace.
+
+</Steps>
 
 #### Use Istio as the Gateway API controller
 
@@ -1356,24 +1565,33 @@ Memgraph HA integrates with Kubernetes monitoring tools through:
 - The [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) Helm chart
 - [Memgraph’s Prometheus exporter](https://github.com/memgraph/prometheus-exporter)
 
-The chart `kube-prometheus-stack` should be installed independently from HA
-chart with the following command:
+The chart `kube-prometheus-stack` should be installed independently from the HA
+chart. Add the `prometheus-community` Helm repository and install (or upgrade) the
+release into the `monitoring` namespace:
 
 ```bash
-helm install kube-prometheus-stack oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack \
-  -f kube_prometheus_stack_values.yaml \
-  -f kube_prometheus_stack_memgraph_dashboard.yaml \
-  --namespace monitoring \
-  --create-namespace
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace
 ```
 
-`kube_prometheus_stack_values.yaml` is optional. A template is available in the
-upstream [chart’s
-repository]((https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml)).
+Remember the release name (`kube-prometheus-stack`) and the namespace (`monitoring`):
+the HA chart needs both to wire its `ServiceMonitor` and Grafana dashboard to this
+stack (see [`prometheus.serviceMonitor.kubePrometheusStackReleaseName`](#configuration-options)
+and `prometheus.namespace` below).
 
-`kube_prometheus_stack_memgraph_dashboard.yaml` is also optional - it provides a generic dashboard which shows the metrics
-that Memgraph exports for both standalone and HA deployments. This dashboard file can be downloaded from 
+To customize the stack, pass your own values file with `-f kube_prometheus_stack_values.yaml`.
+A template is available in the upstream [chart’s
+repository](https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml).
+
+If you scrape through `mg-exporter` (see the next section) you can additionally pass
+`-f kube_prometheus_stack_memgraph_dashboard.yaml`, a generic dashboard which shows the metrics
+that the exporter exposes for both standalone and HA deployments. The dashboard file can be downloaded from
 [here](https://github.com/memgraph/prometheus-exporter/blob/main/kube_prometheus_stack_memgraph_dashboard.yaml).
+When scraping Memgraph directly, use the bundled **Memgraph OpenMetrics** dashboard
+instead (see [Grafana dashboard for direct scraping](#grafana-dashboard-for-direct-scraping)).
 
 If you install the `kube-prometheus-stack` in a **non-default namespace**, allow
 cross-namespace scraping. You can allow this by adding the following
@@ -1460,7 +1678,25 @@ From Memgraph 3.11, Memgraph can serve metrics in Prometheus
 HTTP monitoring port, so the cluster can be scraped directly and `mg-exporter` can be
 skipped entirely.
 
-Set the top-level `scrapeMemgraphDirectly: true` and leave `prometheus.enabled: false`:
+To start the HA chart with direct scraping you need:
+
+1. **A Prometheus Operator in the cluster** – for example `kube-prometheus-stack`
+   installed as shown [above](#monitoring). The HA chart only creates a
+   `ServiceMonitor`; something must consume it.
+2. **`scrapeMemgraphDirectly: true`** – the chart appends `--metrics-format=OpenMetrics`
+   to every coordinator and data instance and adds a `tcp-metrics-port` to each
+   instance `Service` so it can be discovered.
+3. **`prometheus.enabled: false`** – no `mg-exporter` is deployed.
+4. **`prometheus.serviceMonitor.enabled: true`** – provisions the `ServiceMonitor`
+   that targets each instance `Service` directly.
+5. **Matching release name and namespace** – the `ServiceMonitor` is labelled
+   `release: <prometheus.serviceMonitor.kubePrometheusStackReleaseName>`, which is how
+   `kube-prometheus-stack` selects it, and it is created in `prometheus.namespace`
+   (falls back to the release namespace). Both must match the `kube-prometheus-stack`
+   Helm release name and namespace you used when installing the stack.
+
+A minimal values file for the default installation of `kube-prometheus-stack`
+(release `kube-prometheus-stack` in namespace `monitoring`) looks like this:
 
 ```yaml
 # Every coordinator and data instance serves OpenMetrics; the chart exposes their
@@ -1468,10 +1704,20 @@ Set the top-level `scrapeMemgraphDirectly: true` and leave `prometheus.enabled: 
 scrapeMemgraphDirectly: true
 
 prometheus:
-  enabled: false       # no mg-exporter is deployed
+  enabled: false          # no mg-exporter is deployed
+  namespace: monitoring   # where kube-prometheus-stack lives; the ServiceMonitor is created here
   serviceMonitor:
-    enabled: true      # in-cluster: kube-prometheus-stack scrapes each instance directly
+    enabled: true         # in-cluster: kube-prometheus-stack scrapes each instance directly
+    kubePrometheusStackReleaseName: kube-prometheus-stack  # must equal the Helm release name
+    interval: 15s
+  grafanaDashboard:
+    enabled: true         # optional: ship the "Memgraph OpenMetrics" dashboard
+    namespace: monitoring # a namespace the Grafana sidecar watches
 ```
+
+The `ServiceMonitor` selects the instance `Services` in the HA chart's release
+namespace through its `namespaceSelector`, so the HA chart and `kube-prometheus-stack`
+can live in different namespaces without any extra configuration.
 
 `scrapeMemgraphDirectly` only selects the metrics *format and target* — on its own it
 does not scrape anything. You still enable a scraper:
@@ -1491,6 +1737,19 @@ exposes their monitoring ports automatically. The metric names differ from the l
 JSON exporter, so use the bundled **Memgraph OpenMetrics** dashboard.
 </Callout>
 
+After installing the HA chart, verify that the `ServiceMonitor` exists and that
+Prometheus picked up the targets:
+
+```bash
+kubectl get servicemonitor -n monitoring
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
+```
+
+Open `http://localhost:9090/targets` and look for the
+`serviceMonitor/monitoring/<release-name>-memgraph/0` job; every coordinator and data
+instance should be listed as `UP`. If the job is missing, the `release` label or
+namespace does not match your `kube-prometheus-stack` installation.
+
 #### Grafana dashboard for direct scraping
 
 Set `prometheus.grafanaDashboard.enabled: true` to ship the bundled "Memgraph
@@ -1508,6 +1767,10 @@ prometheus:
     namespace: monitoring
     label: grafana_dashboard
 ```
+
+A second dashboard, **Memgraph Logs**, covers the logs shipped by `vectorRemote` and is
+enabled with `vectorRemote.grafanaDashboard.enabled: true` — see
+[Grafana dashboards](#grafana-dashboards).
 
 ### Uninstall kube-prometheus-stack
 
@@ -1681,6 +1944,47 @@ Notes:
 A ready-to-use example values file is available in the Helm charts repository:
 [`examples/remote-monitoring/values-ha-k8s-metrics.yaml`](https://github.com/memgraph/helm-charts/blob/main/examples/remote-monitoring/values-ha-k8s-metrics.yaml).
 
+#### Grafana dashboards
+
+The chart bundles two dashboards, each shipped as its own `ConfigMap` (labelled
+`grafana_dashboard`) for a Grafana sidecar to auto-load, and each behind its own flag:
+
+| Dashboard | Enable with | Shows |
+| --------- | ----------- | ----- |
+| **Memgraph OpenMetrics** | `prometheus.grafanaDashboard.enabled: true` | The metrics `vmagentRemote` scrapes and remote-writes |
+| **Memgraph Logs** | `vectorRemote.grafanaDashboard.enabled: true` | The logs `vectorRemote` ships to VictoriaLogs |
+
+```yaml
+prometheus:
+  grafanaDashboard:
+    enabled: true
+    namespace: monitoring   # must be a namespace the Grafana sidecar watches
+    label: grafana_dashboard
+
+vectorRemote:
+  grafanaDashboard:
+    enabled: true
+    namespace: monitoring
+    label: grafana_dashboard
+```
+
+Each `ConfigMap` must live in a namespace the sidecar watches — set `namespace` to
+Grafana's namespace (or run the sidecar with `searchNamespace: ALL`). Both default to
+`prometheus.namespace`, else the release namespace. The metrics dashboard is also covered
+under [Grafana dashboard for direct scraping](#grafana-dashboard-for-direct-scraping).
+
+Both use datasource template variables rather than hardcoded UIDs, so they bind to the
+datasources you select. The OpenMetrics dashboard needs a Prometheus-compatible one
+("Data source"); the logs dashboard needs a VictoriaLogs one ("Logs data source") for its
+panels plus a Prometheus-compatible one ("Metrics data source") that populates its filter
+variables. Both filter on the `cluster_id`, `cluster_env` and `service_name` labels you set
+in `vmagentRemote.externalLabels` and `vectorRemote.extraLabels`, and break metrics and logs
+down per instance, so you can compare coordinators and data instances in the same view.
+
+If you do not run a Grafana sidecar, both dashboards can be imported by hand via
+*Dashboards* → *New* → *Import* in Grafana — they live in the Helm charts repository under
+[`charts/memgraph-high-availability/dashboards/`](https://github.com/memgraph/helm-charts/tree/main/charts/memgraph-high-availability/dashboards).
+
 ## Configuration options
 
 The following table lists the configurable parameters of the Memgraph HA chart
@@ -1792,7 +2096,7 @@ and their default values.
 | `resources.data`                                           | CPU/Memory resource requests/limits for data instances. Left empty by default.                               | `{}`                           |
 | `scrapeMemgraphDirectly`                                   | Serve metrics in OpenMetrics format and scrape Memgraph directly instead of `mg-exporter` (requires Memgraph >= 3.11). Only selects the format/target — still enable a scraper via `prometheus.serviceMonitor.enabled` and/or `vmagentRemote.enabled`. | `false`                        |
 | `prometheus.enabled`                                       | If set to `true`, K8s resources representing Memgraph's Prometheus exporter will be deployed.                | `false`                        |
-| `prometheus.namespace`                                     | Namespace in which `kube-prometheus-stack` and Memgraph's Prometheus exporter are installed. When empty, the release namespace is used. | `""`         |
+| `prometheus.namespace`                                     | Namespace in which `kube-prometheus-stack` is installed. The `ServiceMonitor`, the Grafana dashboard `ConfigMap` and (when `prometheus.enabled` is `true`) the exporter resources are created here. When empty, the release namespace is used. | `""`         |
 | `prometheus.memgraphExporter.port`                         | The port on which Memgraph's Prometheus exporter is available.                                               | `9115`                         |
 | `prometheus.memgraphExporter.pullFrequencySeconds`         | How often will Memgraph's Prometheus exporter pull data from Memgraph instances.                             | `5`                            |
 | `prometheus.memgraphExporter.repository`                   | The repository where Memgraph's Prometheus exporter image is available.                                      | `docker.io/memgraph/prometheus-exporter` |                      
@@ -1803,7 +2107,7 @@ and their default values.
 | `prometheus.memgraphExporter.extraVolumes`                 | Additional volumes mounted on the `mg-exporter` Deployment (e.g. ConfigMaps with custom exporter configs).   | `[]`                           |
 | `prometheus.memgraphExporter.extraVolumeMounts`            | Additional volume mounts for the `mg-exporter` container.                                                    | `[]`                           |
 | `prometheus.serviceMonitor.enabled`                        | If enabled, a `ServiceMonitor` object will be deployed.                                                      | `false`                        |
-| `prometheus.serviceMonitor.kubePrometheusStackReleaseName` | The release name under which `kube-prometheus-stack` chart is installed.                                     | `kube-prometheus-stack`        |
+| `prometheus.serviceMonitor.kubePrometheusStackReleaseName` | The release name under which `kube-prometheus-stack` chart is installed. Rendered as the `release` label on the `ServiceMonitor`, which is how the stack discovers it. | `kube-prometheus-stack`        |
 | `prometheus.serviceMonitor.interval`                       | How often will Prometheus pull data from Memgraph's Prometheus exporter.                                     | `15s`                          |
 | `prometheus.grafanaDashboard.enabled`                      | Ship the bundled "Memgraph OpenMetrics" Grafana dashboard as a `ConfigMap` for a Grafana sidecar to auto-load. | `false`                      |
 | `prometheus.grafanaDashboard.namespace`                    | Namespace for the dashboard `ConfigMap`; must be one the Grafana sidecar watches. Defaults to `prometheus.namespace`, else release namespace. | `""`           |
@@ -1840,6 +2144,22 @@ and their default values.
 | `vmagentRemote.kubernetes.kubelet.additionalMetricsPath`   | Metrics path for the additional kubelet scrape.                                                              | `/metrics`                     |
 | `vmagentRemote.kubernetes.kubelet.apiServerAddress`        | Kubernetes API server address used to proxy kubelet scrapes.                                                 | `kubernetes.default.svc:443`   |
 | `vmagentRemote.kubernetes.kubelet.insecureSkipVerify`      | Skip TLS verification of the kube-apiserver serving cert when scraping kubelet.                              | `false`                        |
+| `vectorRemote.enabled`                                     | Add a Vector sidecar that ships Memgraph logs from its monitoring websocket to a Loki-compatible endpoint.   | `false`                        |
+| `vectorRemote.data`                                        | Add the Vector sidecar to data instance pods.                                                                | `true`                         |
+| `vectorRemote.coordinators`                                | Add the Vector sidecar to coordinator pods.                                                                  | `true`                         |
+| `vectorRemote.websocketPort`                               | Memgraph monitoring websocket port used by both the chart args and the Vector sidecars.                      | `7444`                         |
+| `vectorRemote.image.repository`                            | Vector image repository.                                                                                     | `timberio/vector`              |
+| `vectorRemote.image.tag`                                   | Vector image tag.                                                                                            | `0.49.0-debian`                |
+| `vectorRemote.image.pullPolicy`                            | Vector image pull policy.                                                                                    | `IfNotPresent`                 |
+| `vectorRemote.logsEndpoint`                                | Loki-compatible logs endpoint base URL; Vector's loki sink appends `/loki/api/v1/push`. Required when `vectorRemote.enabled=true`. | `""`                           |
+| `vectorRemote.auth.secretName`                             | Kubernetes Secret holding basic-auth credentials for the logs endpoint. When empty, basic auth is not configured. | `""`                           |
+| `vectorRemote.auth.usernameKey`                            | Key in the basic-auth Secret holding the username.                                                           | `username`                     |
+| `vectorRemote.auth.passwordKey`                            | Key in the basic-auth Secret holding the password.                                                           | `password`                     |
+| `vectorRemote.extraLabels`                                 | Extra labels attached to every log event shipped by Vector.                                                  | `{}`                           |
+| `vectorRemote.grafanaDashboard.enabled`                    | Ship the bundled "Memgraph Logs" Grafana dashboard as a `ConfigMap` for a Grafana sidecar to auto-load.      | `false`                        |
+| `vectorRemote.grafanaDashboard.namespace`                  | Namespace for the dashboard `ConfigMap`; must be one the Grafana sidecar watches. Defaults to `prometheus.namespace`, else release namespace. | `""`                           |
+| `vectorRemote.grafanaDashboard.label`                      | Label the Grafana sidecar selects dashboards by.                                                             | `grafana_dashboard`            |
+| `vectorRemote.resources`                                   | Resource requests/limits for the Vector sidecar container.                                                   | `{}`                           |
 | `labels.coordinators.podLabels`                            | Enables you to set labels on a pod level for coordinators.                                                   | `{}`                           |
 | `labels.coordinators.statefulSetLabels`                    | Enables you to set labels on a stateful set level for coordinators.                                          | `{}`                           |
 | `labels.coordinators.serviceLabels`                        | Enables you to set labels on a service level for coordinators.                                               | `{}`                           |
