@@ -53,10 +53,10 @@ extract that first and improve according to the above description.
 If that changelog item is not already there, feel free to create one, again
 according to the above guidelines.
 
-If the PR introduces a breaking change, write 2 items: one for the "regular"
-sections (Features, Improvements, Bug Fixes) and one for the Breaking section.
-The item under the Breaking section should be in the format: "What happened?
-What the end-user should do about it?".
+If the PR introduces a breaking change, put it **only** under the Breaking
+section — do not also list it under New features, Improvements, or Bug fixes.
+The Breaking item should be in the format: "What happened? What the end-user
+should do about it?".
 
 ## Release notes only, or also the rest of the docs?
 
