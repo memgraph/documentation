@@ -9,4 +9,5 @@ export default {
   "reference": "Reference",
   "licensing": "Licensing",
   "changelog": "Changelog",
+  "telemetry": "Telemetry",
 }
