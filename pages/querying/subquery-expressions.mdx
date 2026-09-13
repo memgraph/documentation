@@ -500,6 +500,74 @@ Output:
 Variables introduced inside the body are scoped to it and are not available after
 the subquery expression.
 
+A pattern in the body may hold nothing but a correlated variable. Such a pattern
+matches on the value bound to that name rather than scanning the graph: a node
+matches, a `null` matches nothing, and a value that is neither raises an error.
+
+```cypher
+MATCH (p:Person)
+OPTIONAL MATCH (p)-[:KNOWS]->(f:Person)
+WITH p, f
+RETURN p.name AS name, EXISTS { (f) } AS bound
+ORDER BY name, bound;
+```
+
+Output:
+
+```nocopy
++---------+-------+
+| name    | bound |
++---------+-------+
+| "Alice" | true  |
+| "Alice" | true  |
+| "Bob"   | true  |
+| "Carol" | false |
+| "Dave"  | false |
++---------+-------+
+```
+
+Carol and Dave know nobody, so `f` is `null` on their rows and `EXISTS { (f) }`
+is `false`. This is the same rule a top-level [`MATCH`](/querying/clauses/match)
+follows.
+
+A named path inside the body may not take its name from a variable declared
+outside the body. The body writes into the frame it shares with its caller, so
+one name cannot mean the caller's value in one place and the body's own path in
+another:
+
+```cypher
+MATCH (p:Person)
+WITH p, p.name AS path
+RETURN COUNT { MATCH path = (p)-[:KNOWS]->() } AS c;
+```
+
+Output:
+
+```nocopy
+Cannot name a pattern 'path' in COUNT, because that variable is already declared outside it.
+```
+
+Give the path a name of its own, and it works:
+
+```cypher
+MATCH (p:Person)
+RETURN COUNT { MATCH q = (p)-[:KNOWS]->() } AS c
+ORDER BY c;
+```
+
+Output:
+
+```nocopy
++---+
+| c |
++---+
+| 0 |
+| 0 |
+| 1 |
+| 2 |
++---+
+```
+
 ### The body's RETURN decides the result
 
 The body is a query, and its final `RETURN` shapes the row set that the
