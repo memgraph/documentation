@@ -1,0 +1,222 @@
+---
+title: Bulk import in analytical mode
+description: Import data into a high availability cluster using the in-memory analytical storage mode, then switch back to transactional and register the replicas again.
+---
+
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# Bulk import in analytical mode <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+The [in-memory analytical storage
+mode](/fundamentals/storage-memory-usage#in-memory-analytical-storage-mode)
+imports data up to 6 times faster and with significantly lower memory usage than
+the transactional mode, because it does not create `Delta` objects. As of
+Memgraph v3.13, a data instance in a high availability cluster can use that mode
+for a bulk import: switch to `IN_MEMORY_ANALYTICAL`, import, switch back to
+`IN_MEMORY_TRANSACTIONAL` and register the replicas again.
+
+Analytical writes are **never written to the WAL**, so they cannot be
+replicated. The whole workflow is therefore built around a single rule: while
+any database on the instance is analytical, the instance must have no replicas
+attached to it.
+
+<Callout type="info">
+
+Before continuing, read the guides on [how high availability
+works](/clustering/high-availability/how-high-availability-works) and on
+[storage modes](/fundamentals/storage-memory-usage#storage-modes).
+
+</Callout>
+
+## Requirements
+
+A data instance can enter the analytical storage mode only when:
+
+- it holds the **MAIN** role — a REPLICA receives replicated writes, which
+  analytical mode cannot apply, and
+- it has **zero registered replicas**.
+
+Both conditions are instance-wide and all-or-nothing:
+
+- entering analytical mode on **any** database requires that no replica is
+  registered at all, and
+- while **any** database is in analytical mode, registering and unregistering
+  replicas is rejected.
+
+Because [`UNREGISTER
+INSTANCE`](/clustering/high-availability/ha-commands-reference#unregister-instance)
+refuses to remove the current MAIN, the instance you import into is the one data
+instance that stays in the cluster.
+
+<Callout type="warning">
+
+While the import runs, the cluster consists of a single data instance and has
+**no redundancy**: there is no replica to fail over to. Plan the import for a
+maintenance window and keep it as short as possible.
+
+</Callout>
+
+Starting a data instance with
+[`--storage-mode=IN_MEMORY_ANALYTICAL`](/database-management/configuration)
+remains forbidden. An instance started in analytical mode can never produce WAL
+files, not even after switching to transactional mode, which would permanently
+break replication. Analytical mode is reachable only through the runtime
+`STORAGE MODE` query from a transactional start.
+
+## Import workflow
+
+<Steps>
+
+### Unregister every replica
+
+On the **coordinator**, remove all data instances except the MAIN:
+
+```cypher
+UNREGISTER INSTANCE instance_2;
+```
+
+The unregistered instance keeps running and keeps its data — unregistering
+removes it from the cluster, it does not wipe it. You do **not** need to clear
+its data directory before registering it back.
+
+### Switch the MAIN to analytical mode
+
+On the **MAIN data instance**:
+
+```cypher
+STORAGE MODE IN_MEMORY_ANALYTICAL;
+```
+
+If a replica is still registered, the query fails and the storage mode is
+unchanged.
+
+### Import the data
+
+Run the import as usual, for example with [`LOAD
+CSV`](/data-migration/csv) or plain Cypher:
+
+```cypher
+LOAD CSV FROM "/import/nodes.csv" WITH HEADER AS row
+CREATE (:Node {id: row.id});
+```
+
+### Switch back to transactional mode
+
+```cypher
+STORAGE MODE IN_MEMORY_TRANSACTIONAL;
+```
+
+This writes a snapshot of the imported data synchronously, before the mode
+change completes. Do **not** run `CREATE SNAPSHOT` while still in analytical
+mode — see [Durability of the switch back](#durability-of-the-switch-back).
+
+### Register the replicas back
+
+On the **coordinator**:
+
+```cypher
+REGISTER INSTANCE instance_2 WITH CONFIG {
+  "bolt_server": "localhost:7688",
+  "management_server": "localhost:10012",
+  "replication_server": "localhost:10002"
+};
+```
+
+The replica recovers from the snapshot written in the previous step and ends up
+with exactly the data the MAIN holds. Verify with `SHOW INSTANCES` on the
+coordinator and by counting nodes on the replica's own Bolt endpoint.
+
+</Steps>
+
+## Durability of the switch back
+
+The `IN_MEMORY_ANALYTICAL` → `IN_MEMORY_TRANSACTIONAL` switch is the point at
+which the imported data becomes durable, so it does more than flip a flag:
+
+- **It writes a snapshot** stamped with a timestamp that covers the import, and
+  publishes that timestamp as the instance's last durable timestamp. This is
+  what a re-registered replica recovers from.
+- **If the snapshot cannot be written, the switch is aborted** and the query
+  throws. The database stays in analytical mode with its data and all durability
+  files untouched, so you can fix the cause (most often disk space) and retry.
+- **Superseded snapshots and WAL files are archived**. The switch-back snapshot
+  is a new durability base rather than an increment on the old one, so older
+  snapshots and all WAL files are moved to the `.old` directory — or deleted
+  when [`--storage-backup-dir-enabled`](/database-management/configuration) is
+  set to `false` — and WAL sequence numbering restarts from 0.
+- **The WAL is finalized when analytical mode is entered**, which is what lets
+  replica recovery detect that the imported data exists in no WAL file and must
+  be shipped as a snapshot.
+
+<Callout type="warning">
+
+Do not run `CREATE SNAPSHOT` between the import and the switch back. A snapshot
+taken while the instance is in analytical mode carries the **pre-import**
+durable timestamp, because analytical writes never advance it. It is redundant
+at best — the switch back writes a correctly stamped snapshot on its own.
+
+</Callout>
+
+## Re-registering a replica that holds old data
+
+A replica that was unregistered before the import keeps whatever it had at that
+moment, and it may be strictly behind the MAIN. When you register it back,
+Memgraph compares the newest snapshot's timestamp against the ranges of the WAL
+files. The analytical episode leaves a gap that no WAL covers, so recovery
+detects that the WAL chain cannot reproduce the imported data and sends the
+snapshot instead of the WAL files.
+
+The consequences for you as an operator:
+
+- There is **no need to wipe the replica's data directory** before registering
+  it back.
+- The detection is derived from the durability files, not from in-memory state,
+  so it also works if the MAIN is **restarted** between the import and the
+  re-registration.
+
+## Cluster changes while the MAIN is still analytical
+
+`REGISTER INSTANCE` and `UNREGISTER INSTANCE` are committed to the Raft log
+first and only then applied on the MAIN over RPC, so both queries still report
+success while the MAIN is analytical, even though the MAIN rejects the RPC and
+logs the reason:
+
+- **`REGISTER INSTANCE`** — the instance is part of the cluster state, but no
+  replication client is created for it, so it receives nothing.
+- **`UNREGISTER INSTANCE`** — the instance is removed from the cluster state,
+  but the MAIN keeps its replication client.
+
+In both cases the [reconciliation
+loop](/clustering/high-availability/how-high-availability-works#how-the-reconciliation-loop-works)
+resolves the difference on its own once every database is back in transactional
+mode. Still, a query reported as successful does not mean the replica is
+attached or detached yet: change the cluster composition only while the cluster
+is in transactional mode, and confirm the state with `SHOW INSTANCES` on the
+coordinator.
+
+## Errors
+
+| Query | Error | Cause |
+|-------|-------|-------|
+| `STORAGE MODE IN_MEMORY_ANALYTICAL` | `Only the MAIN data instance can use analytical mode.` | The instance holds the REPLICA role. |
+| `STORAGE MODE IN_MEMORY_ANALYTICAL` | `Cannot switch to analytical mode while replicas are registered (...)` | At least one replica is registered. The message lists the names. |
+| `STORAGE MODE IN_MEMORY_TRANSACTIONAL` | `Failed to create the snapshot required to leave IN_MEMORY_ANALYTICAL.` | The switch-back snapshot could not be written. The database stays analytical and unchanged. |
+| `REGISTER REPLICA` | `Couldn't register replica ... because a database is in analytical storage mode.` | Some database on the instance is analytical. |
+| `DROP REPLICA` | `Couldn't unregister replica ... because a database is in analytical storage mode.` | Some database on the instance is analytical. |
+
+The same gates apply to the RPCs the coordinator sends behind `REGISTER
+INSTANCE` and `UNREGISTER INSTANCE`; there the rejection is visible in the data
+instance's log rather than in the query result.
+
+## Plain replication clusters
+
+The gates are not specific to high availability. In a [replication
+cluster](/clustering/replication) without coordinators, a MAIN with registered
+replicas is likewise refused the switch to analytical mode, and `REGISTER
+REPLICA` / `DROP REPLICA` are refused while any database is analytical. Use the
+same workflow with `DROP REPLICA` and `REGISTER REPLICA` in place of the
+coordinator queries.
+
+<CommunityLinks/>

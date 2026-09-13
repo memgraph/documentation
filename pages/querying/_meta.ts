@@ -6,6 +6,7 @@ export default {
   "clauses": "Clauses",
   "functions": "Functions",
   "expressions": "Expressions",
+  "subquery-expressions": "Subquery expressions",
   "schema": "Schema",
   "text-search": "Text search",
   "vector-search": "Vector search",

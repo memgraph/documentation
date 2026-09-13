@@ -455,6 +455,10 @@ Sets a return value of given type.
   void SetValue(const Enum &value)
 ```
 
+```cpp
+  void SetValue(const Value &value)
+```
+
 ##### SetErrorMessage
 
 Sets the given error message.

@@ -616,6 +616,71 @@ Result:
 +-------------------------------+
 ```
 
+## Access control <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+When [fine-grained access control](/database-management/authentication-and-authorization/role-based-access-control#fine-grained-access-control)
+is active for the user running the query, text search respects their read
+permissions: a match is returned only if the user could read it with a normal
+query. Content the user is not allowed to read is never revealed through the
+search results or their relevance scores.
+
+A node or relationship appears in the results only when **both** of these hold:
+
+- **The node or relationship is readable.** The user has `READ` on its
+  [labels](/database-management/authentication-and-authorization/role-based-access-control#label-based-access-control)
+  — or, for a relationship, on its
+  [type](/database-management/authentication-and-authorization/role-based-access-control#relationship-permissions)
+  and on both of its endpoint nodes. Permissions are evaluated against the
+  entity's *actual* labels, so a `DENY` on any of them removes it from the
+  results.
+- **The matched property is readable.** Which properties must be readable
+  depends on the procedure:
+  - `text_search.search` and `text_search.search_edges` search a property named
+    in the query (for example `data.name:Alice`), so only that
+    [property](/database-management/authentication-and-authorization/role-based-access-control#property-based-access-control)
+    must be readable. The match surfaces even if the entity has other properties
+    the user cannot read.
+  - `text_search.search_all`, `text_search.regex_search` and their `_edges`
+    variants search across every indexed property, so **all** indexed text
+    properties the entity has must be readable — if even one is denied, the
+    entity is dropped, because the match could have come from it.
+
+A hit whose match depends on a property the user cannot read is **silently
+dropped**: the results are simply empty, just as a
+[denied property](/database-management/authentication-and-authorization/role-based-access-control#how-denied-properties-behave)
+reads back as `Null` in a normal query. No error is raised.
+
+For example, with a text index on `:Employee` and an analyst who can read
+employees and their properties, except `ssn`:
+
+```cypher
+GRANT READ ON NODES CONTAINING LABELS :Employee TO analyst;
+GRANT READ {*} ON NODES CONTAINING LABELS :Employee TO analyst;
+DENY READ {ssn} ON NODES CONTAINING LABELS :Employee TO analyst;
+```
+
+- `CALL text_search.search('employees', 'data.name:Alice')` returns matching
+  employees — `name` is readable.
+- `CALL text_search.search('employees', 'data.ssn:123456789')` returns nothing —
+  the queried property is denied.
+- `CALL text_search.search_all('employees', 'Alice')` returns nothing for an
+  employee whose indexed `ssn` is set, because the match could have come from the
+  denied property.
+
+<Callout type="warning">
+`text_search.aggregate` and `text_search.aggregate_edges` run inside the search
+engine and cannot filter individual results, so they cannot apply per-row
+permissions. When the caller has a fine-grained restriction on the index's
+properties, the aggregation returns an error message instead of a result — use
+the search procedures above when you need permission-aware results.
+</Callout>
+
+<Callout type="info">
+These checks apply only when fine-grained access control is active for the user.
+An unrestricted user (for example an administrator) and Memgraph Community
+edition see all matches.
+</Callout>
+
 ## Drop text index
 
 Text indices are dropped with the `DROP TEXT INDEX` command. You need to give the name of the index to be deleted.

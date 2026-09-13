@@ -41,8 +41,7 @@ authentication and authorization mechanisms used by Memgraph.
 
  Flag                               | Description
 ------------------------------------|------------
- `--auth-module-mappings`           | Associates auth schemes to external modules. A mapping is structured as follows: `<scheme>:<absolute path to module>` and individual entries are separated with `;`. SSO schemes with [default module paths](#sso-schemes-with-default-module-paths) can omit the path. If the mapping contains whitespace, enclose the flag value with quotation marks.
- `--auth-module-executable`         | [DEPRECATED] Path to the executable that should be used for user authentication/authorization. Replaced by `--auth-module-mappings` from Memgraph 2.18.
+ `--auth-module-mappings`           | Associates auth schemes to external modules. A mapping is structured as follows: `<scheme>:<absolute path to module>` and individual entries are separated with `;`. SSO schemes with [default module paths](#sso-schemes-with-default-module-paths) can omit the path. If the mapping contains whitespace, enclose the flag value with quotation marks. Replaces `--auth-module-executable`, which no longer works (see [deprecated features](/database-management/upgrades/deprecated-features)).
  `--auth-module-timeout-ms`         | Specifies the maximum time that Memgraph will wait for a response from the external auth module.
  `--auth-password-permit-null`      | Can be set to `false` to disable null passwords.
  `--auth-password-strength-regex`   | The regular expression that should be used to match the entire entered password to ensure its strength.
@@ -153,6 +152,29 @@ docker run -it -p 7687:7687 -p 7444:7444 \
 This approach ensures that all roles are created before the external
 authentication module is activated, allowing users to log in seamlessly across
 all supported authentication methods.
+
+This workflow only applies to standalone Memgraph instances. On [data instances
+running in HA
+mode](/clustering/high-availability/how-high-availability-works#data-instance-implementation)
+(i.e. when `--management-port` is set), `--init-file` is **not supported** and
+the instance will fail to start if the flag is provided. There you must use the
+manual procedure instead: start the data instance **without**
+`--auth-module-mappings`, log in, create the roles and grant their privileges,
+then restart with the flag set.
+
+<Callout type="info">
+From Memgraph 3.13, [high availability
+coordinators](/clustering/high-availability/coordinator-authentication) also
+support SSO, using these same modules, schemes and `MEMGRAPH_SSO_*` environment
+variables. Coordinators **do not** need this stop-and-restart cycle: basic
+authentication stays open until a role holding `COORDINATOR_WRITE` exists, so
+you can start them with `--auth-module-mappings` from the beginning and create
+the roles over Bolt on the running cluster.
+
+Note that a `neo4j://` routing connection authenticates against a coordinator
+*and* a data instance with the same credentials, so the **same role names must
+exist on both**.
+</Callout>
 
 ## Auth module architecture
 
