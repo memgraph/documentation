@@ -19,6 +19,8 @@ This page covers:
 - [Quickstart](#quickstart): fastest way to run Memgraph with Docker.
 - [Available Docker images](#available-docker-images): what each Docker image
   includes.
+- [FIPS 140-3 compliant image](#fips-140-3-compliant-image): running Memgraph in
+  FIPS approved mode.
 - [Using Docker Compose](#using-docker-compose): if you prefer a
   multi-containered setup
 - [Install downloaded image](#install-from-a-downloaded-image): Load Memgraph
@@ -114,6 +116,180 @@ image tags you can use to install Memgraph with.
 | `memgraph/lab`       | Web interface for querying and visualization  |
 
 
+
+## FIPS 140-3 compliant image
+
+<Callout type="warning">
+
+FIPS support is **experimental** and requires a **Memgraph Enterprise license**.
+Enabling it on a database that already has users locks those users out until
+their passwords are reset — see [Upgrading an existing
+database](#upgrading-an-existing-database) before you switch.
+
+</Callout>
+
+Memgraph publishes a FIPS 140-3 variant of the `memgraph/memgraph` image,
+tagged with a `-fips` suffix:
+
+```bash
+docker pull memgraph/memgraph:3.13.1-fips
+```
+
+It is a separate image rather than a flag on the standard one, because the
+difference is in the image contents, not just the configuration.
+
+{<h3 className="custom-header">What differs from the standard image</h3>}
+
+| | `memgraph/memgraph:3.13.1` | `memgraph/memgraph:3.13.1-fips` |
+|---|---|---|
+| OpenSSL | Stock Ubuntu OpenSSL | OpenSSL + the validated **FIPS provider** (`fips.so`) |
+| `OPENSSL_CONF` | Distribution default | `/etc/ssl/openssl-fips.cnf` — activates the FIPS and base providers only |
+| Python support | Included | **Not included** — no Python query modules, no Python auth modules |
+| Approved mode | Not available | Opt-in with `--fips-mode=true` |
+
+Python is excluded deliberately. The Python auth-module wheels (`cryptography`,
+`xmlsec`) bundle their own statically linked OpenSSL, which would place a
+second, unvalidated cryptographic module inside the image on the SAML/JWT
+authentication path.
+
+The image is verified at build time: the build fails unless the FIPS provider
+is present in OpenSSL's module directory, reports `status: active` (a module
+that fails its power-on self-test still appears in the provider list), and
+supplies the DRBG (Deterministic Random Bit Generator).
+
+<Callout type="info">
+
+There is currently no FIPS variant of `memgraph/memgraph-mage`. MAGE query modules are
+loaded in-process and can carry their own cryptographic primitives, which
+approved mode cannot constrain.
+
+</Callout>
+
+{<h3 className="custom-header">Running the image</h3>}
+
+Pulling the image is not enough — approved mode is opt-in per process. Pass
+`--fips-mode=true` along with your Enterprise license:
+
+```bash
+docker run -p 7687:7687 -p 7444:7444 --name memgraph \
+  -e MEMGRAPH_ENTERPRISE_LICENSE="<your-license-key>" \
+  -e MEMGRAPH_ORGANIZATION_NAME="<your-organization>" \
+  memgraph/memgraph:3.13.1-fips --fips-mode=true
+```
+
+Without `--fips-mode=true` the container starts normally and uses the FIPS
+provider for anything routed through OpenSSL, but Memgraph does not enforce the
+approved-mode restrictions described below.
+
+If approved mode cannot be entered, Memgraph refuses to start with a distinct
+exit code rather than serving traffic under a compliance claim that is not
+true:
+
+| Exit code | Meaning |
+|---|---|
+| `14` | The OpenSSL FIPS provider is unavailable or not operational |
+| `15` | `--password-encryption-algorithm` is set to a non-approved algorithm |
+| `16` | No valid Enterprise license |
+
+{<h3 className="custom-header">What approved mode enforces</h3>}
+
+- **Password hashing** is restricted to `pbkdf2-sha256` (PBKDF2-HMAC-SHA256,
+  600,000 iterations, 128-bit salt from the module's DRBG). If you do not set
+  `--password-encryption-algorithm`, Memgraph selects it automatically; if you
+  set it to `bcrypt`, `sha256` or `sha256-multiple`, startup fails with exit
+  15.
+- **TLS** negotiates a minimum of TLS 1.2 on every connection Memgraph accepts
+  or makes, including replication and the coordinator's Raft port.
+- **Pre-computed password hashes** (`CREATE USER … IDENTIFIED BY
+  'bcrypt:$2a$…'`) are rejected.
+
+{<h3 className="custom-header">Verifying approved mode</h3>}
+
+Run `SHOW FIPS INFO` to confirm what is actually in force, including the
+identity of the validated module:
+
+```cypher
+SHOW FIPS INFO;
+```
+
+```
++----------------------+----------------------------+
+| fips info            | value                      |
++----------------------+----------------------------+
+| "enabled"            | true                       |
+| "module_name"        | "OpenSSL FIPS Provider"    |
+| "module_version"     | "3.1.2"                    |
+| "password_algorithm" | "pbkdf2-sha256"            |
+| "tls_min_version"    | "TLSv1.2"                  |
++----------------------+----------------------------+
+```
+
+On an image that is not in approved mode, `enabled` is `false` and the module
+fields are empty.
+
+{<h3 className="custom-header" id="upgrading-an-existing-database">Upgrading an existing database</h3>}
+
+A password hash cannot be converted between algorithms — that needs the
+plaintext password, which Memgraph does not store. Every user hashed with
+`bcrypt` (the default), `sha256` or `sha256-multiple` therefore cannot
+authenticate in approved mode, and their passwords must be **reset**. Memgraph
+lists the affected users at startup, before it accepts connections.
+
+The least disruptive approach is to move the hashes across **before** enabling
+FIPS, on your existing non-FIPS instance, so nobody is ever locked out:
+
+<Steps>
+
+{<h3 className="custom-header">Switch the hashing algorithm</h3>}
+
+Restart your current instance with `--password-encryption-algorithm=pbkdf2-sha256`.
+Existing users keep their old hashes and can still log in; only new hashes use
+the approved algorithm.
+
+{<h3 className="custom-header">Reset each password</h3>}
+
+As an administrator, reset every user's password. This writes a new
+`pbkdf2-sha256` hash and does not read the old one:
+
+```cypher
+SET PASSWORD FOR alice TO 'new-password';
+```
+
+{<h3 className="custom-header">Switch to the FIPS image</h3>}
+
+Start the `-fips` image with `--fips-mode=true`. The startup log should report
+no locked-out users.
+
+</Steps>
+
+If you have already enabled FIPS and locked yourself out, recover with
+`--init-file`, which runs before the Bolt server starts and does not
+authenticate:
+
+```cypher
+SET PASSWORD FOR admin TO 'new-password';
+SET PASSWORD FOR alice TO 'new-password';
+```
+
+```bash
+docker run -p 7687:7687 --name memgraph \
+  -e MEMGRAPH_ENTERPRISE_LICENSE="<your-license-key>" \
+  -e MEMGRAPH_ORGANIZATION_NAME="<your-organization>" \
+  -v /path/to/reset.cypherl:/etc/memgraph/reset.cypherl:ro \
+  memgraph/memgraph:3.13.1-fips \
+  --fips-mode=true --init-file=/etc/memgraph/reset.cypherl
+```
+
+<Callout type="warning">
+
+The init file contains plaintext passwords and re-runs on **every** startup,
+resetting those passwords each time. Remove the `--init-file` flag and delete
+the file once you have recovered access.
+
+Init files also do not support comments — every non-empty line is parsed as a
+query, so a `//` line causes a parse error.
+
+</Callout>
 
 ## Verify image signatures and attestations
 
