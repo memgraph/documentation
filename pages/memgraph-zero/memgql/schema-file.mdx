@@ -135,7 +135,7 @@ Every `connection` field is optional; supply what a given backend needs:
 |--------------------|----------|
 | `uri`              | Connection string for the backend. |
 | `user` / `password`| Credentials (override / complement the URI). |
-| `database`         | Database name. |
+| `database`         | Database name. On `memgraph` / `neo4j` it selects the Bolt database (multi-tenancy), the same thing `ADD CONNECTOR … GRAPH <db>` selects at runtime, so one instance can back several connectors; `EXPORT SCHEMA` writes a runtime `GRAPH` selector back as `database`. |
 | `schema`           | Middle namespace (PostgreSQL schema, MySQL / ClickHouse database, Iceberg schema). |
 | `catalog`          | Native root for three-level backends (Iceberg catalog, SQL Server database, Fabric warehouse/lakehouse item). |
 | `path`             | File-backed backends (DuckDB). |
@@ -249,8 +249,9 @@ A vertex maps a **label** to a backend source. Exactly one source kind is set:
 |-------|-------------|-------------|
 | `mappedTableSource.connector` | relational | Connector name (alias `catalog`). |
 | `mappedTableSource.schema`    | relational | Optional middle namespace (PostgreSQL schema, etc.). |
-| `mappedTableSource.table`     | relational | The backing table. |
-| `mappedTableSource.metaFields.id` | relational | Primary-key column; the node's identity and the join key for edges. Also exposed as a property, so `RETURN n` includes it and `n.<id_column>` reads it by name. |
+| `mappedTableSource.database`  | relational | Optional outer namespace for backends with three-part names; on SQL Server it renders `database.schema.table`, so one connection can reach views in other databases. |
+| `mappedTableSource.table`     | relational | The backing table or view. |
+| `mappedTableSource.metaFields.id` | relational | Primary-key column, or a list of columns for a composite key (`["region", "order_no"]`); the node's identity and the join key for edges. Each column is also exposed as a property, so `RETURN n` includes it and `n.<id_column>` reads it by name. |
 | `mappedGraphSource.connector` | native      | Connector name (Memgraph / Neo4j); the query passes through as Cypher. |
 
 ### Edges
@@ -302,6 +303,13 @@ A relational edge adds two more `metaFields` on top of `id`:
 | `id`   | The edge row's own key. Exposed as a property, like a vertex's. |
 | `from` | Foreign-key column pointing at the **source** vertex's id column. |
 | `to`   | Foreign-key column pointing at the **target** vertex's id column. |
+
+Each key is a column name or a list of column names. A list declares a
+composite key and is matched positionally against the endpoint's `id` list, so
+`"to": ["region", "order_no"]` requires the target vertex to declare
+`"id": ["region", "order_no"]`; a length mismatch is refused at load. The join
+is pushed down column by column
+(`… AND r.region = o.region AND r.order_no = o.order_no`).
 
 `from` and `to` are **required** on relational edges; they define the traversal
 `(from)-[:LABEL]->(to)`. Loading fails with an actionable error if either is
