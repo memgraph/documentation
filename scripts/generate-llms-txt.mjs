@@ -424,10 +424,12 @@ function build() {
   lines.push('# Memgraph documentation')
   lines.push('')
   lines.push(
-    '> Memgraph is an open-source, in-memory graph database built for real-time',
-    '> analytics on highly connected data. It speaks Cypher, runs graph algorithms',
-    '> and GraphRAG pipelines in-database, and is used for fraud detection,',
-    '> network optimization, identity and access management, and AI memory.'
+    '> Memgraph is the graph engine for AI context, built for real-time graph',
+    '> reasoning. It complements vector search with structured, connected context',
+    '> and traceable multi-hop reasoning across enterprise data in milliseconds.',
+    '> One in-memory engine serves two workloads: AI context (GraphRAG, AI memory',
+    '> and agentic reasoning) and real-time graph analytics. Memgraph speaks Cypher',
+    '> and runs graph algorithms, vector search and GraphRAG pipelines in-database.'
   )
   lines.push('')
   lines.push(
