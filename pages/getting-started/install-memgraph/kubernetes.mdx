@@ -127,6 +127,99 @@ This change will be applied to all nodes in the cluster. If you want to disable 
 </Callout>
 
 
+### Deploying on Red Hat OpenShift
+
+The standalone chart works on Red Hat OpenShift, but the chart defaults target
+a plain Kubernetes cluster and collide with OpenShift's default `restricted-v2`
+[Security Context Constraint
+(SCC)](https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/authentication_and_authorization/managing-pod-security-policies).
+Under that SCC, pods cannot run privileged containers, cannot run as root, and
+must use a UID and GID from the range assigned to the project. Three chart
+values need to change before `helm install` succeeds.
+
+**Disable the sysctl init container.** The `init-sysctl` container runs as
+root with `privileged: true` to set `vm.max_map_count`, which the SCC rejects,
+so the pod never gets scheduled. Set `sysctlInitContainer.enabled` to `false`
+and raise `vm.max_map_count` on the worker nodes instead, for example through
+the [Node Tuning
+Operator](https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/scalability_and_performance/using-node-tuning-operator)
+or a `MachineConfig`. See [recommended values for the `vm.max_map_count`
+parameter](/database-management/system-configuration#recommended-values-for-the-vmmax_map_count-parameter)
+for the value to use.
+
+**Keep the core-dumps claim disabled.** When
+`persistentVolumeClaim.createCoreDumpsClaim` is `true`, the chart adds an
+`init-core-dumps` container that also runs privileged as root to write the
+kernel core pattern. Leave it at the default `false` on OpenShift.
+
+**Move the UID and GID into the project's allowed range.** The chart sets the
+pod's `runAsUser`, `runAsGroup`, and `fsGroup` from `memgraphUserId` and
+`memgraphGroupId`, which default to the `101`/`103` hardcoded in the Memgraph
+image. OpenShift assigns each project its own UID range and rejects anything
+outside it. Read the range from the project annotations:
+
+```bash
+oc get project <project-name> -o jsonpath='{.metadata.annotations.openshift\.io/sa\.scc\.uid-range}{"\n"}'
+oc get project <project-name> -o jsonpath='{.metadata.annotations.openshift\.io/sa\.scc\.supplemental-groups}{"\n"}'
+```
+
+The output looks like `1000680000/10000`, meaning any UID from `1000680000` to
+`1000689999` is allowed. Pick a value from that range for both IDs. Memgraph
+does not need to run as UID `101`. Its data and log directories live on the
+PVCs, which `fsGroup` makes writable for the chosen group, and the root
+filesystem stays writable so the `/tmp` writes some MAGE Python libraries need
+still work.
+
+Putting it together, a minimal `values.yaml` for OpenShift looks like this:
+
+```yaml
+memgraphUserId: 1000680000
+memgraphGroupId: 1000680000
+
+sysctlInitContainer:
+  enabled: false
+
+persistentVolumeClaim:
+  createCoreDumpsClaim: false
+  # Use the storage class provided by your OpenShift cluster, leave empty for the default one.
+  storageClassName: ""
+  logStorageClassName: ""
+```
+
+Then install the chart into the project:
+
+```bash
+helm install <release-name> memgraph/memgraph -n <project-name> -f values.yaml
+```
+
+<Callout type="info">
+If you must keep the image's default `101`/`103` IDs, for example because you
+mount volumes that already have that ownership, the alternative is to grant the
+chart's service account the `nonroot-v2` SCC or a custom SCC that allows those
+IDs. This needs cluster-admin rights. The chart creates a service account by
+default (`serviceAccount.create: true`), so the command is:
+
+```bash
+oc adm policy add-scc-to-user nonroot-v2 -z <release-name> -n <project-name>
+```
+
+Even with a custom SCC, the two privileged init containers stay unavailable
+unless the SCC also allows privileged containers, so keep them disabled.
+</Callout>
+
+Leave `storageClass.create` at its default `false`. The chart's built-in
+storage class targets Minikube's hostPath provisioner, and OpenShift clusters
+ship with their own storage classes. If the cluster has no default storage
+class, set `persistentVolumeClaim.storageClassName` and
+`persistentVolumeClaim.logStorageClassName` explicitly.
+
+For external access, `service.type: LoadBalancer` works the same way as on any
+other Kubernetes cluster (see [External access with
+LoadBalancer](#external-access-with-loadbalancer)). OpenShift Routes only proxy
+HTTP traffic, so a Route in front of the Bolt port works only in `passthrough`
+TLS mode with [SSL enabled on Memgraph's Bolt
+server](/database-management/ssl-encryption).
+
 ### Installing Memgraph standalone Helm chart
 
 To include a standalone Memgraph into your Kubernetes cluster, you need
