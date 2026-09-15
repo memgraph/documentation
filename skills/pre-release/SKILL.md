@@ -1,13 +1,13 @@
 ---
 name: pre-release
-description: Run final pre-release tasks for the documentation site. Updates release note dates, direct download links to the new Memgraph version, and rebuilds the site to regenerate the sitemap. Use when preparing a documentation release, before publishing, or when asked to run "pre-release" steps.
+description: Run final pre-release tasks for the documentation site. Updates release note dates and direct download links to the new Memgraph version. Use when preparing a documentation release, before publishing, or when asked to run "pre-release" steps.
 ---
 
 # Pre-release
 
 Run these steps right before publishing a new documentation release to ensure
-release dates are correct, download links point to the latest Memgraph version,
-and the sitemap is up-to-date.
+release dates are correct and download links point to the latest Memgraph
+version.
 
 ## When to use
 
@@ -44,11 +44,5 @@ replace **every** occurrence of the previous version with the new one.
 - Verify the result: every URL in the file should reference only the new
   version.
 
-### 3. Rebuild the site to regenerate the sitemap
-
-Run `pnpm build` from the documentation root. The `postbuild` script
-(`next-sitemap`) regenerates `sitemap.xml` automatically.
-
-Confirm the build finishes successfully and the sitemap generation summary
-appears at the end of the output (look for `[next-sitemap] Generation
-completed`).
+Do **not** regenerate or commit `sitemap.xml` as part of a release. The sitemap
+is no longer updated per release.
