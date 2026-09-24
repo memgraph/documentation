@@ -439,10 +439,14 @@ function build() {
   )
   lines.push('')
   lines.push(
-    'Coding agents can install Memgraph Agent Skills for Cypher, data modeling,',
-    'MAGE algorithms, query modules and GraphRAG with `npx skills add memgraph/skills`,',
-    'or in Claude Code with `/plugin marketplace add memgraph/skills`. See',
-    `${SITE}/ai-ecosystem/skills.md for the list of skills.`
+    'For coding agents:',
+    '',
+    '- Search these docs over MCP at `https://mcp-docs.memgraph.com`, with no API key.',
+    '  In Claude Code: `claude mcp add --transport http memgraph-docs https://mcp-docs.memgraph.com`.',
+    `  Other clients: ${SITE}/ai-ecosystem/mcp.md.`,
+    '- Install Memgraph Agent Skills for Cypher, data modeling, MAGE algorithms, query',
+    '  modules and GraphRAG with `npx skills add memgraph/skills`, or in Claude Code with',
+    `  \`/plugin marketplace add memgraph/skills\`. Skill list: ${SITE}/ai-ecosystem/skills.md.`
   )
   lines.push('')
 
