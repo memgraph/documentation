@@ -25,6 +25,7 @@ supports.
 | Multiple chained `WITH` steps in one query                         | ✓               | ✓            | ✓       |
 | Pass a whole node through `WITH n` to a later step                 | ✓               | ✓            | ✓       |
 | `MATCH (n)-[r:R]->(m)` typed edge expansion                        | ✓               | ✓            | ✓       |
+| Multi-label pattern `(n:A&B)`; shared label over several mappings  | ✓               | ✓            | ✗       |
 | Untyped edge `()-[]->(b)` (union over types)                       | ✓               | ✗            | ✗       |
 | `UNION` / `UNION ALL` / `UNION DISTINCT`                           | ✓               | ✓            | ✗       |
 | `INTERSECT` / `EXCEPT`                                             | ✓               | ✓            | ✗       |
@@ -73,6 +74,13 @@ supports.
   `MATCH p = (a){1,3}(b) RETURN p` is not yet supported on SQL backends or
   MongoDB. Drop the `p =` binding (or query a Cypher backend) and `RETURN` the
   individual nodes / edges instead.
+- **Shared labels** (a label listed by several vertex mappings, see
+  [Vertices](/memgraph-zero/memgql/schema-file#vertices)) are unioned only
+  within one connector; a label shared across connectors is refused by routing
+  as ambiguous. A pattern matched through a shared label can be returned,
+  filtered, sorted and aggregated, but not traversed from (`(a:Animal)-[:R]->()`),
+  not `INSERT`ed, and JSON keys (`a.props.key`) cannot be read through it —
+  each is refused with a pointer to the identifying label to use instead.
 
 #### MongoDB-specific
 
@@ -407,7 +415,7 @@ for property-level introspection. See
 |---------------------------|------------------|-------------------------------------------------------------------|
 | `CONNECTOR_TYPE`          | `memgraph`       | Connector to use (see table below)                                |
 | `CONNECTION_TYPE`         | _(none)_         | Alias for `CONNECTOR_TYPE`                                        |
-| `BOLT_LISTEN_ADDR`        | `127.0.0.1:7688` | Address the Bolt server binds to                                  |
+| `BOLT_LISTEN_ADDR`        | `0.0.0.0:7688`   | `<ip>:<port>` the Bolt listener binds — every interface by default, as in Memgraph. Use `127.0.0.1:7688` to accept only connections from the same host. An IP, not a hostname; IPv6 in brackets (`[::]:7688`). `--bolt-address` / `--bolt-port` override it. |
 | `MEMGQL_DEFAULT_LANGUAGE` | `gql`            | [Query language](/memgraph-zero/memgql/reference#query-languages) for bare (unprefixed) queries |
 
 ### Logging
@@ -421,6 +429,8 @@ CLI flags on the Bolt server binary.
 
 | Flag                       | Default            | Description                                          |
 |----------------------------|--------------------|------------------------------------------------------|
+| `--bolt-address=<IP>`      | `0.0.0.0`          | Interface the Bolt listener binds; `127.0.0.1` refuses connections from other hosts. An IP, not a hostname; IPv6 bare (`::`). |
+| `--bolt-port=<PORT>`       | `7688`             | Port the Bolt listener binds (`--bolt-server=<PORT>` is a synonym). Each flag replaces only its half of `BOLT_LISTEN_ADDR`. |
 | `--log-level=<LEVEL>`      | `INFO`             | Logging verbosity for console and file (see below)   |
 | `--log-file=<PATH>`        | `bolt_server.log`  | File to mirror the (level-filtered) log output to    |
 | `--default-language=<L>`   | `gql`              | [Query language](/memgraph-zero/memgql/reference#query-languages) for bare queries (`gql` / `cypher`) |

@@ -5,6 +5,61 @@ description: MemGQL release notes
 
 # MemGQL Changelog
 
+## MemGQL v0.13.0 - unreleased
+
+### 🍃 New features & Improvements
+
+- **Multi-label vertex mappings.** A vertex may declare
+  `"labels": ["Cat", "Animal"]` instead of a single `label`. The first label
+  identifies the mapping; the others may be shared with other mappings. A
+  pattern on a shared label (`MATCH (a:Animal)`) reads every table that
+  carries it as one `UNION` inside the connector, resolving shared property
+  names through each table's own columns and returning `null` for a property
+  only some of them declare. Returned nodes carry all of their labels. See
+  [Vertices](/memgraph-zero/memgql/schema-file#vertices).
+- **`--bolt-address` and `--bolt-port`.** The Bolt listener's interface and
+  port as flags, alongside `BOLT_LISTEN_ADDR`; each flag replaces only its half
+  of the address, so `--bolt-port=7690` starts a second server beside the
+  first. `--bolt-address=127.0.0.1` keeps a server local. See
+  [Configuration](/memgraph-zero/memgql/reference#configuration-reference).
+- **Join edges within one connector.** `mappedJoinSource` now also links two
+  tables in the same relational connector — the case where a row carries the
+  target's *business key* rather than a foreign key into its `metaFields.id`,
+  which a table-backed edge cannot express. The traversal is pushed down as a
+  single `JOIN`, so aggregates across it work and no federated join is
+  involved. See
+  [Cross-connector edges](/memgraph-zero/memgql/schema-file#cross-connector-edges).
+
+### ⚠️ Behavior changes
+
+- **MemGQL listens on every interface by default.** The Bolt listener binds
+  `0.0.0.0:7688` instead of `127.0.0.1:7688`, matching Memgraph's own
+  `--bolt-address` default, so a published container port or a Kubernetes
+  Service reaches it without `BOLT_LISTEN_ADDR`. Anything that can route to
+  the host can now open a session: set `--bolt-address=127.0.0.1` (or
+  `BOLT_LISTEN_ADDR=127.0.0.1:7688`) where the server should stay local, and
+  the `server.listen_addr` row of `SHOW CONFIG` reports what it bound.
+- **A label the mapping does not declare now matches nothing.**
+  `MATCH (p:Person&Vip)` (GQL; `(p:Person:Vip)` in Cypher) on a `Person` table
+  that does not carry `Vip` returns no rows. Previously the second label was
+  ignored and every `Person` came back.
+
+### 🐞 Bug fixes
+
+- `SHOW STATS CONNECTORS` missed queries that routed by label to a single
+  connector; only federated and `USE`-qualified queries were counted.
+
+### 🚧 Known limitations
+
+- A shared label is unioned within one connector only; shared across
+  connectors it is refused by routing as ambiguous. A node matched through a
+  shared label cannot be traversed from, `INSERT`ed, or have JSON keys read
+  through it — each refusal names the identifying label to use instead. See
+  [Known limitations](/memgraph-zero/memgql/reference#known-limitations).
+- A join edge inside one connector cannot be traversed with a variable-length
+  step, and both endpoints on a Memgraph or Neo4j connector are refused in
+  favour of `mappedGraphSource`.
+
 ## MemGQL v0.12.0 - September 14th, 2026
 
 ### ⚠️ Breaking changes
