@@ -438,6 +438,13 @@ function build() {
     'The wider company site is indexed separately at https://memgraph.com/llms.txt.'
   )
   lines.push('')
+  lines.push(
+    'Coding agents can install Memgraph Agent Skills for Cypher, data modeling,',
+    'MAGE algorithms, query modules and GraphRAG with `npx skills add memgraph/skills`,',
+    'or in Claude Code with `/plugin marketplace add memgraph/skills`. See',
+    `${SITE}/ai-ecosystem/skills.md for the list of skills.`
+  )
+  lines.push('')
 
   if (home?.file) {
     lines.push('## Overview')
