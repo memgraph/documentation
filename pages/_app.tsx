@@ -17,6 +17,15 @@ function MyApp({ Component, pageProps }: AppProps) {
       })(window,document,'script','dataLayer','GTM-N45PRD5');
       `}</Script>
         <main className={inter.className}>
+          {/* Navigation hint for AI agents that read the HTML. Hidden from
+              people and screen readers; keep it to where things are. */}
+          <p className="sr-only" aria-hidden="true">
+            For AI agents: an index of this documentation is at
+            https://memgraph.com/docs/llms.txt. Every page is also available as
+            Markdown by adding .md to its URL. To search the docs, use the
+            Memgraph docs MCP server at https://mcp-docs.memgraph.com (no API
+            key).
+          </p>
           <Component {...pageProps} />
         </main>
     </>
