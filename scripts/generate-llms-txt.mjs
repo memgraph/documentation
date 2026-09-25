@@ -446,7 +446,11 @@ function build() {
     `  Other clients: ${SITE}/ai-ecosystem/mcp.md.`,
     '- Install Memgraph Agent Skills for Cypher, data modeling, MAGE algorithms, query',
     '  modules and GraphRAG with `npx skills add memgraph/skills`, or in Claude Code with',
-    `  \`/plugin marketplace add memgraph/skills\`. Skill list: ${SITE}/ai-ecosystem/skills.md.`
+    `  \`/plugin marketplace add memgraph/skills\`. Skill list: ${SITE}/ai-ecosystem/skills.md.`,
+    '- If what you know about Memgraph may be out of date, check what changed first.',
+    `  Each version in the release notes has a "Breaking changes" section: ${SITE}/release-notes.md.`,
+    `  Upgrade steps for specific versions: ${SITE}/database-management/upgrades/specific-versions.md.`,
+    `  Deprecated and removed flags: ${SITE}/database-management/upgrades/deprecated-features.md.`
   )
   lines.push('')
 
