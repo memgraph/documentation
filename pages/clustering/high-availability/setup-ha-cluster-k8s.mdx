@@ -78,6 +78,63 @@ the cluster.
 the `latest` tag can lead to unexpected behavior if pods restart and pull newer,
 incompatible images. </Callout>
 
+### Rotate the license
+
+When your license expires or you receive a new key, you can rotate it without
+restarting any pod. The chart injects the `memgraph-secrets` keys as
+environment variables, and Kubernetes resolves them only when a container
+starts. Editing the Secret therefore has no effect on running pods, and neither
+a Secret edit nor `helm upgrade` triggers a rollout on its own. Rotating the
+license is a two-step process: apply the new key at runtime on every instance,
+then update the Secret so future restarts pick it up.
+
+<Steps>
+
+{<h4 className="custom-header">Set the new license at runtime</h4>}
+
+Connect to **every** coordinator and **every** data instance and run:
+
+```cypher
+SET DATABASE SETTING 'enterprise.license' TO '<new-license-key>';
+SET DATABASE SETTING 'organization.name' TO '<your-organization-name>';
+SHOW LICENSE INFO;
+```
+
+Database settings are per instance and are not replicated, so the queries must
+be run on each instance separately. They work on replicas as well as on the
+main, and coordinators accept them too (the `COORDINATOR_WRITE` privilege is
+required when [coordinator
+authentication](/clustering/high-availability/coordinator-authentication) is
+enabled). The new value is persisted in the data directory on the instance's
+PersistentVolumeClaim.
+
+{<h4 className="custom-header">Update the Secret</h4>}
+
+The Secret is not managed by Helm, so patch it directly:
+
+```bash
+kubectl create secret generic memgraph-secrets \
+  --from-literal=MEMGRAPH_ENTERPRISE_LICENSE='<new-license-key>' \
+  --from-literal=MEMGRAPH_ORGANIZATION_NAME='<your-organization-name>' \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+This does not restart anything. It only changes what the next container start
+sees. Adjust the Secret name and keys if you overrode `secrets.name`,
+`secrets.licenseKey` or `secrets.organizationKey`.
+
+</Steps>
+
+<Callout type="warning">
+Do not skip the Secret update. On Memgraph v3.9.0 and newer, a restarted pod
+compares the persisted setting with the environment variable and keeps the
+license with the furthest expiry, so the runtime-set key wins over a stale
+Secret. On older versions, the environment variable overwrites the persisted
+setting at startup and a restarted pod falls back to the expired key. In both
+cases, a data instance recreated with a fresh volume has no persisted setting
+and relies solely on the Secret.
+</Callout>
+
 ### Install Memgraph HA with `kind`
 
 For local development, we suggest using `kind`. Running:
