@@ -30,6 +30,7 @@ The `MATCH` clause is used to obtain data from the database by matching it to a 
 4. [Using multiple MATCH clauses](#4-using-multiple-match-clauses) <br />
     4.1. [Cartesian product of nodes](#41-cartesian-product-of-nodes) <br />
     4.2. [Creating a list](#42-creating-a-list) <br />
+    4.3. [Matching a variable that is already bound](#43-matching-a-variable-that-is-already-bound) <br />
 
 <Callout>
 
@@ -475,6 +476,79 @@ Output:
 ```
 
 The `OPTIONAL MATCH` clause bypasses the empty set and the query returns only non-empty sets. Therefore, the output of the query is a list containing only the results of the first `MATCH` clause.    
+
+### 4.3. Matching a variable that is already bound
+
+A pattern may hold nothing but a variable the query has already bound. Such a
+pattern does not scan the graph — it matches on the value bound to that name:
+
+```cypher
+MATCH (p:Person)
+MATCH (p)
+RETURN p.name AS name
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+
+| name    |
++---------+
+| "Anna"  |
+| "Harry" |
+| "John"  |
++---------+
+```
+
+A node matches and the row is kept. A `null`, which an `OPTIONAL MATCH` leaves
+behind when nothing matched, matches nothing and the row is dropped:
+
+```cypher
+MATCH (p:Person)
+OPTIONAL MATCH (p)-[:LIVING_IN]->(c:Country {continent: 'Asia'})
+WITH p, c
+MATCH (c)
+RETURN p.name AS name, c.name AS country
+ORDER BY name;
+```
+
+Output:
+
+`Empty set`
+
+No person lives in an Asian country, so `c` is `null` on every row and `MATCH (c)`
+keeps none of them. Without the `MATCH (c)`, the query returns all three people
+with a `null` country.
+
+A value that is neither a node nor `null` raises an error:
+
+```cypher
+MATCH (p:Person)
+WITH p.name AS p
+MATCH (p)
+RETURN p;
+```
+
+Output:
+
+```nocopy
+Expected a node for 'p', but got string.
+```
+
+<Callout type="warning">
+
+This applies wherever a pattern appears — a top-level `MATCH`, a `CALL {}`
+subquery, and the body of a [subquery
+expression](/querying/subquery-expressions). Before Memgraph 3.14 a pattern
+holding only a bound variable was ignored, so the row passed through whatever the
+variable held. Queries that carried a `null` or a non-node value through such a
+pattern now return fewer rows or raise an error.
+
+A pattern that also states a label or a property, such as `MATCH (p:Person)`, is
+unaffected — it already raised on a non-node value.
+
+</Callout>
 
 ## Dataset queries
 
