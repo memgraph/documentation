@@ -20,6 +20,31 @@ export default withNextra({
   async redirects() {
     return [
       {
+        source: '/deployment/docker',
+        destination: '/deployment/environments/docker',
+        permanent: true
+      },
+      {
+        source: '/deployment/linux',
+        destination: '/deployment/environments/linux',
+        permanent: true
+      },
+      {
+        source: '/deployment/aws',
+        destination: '/deployment/environments/aws',
+        permanent: true
+      },
+      {
+        source: '/deployment/gcp',
+        destination: '/deployment/environments/gcp',
+        permanent: true
+      },
+      {
+        source: '/deployment/azure',
+        destination: '/deployment/environments/azure',
+        permanent: true
+      },
+      {
         source: '/cypher-manual/graph-algorithms',
         destination: '/advanced-algorithms',
         permanent: true
