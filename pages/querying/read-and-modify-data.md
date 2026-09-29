@@ -553,7 +553,7 @@ you can use the following query:
 DROP GRAPH;
 ```
 
-More details are available at [`DROP GRAPH`](/querying/clauses/drop-graph) documentation.
+More details are available at [`DROP GRAPH`](/querying/clauses/drop#drop-graph) documentation.
 
 ### REMOVE
 

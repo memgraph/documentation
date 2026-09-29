@@ -3457,7 +3457,7 @@ export default withNextra({
       },
       {
         source: '/data-migration/migrate-from-neo4j-using-single-cypher-query',
-        destination: 'data-migration/migrate-from-neo4j/using-single-cypher-query',
+        destination: '/data-migration/migrate-from-neo4j/using-single-cypher-query',
         permanent: true
       },
       {
