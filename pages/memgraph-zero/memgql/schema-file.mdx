@@ -22,15 +22,17 @@ Run MemGQL in Docker: mount the schema file and pass its container path.
 
 ```bash
 docker run --rm -p 7688:7688 \
-  -e BOLT_LISTEN_ADDR=0.0.0.0:7688 \
   -v "$(pwd)/schema.json:/data/schema.json" \
   memgraph/memgql:latest --schema=/data/schema.json
 ```
 
 `--schema` (or the `SCHEMA_FILE` env var) is all you need; it implies
-multi-connector mode. Set `BOLT_LISTEN_ADDR=0.0.0.0:7688` so the Bolt port is
-reachable from outside the container (the default binds loopback only), and run
-MemGQL on the same Docker network as the backends its connectors reference.
+multi-connector mode. MemGQL listens on `0.0.0.0:7688` by default — every
+interface, as Memgraph does — so the published port reaches it without further
+configuration. To accept local connections only, set
+`BOLT_LISTEN_ADDR=127.0.0.1:7688` or pass `--bolt-address=127.0.0.1` (see
+[Configuration](/memgraph-zero/memgql/reference#configuration-reference)).
+Run MemGQL on the same Docker network as the backends its connectors reference.
 
 Every connector connects and every graph registers at boot, so no `CONNECT` or
 `USE` is required to start querying. Runtime DDL writes the updated catalog back
@@ -245,8 +247,40 @@ A vertex maps a **label** to a backend source. Exactly one source kind is set:
 }
 ```
 
+A table whose rows should carry **more than one label** lists them under
+`labels` instead of `label`. The first label identifies the mapping and must be
+unique in the graph; the others may be shared with other mappings:
+
+```json
+{
+  "labels": ["Cat", "Animal"],
+  "mappedTableSource": {
+    "connector": "pg",
+    "table": "cats",
+    "metaFields": { "id": "cat_id" }
+  },
+  "attributes": [
+    { "name": "id", "column": "cat_id" },
+    { "name": "name" }
+  ]
+}
+```
+
+With a second mapping `["Dog", "Animal"]` over a `dogs` table keyed by
+`dog_id`, `MATCH (a:Cat)` reads one table, `MATCH (a:Dog&Animal)` the other
+(GQL writes a label conjunction as `:A&B`; in Cypher it is `:Dog:Animal`),
+and `MATCH (a:Animal)` both — as one `UNION` statement inside the connector.
+Shared property names resolve through each table's own columns, a property
+only one table declares is `null` on the other's rows, and returned nodes
+carry all of their labels (`(:Cat:Animal)`). Attributes that two carriers of a shared
+label both declare must have the same `type`. A traversal or an `INSERT` has to
+start from one table, so on a shared label both are refused with a pointer to
+the identifying label. A label no mapping carries together with the others
+matches nothing.
+
 | Field | Source kind | Description |
 |-------|-------------|-------------|
+| `label` / `labels` | both | The node label, or a list of labels whose first entry identifies the mapping (unique per graph) and whose others may be shared with other mappings. |
 | `mappedTableSource.connector` | relational | Connector name (alias `catalog`). |
 | `mappedTableSource.schema`    | relational | Optional middle namespace (PostgreSQL schema, etc.). |
 | `mappedTableSource.database`  | relational | Optional outer namespace for backends with three-part names; on SQL Server it renders `database.schema.table`, so one connection can reach views in other databases. |
@@ -258,9 +292,12 @@ A vertex maps a **label** to a backend source. Exactly one source kind is set:
 
 An edge maps a **relationship type** between two labels. Relational edges name
 the foreign-key columns via `metaFields.from` / `metaFields.to`; native-graph
-edges pass through; and a `mappedJoinSource` edge links two labels that live in
-**different connectors** (see [Cross-connector edges](#cross-connector-edges)).
-Exactly one source kind is set.
+edges pass through; and a `mappedJoinSource` edge has no table at all — it
+links two labels by the equality of one property on each side, whether they
+live in **different connectors** or in the same one (see
+[Cross-connector edges](#cross-connector-edges)). Exactly one source kind is
+set. An edge's `from` / `to` name a vertex by its identifying label (the first
+entry of a `labels` list).
 
 ```json
 {
@@ -318,9 +355,11 @@ labels; the traversal is resolved by the backend.
 
 #### Cross-connector edges
 
-A third source kind, `mappedJoinSource`, declares an edge whose two endpoints
-live in **different connectors**. It has no backing table anywhere: the
-relationship *is* equality between one property on each endpoint.
+A third source kind, `mappedJoinSource`, declares an edge with **no backing
+table anywhere**: the relationship *is* equality between one property on each
+endpoint. It is how a traversal crosses into a **different connector**, and
+also how two tables in the **same** connector are linked by a business key
+rather than by a foreign key into the target's `metaFields.id`.
 
 ```json
 {
@@ -361,19 +400,22 @@ don't collide.
 **Rules and limits** (each is refused with a message saying what to write
 instead):
 
-- Both endpoints must live in different connectors — within one connector use
-  `mappedTableSource` with `metaFields.from` / `to`.
-- Each key must be a declared `attribute` of its endpoint vertex (native-graph
-  vertices are exempt, since the query passes through).
-- The edge must be traversed **in a direction**: `-[:R]->` or `<-[:R]-`, not
-  `-[:R]-`.
-- No variable-length traversal, no `OPTIONAL MATCH`, and one `MATCH` with one
-  path pattern per query.
+- Each key must be a declared `attribute` of its endpoint vertex, backed by a
+  plain scalar column (native-graph vertices are exempt, since the query passes
+  through). The edge declares no `attributes`.
 - The edge carries no properties, so it cannot be filtered — filter the
   endpoints instead.
-- Every node in the pattern needs a label, so each side can be routed.
-- Aggregating *across* the join (for example `count()` over both sides) is not
-  supported yet; return the rows and count client-side.
+- Across connectors: the edge must be traversed **in a direction** (`-[:R]->`
+  or `<-[:R]-`, not `-[:R]-`); no variable-length traversal, no
+  `OPTIONAL MATCH`, one `MATCH` with one path pattern per query; every node in
+  the pattern needs a label, so each side can be routed; aggregating *across*
+  the join (`count()` over both sides) is not supported yet.
+- Within one relational connector the edge is pushed down as a single `JOIN`
+  on the two key columns, so those limits do not apply: aggregates work, and an
+  undirected step is accepted when the two endpoint labels differ. A
+  variable-length step over it is refused. Both endpoints on a Memgraph or
+  Neo4j connector are refused — that backend stores its own relationships, so
+  declare `mappedGraphSource`.
 
 A **table-backed** edge whose endpoints sit in different connectors is still
 skipped at load time with a warning pointing at `mappedJoinSource`.
