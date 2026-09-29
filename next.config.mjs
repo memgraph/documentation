@@ -3003,11 +3003,6 @@ export default withNextra({
         permanent: true
       },
       {
-        source: '/advanced-algorithms/available-algorithms/convert',
-        destination: '/querying/functions#conversion-functions',
-        permanent: true
-      },
-      {
         source: '/querying/functions#schema',
         destination: '/querying/schema',
         permanent: true
