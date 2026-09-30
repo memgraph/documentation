@@ -7,24 +7,24 @@ description: Learn how you can manage streams efficiently with queries in Memgra
 
 The following page instructs how to manage streams using queries. Streams can
 also be [managed through the **Stream** section in the Memgraph
-Lab](/data-streams/manage-streams-query). 
+Lab](/data-migration/data-streams/manage-streams-query). 
 
 If you need a Kafka stream to play around with, we've provided some at [Awesome
 Data Stream](https://awesomedata.stream/)! 
 
 ## How to create and load a transformation module into Memgraph?
 
-A [transformation module](/data-streams/transformation-modules) is a set of
+A [transformation module](/data-migration/data-streams/transformation-modules) is a set of
 user-defined transformation procedures written in
-[C](/data-streams/transformation-modules/c-api) or
-[Python](/data-streams/transformation-modules/python-api) that act on data
+[C](/data-migration/data-streams/transformation-modules/c-api) or
+[Python](/data-migration/data-streams/transformation-modules/python-api) that act on data
 received from a streaming engine. Transformation procedures instruct Memgraph on
 how to transform the incoming messages to consume them correctly. 
 
 To create a transformation module, you need to:
 
 1. [Create a Python or a shared library file
-   (module).](/data-streams/transformation-modules#creating-a-transformation-module)
+   (module).](/data-migration/data-streams/transformation-modules#creating-a-transformation-module)
 2. Save the file into the Memgraph's `query_modules` or `internal_modules` directory (default:
    `/usr/lib/memgraph/query_modules` and `/var/lib/memgraph/internal_modules/`).
 3. Load the file into Memgraph either on startup (automatically) or by running a
@@ -33,13 +33,13 @@ To create a transformation module, you need to:
 If you are using Docker to run Memgraph, check [how to transfer the file into the container](/getting-started/first-steps-with-docker#copy-files-to-a-docker-container). 
 
 If you are using Memgraph Lab you can [create transformation module within the
-application](/data-streams/transformation-modules#creating-transformation-modules-within-memgraph-lab). 
+application](/data-migration/data-streams/transformation-modules#creating-transformation-modules-within-memgraph-lab). 
 
 ## How to create a Kafka or Redpanda stream?
 
 In order to create a stream with a query, first you need to [load the
 transformation module into
-Memgraph](/data-streams/manage-streams-query#how-to-create-and-load-a-transformation-module-into-memgraph). The
+Memgraph](/data-migration/data-streams/manage-streams-query#how-to-create-and-load-a-transformation-module-into-memgraph). The
 most basic query for creating a stream is:
 
 
@@ -51,13 +51,13 @@ BOOTSTRAP_SERVERS bootstrapServers;
 ```
 
 Additional options for creating a stream are explained in the [reference
-guide](/data-streams#kafka-and-redpanda). 
+guide](/data-migration/data-streams#kafka-and-redpanda). 
 
 ## How to create a Pulsar stream?
 
 In order to create a stream with a query, first you need to [load the
 transformation module into
-Memgraph](/data-streams/manage-streams-query#how-to-create-and-load-a-transformation-module-into-memgraph). The
+Memgraph](/data-migration/data-streams/manage-streams-query#how-to-create-and-load-a-transformation-module-into-memgraph). The
 most basic query for creating a stream is:
 
 
@@ -69,7 +69,7 @@ SERVICE_URL serviceURL;
 ```
 
 Additional options for creating a stream are explained in the [reference
-guide](/data-streams#pulsar).
+guide](/data-migration/data-streams#pulsar).
 
 ## How to get information about a stream?
 
@@ -130,7 +130,7 @@ To delete a stream:
 DROP STREAM streamName;
 ```
 
-For more options, [check the reference guide](/data-streams#start-a-stream).
+For more options, [check the reference guide](/data-migration/data-streams#start-a-stream).
 
 ## How to change Kafka stream offset?
 

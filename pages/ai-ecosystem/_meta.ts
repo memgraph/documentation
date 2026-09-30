@@ -4,5 +4,6 @@ export default {
     "skills": "Skills",
     "agents": "Agents",
     "machine-learning": "Machine learning",
-    "integrations": "Integrations"
+    "integrations": "Integrations",
+    "use-cases": "Use cases"
 }

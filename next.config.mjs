@@ -20,6 +20,46 @@ export default withNextra({
   async redirects() {
     return [
       {
+        source: '/use-cases',
+        destination: '/ai-ecosystem/use-cases',
+        permanent: true
+      },
+      {
+        source: '/use-cases/agentic-graphrag',
+        destination: '/ai-ecosystem/use-cases/agentic-graphrag',
+        permanent: true
+      },
+      {
+        source: '/use-cases/ai-memory',
+        destination: '/ai-ecosystem/use-cases/ai-memory',
+        permanent: true
+      },
+      {
+        source: '/use-cases/agentic-ai',
+        destination: '/ai-ecosystem/use-cases/agentic-ai',
+        permanent: true
+      },
+      {
+        source: '/use-cases.md',
+        destination: '/ai-ecosystem/use-cases.md',
+        permanent: true
+      },
+      {
+        source: '/use-cases/agentic-graphrag.md',
+        destination: '/ai-ecosystem/use-cases/agentic-graphrag.md',
+        permanent: true
+      },
+      {
+        source: '/use-cases/ai-memory.md',
+        destination: '/ai-ecosystem/use-cases/ai-memory.md',
+        permanent: true
+      },
+      {
+        source: '/use-cases/agentic-ai.md',
+        destination: '/ai-ecosystem/use-cases/agentic-ai.md',
+        permanent: true
+      },
+      {
         source: '/deployment/docker',
         destination: '/deployment/environments/docker',
         permanent: true
@@ -636,17 +676,17 @@ export default withNextra({
       },
       {
         source: '/memgraph/how-to-guides/replication',
-        destination: '/clustering/replication',
+        destination: '/database-management/clustering/replication',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/replication',
-        destination: '/clustering/replication',
+        destination: '/database-management/clustering/replication',
         permanent: true
       },
       {
         source: '/memgraph/under-the-hood/replication',
-        destination: '/clustering/replication',
+        destination: '/database-management/clustering/replication',
         permanent: true
       },
       {
@@ -821,17 +861,17 @@ export default withNextra({
       },
       {
         source: '/memgraph/import-data/data-streams/overview',
-        destination: '/data-streams',
+        destination: '/data-migration/data-streams',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/streams',
-        destination: '/data-streams',
+        destination: '/data-migration/data-streams',
         permanent: true
       },
       {
         source: '/memgraph/tutorials/graph-stream-processing-with-kafka',
-        destination: '/data-streams/graph-stream-processing-with-kafka',
+        destination: '/data-migration/data-streams/graph-stream-processing-with-kafka',
         permanent: true
       },
       {
@@ -846,27 +886,27 @@ export default withNextra({
       },
       {
         source: '/memgraph/how-to-guides/streams/manage-streams',
-        destination: '/data-streams/manage-streams-query',
+        destination: '/data-migration/data-streams/manage-streams-query',
         permanent: true
       },
       {
         source: '/memgraph/import-data/data-streams/manage-streams',
-        destination: '/data-streams/manage-streams-query',
+        destination: '/data-migration/data-streams/manage-streams-query',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/streams/transformation-modules',
-        destination: '/data-streams/transformation-modules',
+        destination: '/data-migration/data-streams/transformation-modules',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/streams/transformation-modules/api/c-api',
-        destination: '/data-streams/transformation-modules/c-api',
+        destination: '/data-migration/data-streams/transformation-modules/c-api',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/streams/transformation-modules/api/python-api',
-        destination: '/data-streams/transformation-modules/python-api',
+        destination: '/data-migration/data-streams/transformation-modules/python-api',
         permanent: true
       },
       {
@@ -1819,17 +1859,17 @@ export default withNextra({
       },
       {
         source: '/memgraph/concepts-overview/replication',
-        destination: '/clustering/replication',
+        destination: '/database-management/clustering/replication',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/replication',
-        destination: '/clustering/replication',
+        destination: '/database-management/clustering/replication',
         permanent: true
       },
       {
         source: '/memgraph/concepts/replication',
-        destination: '/clustering/replication',
+        destination: '/database-management/clustering/replication',
         permanent: true
       },
       {
@@ -2019,37 +2059,37 @@ export default withNextra({
       },
       {
         source: '/memgraph/database-functionalities/streams/kafka-streams',
-        destination: '/data-streams',
+        destination: '/data-migration/data-streams',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/streams/kafka/kafka-streams',
-        destination: '/data-streams',
+        destination: '/data-migration/data-streams',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/streams/kafka/kafka-streams',
-        destination: '/data-streams',
+        destination: '/data-migration/data-streams',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/streams/pulsar/pulsar-streams',
-        destination: '/data-streams',
+        destination: '/data-migration/data-streams',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/streams/pulsar/pulsar-streams',
-        destination: '/data-streams',
+        destination: '/data-migration/data-streams',
         permanent: true
       },
       {
         source: '/memgraph/import-data/kafka',
-        destination: '/data-streams',
+        destination: '/data-migration/data-streams',
         permanent: true
       },
       {
         source: '/memgraph/import-data/kafka/overview',
-        destination: '/data-streams',
+        destination: '/data-migration/data-streams',
         permanent: true
       },
       {
@@ -2059,42 +2099,42 @@ export default withNextra({
       },
       {
         source: '/memgraph/how-to-guides/streams/kafka/implement-transformation-module',
-        destination: '/data-streams/transformation-modules',
+        destination: '/data-migration/data-streams/transformation-modules',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/streams/kafka/implement-transformation-module',
-        destination: '/data-streams/transformation-modules',
+        destination: '/data-migration/data-streams/transformation-modules',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/streams/pulsar/implement-transformation-module',
-        destination: '/data-streams/transformation-modules',
+        destination: '/data-migration/data-streams/transformation-modules',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/streams/pulsar/implement-transformation-module',
-        destination: '/data-streams/transformation-modules',
+        destination: '/data-migration/data-streams/transformation-modules',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/streams/implement-transformation-module',
-        destination: '/data-streams/transformation-modules',
+        destination: '/data-migration/data-streams/transformation-modules',
         permanent: true
       },
       {
         source: '/memgraph/import-data/kafka/json',
-        destination: '/data-streams/transformation-modules/python-api',
+        destination: '/data-migration/data-streams/transformation-modules/python-api',
         permanent: true
       },
       {
         source: '/memgraph/import-data/kafka/avro',
-        destination: '/data-streams/transformation-modules/python-api',
+        destination: '/data-migration/data-streams/transformation-modules/python-api',
         permanent: true
       },
       {
         source: '/memgraph/import-data/kafka/protobuf',
-        destination: '/data-streams/transformation-modules/python-api',
+        destination: '/data-migration/data-streams/transformation-modules/python-api',
         permanent: true
       },
       {
@@ -2773,7 +2813,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/1.6.1/database-functionalities/replication',
-        destination: '/clustering/replication',
+        destination: '/database-management/clustering/replication',
         permanent: true
       },
       {
@@ -2798,12 +2838,12 @@ export default withNextra({
       },
       {
         source: '/memgraph/2.1.0/database-functionalities/streams/pulsar/pulsar-streams',
-        destination: '/data-streams',
+        destination: '/data-migration/data-streams',
         permanent: true
       },
       {
         source: '/memgraph/2.1.1/how-to-guides/streams/pulsar/implement-transformation-module',
-        destination: '/data-streams/transformation-modules',
+        destination: '/data-migration/data-streams/transformation-modules',
         permanent: true
       },
       {
@@ -2913,7 +2953,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/2.5.2/reference-guide/replication',
-        destination: '/clustering/replication',
+        destination: '/database-management/clustering/replication',
         permanent: true
       },
       {
@@ -3004,7 +3044,7 @@ export default withNextra({
       },
       {
         source: '/configuration/system-replication',
-        destination: '/clustering/replication/system-replication',
+        destination: '/database-management/clustering/replication/system-replication',
         permanent: true
       },
       {
@@ -3045,7 +3085,7 @@ export default withNextra({
       },
       {
         source: '/configuration/high-availability',
-        destination: '/clustering/high-availability',
+        destination: '/database-management/clustering/high-availability',
         permanent: true
       },
       {
@@ -3070,12 +3110,12 @@ export default withNextra({
       },
       {
         source: '/configuration/replication',
-        destination: '/clustering/replication',
+        destination: '/database-management/clustering/replication',
         permanent: true
       },
       {
         source: '/configuration/replication/system-replication',
-        destination: '/clustering/replication/system-replication',
+        destination: '/database-management/clustering/replication/system-replication',
         permanent: true
       },
       {
@@ -3244,6 +3284,26 @@ export default withNextra({
       
 
       // END: NEW MEMGRAPH LAB REDIRECTS
+      {
+        source: '/clustering.md',
+        destination: '/database-management/clustering.md',
+        permanent: true
+      },
+      {
+        source: '/clustering/:path*',
+        destination: '/database-management/clustering/:path*',
+        permanent: true
+      },
+      {
+        source: '/data-streams.md',
+        destination: '/data-migration/data-streams.md',
+        permanent: true
+      },
+      {
+        source: '/data-streams/:path*',
+        destination: '/data-migration/data-streams/:path*',
+        permanent: true
+      },
     ];
   },
 });
