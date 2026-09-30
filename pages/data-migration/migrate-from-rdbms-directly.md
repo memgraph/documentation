@@ -26,7 +26,7 @@ databases](https://memgraph.com/blog/the-benefits-of-using-a-graph-database-inst
 
 <Callout type="info" title="SQL2Graph Agent"> 
 If you have a SQL data model and
-want to migrate to Memgraph, you can try out our [Agent](/ai-ecosystem/agents)
+want to migrate to Memgraph, you can try out our [Agent](/ai-ecosystem/graph-rag/knowledge-graph-creation)
 that leverages the LLM to automate the process of modeling and migration.
 </Callout>
 

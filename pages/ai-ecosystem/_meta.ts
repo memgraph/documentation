@@ -1,9 +1,8 @@
 export default {
     "graph-rag": "GraphRAG",
-    "mcp": "MCP",
-    "skills": "Skills",
-    "agents": "Agents",
-    "machine-learning": "Machine learning",
-    "integrations": "Integrations",
-    "use-cases": "Use cases"
+    "integrations": "Framework integrations",
+    "mcp": "Memgraph MCP server",
+    "coding-with-ai": "Coding with AI",
+    "use-cases": "Use cases",
+    "machine-learning": "Machine learning"
 }

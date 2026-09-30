@@ -20,6 +20,56 @@ export default withNextra({
   async redirects() {
     return [
       {
+        source: '/ai-ecosystem/agents',
+        destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/agents/sql2graph-agent',
+        destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation/sql2graph-agent',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/agents/unstructured2graph-agent',
+        destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation/unstructured2graph-agent',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/graph-rag/prerequisites',
+        destination: '/ai-ecosystem/graph-rag',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/skills',
+        destination: '/ai-ecosystem/coding-with-ai/skills',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/agents.md',
+        destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/agents/sql2graph-agent.md',
+        destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation/sql2graph-agent.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/agents/unstructured2graph-agent.md',
+        destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation/unstructured2graph-agent.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/graph-rag/prerequisites.md',
+        destination: '/ai-ecosystem/graph-rag.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/skills.md',
+        destination: '/ai-ecosystem/coding-with-ai/skills.md',
+        permanent: true
+      },
+      {
         source: '/use-cases',
         destination: '/ai-ecosystem/use-cases',
         permanent: true
