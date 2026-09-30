@@ -20,6 +20,46 @@ export default withNextra({
   async redirects() {
     return [
       {
+        source: '/ai-ecosystem/use-cases',
+        destination: '/ai-ecosystem',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/use-cases.md',
+        destination: '/ai-ecosystem.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/use-cases/agentic-graphrag',
+        destination: '/ai-ecosystem/graph-rag/agentic-graphrag',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/use-cases/agentic-graphrag.md',
+        destination: '/ai-ecosystem/graph-rag/agentic-graphrag.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/use-cases/ai-memory',
+        destination: '/ai-ecosystem/ai-memory',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/use-cases/ai-memory.md',
+        destination: '/ai-ecosystem/ai-memory.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/use-cases/agentic-ai',
+        destination: '/ai-ecosystem/agentic-ai',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/use-cases/agentic-ai.md',
+        destination: '/ai-ecosystem/agentic-ai.md',
+        permanent: true
+      },
+      {
         source: '/ai-ecosystem/agents',
         destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation',
         permanent: true
@@ -71,42 +111,42 @@ export default withNextra({
       },
       {
         source: '/use-cases',
-        destination: '/ai-ecosystem/use-cases',
+        destination: '/ai-ecosystem',
         permanent: true
       },
       {
         source: '/use-cases/agentic-graphrag',
-        destination: '/ai-ecosystem/use-cases/agentic-graphrag',
+        destination: '/ai-ecosystem/graph-rag/agentic-graphrag',
         permanent: true
       },
       {
         source: '/use-cases/ai-memory',
-        destination: '/ai-ecosystem/use-cases/ai-memory',
+        destination: '/ai-ecosystem/ai-memory',
         permanent: true
       },
       {
         source: '/use-cases/agentic-ai',
-        destination: '/ai-ecosystem/use-cases/agentic-ai',
+        destination: '/ai-ecosystem/agentic-ai',
         permanent: true
       },
       {
         source: '/use-cases.md',
-        destination: '/ai-ecosystem/use-cases.md',
+        destination: '/ai-ecosystem.md',
         permanent: true
       },
       {
         source: '/use-cases/agentic-graphrag.md',
-        destination: '/ai-ecosystem/use-cases/agentic-graphrag.md',
+        destination: '/ai-ecosystem/graph-rag/agentic-graphrag.md',
         permanent: true
       },
       {
         source: '/use-cases/ai-memory.md',
-        destination: '/ai-ecosystem/use-cases/ai-memory.md',
+        destination: '/ai-ecosystem/ai-memory.md',
         permanent: true
       },
       {
         source: '/use-cases/agentic-ai.md',
-        destination: '/ai-ecosystem/use-cases/agentic-ai.md',
+        destination: '/ai-ecosystem/agentic-ai.md',
         permanent: true
       },
       {
