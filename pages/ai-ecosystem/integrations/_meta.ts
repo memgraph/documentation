@@ -1,4 +1,5 @@
 export default {
+    "mcp": "Memgraph MCP server",
     "langchain": "LangChain",
     "llamaindex": "LlamaIndex",
     "lightrag": "LightRAG",
