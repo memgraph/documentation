@@ -11,10 +11,10 @@ export default {
   "custom-query-modules": "Custom query modules",
   "database-management": "Database management",
   "deployment": "Deployment",
+  "memgraph-lab": "Memgraph Lab",
   "--": {
     type: "separator",
   },
-  "memgraph-lab": "Memgraph Lab",
   "memgraph-zero": "Memgraph Zero",
   "---": {
     type: "separator",
