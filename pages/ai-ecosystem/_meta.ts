@@ -1,9 +1,6 @@
 export default {
-    "graph-rag": "GraphRAG",
-    "ai-memory": "AI memory",
-    "agentic-ai": "Agentic AI",
-    "integrations": "Framework integrations",
-    "mcp": "Memgraph MCP server",
-    "coding-with-ai": "Coding with AI",
-    "machine-learning": "Machine learning"
+    "get-started": "Start with graph + AI",
+    "graph-rag": "Build GraphRAG",
+    "agentic-applications": "Build agentic applications",
+    "integrations": "Integrate AI frameworks"
 }

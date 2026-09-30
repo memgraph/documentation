@@ -1,7 +1,7 @@
 export default {
   "index": "Home",
   "getting-started": "Getting started",
-  "ai-ecosystem": "AI ecosystem",
+  "ai-ecosystem": "AI applications",
   "client-libraries": "Client libraries",
   "fundamentals": "Fundamentals",
   "data-modeling": "Data modeling",

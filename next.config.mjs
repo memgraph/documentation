@@ -20,6 +20,36 @@ export default withNextra({
   async redirects() {
     return [
       {
+        source: '/ai-ecosystem/mcp',
+        destination: '/ai-ecosystem/agentic-applications/mcp',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/mcp.md',
+        destination: '/ai-ecosystem/agentic-applications/mcp.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/machine-learning',
+        destination: '/advanced-algorithms/machine-learning',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/machine-learning.md',
+        destination: '/advanced-algorithms/machine-learning.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/graph-rag/knowledge-graph-creation',
+        destination: '/ai-ecosystem/get-started/knowledge-graph-creation',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/graph-rag/knowledge-graph-creation.md',
+        destination: '/ai-ecosystem/get-started/knowledge-graph-creation.md',
+        permanent: true
+      },
+      {
         source: '/ai-ecosystem/use-cases',
         destination: '/ai-ecosystem',
         permanent: true
@@ -41,72 +71,72 @@ export default withNextra({
       },
       {
         source: '/ai-ecosystem/use-cases/ai-memory',
-        destination: '/ai-ecosystem/ai-memory',
+        destination: '/ai-ecosystem/agentic-applications/ai-memory',
         permanent: true
       },
       {
         source: '/ai-ecosystem/use-cases/ai-memory.md',
-        destination: '/ai-ecosystem/ai-memory.md',
+        destination: '/ai-ecosystem/agentic-applications/ai-memory.md',
         permanent: true
       },
       {
         source: '/ai-ecosystem/use-cases/agentic-ai',
-        destination: '/ai-ecosystem/agentic-ai',
+        destination: '/ai-ecosystem/agentic-applications/agentic-ai',
         permanent: true
       },
       {
         source: '/ai-ecosystem/use-cases/agentic-ai.md',
-        destination: '/ai-ecosystem/agentic-ai.md',
+        destination: '/ai-ecosystem/agentic-applications/agentic-ai.md',
         permanent: true
       },
       {
         source: '/ai-ecosystem/agents',
-        destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation',
+        destination: '/ai-ecosystem/get-started/knowledge-graph-creation',
         permanent: true
       },
       {
         source: '/ai-ecosystem/agents/sql2graph-agent',
-        destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation/sql2graph-agent',
+        destination: '/ai-ecosystem/get-started/knowledge-graph-creation/sql2graph-agent',
         permanent: true
       },
       {
         source: '/ai-ecosystem/agents/unstructured2graph-agent',
-        destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation/unstructured2graph-agent',
+        destination: '/ai-ecosystem/get-started/knowledge-graph-creation/unstructured2graph-agent',
         permanent: true
       },
       {
         source: '/ai-ecosystem/graph-rag/prerequisites',
-        destination: '/ai-ecosystem/graph-rag',
+        destination: '/ai-ecosystem/get-started',
         permanent: true
       },
       {
         source: '/ai-ecosystem/skills',
-        destination: '/ai-ecosystem/coding-with-ai/skills',
+        destination: '/getting-started/coding-with-ai/skills',
         permanent: true
       },
       {
         source: '/ai-ecosystem/agents.md',
-        destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation.md',
+        destination: '/ai-ecosystem/get-started/knowledge-graph-creation.md',
         permanent: true
       },
       {
         source: '/ai-ecosystem/agents/sql2graph-agent.md',
-        destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation/sql2graph-agent.md',
+        destination: '/ai-ecosystem/get-started/knowledge-graph-creation/sql2graph-agent.md',
         permanent: true
       },
       {
         source: '/ai-ecosystem/agents/unstructured2graph-agent.md',
-        destination: '/ai-ecosystem/graph-rag/knowledge-graph-creation/unstructured2graph-agent.md',
+        destination: '/ai-ecosystem/get-started/knowledge-graph-creation/unstructured2graph-agent.md',
         permanent: true
       },
       {
         source: '/ai-ecosystem/graph-rag/prerequisites.md',
-        destination: '/ai-ecosystem/graph-rag.md',
+        destination: '/ai-ecosystem/get-started.md',
         permanent: true
       },
       {
         source: '/ai-ecosystem/skills.md',
-        destination: '/ai-ecosystem/coding-with-ai/skills.md',
+        destination: '/getting-started/coding-with-ai/skills.md',
         permanent: true
       },
       {
@@ -121,12 +151,12 @@ export default withNextra({
       },
       {
         source: '/use-cases/ai-memory',
-        destination: '/ai-ecosystem/ai-memory',
+        destination: '/ai-ecosystem/agentic-applications/ai-memory',
         permanent: true
       },
       {
         source: '/use-cases/agentic-ai',
-        destination: '/ai-ecosystem/agentic-ai',
+        destination: '/ai-ecosystem/agentic-applications/agentic-ai',
         permanent: true
       },
       {
@@ -141,12 +171,12 @@ export default withNextra({
       },
       {
         source: '/use-cases/ai-memory.md',
-        destination: '/ai-ecosystem/ai-memory.md',
+        destination: '/ai-ecosystem/agentic-applications/ai-memory.md',
         permanent: true
       },
       {
         source: '/use-cases/agentic-ai.md',
-        destination: '/ai-ecosystem/agentic-ai.md',
+        destination: '/ai-ecosystem/agentic-applications/agentic-ai.md',
         permanent: true
       },
       {
