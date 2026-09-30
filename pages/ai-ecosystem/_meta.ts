@@ -1,8 +1,7 @@
 export default {
+    "knowledge-graph-creation": "Knowledge graph creation",
     "graph-rag": "GraphRAG",
-    "mcp": "MCP",
-    "skills": "Skills",
-    "agents": "Agents",
-    "machine-learning": "Machine learning",
-    "integrations": "Integrations"
+    "ai-memory": "AI memory",
+    "agentic-ai": "Agentic AI",
+    "integrations": "Tools and integrations"
 }

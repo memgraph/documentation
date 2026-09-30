@@ -1,6 +1,7 @@
 export default {
   "authentication-and-authorization": "Authentication and authorization",
   "backup-and-restore": "Backup and restore",
+  "clustering": "Clustering",
   "configuration": "Configuration",
   "debugging": "Debugging",
   "enabling-memgraph-enterprise": "Enabling Memgraph Enterprise",

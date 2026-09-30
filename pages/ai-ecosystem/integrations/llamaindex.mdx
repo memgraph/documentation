@@ -1,0 +1,169 @@
+---
+title: LlamaIndex
+description: Use Memgraph as the graph store for LlamaIndex to build a knowledge graph from unstructured data and query it in natural language.
+---
+
+import GitHub from '/components/icons/GitHub'
+import { SocialCards } from '/components/social-card/SocialCards'
+import { SocialCard } from '/components/social-card/SocialCard'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# LlamaIndex
+
+<SocialCards>
+  <SocialCard 
+    icon={<GitHub />}
+    title="LlamaIndex integration"
+    href="https://github.com/run-llama/llama_index/tree/main/llama-index-integrations/graph_stores/llama-index-graph-stores-memgraph"
+    is_external={true}
+  />
+</SocialCards>
+
+
+LlamaIndex is a simple, flexible data framework for connecting custom data
+sources to large language models. Currently, [Memgraph's
+integration](https://docs.llamaindex.ai/en/stable/api_reference/storage/graph_stores/memgraph/)
+supports creating a knowledge graph from unstructured data and querying with
+natural language. You can follow the example on [LlamaIndex
+docs](https://docs.llamaindex.ai/en/stable/examples/property_graph/property_graph_memgraph/)
+or go through quick start below.
+
+{<h4 className="custom-header">Installation</h4>}
+
+To install LlamaIndex and Memgraph graph store, run:
+
+```shell
+pip install llama-index llama-index-graph-stores-memgraph
+```
+
+{<h4 className="custom-header">Environment setup</h4>}
+
+Before you get started, make sure you have [Memgraph](/getting-started) running
+in the background.
+
+To use Memgraph as the underlying graph store for LlamaIndex, define your graph
+store by providing the credentials used for your database:
+
+```python
+from llama_index.graph_stores.memgraph import MemgraphPropertyGraphStore
+
+username = ""  # Enter your Memgraph username (default "")
+password = ""  # Enter your Memgraph password (default "")
+url = ""  # Specify the connection URL, e.g., 'bolt://localhost:7687'
+
+graph_store = MemgraphPropertyGraphStore(
+    username=username,
+    password=password,
+    url=url,
+)
+```
+
+Additionally, a working OpenAI key is required:
+
+```python
+import os
+os.environ["OPENAI_API_KEY"] = "<YOUR_API_KEY>"  # Replace with your OpenAI API key
+```
+
+{<h4 className="custom-header">Dataset</h4>}
+
+For the dataset, we'll use a text about Charles Darwin stored in the
+`/data/charles_darwin/charles.txt` file:
+
+```
+Charles Robert Darwin was an English naturalist, geologist, and biologist,
+widely known for his contributions to evolutionary biology. His proposition that
+all species of life have descended from a common ancestor is now generally
+accepted and considered a fundamental scientific concept. In a joint publication
+with Alfred Russel Wallace, he introduced his scientific theory that this
+branching pattern of evolution resulted from a process he called natural
+selection, in which the struggle for existence has a similar effect to the
+artificial selection involved in selective breeding. Darwin has been described
+as one of the most influential figures in human history and was honoured by
+burial in Westminster Abbey.
+```
+
+```python
+from llama_index.core import SimpleDirectoryReader
+
+documents = SimpleDirectoryReader("./data/charles_darwin/").load_data()
+```
+
+The data is now loaded in the documents variable which we'll pass as an argument 
+in the next step of index creation and graph construction.
+
+{<h4 className="custom-header">Graph construction</h4>}
+
+LlamaIndex provides multiple [graph
+constructors](https://docs.llamaindex.ai/en/latest/module_guides/indexing/lpg_index_guide/#construction).
+In this example, we'll use the
+[SchemaLLMPathExtractor](https://docs.llamaindex.ai/en/latest/module_guides/indexing/lpg_index_guide/#schemallmpathextractor),
+which allows to both predefine the schema or use the one LLM provides without
+explicitly defining entities.
+
+```python
+from llama_index.core import PropertyGraphIndex
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.llms.openai import OpenAI
+from llama_index.core.indices.property_graph import SchemaLLMPathExtractor
+
+index = PropertyGraphIndex.from_documents(
+    documents,
+    embed_model=OpenAIEmbedding(model_name="text-embedding-ada-002"),
+    kg_extractors=[
+        SchemaLLMPathExtractor(
+            llm=OpenAI(model="gpt-4", temperature=0.0),
+        )
+    ],
+    property_graph_store=graph_store,
+    show_progress=True,
+)
+```
+
+In the below image, you can see how the text was transformed into a knowledge
+graph and stored into Memgraph.
+
+![llama-index](/pages/ai-ecosystem/integrations/llamaindex-kg.png)
+
+{<h4 className="custom-header">Querying</h4>}
+
+Labeled property graphs can be queried in several ways to retrieve nodes and
+paths and in LlamaIndex, several node retrieval methods at once can be combined.
+
+If no sub-retrievers are provided, the defaults are
+[LLMSynonymRetriever](https://docs.llamaindex.ai/en/latest/module_guides/indexing/lpg_index_guide/#default-llmsynonymretriever)
+and
+[VectorContextRetriever](https://docs.llamaindex.ai/en/latest/module_guides/indexing/lpg_index_guide/#default-if-supported-vectorcontextretriever),
+if supported.
+
+From the latest update, LlamaIndex utilizes Memgraph's **[vector search](/querying/vector-search)** feature in
+the background to enhance retrieval. This integration enables faster and more
+accurate querying by leveraging vector similarity searches for embeddings stored
+in the graph, leading to precise and context-aware answers.
+
+```python
+query_engine = index.as_query_engine(include_text=True)
+
+response = query_engine.query("Who did Charles Robert Darwin collaborate with?")
+print(str(response))
+```
+
+In the image below, you can see what's happening under the hood to get the answer. 
+
+![llama-retriever](/pages/ai-ecosystem/integrations/llama-retriever.png)
+
+{<h3 className="custom-header">Demos</h3>} 
+
+If you'd like to take it one step further, explore how Memgraph and LlamaIndex
+work together in real-world applications with these interactive demos:
+
+- [**Single-agent GraphRAG
+  system**](https://github.com/memgraph/ai-demos/blob/main/integrations/llamaindex/single-agent-rag-system/single_agent_rag_system.ipynb):
+  Learn how to build an agent-powered graph retrieval-augmented generation (RAG)
+  system using Memgraph and LlamaIndex.
+- [**Multi-agent GraphRAG
+  System**](https://github.com/memgraph/ai-demos/blob/main/integrations/llamaindex/multi-agent-rag-system/multi_agent_rag_system.ipynb):
+  Dive into a more advanced setup with multiple agents collaborating in a
+  GraphRAG system.
+
+<CommunityLinks/>
