@@ -20,6 +20,11 @@ export default withNextra({
   async redirects() {
     return [
       {
+        source: '/database-management/experimental-features',
+        destination: '/querying/text-search',
+        permanent: true
+      },
+      {
         source: '/getting-started/install-memgraph/amazon-linux',
         destination: '/getting-started/install-memgraph',
         permanent: true
