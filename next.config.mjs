@@ -2259,12 +2259,12 @@ export default withNextra({
       },
       {
         source: '/memgraph/getting-help/getting-help',
-        destination: '/help-center/',
+        destination: '/help-center',
         permanent: true
       },
       {
         source: '/mage/getting-help',
-        destination: '/help-center/',
+        destination: '/help-center',
         permanent: true
       },
       {
