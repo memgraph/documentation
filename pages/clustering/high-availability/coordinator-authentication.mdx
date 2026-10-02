@@ -42,7 +42,8 @@ carrying a coordinator privilege mask.
 | Users | Stored in the auth store | Not supported |
 | Roles | Stored in the auth store | Stored in the **Raft-replicated cluster state** |
 | Privileges | Full privilege set + fine-grained access control | Exactly two: `COORDINATOR_READ`, `COORDINATOR_WRITE` |
-| Basic auth | Username and password are validated | Passthrough — credentials are ignored (see [below](#basic-authentication-passthrough)) |
+| Basic auth | Username and password are validated | Passthrough — credentials are ignored (see [below](#authentication-passthrough)) |
+| Other Bolt schemes | Rejected unless mapped to an auth module | Passthrough, same as basic auth (see [below](#authentication-passthrough)) |
 | SSO | Supported (OIDC, SAML, Kerberos) | Supported (OIDC, SAML, Kerberos) |
 
 Because roles live in the Raft log, they survive coordinator restarts, are
@@ -110,57 +111,88 @@ Anything not recognized fails closed and requires `COORDINATOR_WRITE`.
 
 ## Authentication modes
 
-A coordinator accepts exactly two kinds of Bolt connection: **basic/none** and
-an **SSO scheme listed in `--auth-module-mappings`**. Any other scheme is
-rejected with:
+A coordinator sorts every Bolt connection into one of two paths based on the
+authentication scheme the client sends:
 
-```
-The "<scheme>" authentication scheme isn't supported on this coordinator;
-connect with basic auth or an SSO scheme listed in the auth-module-mappings flag.
-```
+- A scheme **listed in `--auth-module-mappings`** takes the [SSO
+  path](#sso-authentication): the coordinator runs the mapped auth module and
+  genuinely authenticates the connection.
+- **Every other scheme** — `basic`, `none`, or a scheme that is **not** listed
+  in `--auth-module-mappings` — takes the [passthrough
+  path](#authentication-passthrough) described next.
 
-### Basic authentication passthrough
+There is no separate "unsupported scheme" rule. A client that keeps its
+data-instance SSO configuration (for example, `oidc`) when talking to a
+coordinator that has no SSO configured is treated exactly like a basic-auth
+client.
 
-When SSO is not in effect, connecting with a username and password (or with no
-auth at all) **succeeds and the credentials are ignored**. The session gets full
+### Authentication passthrough
+
+When SSO is not in effect, connecting with a username and password, with no
+auth at all, or with any scheme not listed in `--auth-module-mappings`
+**succeeds and the credentials are ignored**. The session gets full
 `COORDINATOR_WRITE` access. This is the pre-3.13 behavior, it requires no
 license, and it keeps existing admin tooling working unchanged.
 
-Basic/none authentication is **denied** only when **all three** of the following
-hold:
+<Callout type="info">
+**Memgraph 3.13 rejected unlisted schemes.** In 3.13, a coordinator only let
+`basic`/`none` through and refused any other scheme outright, so drivers that
+sent their data-instance SSO scheme to a coordinator without SSO stopped
+connecting after an upgrade from 3.12. From Memgraph 3.14, an unlisted scheme
+follows the same passthrough rule as `basic`/`none`, restoring the 3.12
+behavior.
+</Callout>
+
+Passthrough authentication is **denied** only when **all three** of the
+following hold:
 
 1. SSO is configured — `--auth-module-mappings` is non-empty.
 2. The enterprise license is valid.
 3. The committed role set contains at least one role holding
    `COORDINATOR_WRITE`.
 
-In that case the connection is rejected with:
+In that case the connection is rejected. The message tells `basic`/`none` apart
+from an unlisted scheme, because the remedy differs: the former needs an SSO
+login, while the latter is usually a misspelled or unconfigured scheme.
+
+For `basic`/`none`:
 
 ```
 Basic authentication is disabled on this coordinator because SSO is configured;
 connect with an SSO scheme listed in the auth-module-mappings flag.
 ```
 
+For any other scheme not listed in `--auth-module-mappings`:
+
+```
+The "<scheme>" authentication scheme isn't supported on this coordinator;
+connect with an SSO scheme listed in the auth-module-mappings flag.
+```
+
+The deny rule applies to arbitrary scheme names as well as to `basic`, so a
+client cannot bypass the SSO privilege model by sending a made-up scheme.
+
 <Callout type="info">
 **Anybody can log in until a `COORDINATOR_WRITE` role exists.** Condition 3 is
 what makes coordinator SSO self-bootstrapping. On a coordinator that starts with
 `--auth-module-mappings` set but an empty role set, SSO cannot yet grant a
-privileged session to anybody — so basic auth stays open, and you use it to
-create the first role and grant it `COORDINATOR_WRITE`. The moment that grant
-commits to Raft, basic auth closes on the next login attempt and SSO takes over.
-**No coordinator restart is required.**
+privileged session to anybody — so the passthrough stays open, and you use a
+basic-auth connection to create the first role and grant it `COORDINATOR_WRITE`.
+The moment that grant commits to Raft, the passthrough closes on the next login
+attempt and SSO takes over. **No coordinator restart is required.**
 
 The same rule applies in reverse: if you drop or revoke the last
-`COORDINATOR_WRITE` role on a live cluster, basic auth reopens rather than
-leaving the cluster unadministrable.
+`COORDINATOR_WRITE` role on a live cluster, the passthrough reopens rather than
+leaving the cluster unadministrable. Unlisted schemes are admitted during
+break-glass in the same way as `basic`/`none`.
 </Callout>
 
 <Callout type="warning">
 **Break-glass on license loss.** If the enterprise license is missing, expired
-or invalid, SSO rejects every login. Condition 2 above means basic auth falls
-back to the passthrough in exactly that case, so a license transition can never
-lock every Bolt session out of a coordinator. Use that session to re-install the
-license over Bolt:
+or invalid, SSO rejects every login. Condition 2 above means `basic`/`none` and
+unlisted schemes fall back to the passthrough in exactly that case, so a license
+transition can never lock every Bolt session out of a coordinator. Use that
+session to re-install the license over Bolt:
 
 ```cypher
 SET DATABASE SETTING 'enterprise.license' TO 'License';
@@ -174,7 +206,7 @@ refresh.
 
 ### A follower without quorum cannot be logged into
 
-Both the basic-auth decision and the SSO role check need the **leader's**
+Both the passthrough decision and the SSO role check need the **leader's**
 committed role set, and both are **fail-closed**: when the leader cannot be
 reached, the login is rejected rather than validated against possibly-stale
 local replicated state, which could still list a dropped role or an
@@ -191,14 +223,14 @@ license:
   can't be validated. Retry once a leader is elected.
   ```
 
-- **Basic/none logins are also rejected.** An unknown role set is not treated as
-  "no writable role", so the break-glass path does not open during a transient
-  leader outage.
+- **Passthrough logins (`basic`/`none` and unlisted schemes) are also
+  rejected.** An unknown role set is not treated as "no writable role", so the
+  break-glass path does not open during a transient leader outage.
 
 This is intentional and temporary: SSO is unavailable in that window anyway, and
 access returns as soon as a leader is elected. If SSO is **not** configured, the
-basic-auth passthrough never contacts the leader, so it keeps working on a
-partitioned follower.
+passthrough never contacts the leader, so it keeps working on a partitioned
+follower.
 
 ### SSO authentication
 
@@ -281,11 +313,10 @@ a session whose roles were revoked mid-flight can still inspect who it is.
 
 - `SHOW CURRENT USER` returns the principal the identity provider authenticated.
   It is purely session-local and works even when the leader is unreachable. A
-  basic-auth passthrough session authenticated no principal and returns `null`.
+  passthrough session authenticated no principal and returns `null`.
 - `SHOW CURRENT ROLE` returns the session's roles **filtered against the
   leader's committed role set**, so it stops naming a role that `DROP ROLE`
-  already removed. A basic-auth passthrough session has no roles and returns
-  `null`.
+  already removed. A passthrough session has no roles and returns `null`.
 
 ### Auth queries rejected on coordinators
 
