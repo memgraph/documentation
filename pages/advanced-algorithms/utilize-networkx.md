@@ -17,7 +17,7 @@ you can find out:
 - [**How to run NetworkX algorithms in Memgraph
   Lab**](#how-to-run-networkx-algorithms-in-memgraph-lab)
 - [**How to implement custom NetworkX
-  module**](#how-to-implement-custom-networkx-module)
+  module**](#how-to-implement-custom-networkx-module-in-memgraph-lab)
 
 
 ## How to run NetworkX algorithms in Memgraph Lab
@@ -41,7 +41,7 @@ a command-line interpreter and run the following Docker command:
 docker run -p 7687:7687 -p 7444:7444 --name memgraph memgraph/memgraph-mage
 ```
 
-Connect to Memgraph via [Memgraph Lab](/data-visualization). 
+Connect to Memgraph via [Memgraph Lab](/memgraph-lab). 
 
 Check out the [installation guide](/getting-started/install-memgraph) for other
 installation options. If you wish to avoid the installation, you can also use
@@ -103,7 +103,7 @@ a command-line interpreter and run the following Docker command:
 docker run -p 7687:7687 -p 7444:7444 --name memgraph memgraph/memgraph-mage
 ```
 
-Connect to Memgraph via [Memgraph Lab](/data-visualization). 
+Connect to Memgraph via [Memgraph Lab](/memgraph-lab). 
 
 Check out the [installation guide](/getting-started/install-memgraph) for other
 installation options. If you wish to avoid the installation, you can also use
