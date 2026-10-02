@@ -553,7 +553,7 @@ you can use the following query:
 DROP GRAPH;
 ```
 
-More details are available at [`DROP GRAPH`](/querying/clauses/drop-graph) documentation.
+More details are available at [`DROP GRAPH`](/querying/clauses/drop#drop-graph) documentation.
 
 ### REMOVE
 
@@ -751,6 +751,6 @@ to only guarantee the ACID compliance with respect to the batches committed
 inside the query. If the query experiences a failure during execution, the query
 is reverted up to the latest committed batch. Most common failure of queries is
 during [write-write
-conflicts](/help-center/errors/transactions#conflicting-transaction), and it is
+conflicts](/help-center/errors/transactions#conflicting-transactions), and it is
 recommended that no other write operations are performed during periodic
 execution. 

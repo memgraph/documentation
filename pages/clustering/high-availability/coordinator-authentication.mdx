@@ -242,6 +242,23 @@ used on data instances work here, and `MEMGRAPH_SSO_*` environment variables are
 inherited by the module subprocess exactly as they are on data instances — there
 is no separate coordinator-side SSO configuration.
 
+<Callout type="warning">
+**SSO on coordinators does not work with the Memgraph HA Helm chart out of the
+box.** The chart's `cluster-setup` Job registers coordinators and data instances
+through `mgconsole` with plain username/password credentials. Once SSO is
+enabled on coordinators, those connections are rejected, so the Job fails and
+the cluster is never formed. The Job also re-runs on every `helm upgrade`, so it
+will keep failing after the initial install.
+
+Until the chart supports SSO-authenticated setup, running SSO on coordinators in
+Kubernetes requires manual intervention: disable the `cluster-setup` Job and
+[set up the cluster
+yourself](/clustering/high-availability/setup-ha-cluster-k8s#setting-up-the-cluster).
+Register the coordinators and data instances over an SSO-authenticated
+connection that holds `COORDINATOR_WRITE`, and apply membership changes on
+`helm upgrade` the same way. This flow will be improved in an upcoming release.
+</Callout>
+
 The login is accepted only when **all** of the following hold:
 
 1. The module authenticates the identity (valid, unexpired IdP token).
@@ -293,9 +310,9 @@ SHOW ROLES;
 
 GRANT COORDINATOR_READ TO ops;
 GRANT COORDINATOR_WRITE TO ops;
-GRANT ALL PRIVILEGES TO ops;          -- grants both coordinator privileges
+GRANT ALL PRIVILEGES TO ops;          // grants both coordinator privileges
 REVOKE COORDINATOR_WRITE FROM ops;
-REVOKE ALL PRIVILEGES FROM ops;       -- removes both
+REVOKE ALL PRIVILEGES FROM ops;       // removes both
 
 SHOW PRIVILEGES FOR ROLE ops;
 ```
@@ -394,7 +411,7 @@ therefore performs two independent authentications:
 
 <Steps>
 
-{<h3 className="custom-header">The driver authenticates against a coordinator</h3>}
+{<h3 id="the-driver-authenticates-against-a-coordinator" className="custom-header">The driver authenticates against a coordinator</h3>}
 
 It sends the SSO scheme and IdP token to a coordinator and issues a `ROUTE`
 message. The coordinator runs the auth module, requires every returned role to
@@ -402,7 +419,7 @@ exist **in the Raft-replicated coordinator role set**, and requires the union of
 their masks to grant at least `COORDINATOR_READ` — otherwise the routing table
 request is denied.
 
-{<h3 className="custom-header">The driver authenticates against a data instance</h3>}
+{<h3 id="the-driver-authenticates-against-a-data-instance" className="custom-header">The driver authenticates against a data instance</h3>}
 
 Using the routing table, the driver opens a connection to MAIN or a REPLICA with
 the **same scheme and the same token**. The data instance runs its own auth
@@ -426,21 +443,21 @@ data privilege set — but the **role names must match**. A typical setup mirror
 each IdP group into a role of the same name on both sides:
 
 ```cypher
--- On any coordinator
+// On any coordinator
 CREATE ROLE analyst;
 GRANT COORDINATOR_READ TO analyst;
 
 CREATE ROLE dba;
-GRANT ALL PRIVILEGES TO dba;   -- COORDINATOR_READ + COORDINATOR_WRITE
+GRANT ALL PRIVILEGES TO dba;   // COORDINATOR_READ + COORDINATOR_WRITE
 ```
 
 ```cypher
--- On the MAIN data instance (replicated to REPLICAs)
+// On the MAIN data instance (replicated to REPLICAs)
 CREATE ROLE analyst;
 GRANT MATCH TO analyst;
 
 CREATE ROLE dba;
-GRANT ALL PRIVILEGES TO dba;   -- the full data-instance privilege set
+GRANT ALL PRIVILEGES TO dba;   // the full data-instance privilege set
 ```
 
 <Callout type="info">
@@ -463,7 +480,7 @@ exists, you can create the roles over Bolt on the running cluster.
 
 <Steps>
 
-{<h3 className="custom-header">Start the coordinators with the SSO mapping</h3>}
+{<h3 id="start-the-coordinators-with-the-sso-mapping" className="custom-header">Start the coordinators with the SSO mapping</h3>}
 
 ```
 --auth-module-mappings=oidc-entra-id
@@ -472,7 +489,7 @@ exists, you can create the roles over Bolt on the running cluster.
 Set the `MEMGRAPH_SSO_*` environment variables the module needs, exactly as you
 would on a data instance.
 
-{<h3 className="custom-header">Connect with basic auth</h3>}
+{<h3 id="connect-with-basic-auth" className="custom-header">Connect with basic auth</h3>}
 
 No `COORDINATOR_WRITE` role exists yet, so username/password (or no credentials
 at all) is still accepted with full access:
@@ -481,7 +498,7 @@ at all) is still accepted with full access:
 mgconsole --host <coordinator-host> --port 7687
 ```
 
-{<h3 className="custom-header">Create the roles and grant privileges</h3>}
+{<h3 id="create-the-roles-and-grant-privileges" className="custom-header">Create the roles and grant privileges</h3>}
 
 ```cypher
 CREATE ROLE dba;
@@ -494,7 +511,7 @@ GRANT COORDINATOR_READ TO analyst;
 The role names must match what your IdP returns — see [role
 mapping](/database-management/authentication-and-authorization/auth-system-integrations#role-mapping).
 
-{<h3 className="custom-header">SSO is now enforced</h3>}
+{<h3 id="sso-is-now-enforced" className="custom-header">SSO is now enforced</h3>}
 
 As soon as `GRANT ALL PRIVILEGES TO dba` commits to Raft, all three deny
 conditions hold and the **next** basic-auth login attempt is rejected. Existing
@@ -527,9 +544,9 @@ The safe order is therefore:
 
 <Steps>
 
-{<h3 className="custom-header">Start the data instance *without* `--auth-module-mappings`</h3>}
+{<h3 id="start-the-data-instance-without---auth-module-mappings" className="custom-header">Start the data instance *without* `--auth-module-mappings`</h3>}
 
-{<h3 className="custom-header">Log in and create the roles</h3>}
+{<h3 id="log-in-and-create-the-roles" className="custom-header">Log in and create the roles</h3>}
 
 ```cypher
 CREATE ROLE dba;
@@ -539,7 +556,7 @@ CREATE ROLE analyst;
 GRANT MATCH TO analyst;
 ```
 
-{<h3 className="custom-header">Restart the data instance with `--auth-module-mappings` set</h3>}
+{<h3 id="restart-the-data-instance-with---auth-module-mappings-set" className="custom-header">Restart the data instance with `--auth-module-mappings` set</h3>}
 
 SSO logins now find their roles and succeed.
 
@@ -607,6 +624,10 @@ the same flag used on data instances. A module that exceeds it fails the login.
 - **Role names** must match the
   [`--auth-user-or-role-name-regex`](/database-management/configuration) pattern,
   the same as on data instances.
+- **Helm chart cluster setup is incompatible with coordinator SSO.** The
+  chart's `cluster-setup` Job cannot authenticate against SSO-protected
+  coordinators. Disable the Job and set the cluster up manually, as described
+  [above](#sso-authentication).
 
 ## Troubleshooting
 

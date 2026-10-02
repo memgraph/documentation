@@ -263,7 +263,7 @@ If the parent property is not of type `Map`, the query will **throw an exception
 MATCH (n:Person {name: 'Harry'}) SET n.name.surname = 'Johnson' // ERROR because n.name is a string, not a map
 ```
 
-{<h3 className="custom-header"> Appending to nested properties </h3>}
+{<h3 id="appending-to-nested-properties" className="custom-header"> Appending to nested properties </h3>}
 
 You can also append to **existing map properties** using the `+=` operator:
 
