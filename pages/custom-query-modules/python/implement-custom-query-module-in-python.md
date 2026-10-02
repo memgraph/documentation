@@ -365,7 +365,7 @@ can be viewed in the log file.
 
 If you started your Memgraph Platform image by exposing the `7444` port, you can
 check the logs from Memgraph Lab. Otherwise, you need to [access the logs in the
-Docker container](/database-management/configuration).
+Docker container](/database-management/logs#access-logs).
 
 But the rest of the errors in the code will result in the procedure not being
 detected. That means that if you go to the **Query Modules** menu item and check
