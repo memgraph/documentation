@@ -7,7 +7,7 @@ description: Easily transition from RDBMS to Memgraph using MAGE modules. Our de
 
 This tutorial will help you import your data from a PostgreSQL database into
 Memgraph directly using the Memgraph MAGE
-[`migrate`](/advanced-algorithms/available-algorithms/migrate) module. The
+[`migrate`](/advanced-algorithms/available-algorithms/cross_database#postgresql) module. The
 migrate module contains a comprehensive list of data sources from which you're
 able to migrate your data to Memgraph in one step.
 
@@ -40,7 +40,7 @@ please follow the [getting started guide](/getting-started).
 - (optional) A running relational database either with your own schema and data
   or the data we provided to populate the tables. Here we will be using PostgreSQL, but
   you can also choose whatever external source, if it is supported inside 
-  [MAGE available migration algorithms](/advanced-algorithms/available-algorithms/migrate).
+  [MAGE available migration algorithms](/advanced-algorithms/available-algorithms/cross_database#procedures).
 
 ## Data model
 
@@ -145,7 +145,7 @@ In the next two sections, we will provide you with different ways of migrating f
 One will be migrating the whole table from the RDBMS to Memgraph, and the other will be by issuing a query.
 
 ### 3. Import nodes from corresponding tables
-The [migrate module](/advanced-algorithms/available-algorithms/migrate) in MAGE has an easy API how to migrate rows from a relational database to Memgraph. We
+The [migrate module](/advanced-algorithms/available-algorithms/cross_database#postgresql) in MAGE has an easy API how to migrate rows from a relational database to Memgraph. We
 can inspect the table with the following query:
 
 ```cypher
