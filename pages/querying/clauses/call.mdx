@@ -22,13 +22,14 @@ Switch to MAGE documentation if you want to CALL a graph algorithm or some other
     1.3. [Post-union processing](#13-post-union-processing) <br />
     1.4. [Observing changes from previous executions](#14-observing-changes-from-previous-executions)<br />
     1.5. [Unit subqueries](#15-unit-subqueries) <br />
-    1.6. [Scoped variables with `CALL (...)`](#16-scoped-variables-with-call-)
+    1.6. [Scoped variables with `CALL (...)`](#16-scoped-variables-with-call-) <br />
+    1.7. [Optional subqueries with `OPTIONAL CALL`](#17-optional-subqueries-with-optional-call)
 
 2. [Invalid uses of CALL subquery](#2-invalid-uses-of-call-subquery) <br />
     2.1. [Returning variables with the same name as those in the outer scope](#21-returning-variables-with-same-name-as-those-in-the-outer-scope) <br />
     2.2. [Returning non-aliased expressions](#22-returning-non-aliased-expressions) <br />
     2.3. [Referencing outer scope variables that don't exist](#22-referencing-outer-scope-variables-that-dont-exist) <br />
-    2.4. [Using `OPTIONAL CALL` with scoped variables](#24-using-optional-call-with-scoped-variables) <br />
+    2.4. [Using `OPTIONAL` with a procedure call](#24-using-optional-with-a-procedure-call) <br />
 
 ## 1. Uses of CALL subquery
 
@@ -224,6 +225,48 @@ The scoped form is equivalent to using `WITH` to import variables, but
 narrows the subquery's scope explicitly at the boundary, which makes the
 import list visible at a glance.
 
+### 1.7. Optional subqueries with `OPTIONAL CALL`
+
+`CALL` drops an input row when the subquery returns no rows for it. `OPTIONAL
+CALL` keeps that row and sets the columns the subquery returns to `null`, which
+is the same contract as [`OPTIONAL MATCH`](/querying/clauses/optional-match).
+
+Imagine the data from [1.2](#12-cartesian-products-with-bounded-symbols), plus a
+third `:Person` named `Carol` who has no `:HAS_PARENT` relationship:
+
+```cypher
+MATCH (person:Person)
+OPTIONAL CALL (person) {
+  MATCH (person)-[:HAS_PARENT]->(parent:Parent)
+  RETURN parent.name AS parent_name
+}
+RETURN person.name AS person_name, parent_name
+```
+
+Output:
+```nocopy
++-------------+-------------+
+| person_name | parent_name |
++---------------------------+
+| 'John'      | 'John Sr.'  |
+| 'John'      | 'Anna'      |
+| 'Alice'     | 'Roxanne'   |
+| 'Alice'     | 'Bill'      |
+| 'Carol'     | null        |
++---------------------------+
+```
+
+Without `OPTIONAL`, `Carol` does not appear in the result at all.
+
+`OPTIONAL` can be combined with every scope form (`CALL (v1, v2)`, `CALL (*)`,
+`CALL ()`, or no scope clause), with a `UNION` subquery, with nested subqueries,
+and with [`IN TRANSACTIONS`](/querying/read-and-modify-data#call-subqueries-in-transactions).
+
+Variables imported from the outer scope keep their values; only the columns the
+subquery itself introduces are set to `null`. A
+[unit subquery](#15-unit-subqueries) returns no columns, so `OPTIONAL` has
+nothing to set to `null` and the number of rows is the same either way.
+
 ## 2. Invalid uses of CALL subquery
 
 ### 2.1. Returning variables with the same name as those in the outer scope
@@ -308,19 +351,25 @@ CALL {
 RETURN DISTINCT n;
 ```
 
-### 2.4. Using `OPTIONAL CALL` with scoped variables
+### 2.4. Using `OPTIONAL` with a procedure call
 
-The scoped `CALL (...)` form cannot be combined with `OPTIONAL`:
+`OPTIONAL` applies to a `CALL` subquery, not to a procedure call:
 
 ```cypher
-MATCH (p:Player)
-OPTIONAL CALL (p) {
-  MATCH (p)-[:PLAYS_FOR]->(team:Team)
-  RETURN team.name AS team
-}
-RETURN p.name, team;
+MATCH (p:Person)
+OPTIONAL CALL algo.procedure(p)
+YIELD result
+RETURN p.name, result;
 ```
 
-The above query results in an error. To make a scoped subquery optional,
-emit a sentinel value from the inner block instead, or fall back to the
-plain `OPTIONAL MATCH` outside the `CALL`.
+The above query results in an error. Wrap the procedure call in a subquery
+instead:
+
+```cypher
+MATCH (p:Person)
+OPTIONAL CALL (p) {
+  CALL algo.procedure(p) YIELD result
+  RETURN result
+}
+RETURN p.name, result;
+```
