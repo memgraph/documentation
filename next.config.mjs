@@ -2994,7 +2994,7 @@ export default withNextra({
       },
       {
         source: '/advanced-algorithms/available-algorithms/schema',
-        destination: '/querying/functions#schema',
+        destination: '/querying/schema#schema-related-procedures',
         permanent: true
       },
       {
@@ -3232,7 +3232,7 @@ export default withNextra({
       },
       {
         source: '/ai-ecosystem/graphchat',
-        destination: '/ai-ecosystem#graphchat',
+        destination: '/memgraph-lab/features/graphchat',
         permanent: true
       },
       {
