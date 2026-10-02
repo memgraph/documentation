@@ -15,7 +15,7 @@ provided](/custom-query-modules/python/python-example).
 
 If you install any C++ modules after running Memgraph, you’ll need to [load
 them into
-Memgraph](/custom-query-modules/manage-query-modules#loading-query-modules) or
+Memgraph](/custom-query-modules/manage-query-modules#load-procedures) or
 restart Memgraph in order to use them.
 
 ## Functions and procedures
