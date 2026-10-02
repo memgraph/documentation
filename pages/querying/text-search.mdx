@@ -249,6 +249,73 @@ Result:
 +-------------+-------------+
 ```
 
+### Phrase prefix and proximity search
+
+The `search_query` of `text_search.search` supports two additional
+[Tantivy phrase modifiers](https://docs.rs/tantivy/latest/tantivy/query/struct.QueryParser.html):
+**phrase prefix** (`"…"*`) and **slop** (`"…"~N`). They apply to the properties you
+name (prefixed with `data.`), and also to `text_search.search_all` and the `_edges`
+variants.
+
+{<h4 className="custom-header">Phrase prefix: `"…"*`</h4>}
+
+A phrase prefix query matches an ordered, adjacent phrase in which the leading terms
+match exactly and the **last** term is matched as a prefix. It is the exact-match
+counterpart of [`text_search.fuzzy_phrase_search`](#fuzzy-phrase-search): use `"…"*`
+for ordered "search-as-you-type" matching without typo tolerance, and
+`fuzzy_phrase_search` when you also need typo tolerance.
+
+```cypher
+CREATE TEXT INDEX docs ON :Doc;
+CREATE (:Doc {title: 'big bad wolf'});
+CREATE (:Doc {title: 'big bad world'});
+CREATE (:Doc {title: 'big brave wolf'});
+
+CALL text_search.search('docs', 'data.title:"big bad wo"*')
+YIELD node
+RETURN node.title AS title
+ORDER BY title;
+```
+
+Result:
+```
++-----------------+
+| title           |
++-----------------+
+| "big bad wolf"  |
+| "big bad world" |
++-----------------+
+```
+
+`big brave wolf` does not match: the leading terms (`big bad`) are matched exactly
+and in order, and only the last term (`wo`) is a prefix. A phrase prefix needs at
+least two terms — a single-token phrase such as `data.title:"wo"*` is rejected.
+
+{<h4 className="custom-header">Slop (proximity): `"…"~N`</h4>}
+
+A slop query matches the terms of a phrase when they occur within `N` positions of
+each other, tolerating intervening words.
+
+```cypher
+CALL text_search.search('docs', 'data.title:"big wolf"~1')
+YIELD node
+RETURN node.title AS title
+ORDER BY title;
+```
+
+Result:
+```
++------------------+
+| title            |
++------------------+
+| "big bad wolf"   |
+| "big brave wolf" |
++------------------+
+```
+
+Both titles match because `big` and `wolf` are one position apart; the exact phrase
+query `data.title:"big wolf"` (without `~1`) matches neither.
+
 ### Fuzzy search
 
 Fuzzy matching lets a search tolerate typos and partial terms. Using the
