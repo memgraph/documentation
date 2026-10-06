@@ -20,6 +20,41 @@ export default withNextra({
   async redirects() {
     return [
       {
+        source: '/database-management/experimental-features',
+        destination: '/querying/text-search',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/amazon-linux',
+        destination: '/getting-started/install-memgraph',
+        permanent: true
+      },
+      {
+        source: '/deployment/docker',
+        destination: '/deployment/environments/docker',
+        permanent: true
+      },
+      {
+        source: '/deployment/linux',
+        destination: '/deployment/environments/linux',
+        permanent: true
+      },
+      {
+        source: '/deployment/aws',
+        destination: '/deployment/environments/aws',
+        permanent: true
+      },
+      {
+        source: '/deployment/gcp',
+        destination: '/deployment/environments/gcp',
+        permanent: true
+      },
+      {
+        source: '/deployment/azure',
+        destination: '/deployment/environments/azure',
+        permanent: true
+      },
+      {
         source: '/cypher-manual/graph-algorithms',
         destination: '/advanced-algorithms',
         permanent: true
@@ -531,22 +566,22 @@ export default withNextra({
       },
       {
         source: '/memgraph/reference-guide/audit-log',
-        destination: '/configuration/audit-log',
+        destination: '/database-management/logs',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/auth-module',
-        destination: '/configuration/auth-module',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/config-logs',
-        destination: '/configuration/configuration-settings',
+        destination: '/database-management/configuration',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/configuration',
-        destination: '/configuration/configuration-settings',
+        destination: '/database-management/configuration',
         permanent: true
       },
       {
@@ -561,102 +596,102 @@ export default withNextra({
       },
       {
         source: '/memgraph/how-to-guides/enterprise-features',
-        destination: '/configuration/enabling-memgraph-enterprise',
+        destination: '/database-management/enabling-memgraph-enterprise',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/enabling-enterprise',
-        destination: '/configuration/enabling-memgraph-enterprise',
+        destination: '/database-management/enabling-memgraph-enterprise',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/enterprise-features',
-        destination: '/configuration/enabling-memgraph-enterprise',
+        destination: '/database-management/enabling-memgraph-enterprise',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/runtime-settings',
-        destination: '/configuration/enabling-memgraph-enterprise',
+        destination: '/database-management/enabling-memgraph-enterprise',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/exposing-system-metrics',
-        destination: '/configuration/monitoring-server',
+        destination: '/database-management/monitoring',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/manage-users-using-ldap',
-        destination: '/configuration/auth-module',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/ldap-security',
-        destination: '/configuration/auth-module',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/metadata',
-        destination: '/configuration/metadata',
+        destination: '/database-management/query-metadata',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/monitoring-server',
-        destination: '/configuration/monitoring-server',
+        destination: '/database-management/monitoring',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/multi-tenancy',
-        destination: '/configuration/multi-tenancy',
+        destination: '/database-management/multi-tenancy',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/replication',
-        destination: '/configuration/replication',
+        destination: '/clustering/replication',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/replication',
-        destination: '/configuration/replication',
+        destination: '/clustering/replication',
         permanent: true
       },
       {
         source: '/memgraph/under-the-hood/replication',
-        destination: '/configuration/replication',
+        destination: '/clustering/replication',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/manage-label-based-access-control',
-        destination: '/configuration/security',
+        destination: '/database-management/authentication-and-authorization/role-based-access-control',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/manage-user-privileges',
-        destination: '/configuration/security',
+        destination: '/database-management/authentication-and-authorization/role-based-access-control',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/security',
-        destination: '/configuration/security',
+        destination: '/database-management/authentication-and-authorization/role-based-access-control',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/users',
-        destination: '/configuration/security',
+        destination: '/database-management/authentication-and-authorization/role-based-access-control',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/server-stats',
-        destination: '/configuration/server-stats',
+        destination: '/database-management/server-stats',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides/encryption',
-        destination: '/configuration/ssl-encryption',
+        destination: '/database-management/ssl-encryption',
         permanent: true
       },
       {
         source: '/memgraph/reference-guide/encryption',
-        destination: '/configuration/ssl-encryption',
+        destination: '/database-management/ssl-encryption',
         permanent: true
       },
       {
@@ -1151,7 +1186,7 @@ export default withNextra({
       },
       {
         source: '/errors',
-        destination: '/help-center/errors/overview',
+        destination: '/help-center/errors',
         permanent: true
       },
       {
@@ -1448,11 +1483,6 @@ export default withNextra({
       {
         source: '/cypher-manual/what-are-graph-databases',
         destination: '/',
-        permanent: true
-      },
-      {
-        source: '/mage/how-to-guides/run-a-query-module',
-        destination: '/advanced-algorithms/run-algorithms',
         permanent: true
       },
       {
@@ -1764,17 +1794,17 @@ export default withNextra({
       },
       {
         source: '/memgraph/reference-overview/audit-log',
-        destination: '/configuration/audit-log',
+        destination: '/database-management/logs',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/auth-module',
-        destination: '/configuration/auth-module',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/configuration',
-        destination: '/configuration/configuration-settings',
+        destination: '/database-management/configuration',
         permanent: true
       },
       {
@@ -1784,47 +1814,47 @@ export default withNextra({
       },
       {
         source: '/memgraph/how-to-guides-overview/manage-users-using-ldap',
-        destination: '/configuration/auth-module',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/ldap-security',
-        destination: '/configuration/auth-module',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/manage-users-using-ldap',
-        destination: '/configuration/auth-module',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations',
         permanent: true
       },
       {
         source: '/memgraph/concepts-overview/replication',
-        destination: '/configuration/replication',
+        destination: '/clustering/replication',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/replication',
-        destination: '/configuration/replication',
+        destination: '/clustering/replication',
         permanent: true
       },
       {
         source: '/memgraph/concepts/replication',
-        destination: '/configuration/replication',
+        destination: '/clustering/replication',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides-overview/manage-user-privileges',
-        destination: '/configuration/security',
+        destination: '/database-management/authentication-and-authorization/role-based-access-control',
         permanent: true
       },
       {
         source: '/memgraph/reference-overview/security',
-        destination: '/configuration/security',
+        destination: '/database-management/authentication-and-authorization/role-based-access-control',
         permanent: true
       },
       {
         source: '/memgraph/database-functionalities/manage-user-privileges',
-        destination: '/configuration/security',
+        destination: '/database-management/authentication-and-authorization/role-based-access-control',
         permanent: true
       },
       {
@@ -2239,12 +2269,12 @@ export default withNextra({
       },
       {
         source: '/memgraph/getting-help/getting-help',
-        destination: '/help-center/',
+        destination: '/help-center',
         permanent: true
       },
       {
         source: '/mage/getting-help',
-        destination: '/help-center/',
+        destination: '/help-center',
         permanent: true
       },
       {
@@ -2748,12 +2778,12 @@ export default withNextra({
       },
       {
         source: '/memgraph/1.3.0/reference-guide/security',
-        destination: '/configuration/security',
+        destination: '/database-management/authentication-and-authorization/role-based-access-control',
         permanent: true
       },
       {
         source: '/memgraph/1.6.1/database-functionalities/replication',
-        destination: '/configuration/replication',
+        destination: '/clustering/replication',
         permanent: true
       },
       {
@@ -2768,7 +2798,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/2.0.0/reference-guide/security',
-        destination: '/configuration/security',
+        destination: '/database-management/authentication-and-authorization/role-based-access-control',
         permanent: true
       },
       {
@@ -2798,7 +2828,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/2.10.0/reference-guide/runtime-settings',
-        destination: '/configuration/enabling-memgraph-enterprise',
+        destination: '/database-management/enabling-memgraph-enterprise',
         permanent: true
       },
       {
@@ -2833,7 +2863,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/2.3.1/reference-guide/audit-log',
-        destination: '/configuration/audit-log',
+        destination: '/database-management/logs',
         permanent: true
       },
       {
@@ -2843,7 +2873,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/2.4.0/reference-guide/enabling-enterprise',
-        destination: '/configuration/enabling-memgraph-enterprise',
+        destination: '/database-management/enabling-memgraph-enterprise',
         permanent: true
       },
       {
@@ -2893,7 +2923,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/2.5.2/reference-guide/replication',
-        destination: '/configuration/replication',
+        destination: '/clustering/replication',
         permanent: true
       },
       {
@@ -2959,32 +2989,22 @@ export default withNextra({
       //END 404 links redirects
       {
         source: '/configuration/exposing-system-metrics',
-        destination: '/configuration/monitoring-server',
+        destination: '/database-management/monitoring',
         permanent: true
       },
       {
         source: '/configuration/ldap-security',
-        destination: '/configuration/auth-module',
+        destination: '/database-management/authentication-and-authorization/auth-system-integrations',
         permanent: true
       },
       {
         source: '/memgraph/next/reference-guide/exposing-system-metrics',
-        destination: '/configuration/monitoring-server',
+        destination: '/database-management/monitoring',
         permanent: true
       },
       {
         source: '/advanced-algorithms/available-algorithms/schema',
-        destination: '/querying/functions#schema',
-        permanent: true
-      },
-      {
-        source: '/advanced-algorithms/available-algorithms/convert',
-        destination: '/querying/functions#conversion-functions',
-        permanent: true
-      },
-      {
-        source: '/querying/functions#schema',
-        destination: '/querying/schema',
+        destination: '/querying/schema#schema-related-procedures',
         permanent: true
       },
       {
@@ -2994,7 +3014,7 @@ export default withNextra({
       },
       {
         source: '/configuration/system-replication',
-        destination: '/configuration/replication/system-replication',
+        destination: '/clustering/replication/system-replication',
         permanent: true
       },
       {
@@ -3130,16 +3150,6 @@ export default withNextra({
         permanent: true
       },
       {
-        source: '/ai-ecosystem/graph-rag#integrations',
-        destination: '/ai-ecosystem/integrations',
-        permanent: true
-      },
-      {
-        source: '/advanced-algorithms/available-algorithms#streaming-graph-algorithms',
-        destination: '/advanced-algorithms/available-algorithms#dynamic-graph-algorithms-enterprise',
-        permanent: true
-      },
-      {
         source: '/data-modeling/knowledge-graph',
         destination: '/data-modeling/modeling-guides/model-a-knowledge-graph',
         permanent: true
@@ -3211,11 +3221,6 @@ export default withNextra({
         permanent: true
       },
       {
-        source: '/data-visualization/user-manual/csv-file-import',
-        destination: '/memgraph-lab/features/csv-file-import',
-        permanent: true
-      },
-      {
         source: '/data-visualization/graph-style-script/built-in-elements',
         destination: '/memgraph-lab/features/graph-style-script/built-in-elements',
         permanent: true
@@ -3223,11 +3228,6 @@ export default withNextra({
       {
         source: '/data-visualization/graph-style-script/directive-properties',
         destination: '/memgraph-lab/features/graph-style-script/directive-properties',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/graph-style-script#main-building-blocks',
-        destination: '/memgraph-lab/features/graph-style-script/main-building-blocks',
         permanent: true
       },
       {
@@ -3241,278 +3241,13 @@ export default withNextra({
         permanent: true
       },
       {
-        source: '/data-visualization/user-manual#run-history',
-        destination: '/memgraph-lab/features/run-history',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#collections',
-        destination: '/memgraph-lab/features/collections',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#query-modules',
-        destination: '/memgraph-lab/features/query-modules',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#streams',
-        destination: '/memgraph-lab/features/streams',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#graph-schema',
-        destination: '/memgraph-lab/features/graph-schema',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#datasets',
-        destination: '/memgraph-lab/getting-started/data-migration#datasets',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#import',
-        destination: '/memgraph-lab/getting-started/data-migration',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#export',
-        destination: '/memgraph-lab/getting-started/data-migration',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#logs',
-        destination: '/memgraph-lab/features/logs',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#layout',
-        destination: '/memgraph-lab/features/layout',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/graph-style-script#caching-results-for-faster-performance',
-        destination: '/memgraph-lab/features/graph-style-script#caching-results-for-faster-performance',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#import--export',
-        destination: '/memgraph-lab/getting-started/data-migration',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#cypher-editor',
-        destination: '/memgraph-lab/querying#cypher-editor',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#graph-style-editor',
-        destination: '/memgraph-lab/querying#graph-style-editor',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#parameters',
-        destination: '/memgraph-lab/querying#parameters',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#data-results',
-        destination: '/memgraph-lab/querying#query-results',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual#graph-results',
-        destination: '/memgraph-lab/querying#graph-results',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual/single-sign-on#set-up-lab-integration',
-        destination: '/memgraph-lab/features/single-sign-on#set-up-lab-integration',
-        permanent: true
-      },
-      {
-        source: '/data-visualization/user-manual/single-sign-on#set-up-lab-integration-1',
-        destination: '/memgraph-lab/features/single-sign-on#set-up-lab-integration-1',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#available-docker-images',
-        destination: '/getting-started/install-memgraph/docker#quickstart',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#run-memgraph-mage-docker-image',
-        destination: '/getting-started/install-memgraph/docker#run-memgraph-mage',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#run-memgraph-mage-docker-image--cugraph',
-        destination: '/getting-started/install-memgraph/docker#advanced-cugraph-support-legacy',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#run-memgraph-docker-image',
-        destination: '/getting-started/install-memgraph/docker#run-memgraph-mage',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#load-and-run-memgraph-docker-image-from-memgraph-download-hub',
-        destination: '/getting-started/install-memgraph/docker#install-from-a-downloaded-targz',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#run-memgraph-lab-image',
-        destination: '/getting-started/install-memgraph/docker#connect-via-memgraph-lab',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#issues-when-connecting-to-memgraph-lab-to-memgraph',
-        destination: '/getting-started/install-memgraph/docker#memgraph-lab-cant-connect',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#issues-when-connecting-to-memgraph-lab-to-memgraph',
-        destination: '/getting-started/install-memgraph/docker#quickstart',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#running-individual-tools-from-memgraph-platform-image',
-        destination: '/getting-started/install-memgraph/docker#quickstart',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#stop-and-start-the-instance',
-        destination: '/getting-started/first-steps-with-docker#managing-docker-service-on-windows-using-powershell',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#issues-with-loading-memgraph',
-        destination: '/getting-started/install-memgraph/docker#troubleshooting',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#issues-when-connecting-to-memgraph-platform-up-to-version-214',
-        destination: '/getting-started/install-memgraph/docker#troubleshooting',
-        permanent: true
-      },
-      {
-        source: '/getting-started/install-memgraph/docker#issues-with-connecting-mgconsole-to-the-database',
-        destination: '/getting-started/install-memgraph/docker#troubleshooting',
-        permanent: true
-      },
-      {
         source: '/ai-ecosystem/graphchat',
-        destination: '/ai-ecosystem#graphchat',
-        permanent: true
-      },
-      {
-        source: '/getting-started/build-memgraph-from-source#obtaining-the-source-code',
-        destination: '/getting-started/build-memgraph-from-source#obtain-the-source-code',
-        permanent: true
-      },
-      {
-        source: '/getting-started/build-memgraph-from-source#downloading-the-dependencies',
-        destination: '/getting-started/build-memgraph-from-source#download-dependencies-required-for-methods-1--2',
-        permanent: true
-      },
-      {
-        source: '/getting-started/build-memgraph-from-source#compiling',
-        destination: '/getting-started/build-memgraph-from-source#toolchain-installation-required-for-methods-1--2',
-        permanent: true
-      },
-      {
-        source: '/getting-started/build-memgraph-from-source#toolchain-installation-procedure',
-        destination: '/getting-started/build-memgraph-from-source#toolchain-installation-required-for-methods-1--2',
-        permanent: true
-      },
-      {
-        source: '/getting-started/build-memgraph-from-source#installing-memgraph-dependencies',
-        destination: '/getting-started/build-memgraph-from-source#download-dependencies-required-for-methods-1--2',
-        permanent: true
-      },
-      {
-        source: '/getting-started/build-memgraph-from-source#running-memgraph',
-        destination: '/getting-started/build-memgraph-from-source#run-memgraph',
+        destination: '/memgraph-lab/features/graphchat',
         permanent: true
       },
       {
         source: '/data-migration/migrate-from-neo4j-using-single-cypher-query',
-        destination: 'data-migration/migrate-from-neo4j/using-single-cypher-query',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#flags',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#configuration-flags',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#communication',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#communication-protocol',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#single-role-response-backward-compatible',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#multiple-roles-support',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#multiple-roles-response-new-format',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#multiple-roles-support',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#single-role-in-array-format',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#multiple-roles-support',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#entra-id',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#configuration-1',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#okta',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#configuration-1',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#openid-connect-oidc',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#openid-connect',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#custom-auth',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#custom-oidc-provider',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#username',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#username-configuration',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#basic-username--password-auth',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#basic-authentication',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#ldap',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#ldap-authentication',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#example',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#example-ldap-directory',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#authentication',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#authentication-workflow',
-        permanent: true
-      },
-      {
-        source: '/database-management/authentication-and-authorization/auth-system-integrations#authorization',
-        destination: '/database-management/authentication-and-authorization/auth-system-integrations#authorization-and-role-mapping',
+        destination: '/data-migration/migrate-from-neo4j/using-single-cypher-query',
         permanent: true
       },
 
