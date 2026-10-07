@@ -46,6 +46,262 @@ guide.
 
 ## 🚀 Latest release
 
+### Memgraph v3.14.0 - October 21st, 2026
+
+{<h4 className="custom-header">⚠️ Breaking changes</h4>}
+
+- `SHOW TRANSACTIONS` and `SHOW ACTIVE USERS INFO` each gain a `database`
+  column with the name of the database the session is using. `SHOW ACTIVE
+  USERS INFO` also gains `database marked for deletion`. Clients that parse
+  these results by column position need to account for the new fields.
+  [#4571](https://github.com/memgraph/memgraph/pull/4571)
+- Edge index operator metrics are merged into
+  `memgraph_scan_all_by_edge_type_property_operator_total` and
+  `memgraph_scan_all_by_edge_property_operator_total`. Dashboards that
+  scrape the older `_value` or `_range` series need those names updated.
+  [#4671](https://github.com/memgraph/memgraph/pull/4671)
+- Comparing an edge property with a type it cannot match, such as a
+  boolean or a point, now returns no rows instead of raising. Update
+  queries that relied on that error.
+  [#4671](https://github.com/memgraph/memgraph/pull/4671)
+- A pattern that names an already-bound variable is now a node test, including
+  in plain `MATCH`. After `OPTIONAL MATCH`, `MATCH (b)` no longer keeps a null
+  `b` row; it drops it (or errors if `b` is not a node). In `EXISTS` / `COUNT` /
+  `COLLECT`, a pattern may also no longer reuse a name from outside the body.
+  Rename those variables, or drop a no-op `MATCH` on a bound name.
+  [#4707](https://github.com/memgraph/memgraph/pull/4707)
+- Functions in the `collections` query module (`contains`, `to_set`, `union`
+  and `duplicates`) now treat maps with the same keys and values as equal,
+  matching Cypher's `=`. Queries that relied on every non-empty map being
+  distinct will see different results. Custom C++ query modules need to be
+  recompiled for this release.
+  [#4783](https://github.com/memgraph/memgraph/pull/4783)
+- Comparing lists or maps that hold `null` now returns `null`, the same as
+  `null = null`, instead of treating them as equal. Update filters and
+  conditions that assumed `[null] = [null]` or `{a: null} = {a: null}` was
+  true. `DISTINCT` and grouping still treat those values as the same key.
+  [#4794](https://github.com/memgraph/memgraph/pull/4794)
+- `NaN > x` and `NaN >= x` now return `false` instead of `true`. A filter
+  on those operators keeps no row where it previously kept every row.
+  [#4816](https://github.com/memgraph/memgraph/pull/4816)
+- Comparing values with `<`, `<=`, `>` or `>=` no longer fails the query
+  when the pair has no order. Two booleans are ordered as Cypher orders
+  them (`false` < `true`). A pair such as two points or two lists
+  returns `null`.
+  [#4816](https://github.com/memgraph/memgraph/pull/4816)
+- An indexed range over a date, local time, local date time or duration
+  returns only values of that same kind. It previously also returned the
+  other three. Recheck range queries on mixed temporal properties.
+  [#4816](https://github.com/memgraph/memgraph/pull/4816)
+- A uniqueness constraint now allows two nodes whose property holds
+  `null` at any depth, such as `[1, null]` or `{a: null}`. It
+  previously refused the second. Recheck constraints that relied on
+  that refusal.
+  [#4836](https://github.com/memgraph/memgraph/pull/4836)
+
+{<h4 className="custom-header">✨ New features</h4>}
+
+- `DROP DATABASE ... FORCE` no longer blocks other databases on the instance
+  while the tenant is torn down. A database still draining is shown as
+  `DROPPING` in `SHOW DATABASES`. If the same name is created again while
+  the old tenant is draining, that row is shown as `name (uuid)`. Plain
+  `DROP DATABASE` is unchanged.
+  [#4573](https://github.com/memgraph/memgraph/pull/4573)
+- `SHOW SESSIONS` lists active Bolt sessions (`session_id`, `username`,
+  `database`, `login_timestamp`). `TERMINATE SESSIONS` evicts sessions by
+  uuid from another connection. A user may manage their own sessions;
+  terminating another user's session requires `TRANSACTION_MANAGEMENT` on
+  that session's database. `SESSIONS` is a reserved keyword; quote it as a
+  bare identifier.
+  [#4577](https://github.com/memgraph/memgraph/pull/4577)
+- The `collections` query module adds `index_of(coll, value)`: the position
+  of the first element equal to `value`, or `-1`. A null collection or
+  value returns null.
+  [#4783](https://github.com/memgraph/memgraph/pull/4783)
+- The built-in `nullIf(value1, value2)` returns null when the two arguments
+  are equal, and the first argument otherwise — the counterpart of
+  `coalesce`. The comparison is the same as `=`, so `nullIf(1, null)`
+  returns `1`.
+  [#4786](https://github.com/memgraph/memgraph/pull/4786)
+- `OPTIONAL CALL` keeps an input row when the subquery body returns
+  nothing for it, and sets the body's returned columns to null. Without
+  `OPTIONAL`, that row is dropped. Supported with a scope clause,
+  `(*)`, no scope, `UNION`, nesting, and `IN TRANSACTIONS`.
+  [#4833](https://github.com/memgraph/memgraph/pull/4833)
+- Aggregation functions can be used inside a `CASE` expression in
+  `RETURN` and `WITH`. They were previously refused. Aggregations in
+  `ORDER BY` are still refused.
+  [#4859](https://github.com/memgraph/memgraph/pull/4859)
+- The FIPS Docker image now includes a Python interpreter, so Python
+  query modules and auth modules run on that image.
+  [#4902](https://github.com/memgraph/memgraph/pull/4902)
+- An `EXISTS { ... }`, `COUNT { ... }` or `COLLECT { ... }` body can
+  contain `UNWIND`, for example `COUNT { UNWIND n.list AS x RETURN x }`.
+  Write clauses stay refused in these bodies.
+  [#4915](https://github.com/memgraph/memgraph/pull/4915)
+- `SHOW STORAGE INFO` now reports `disk_available`, the free space on
+  the filesystem that holds the data directory.
+  [#4952](https://github.com/memgraph/memgraph/pull/4952)
+
+{<h4 className="custom-header">🐞 Bug fixes</h4>}
+
+- After a data instance joins a high-availability cluster, OpenMetrics
+  scrapes now use the cluster UUID for the default database on every
+  instance. Series for `database="memgraph"` can be aggregated across
+  the cluster.
+  [#4275](https://github.com/memgraph/memgraph/pull/4275)
+- `AFTER COMMIT` triggers no longer run for transactions that fail to commit
+  (for example a STRICT_SYNC write that aborts). They fire only when the
+  commit succeeds. On shutdown or `DROP TRIGGER`, any queued trigger work that
+  cannot run is logged instead of being discarded silently.
+  [#4565](https://github.com/memgraph/memgraph/pull/4565)
+- During a license refresh, a query could briefly skip Enterprise permission
+  checks. Those checks stay enforced while the license is revalidated.
+  [#4566](https://github.com/memgraph/memgraph/pull/4566)
+- Dropping a database while a write is still committing no longer crashes a
+  replica registered with STRICT_SYNC. The in-flight commit is aborted
+  before the database is removed.
+  [#4568](https://github.com/memgraph/memgraph/pull/4568)
+- Switching a database to on-disk storage mode is less likely to fail because of
+  brief concurrent activity (for example a metrics scrape or a Lab connection
+  between queries). Those no longer block the switch immediately. If another
+  session still holds the database after a short wait, the switch fails as
+  before, because exclusive access is required.
+  [#4569](https://github.com/memgraph/memgraph/pull/4569)
+- Dropping or renaming a multi-tenant database with a tenant profile now
+  persists correctly, including across crashes and replication.
+  [#4570](https://github.com/memgraph/memgraph/pull/4570)
+- `DROP DATABASE` no longer hangs when an index is being built or TTL is
+  running in the background.
+  [#4572](https://github.com/memgraph/memgraph/pull/4572)
+- Dropping an index is safe to roll back and to replay after recovery, including
+  when drops run alongside other writers or each other.
+  [#4741](https://github.com/memgraph/memgraph/pull/4741)
+- Bolt stays usable when a query fails after streaming a large result.
+  [#4758](https://github.com/memgraph/memgraph/pull/4758)
+- Dropping a database now also drops that database's server-side
+  parameters (`SET PARAMETER`), including across replication and
+  recovery. They no longer linger and reappear on replicas.
+  [#4774](https://github.com/memgraph/memgraph/pull/4774)
+- Creating or resuming a database at the memory limit no longer fails while
+  setting up stream support.
+  [#4785](https://github.com/memgraph/memgraph/pull/4785)
+- A procedure inside `CALL { ... }`, and clauses below it in that
+  subquery, now run for every input row instead of only the first.
+  Affected queries return different results and can write different
+  data, including `CALL { ... } IN TRANSACTIONS`.
+  [#4832](https://github.com/memgraph/memgraph/pull/4832)
+- A property holding `NaN` is kept in an index and found again. An
+  `IS NOT NULL` count on that property no longer shrinks or changes
+  from run to run once the index exists.
+  [#4836](https://github.com/memgraph/memgraph/pull/4836)
+- `DISTINCT` and grouping treat two NaNs as one value. A point with a
+  NaN coordinate is handled the same way. `=` is unchanged and still
+  returns false for a NaN.
+  [#4846](https://github.com/memgraph/memgraph/pull/4846)
+- `ORDER BY` places a NaN after every number, including positive
+  infinity, and two NaNs sort together. A column that held a NaN no
+  longer has an arbitrary order.
+  [#4846](https://github.com/memgraph/memgraph/pull/4846)
+- A node with more than one unique constraint no longer leaks memory
+  when a write touches only one of them, including under
+  `USING PERIODIC COMMIT` and `CALL { ... } IN TRANSACTIONS`.
+  [#4848](https://github.com/memgraph/memgraph/pull/4848)
+- `EXISTS { ... }`, `COUNT { ... }` and `COLLECT { ... }` in a `WHERE`
+  no longer fail or keep the wrong rows when the body reads the outer
+  query only through a `WHERE`, a `WITH`, a later `UNION` branch, or a
+  nested subquery. `WHERE n.prop = COUNT { ... }` also returns the same
+  rows with a label-property index as without one.
+  [#4874](https://github.com/memgraph/memgraph/pull/4874)
+- `SHOW REPLICATION LAG` now reports the correct lag for `STRICT_SYNC`
+  replicas.
+  [#4884](https://github.com/memgraph/memgraph/pull/4884)
+- `STARTS WITH` on an indexed property no longer returns nothing when
+  the prefix is made entirely of `0xFF` bytes.
+  [#4886](https://github.com/memgraph/memgraph/pull/4886)
+- Creating or dropping a database no longer makes a healthy MAIN look
+  down to the coordinator. Cluster health checks are answered while
+  that operation holds its lock, so MAIN is not demoted.
+  [#4903](https://github.com/memgraph/memgraph/pull/4903)
+- `SHOW INSTANCE` now works on a coordinator that is still joining
+  the cluster.
+  [#4911](https://github.com/memgraph/memgraph/pull/4911)
+- Switching users on a pooled Bolt connection now clears the previous
+  user's `SET SESSION` settings.
+  [#4932](https://github.com/memgraph/memgraph/pull/4932)
+- Setting a property to the value it already holds no longer fires an
+  `ON UPDATE` trigger when that value is a NaN, or a list or map that
+  holds a null.
+  [#4936](https://github.com/memgraph/memgraph/pull/4936)
+- Label disjunctions now return the correct rows, including two
+  `:A|B` tests on the same node and `WHERE n:A OR m:B`.
+  [#4948](https://github.com/memgraph/memgraph/pull/4948)
+- `valueType()` now returns `VIRTUAL_GRAPH` for the graph that
+  `derive()` returns.
+  [#4954](https://github.com/memgraph/memgraph/pull/4954)
+- Comparing two lists with `<`, `<=`, `>` or `>=` now uses dictionary
+  order instead of raising.
+  [#4956](https://github.com/memgraph/memgraph/pull/4956)
+- On a coordinator without SSO, login now succeeds with a Bolt
+  scheme that is not listed in `--auth-module-mappings`.
+  [#4962](https://github.com/memgraph/memgraph/pull/4962)
+- `REMOVE COORDINATOR` now finishes if the same query is retried after
+  a timeout, instead of failing with "no such id".
+  [#4968](https://github.com/memgraph/memgraph/pull/4968)
+- After `DROP DATABASE ... FORCE`, a Bolt connection that was on that
+  database is now closed, so the driver reconnects instead of staying
+  stuck on "Database required".
+  [#4969](https://github.com/memgraph/memgraph/pull/4969)
+
+{<h4 className="custom-header">🛠️ Improvements</h4>}
+
+- Queries that set a timeout do less bookkeeping while they run, because the
+  limit is checked against a shared clock instead of a per-query timer.
+  [#4662](https://github.com/memgraph/memgraph/pull/4662)
+- Edge property indexes now answer `STARTS WITH` from the index alone.
+  `CONTAINS`, `ENDS WITH` and regex read only the string run of the index,
+  not every value of the property.
+  [#4671](https://github.com/memgraph/memgraph/pull/4671)
+- Replicas apply incoming writes about twice as fast.
+  [#4714](https://github.com/memgraph/memgraph/pull/4714)
+- `KSHORTEST` path expansion is much faster and uses less memory, especially
+  for larger `k`, and equality and ordering comparisons between values are
+  faster.
+  [#4733](https://github.com/memgraph/memgraph/pull/4733)
+  [#4760](https://github.com/memgraph/memgraph/pull/4760)
+- Commits skip uniqueness and existence constraint checks for writes that
+  cannot affect any constraint, so concurrent writers wait less on validation.
+  [#4769](https://github.com/memgraph/memgraph/pull/4769)
+- Building Memgraph from source can reuse the compiler cache across different
+  checkout paths of the same repository.
+  [#4795](https://github.com/memgraph/memgraph/pull/4795)
+- A pattern comprehension that filters on a value from the outer query
+  can use an index, for example
+  `MATCH (m:Item) RETURN [ (n:Item {id: m.id})--(q) | q ]`.
+  [#4819](https://github.com/memgraph/memgraph/pull/4819)
+- `CONTAINS`, `ENDS WITH` and regex on an indexed string under
+  `USING PARALLEL EXECUTION` no longer scan the whole index column.
+  [#4827](https://github.com/memgraph/memgraph/pull/4827)
+- `path.expand_config` uses less time and memory on a breadth-first walk
+  with `uniqueness: NODE_PATH` or `RELATIONSHIP_PATH` when many paths
+  reach the same node. Walks that never revisit a node can be slower.
+  A memory-limit error now reports how many partial paths were held and
+  suggests a hop bound or `uniqueness: NODE_GLOBAL`.
+  [#4875](https://github.com/memgraph/memgraph/pull/4875)
+- `CONTAINS`, `ENDS WITH` and regex on an indexed edge property are
+  tested while reading the index, so non-matching values are dropped
+  there rather than by a later filter.
+  [#4900](https://github.com/memgraph/memgraph/pull/4900)
+- Cypher queries now parse faster the first time they run, especially
+  relationships with a property map and `exists()` patterns.
+  [#4963](https://github.com/memgraph/memgraph/pull/4963)
+
+### Lab v3.14.0 - October 21st, 2026
+
+<LabReleasesClient version="3.14.0" />
+
+## Previous releases
+
 ### Lab v3.13.2 - September 18th, 2026
 
 <LabReleasesClient version="3.13.2" />
