@@ -13,4 +13,6 @@ export default {
     "run-history": "Run history",
     "sharing-features": "Sharing features",
     "single-sign-on": "Single sign-on",
-  }
+    "query-modules": "Query modules",
+    "streams": "Streams"
+}
