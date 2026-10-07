@@ -460,7 +460,8 @@ def message(r):
     return EXPLAIN.get(r['kind'], r['kind']) + (f": {r['msg']}" if r['msg'] else '')
 
 
-for title, rs, level in (('In the blocks this change touches', failing, 'error'),
+whole = a.all or bool(a.pages)
+for title, rs, level in (('Problems' if whole else 'In the blocks this change touches', failing, 'error'),
                          ('Elsewhere on the changed pages (not failing)', others, 'warning')):
     if not rs:
         continue
@@ -482,5 +483,5 @@ if os.environ.get('GITHUB_STEP_SUMMARY'):
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
         f.write(scrub('\n'.join(summary)) + '\n')
 
-print(f'\n{len(failing)} problem(s) in changed blocks, {len(others)} elsewhere on the changed pages.')
+print(f'\n{len(failing)} problem(s).' if whole else f'\n{len(failing)} problem(s) in changed blocks, {len(others)} elsewhere on the changed pages.')
 sys.exit(1 if failing else 0)
