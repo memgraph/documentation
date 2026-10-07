@@ -87,8 +87,8 @@ Rules for this format:
 
 4. **Changelog check**
    - Open `pages/release-notes.mdx` and locate the section for the new release (e.g. `### Memgraph v3.9.0`).
-   - For each PR in **Release Notes Required**, confirm it appears in that section (e.g. as `[#NNNN](https://github.com/memgraph/memgraph/pull/NNNN)` or equivalent).
-   - Optionally cross-check the memgraph milestone: merged PRs with user-visible work (e.g. **Docs needed**, **Docs - changelog only**) that are absent from that release section should also be treated as **missing from changelog**, even if they were never added to **Release Notes Required** on the docs PR.
+   - For each PR in **Changelog**, confirm it appears in that section (e.g. as `[#NNNN](https://github.com/memgraph/memgraph/pull/NNNN)` or equivalent).
+   - Optionally cross-check the memgraph milestone: merged PRs with user-visible work (e.g. **Docs needed**, **Docs - changelog only**) that are absent from that release section should also be treated as **missing from changelog**, even if they were never added to **Changelog** on the docs PR.
    - List any **missing from changelog** with PR numbers (and titles if known).
 
    **If anything is missing from the changelog:** follow **`skills/write-changelog-item/SKILL.md`** end-to-end for each gap. That skill defines how to write the item (user-friendly / user-centric impact, not engineering work; markdown; PR link; breaking vs non-breaking; whether the change is release-notes-only or must also be propagated into the docs), where to place it in `pages/release-notes.mdx` (correct section, ascending PR # within the section), and requires updating `pages/release-notes.mdx` plus keeping the open documentation release PR description aligned. When updating the docs PR body, use the **Docs Integration Tracking** checklist format described in the Assumptions section — tick `[x]` on the relevant **Changelog** line and, if the PR is also "Docs needed", on the **Docs needed** line once a doc PR exists. Do not use a different format or skip the release PR body update.

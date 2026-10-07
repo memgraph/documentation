@@ -118,12 +118,17 @@ description of the open documentation release PR (e.g.
 everything integrated in the release.
 
 1. Fetch the current PR body via `gh api`.
-2. Add the memgraph PR to the **Release Notes Required** section if it is not
-   already listed. Use the same format as the existing entries:
+2. In the **Docs Integration Tracking** section, add the memgraph PR to
+   **Changelog (all PRs requiring a changelog entry)** if it is not already
+   listed, or tick its line. Use the format the section already uses:
    `- [x] https://github.com/memgraph/memgraph/pull/XXXX @author`
-   Append the new entry at the end of the list (before the blank line / TODO).
-3. If the memgraph PR has the **"Docs needed"** label and a corresponding
-   documentation PR exists, also add it to the **Memgraph PRs Docs Needed**
-   section using the existing format:
-   `- [x] https://github.com/memgraph/memgraph/pull/XXXX -> https://github.com/memgraph/documentation/pull/YYYY @author`
-4. Push the updated body back via `gh api ... -X PATCH -F "body=@file"`.
+   Keep the list in ascending PR number order.
+3. If the memgraph PR has the **"Docs needed"** label, also make sure it is
+   listed under **Docs needed (Memgraph PR → Docs PR)**:
+   `- [x] https://github.com/memgraph/memgraph/pull/XXXX → https://github.com/memgraph/documentation/pull/YYYY @author`
+   Tick it only when the docs PR exists; otherwise leave it unticked with
+   `→ no doc PR yet`.
+4. If the memgraph PR has the `breaking` label, make sure it is listed under
+   **Breaking changes PRs**:
+   `- [x] https://github.com/memgraph/memgraph/pull/XXXX — short title @author`
+5. Push the updated body back via `gh api ... -X PATCH -F "body=@file"`.
