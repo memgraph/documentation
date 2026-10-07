@@ -87,8 +87,9 @@ Rules for this format:
 
 4. **Changelog check**
    - Open `pages/release-notes.mdx` and locate the section for the new release (e.g. `### Memgraph v3.9.0`).
-   - For each PR in **Release Notes Required**, confirm it appears in that section (e.g. as `[#NNNN](https://github.com/memgraph/memgraph/pull/NNNN)` or equivalent).
-   - Optionally cross-check the memgraph milestone: merged PRs with user-visible work (e.g. **Docs needed**, **Docs - changelog only**) that are absent from that release section should also be treated as **missing from changelog**, even if they were never added to **Release Notes Required** on the docs PR.
+   - For each PR in **Changelog**, confirm it appears in that section (e.g. as `[#NNNN](https://github.com/memgraph/memgraph/pull/NNNN)` or equivalent).
+   - For each PR in **Docs needed**, confirm its entry links to the docs page for the change (a root-relative link such as `/querying/text-search#create-text-index`). The docs CI checks that the page and section exist; this step checks that the link is there. List entries without one as **missing docs link** and add the link.
+   - Optionally cross-check the memgraph milestone: merged PRs with user-visible work (e.g. **Docs needed**, **Docs - changelog only**) that are absent from that release section should also be treated as **missing from changelog**, even if they were never added to **Changelog** on the docs PR.
    - List any **missing from changelog** with PR numbers (and titles if known).
 
    **If anything is missing from the changelog:** follow **`skills/write-changelog-item/SKILL.md`** end-to-end for each gap. That skill defines how to write the item (user-friendly / user-centric impact, not engineering work; markdown; PR link; breaking vs non-breaking; whether the change is release-notes-only or must also be propagated into the docs), where to place it in `pages/release-notes.mdx` (correct section, ascending PR # within the section), and requires updating `pages/release-notes.mdx` plus keeping the open documentation release PR description aligned. When updating the docs PR body, use the **Docs Integration Tracking** checklist format described in the Assumptions section — tick `[x]` on the relevant **Changelog** line and, if the PR is also "Docs needed", on the **Docs needed** line once a doc PR exists. Do not use a different format or skip the release PR body update.
@@ -108,8 +109,8 @@ Rules for this format:
      - **Missing articles** ("creation of init container" → "creation of **an** init container").
      - **Wrong word forms** ("set-up" used as a verb → "set up"; "additionally to" → "in addition to").
      - **Stray punctuation** (accidental periods, double spaces in non-trailing positions).
-     - **Capitalization** - if the text is dealing with high availability and mentioning MAIN and REPLICA instances, use capital letters. When using in plural, write MAINs and REPLICAs.
-     
+     - **Names and terms** that don't follow the writing rules engineers use, in the `write-docs-page` skill's `references/tone.md` (`memgraph/infra`, `agents/docs/skills/write-docs-page`): product names, MAIN and REPLICA in capitals (MAINs and REPLICAs in the plural), American English. Add a new naming rule there, not here, so docs written with the skill follow it too.
+
    - Do **not** rewrite for style or restructure paragraphs. Only fix clear errors: misspellings, missing/wrong articles, broken grammar, and wrong word forms.
    - Apply fixes directly, then list what was changed in the report.
 
@@ -131,6 +132,7 @@ Rules for this format:
    - Sort every PR list in the report by PR number ascending (smallest → largest).
    - **Docs label issues:** list every merged PR with a missing or questionable label, the recommended label, and a one-line reason. The canvas from step 1 serves as the primary deliverable for this section.
    - **Not in changelog:** summarize all gaps (PR numbers and titles). When remediating, apply the **one item at a time** rule from step 4. For each gap, state that remediation follows **`write_changelog_item`** per `skills/write-changelog-item/SKILL.md` (unless the user asked for report-only). Include PRs found only via milestone cross-check.
+   - **Missing docs links:** entries for **Docs needed** PRs that did not link their docs page, with the link added.
    - **Docs page missing:** list merged memgraph PRs labeled "Docs needed" with no doc PR on the tracking list; briefly note what's missing (e.g. "TLS .pem-only behavior").
    - **Docs PR tracking list gaps:** if any merged "Docs needed" or "Docs - changelog only" PR is absent from the **Docs Integration Tracking** checklist on the release docs PR, add it using the checklist format from the Assumptions section (unticked `[ ]`, correct section, author handle).
    - **Spelling/grammar fixes:** list each fix with file name and a short before → after summary.

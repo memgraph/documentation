@@ -47,6 +47,14 @@ The changelog item should be benefit focused (highlight the why). The changelog
 item should be in the markdown format, don't remove ticks and markdown links,
 don't use bold and italic, use - at the beginning of the item.
 
+Link the docs page for the change in the item whenever there is one: the page
+from the docs PR for a **Docs needed** PR, or the existing page that covers the
+changed flag, command or behavior. Link the section when there is one, with a
+root-relative link: `[text search](/querying/text-search#create-text-index)`.
+Readers and agents look at the release notes first to learn what changed; the
+link takes them to how it works now. A bug fix with no page to point to needs
+no link.
+
 Usually the PR has the item written in one of the comments under the PR. Try to
 extract that first and improve according to the above description.
 
@@ -118,12 +126,17 @@ description of the open documentation release PR (e.g.
 everything integrated in the release.
 
 1. Fetch the current PR body via `gh api`.
-2. Add the memgraph PR to the **Release Notes Required** section if it is not
-   already listed. Use the same format as the existing entries:
+2. In the **Docs Integration Tracking** section, add the memgraph PR to
+   **Changelog (all PRs requiring a changelog entry)** if it is not already
+   listed, or tick its line. Use the format the section already uses:
    `- [x] https://github.com/memgraph/memgraph/pull/XXXX @author`
-   Append the new entry at the end of the list (before the blank line / TODO).
-3. If the memgraph PR has the **"Docs needed"** label and a corresponding
-   documentation PR exists, also add it to the **Memgraph PRs Docs Needed**
-   section using the existing format:
-   `- [x] https://github.com/memgraph/memgraph/pull/XXXX -> https://github.com/memgraph/documentation/pull/YYYY @author`
-4. Push the updated body back via `gh api ... -X PATCH -F "body=@file"`.
+   Keep the list in ascending PR number order.
+3. If the memgraph PR has the **"Docs needed"** label, also make sure it is
+   listed under **Docs needed (Memgraph PR → Docs PR)**:
+   `- [x] https://github.com/memgraph/memgraph/pull/XXXX → https://github.com/memgraph/documentation/pull/YYYY @author`
+   Tick it only when the docs PR exists; otherwise leave it unticked with
+   `→ no doc PR yet`.
+4. If the memgraph PR has the `breaking` label, make sure it is listed under
+   **Breaking changes PRs**:
+   `- [x] https://github.com/memgraph/memgraph/pull/XXXX — short title @author`
+5. Push the updated body back via `gh api ... -X PATCH -F "body=@file"`.
