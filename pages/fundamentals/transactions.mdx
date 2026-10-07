@@ -439,6 +439,69 @@ Client received exception: Transactions was asked to abort either because it was
 specified or another user asked to abort it.
 ```
 
+## Manage sessions
+
+A session is one client connection to Memgraph over Bolt. You can list the
+open sessions and close any of them from another connection, for example an
+idle connection that keeps a database in use and stops a [forced `DROP
+DATABASE`](/database-management/multi-tenancy#drop-database-with-force) from
+finishing. Available since Memgraph 3.14.
+
+Session queries run as implicit transactions only; running them inside an
+explicit transaction raises an error. `SESSIONS` is a reserved keyword, so if
+you use it as a name (a label, property or variable), write it in backticks:
+`` `sessions` ``.
+
+### Show sessions
+
+To list the open sessions, run:
+
+```cypher
+SHOW SESSIONS;
+```
+
+Each row is one session that has finished logging in:
+
+| Column | Type | Description |
+|---|---|---|
+| `session_id` | `String` | Unique id of the session. Use this value with `TERMINATE SESSIONS`. |
+| `username` | `String` | The user the session is logged in as. |
+| `database` | `String` | The database the session is using, or `""` if it isn't using one. |
+| `login_timestamp` | `String` | When the session logged in. |
+
+You see your own sessions, and the sessions on every database where you have
+the `TRANSACTION_MANAGEMENT` privilege. A session that isn't using a
+database counts as using the default database, `memgraph`.
+
+### Terminate sessions
+
+To close one or more sessions, run the following query from another
+connection:
+
+```plaintext
+TERMINATE SESSIONS 'SESSION_ID' [, 'SESSION_ID' ...];
+```
+
+`SESSION_ID` is a `session_id` from `SHOW SESSIONS`. It must be a string;
+any other value raises the error `Session id must be a string.`
+
+Memgraph closes each session's connection, whether it is idle or running a
+query. A running query is aborted. A transaction that is already committing
+isn't interrupted; it completes.
+
+You can terminate your own other sessions without any privilege. To terminate
+another user's session, you need the `TRANSACTION_MANAGEMENT` privilege on
+the database that session is using (the default database, `memgraph`, if it
+isn't using one). The session that runs `TERMINATE SESSIONS` can't terminate
+itself.
+
+The result has two columns, `session_id` and `killed`, with one row per id in
+the query, in the same order. A row reports `killed: true` only if the
+session was found and you were allowed to close it. An id that matches no
+session, an id you're not allowed to terminate, the id of the session running
+the query, and every repeat of an id already in the list all report
+`killed: false`.
+
 ## Isolation levels
 
 In database systems, isolation determines how transaction integrity is visible
