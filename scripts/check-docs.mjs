@@ -51,7 +51,8 @@ function proseLines(file) {
   let fence = null
   return text.get(file).split('\n').map((line) => {
     if (fence === null) {
-      const m = line.match(/^\s*(`{3,}|~{3,})/)
+      // A backtick fence's info string can't contain a backtick, so ```a``` is inline code.
+      const m = line.match(/^\s*(`{3,}(?=[^`]*$)|~{3,})/)
       if (m) fence = m[1]
       return fence === null ? line : ''
     }
@@ -93,7 +94,6 @@ function sectionIds(file, seenFiles = new Set()) {
           .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
           .replace(/<[^>]+>/g, '')
           .replace(/[`*\\]/g, '')
-          .trim()
         s = slug(plain)
       }
       const n = count.get(s) || 0
@@ -232,25 +232,42 @@ for (const [route, file] of pages) {
         at('leave out .md/.mdx')
         continue
       }
-      const target = strip(url)
-      const id = url.includes('#') ? decodeURIComponent(url.split('#')[1]) : ''
-      if (pages.has(target)) {
-        if (id && !sectionIds(pages.get(target)).has(id)) at(`${target} has no section #${id}`)
-        continue
-      }
-      if (isStatic(target) || mdPage(target)) continue
-      const pattern = patterns.find((r) => target.startsWith(fixedPart(r.source) + '/'))
-      if (pattern) {
-        at(`goes through the redirect ${pattern.source}; link to the page it lands on instead`)
-        continue
-      }
-      if (bySource.has(target)) {
-        const end = follow(target)
-        const fixed = end.external || end.loop ? end.route : end.route + (bySource.get(target).destination.includes('#') ? '#' + bySource.get(target).destination.split('#')[1] : id ? '#' + id : '')
-        at(`goes through a redirect; link to ${fixed} instead`)
-        continue
-      }
-      at('no page or file at this address')
+      checkTarget(url, at)
+    }
+  })
+}
+
+/** Check a root-relative docs link: the page or file exists, the section exists, no redirect on the way. */
+function checkTarget(url, at) {
+  const target = strip(url)
+  const id = url.includes('#') ? decodeURIComponent(url.split('#')[1]) : ''
+  if (pages.has(target)) {
+    if (id && !sectionIds(pages.get(target)).has(id)) at(`${target} has no section #${id}`)
+    return
+  }
+  if (isStatic(target) || mdPage(target)) return
+  const pattern = patterns.find((r) => target.startsWith(fixedPart(r.source) + '/'))
+  if (pattern) return at(`goes through the redirect ${pattern.source}; link to the page it lands on instead`)
+  if (bySource.has(target)) {
+    const end = follow(target)
+    const fixed = end.external || end.loop ? end.route : end.route + (bySource.get(target).destination.includes('#') ? '#' + bySource.get(target).destination.split('#')[1] : id ? '#' + id : '')
+    return at(`goes through a redirect; link to ${fixed} instead`)
+  }
+  at('no page or file at this address')
+}
+
+// Links written into components (footer, cards) show on pages too. A plain <a>
+// needs the /docs prefix and <Link> adds it, so both forms are accepted here.
+const COMPONENT_EXTS = ['.js', '.jsx', '.ts', '.tsx']
+const componentFiles = [
+  ...walk(path.join(ROOT, 'components')).filter((f) => COMPONENT_EXTS.includes(path.extname(f))),
+  path.join(ROOT, 'theme.config.tsx'),
+].filter((f) => fs.existsSync(f))
+for (const file of componentFiles) {
+  fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+    for (const m of line.matchAll(/\bhref=\{?["'`](\/[^"'`$]*)["'`]\}?/g)) {
+      const url = m[1].replace(/^\/docs(?=\/|$)/, '') || '/'
+      checkTarget(url, (msg) => report(file, i + 1, `${m[1]}: ${msg}`))
     }
   })
 }
