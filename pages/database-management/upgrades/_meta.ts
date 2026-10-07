@@ -1,3 +1,4 @@
 export default {
-    "specific-versions": "Specific versions"
+    "specific-versions": "Specific versions",
+    "deprecated-features": "Deprecated features"
 }

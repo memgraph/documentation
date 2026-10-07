@@ -15,7 +15,7 @@ provided](/custom-query-modules/python/python-example).
 
 If you install any C++ modules after running Memgraph, you’ll need to [load
 them into
-Memgraph](/custom-query-modules/manage-query-modules#loading-query-modules) or
+Memgraph](/custom-query-modules/manage-query-modules#load-procedures) or
 restart Memgraph in order to use them.
 
 ## Functions and procedures
@@ -453,6 +453,10 @@ Sets a return value of given type.
 
 ```cpp
   void SetValue(const Enum &value)
+```
+
+```cpp
+  void SetValue(const Value &value)
 ```
 
 ##### SetErrorMessage
@@ -3124,12 +3128,8 @@ This section describes C++ API methods for database operations beyond graph mani
 
 ### Text search
 
-Text search is an experimental feature introduced in Memgraph 2.15.1. Refer to
-the [text search page](/querying/text-search) for an overview of its
-capabilities.
-
-To use text search, start memgraph with the `--experimental-enabled=text-search`
-flag.
+Refer to the [text search page](/querying/text-search) for an overview of
+text search capabilities.
 
 #### SearchTextIndex
 

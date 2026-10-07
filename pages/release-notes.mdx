@@ -46,6 +46,615 @@ guide.
 
 ## 🚀 Latest release
 
+### Lab v3.13.2 - September 18th, 2026
+
+<LabReleasesClient version="3.13.2" />
+
+### Memgraph v3.13.1 - September 14th, 2026
+
+{<h4 className="custom-header">✨ New features</h4>}
+
+- Added experimental, Enterprise-only FIPS 140-3 support: a new 
+  `memgraph/memgraph:<version>-fips` Docker image bundling the validated OpenSSL
+  FIPS provider, and a `--fips-mode=true` flag that restricts password hashing 
+  to PBKDF2-SHA256 and TLS to 1.2 or higher.
+  [#4664](https://github.com/memgraph/memgraph/pull/4664)
+
+{<h4 className="custom-header">🐞 Bug fixes</h4>}
+
+- Fix stale `MemoryRes` value in `SHOW METRICS INFO`, caused by this metric only 
+  being updated when metrics were scraped from the HTTP metrics endpoint.
+  [#4793](https://github.com/memgraph/memgraph/pull/4793)
+- Fixed `SHOW METRICS INFO` failing with "Metrics registry has no database with 
+  UUID" on a database that recovered from a snapshot written under a different 
+  UUID, such as a replica recovering from its main. 
+  [#4805](https://github.com/memgraph/memgraph/pull/4805)
+
+### Lab v3.13.1 - September 11th, 2026
+
+<LabReleasesClient version="3.13.1" />
+
+### Memgraph v3.13.0 - September 9th, 2026
+
+{<h4 className="custom-header">⚠️ Breaking changes</h4>}
+
+- The APOC compatibility names `apoc.convert.fromJsonList` and
+  `apoc.convert.toJson` now resolve to the C++ `convert` module
+  (`convert.from_json_list` / `convert.to_json`) instead of the Python
+  `json_util` implementations. Output can differ — especially for nodes,
+  relationships, paths, points, and temporals. Call `json_util.*` explicitly if
+  you need the previous Python behavior, or update consumers for the new
+  structured / ISO-8601 JSON forms.
+  [#4443](https://github.com/memgraph/memgraph/pull/4443)
+- The `COORDINATOR` privilege was removed — it never gated any operation. It is
+  no longer accepted in `GRANT` / `DENY` / `REVOKE` statements, which now fail
+  with a syntax error, and it is no longer reported by `SHOW PRIVILEGES` or
+  included in `GRANT ALL PRIVILEGES`. Remove any `GRANT COORDINATOR` /
+  `DENY COORDINATOR` / `REVOKE COORDINATOR` statements from provisioning scripts
+  and update tooling that compares against the full privilege list. No data
+  migration is required: a stale grant in an existing deployment is never
+  reported and never checked. The new `COORDINATOR_READ` and `COORDINATOR_WRITE`
+  privileges are not a replacement — they are coordinator-only and are rejected
+  on data instances.
+  [#4399](https://github.com/memgraph/memgraph/pull/4399)
+- Connecting to a coordinator with a username and password is no longer always
+  accepted. Once `--auth-module-mappings` is set, the enterprise license is
+  valid, **and** a role holding `COORDINATOR_WRITE` exists, basic authentication
+  is denied in favor of SSO. Until all three hold, the previous passthrough
+  behavior is unchanged.
+  [#4399](https://github.com/memgraph/memgraph/pull/4399)
+- Inside a bare `CALL {}` subquery, a pattern that mentions an outer variable
+  without importing it now opens a fresh binding instead of silently reusing
+  the caller’s. Queries that relied on the old leak return different results
+  with no error. Import explicitly with `CALL (n) {`, `CALL (*) {`, or a
+  leading `WITH n`. Some invalid pattern-comprehension shapes that used to
+  abort the server now raise a clear query error instead (create+reference in
+  the same clause, reusing a bound relationship, variable-length expand from a
+  node written in the same query part).
+  [#4487](https://github.com/memgraph/memgraph/pull/4487)
+- In `path.expand` / `path.expand_config` / `path.subgraph_*` relationship
+  filters, `<TYPE>` now means incoming `TYPE` (the old reciprocal-pair reading
+  is gone). `*` in a label filter is a wildcard, not a literal label. Unknown
+  config keys are errors instead of being ignored. Calls that relied on the
+  old readings can return different results or fail without a code change.
+  [#4530](https://github.com/memgraph/memgraph/pull/4530)
+- `SHOW INSTANCES` is now strongly consistent and always answered by the leader
+  coordinator. A follower that cannot reach the leader no longer falls back to
+  reporting the cluster from its own local Raft state with `unknown` health —
+  it returns an empty result set with a `LeaderNotReachable` warning
+  notification instead. Tooling that parses `SHOW INSTANCES` should treat an
+  empty result as "cluster state unknown, retry" rather than "no instances
+  registered". A data instance that is down now reports the role recorded in the
+  Raft log (`main` / `replica`) instead of an unknown role.
+  [#4492](https://github.com/memgraph/memgraph/pull/4492)
+- `TERMINATE TRANSACTIONS` now requires transaction ids to parse in full. Ids
+  with trailing characters previously terminated the transaction matching the
+  numeric prefix, and unparseable ids were reported back as an attempt on
+  `18446744073709551615`; both now raise an error.
+  [#4534](https://github.com/memgraph/memgraph/pull/4534)
+- `size()`, `substring()`, `left()`, and `right()` now count characters, not
+  bytes. For non-ASCII text, lengths and cut positions can change (for example
+  `size('中')` is `1`, not `3`). Recheck any stored results that depended on
+  the old byte offsets.
+  [#4586](https://github.com/memgraph/memgraph/pull/4586)
+- A number that starts with `0` is now octal, so `09` and `018` are parse
+  errors instead of `9.0` and `18.0`. Drop the leading zero for decimal, or
+  keep it for octal (`010` is still `8`).
+  [#4588](https://github.com/memgraph/memgraph/pull/4588)
+- A `RETURN` inside `EXISTS { ... }` now affects the answer. Queries that
+  relied on the body `RETURN` being ignored may return different results after
+  upgrading.
+  [#4597](https://github.com/memgraph/memgraph/pull/4597)
+- Whole-number strings that do not fit in a 64-bit integer now raise an error
+  in `toInteger()` instead of wrapping to a wrong value. Use `toIntegerOrNull()`
+  if you want `null` for those inputs.
+  [#4589](https://github.com/memgraph/memgraph/pull/4589)
+- `single()` returns `null` when the predicate is `null` for any list element,
+  instead of `true`. Queries that treated a null predicate as a match will see
+  different results. Wrap with `coalesce(single(...), false)` if those rows
+  should be treated as not matching.
+  [#4590](https://github.com/memgraph/memgraph/pull/4590)
+- `split('', ...)` returns `['']` rather than an empty list, so a non-null
+  string always yields at least one field. Update callers that assumed splitting
+  an empty string produced no fields.
+  [#4591](https://github.com/memgraph/memgraph/pull/4591)
+- The default value of `--metrics-format` changed from `JSON` to `OpenMetrics`.
+  A deployment that relied on the JSON metrics endpoint without setting the flag
+  now serves OpenMetrics after upgrading. Either update your monitoring
+  dashboards, as described in [Migrating from JSON to
+  OpenMetrics](/database-management/monitoring#migrating-from-json-to-openmetrics),
+  or set `--metrics-format=JSON` explicitly. The deprecated JSON endpoint
+  remains available for several releases.
+  [#4678](https://github.com/memgraph/memgraph/pull/4678)
+- The `cross_database` module (and the deprecated `migrate.*` aliases) now
+  requires Memgraph Enterprise. Community deployments that called these
+  procedures need an Enterprise license after upgrading.
+  [#4726](https://github.com/memgraph/memgraph/pull/4726)
+
+{<h4 className="custom-header">🐞 Bug fixes</h4>}
+
+- Fixed a query planning crash when `extract()` was used inside `WHERE` (for
+  example `WHERE 'x' IN extract(v IN n.list | v.field)`). Those queries now
+  run as written.
+  [#4081](https://github.com/memgraph/memgraph/pull/4081)
+- Identifiers may now include currency symbols such as `$` anywhere except as
+  the first character (for example `price$`), matching openCypher. Whitespace
+  between `$` and a parameter name (for example `$ 1`) is also handled
+  correctly. Previously both cases could confuse the query stripper and crash
+  the server.
+  [#4283](https://github.com/memgraph/memgraph/pull/4283)
+  [#4285](https://github.com/memgraph/memgraph/pull/4285)
+- Text and vector search now respect fine-grained label and property
+  permissions. Hits the caller cannot read are filtered out, and
+  `text_search.aggregate` / `text_search.aggregate_edges` return an error unless
+  every indexed property is readable.
+  [#4316](https://github.com/memgraph/memgraph/pull/4316)
+- Running many one-off queries that differ only in large inlined values (for
+  example embeddings) no longer lets the query cache grow without bound and
+  exhaust memory. The cache is capped by `--query-ast-cache-max-size` (default
+  `1000`; `0` disables it), and each entry also uses less memory.
+  [#4334](https://github.com/memgraph/memgraph/pull/4334)
+  [#4445](https://github.com/memgraph/memgraph/pull/4445)
+- Fixed parallel index scans (`USING PARALLEL EXECUTION`) so a filter that
+  evaluates to `null` returns no rows instead of treating the filter as absent
+  and returning every matching edge or node.
+  [#4406](https://github.com/memgraph/memgraph/pull/4406)
+- The `collections.*` functions and procedures now accept `NULL` list and scalar
+  arguments instead of failing argument validation. Each function returns a
+  defined result (for example `collections.sum(null)` → `null`,
+  `collections.sort(null)` → `[]`, `collections.contains(null, x)` → `false`),
+  matching the compatibility-layer behavior.
+  [#4416](https://github.com/memgraph/memgraph/pull/4416)
+- Fixed stale coordinator entries in the HA routing table and a possible
+  coordinator crash on `REMOVE COORDINATOR`. Coordinators now deduplicate
+  entries when applying Raft logs and snapshots.
+  [#4444](https://github.com/memgraph/memgraph/pull/4444)
+- Fixed `path.subgraph_all` and `path.subgraph_nodes` so their config options
+  work as expected.
+  [#4447](https://github.com/memgraph/memgraph/pull/4447)
+- Under heavy concurrent load, operations that need exclusive access to the
+  database could hang indefinitely while shared readers kept arriving. Those
+  exclusive waiters now take priority so the hang no longer happens.
+  [#4450](https://github.com/memgraph/memgraph/pull/4450)
+- Fixed concurrent `SET STORAGE MODE` handling so mode switches are safe under
+  load.
+  [#4451](https://github.com/memgraph/memgraph/pull/4451)
+- Fixed a crash when `LOAD PARQUET` hit invalid values (for example a time
+  outside Memgraph’s supported range). The query now fails with an error
+  instead of taking down the server.
+  [#4454](https://github.com/memgraph/memgraph/pull/4454)
+- Fixed `LOAD PARQUET` silently storing wrong timestamps or durations when
+  converting large temporal values from Parquet. Those cases now fail with a
+  clear query error instead of corrupting data.
+  [#4455](https://github.com/memgraph/memgraph/pull/4455)
+- Fixed a rare crash in garbage collection under heavy concurrent writes when
+  indexes or unique constraints are defined.
+  [#4475](https://github.com/memgraph/memgraph/pull/4475)
+- Fixed pattern comprehensions in `WITH … WHERE` / `ORDER BY` so they correlate
+  with the bound variable instead of scanning the whole graph; fixed `CALL {}`
+  overwriting outer variables it did not import; and fixed related wrong
+  results for named paths and `WITH` + `ORDER BY` + `WHERE`.
+  [#4487](https://github.com/memgraph/memgraph/pull/4487)
+- Fixed a crash when multiple sessions printed query plans at the same time
+  (for example concurrent `EXPLAIN` / `PROFILE`, or query-plan logging).
+  [#4489](https://github.com/memgraph/memgraph/pull/4489)
+- Pattern comprehensions now see writes made earlier in the same query part.
+  Reading a list like `[(p)-[:ACTED_IN]->(m) | m]` after a `SET` / `CREATE` no
+  longer returns empty or wrong results. Expanding from a node that a preceding
+  clause deleted now raises an error instead of counting relationships that no
+  longer exist.
+  [#4499](https://github.com/memgraph/memgraph/pull/4499)
+- Fixed TTL sometimes never running after it was configured or enabled, so
+  expired data is cleaned up as scheduled.
+  [#4513](https://github.com/memgraph/memgraph/pull/4513)
+- `SET COORDINATOR SETTING 'instance_health_check_frequency_sec' TO '0'` is now
+  rejected with an invalid-argument error instead of crashing the coordinator
+  later (for example on `REGISTER INSTANCE` or restart).
+  [#4522](https://github.com/memgraph/memgraph/pull/4522)
+- Fixed silent data loss when a WAL file other than the last one in the chain
+  was damaged. Recovery used to apply the readable prefix of that file and then
+  apply the following files in full, coming up with an incomplete dataset
+  without reporting anything; on a replica the divergence never healed because
+  the replica reported the later timestamp and main considered it caught up.
+  Damage in a completed (finalized) WAL file is now fatal: the database fails
+  recovery instead of starting stale, and a replica stops applying the rest of
+  the chain. A WAL file that was still being written when the process crashed
+  is unaffected and is still truncated to its last whole transaction. Recover
+  such an instance with
+  [`--storage-allow-recovery-failure`](/database-management/configuration) plus
+  `RECOVER SNAPSHOT`, or from a backup.
+  [#4528](https://github.com/memgraph/memgraph/pull/4528)
+- Fixed several `path` module issues: traversals honor query timeout /
+  `TERMINATE TRANSACTIONS` / shutdown; deep expansions error instead of
+  crashing; `path.create` no longer aborts on a missing `rel` key; and filter /
+  hop-bound edge cases that produced wrong or empty results.
+  [#4530](https://github.com/memgraph/memgraph/pull/4530)
+- `TERMINATE TRANSACTIONS` no longer reports `killed: true` for a transaction
+  the caller is not authorized to terminate. Such a match now reports
+  `killed: false`, indistinguishable from an id that does not exist.
+  [#4534](https://github.com/memgraph/memgraph/pull/4534)
+- Fixed a crash when writing a property covered by a nested index if the value
+  has nothing at the indexed path (for example `CREATE (:T {m: 1})` with an
+  index on `:T(m.k)`).
+  [#4550](https://github.com/memgraph/memgraph/pull/4550)
+- `path.slice` clamps out-of-range `offset` / `length` instead of throwing, and
+  `path.slice`, `path.elements`, and `path.combine` accept a null path. A
+  negative `length` other than `-1` (to the end) now returns a subpath with no
+  relationships rather than the rest of the path.
+  [#4552](https://github.com/memgraph/memgraph/pull/4552)
+- `*KSHORTEST|k` now returns up to `k` paths for each input row, not for the
+  whole query. `|k` can also be an expression from the current row (for example
+  `-[*KSHORTEST|n.k]->`). With an inlined edge property map, only matching
+  paths count toward `k`.
+  [#4559](https://github.com/memgraph/memgraph/pull/4559)
+- Negative or empty `*KSHORTEST` depth bounds and a negative `|k` now raise a
+  query error instead of returning no rows (or scanning the whole graph first).
+  [#4559](https://github.com/memgraph/memgraph/pull/4559)
+- `EXISTS { ... }` subquery bodies now behave as expected: bodies that always
+  match evaluate to `true` instead of crashing the server, and `EXISTS` in
+  `WITH` projections and `ORDER BY` no longer fails with a spurious aliasing
+  error.
+  [#4560](https://github.com/memgraph/memgraph/pull/4560)
+- Replicas no longer time out during recovery steps that run long inside a
+  single delta, such as populating an index, validating a constraint, loading a
+  snapshot, clearing storage before a reset, or aborting an interrupted
+  two-phase commit. A replica now reports progress on a fixed time interval for
+  as long as the work keeps advancing, instead of after a fixed number of
+  processed deltas, so the main no longer drops the connection mid-build and
+  leaves the replica unable to converge. A replica that stops advancing stops
+  reporting, so a genuinely stuck replica is still caught by the main's timeout.
+  As a consequence, the `deltas_batch_progress_size` coordinator setting **no
+  longer has any effect**; it stays readable and settable so existing
+  configurations keep working across an upgrade, and will be removed in a future
+  release. [#4557](https://github.com/memgraph/memgraph/pull/4557)
+- Filters on a variable imported into a scoped `CALL (v) { ... }` subquery now
+  use a label-property or `id()` index instead of scanning every node or edge
+  once per input row. `MATCH ()-[e:TYPE]->() WHERE id(e) = ...` no longer
+  returns an edge of the wrong type.
+  [#4561](https://github.com/memgraph/memgraph/pull/4561)
+- Variables imported by `CALL (v1, v2) { ... }` and `CALL (*) { ... }` now stay
+  bound after a `WITH` inside the subquery. Previously an inner `WITH` that
+  omitted them could return wrong rows, overwrite the outer variable, or
+  `CREATE`/`MERGE` a new node instead of using the imported one.
+  [#4578](https://github.com/memgraph/memgraph/pull/4578)
+- Fixed crashes and unbounded index growth in `IN_MEMORY_ANALYTICAL` when
+  indexes are enabled. Index entries are now removed before the nodes or edges
+  they point to are deleted.
+  [#4580](https://github.com/memgraph/memgraph/pull/4580)
+- `reverse()` now reverses characters, not bytes, so accented text, Chinese,
+  and emoji come back readable instead of as broken UTF-8.
+  [#4585](https://github.com/memgraph/memgraph/pull/4585)
+- `size()`, `substring()`, `left()`, and `right()` now work on whole
+  characters, so cuts no longer split multi-byte text into invalid UTF-8.
+  [#4586](https://github.com/memgraph/memgraph/pull/4586)
+- Integer literals with a leading zero are no longer treated as floating-point
+  values, so they get a proper integer range check instead of a silent
+  approximate double.
+  [#4588](https://github.com/memgraph/memgraph/pull/4588)
+- `toInteger()` now converts whole-number strings exactly. Values near the
+  64-bit limits no longer round to a neighbouring integer (for example the
+  largest integer no longer comes back as the smallest).
+  [#4589](https://github.com/memgraph/memgraph/pull/4589)
+- An invalid timezone now raises a clear argument error instead of "An
+  unknown exception occurred". UTC offsets such as `+01:00` and `Z` are
+  accepted as well as timezone names.
+  [#4592](https://github.com/memgraph/memgraph/pull/4592)
+- A `RETURN` inside `EXISTS { ... }` is now planned instead of ignored, so
+  `DISTINCT`, `SKIP`, `LIMIT`, and aggregation in the body affect the answer.
+  Results can change without an error — recheck any query that relied on the
+  body `RETURN` being ignored.
+  [#4597](https://github.com/memgraph/memgraph/pull/4597)
+- Replication and coordination now log cluster state changes at `INFO` instead
+  of `TRACE`, so you can see failover, role, and leadership changes without
+  enabling per-delta trace logs. The default log level stays `WARNING`.
+  [#4599](https://github.com/memgraph/memgraph/pull/4599)
+- Query log masking no longer leaks part of a secret when the value contains
+  quotes or is missing a closing quote. Those values are now fully redacted in
+  logs.
+  [#4629](https://github.com/memgraph/memgraph/pull/4629)
+- `EXPLAIN` no longer shows a `Limit` above an `EXISTS { ... }` or
+  `COUNT { ... }` subquery branch. That operator did not actually limit the
+  branch, so the plan looked wrong. Query results are unchanged.
+  [#4630](https://github.com/memgraph/memgraph/pull/4630)
+- Type constraints now accept zoned datetimes whose timezone is a numeric UTC
+  offset, such as `+01:00`, instead of rejecting them as the wrong type.
+  [#4635](https://github.com/memgraph/memgraph/pull/4635)
+- Near the memory hard limit, Memgraph no longer crashes by refusing allocations
+  the runtime needs for itself. Query allocations are still limited as before.
+  [#4646](https://github.com/memgraph/memgraph/pull/4646)
+- Repeated runs of variable-length expands that return distinct vertices (for
+  example with `DISTINCT`) are faster, because those queries no longer replan
+  on every execution.
+  [#4650](https://github.com/memgraph/memgraph/pull/4650)
+- Setting a list property that is also covered by a vector index no longer
+  crashes the server when the node already has a typed-list constraint. The
+  value is checked like any other list.
+  [#4653](https://github.com/memgraph/memgraph/pull/4653)
+- List comprehensions whose `WHERE` predicate is `NULL` for an element now
+  omit that element and keep the rest of the list, instead of returning
+  `NULL` for the whole result. A `WHERE` predicate that is neither a boolean
+  nor `NULL` is rejected with an error.
+  [#4665](https://github.com/memgraph/memgraph/pull/4665)
+- `LOAD PARQUET` and `LOAD JSONL` accept URLs of any length, including long
+  signed URLs. A download in progress can be stopped with
+  `TERMINATE TRANSACTIONS`, and failures that cannot succeed on retry are
+  reported as client errors rather than transient ones.
+  [#4672](https://github.com/memgraph/memgraph/pull/4672)
+- Lists that hold large integers are compared and sorted correctly. Values that
+  differed only in the high bits no longer compared equal.
+  [#4712](https://github.com/memgraph/memgraph/pull/4712)
+
+{<h4 className="custom-header">🛠️ Improvements</h4>}
+
+- Memgraph is now built with a distro-agnostic toolchain, so DEB and RPM
+  packages install on a wider range of Linux distributions that meet
+  GLIBC >= 2.31 and Python >= 3.10.
+  [#3587](https://github.com/memgraph/memgraph/pull/3587)
+- `node2vec` and `node2vec_online` now use a C++ word2vec implementation instead
+  of the unmaintained Python `gensim` package. Usage is unchanged, expect
+  faster runs.
+  [#4319](https://github.com/memgraph/memgraph/pull/4319)
+- MAGE is now built and packaged from the same unified CMake / Conan tree as
+  Memgraph. Build it with `build.sh --mage on` or `--mage only`; the old
+  `mage/setup` Python script is removed. Only affects people building MAGE from
+  source — prebuilt packages are unchanged.
+  [#4348](https://github.com/memgraph/memgraph/pull/4348)
+- `build.sh --target` now accepts several targets in one invocation (for
+  example `--target memgraph memgraph__unit`), so you can build multiple
+  targets with a single configure step instead of one run per target.
+  [#4404](https://github.com/memgraph/memgraph/pull/4404)
+- Queries that use query-module functions or `CALL` procedures are now
+  plan-cached instead of being re-parsed and re-planned on every run. Module
+  reloads stay safe; only module-dependent queries are invalidated, and the
+  next execution picks up updated code.
+  [#4461](https://github.com/memgraph/memgraph/pull/4461)
+  [#4482](https://github.com/memgraph/memgraph/pull/4482)
+- In in-memory transactional mode, `CREATE INDEX` / `CREATE CONSTRAINT` no
+  longer stall behind garbage collection (and GC no longer waits on those DDL
+  statements). Under index-heavy workloads this removes GC-correlated latency
+  spikes on index and constraint creation.
+  [#4468](https://github.com/memgraph/memgraph/pull/4468)
+- `SHOW TRIGGERS` and `DROP TRIGGER` no longer take a storage write lock.
+  `CREATE TRIGGER` uses a read accessor only. Clients that poll
+  `SHOW TRIGGERS` often (for example Memgraph Lab) no longer contend with
+  writers for that reason.
+  [#4495](https://github.com/memgraph/memgraph/pull/4495)
+- Connecting Lab is less expensive under load: its connect-time health-check
+  queries no longer open a storage transaction or pin a tenant.
+  [#4496](https://github.com/memgraph/memgraph/pull/4496)
+- The self-contained Memgraph+MAGE offline installer is quieter (installer noise
+  goes to a log file) and is published with the other release artifacts on the
+  [download hub](https://memgraph.com/download).
+  [#4500](https://github.com/memgraph/memgraph/pull/4500)
+- Garbage collection is faster on databases with many indexes: it only visits
+  indexes that recent writes could have touched.
+  [#4508](https://github.com/memgraph/memgraph/pull/4508)
+- Recovery from WAL files is roughly 35% faster. Each WAL file now records its
+  timestamp range and transaction count in its header, so deciding which files
+  to recover from no longer requires parsing every file end to end, and
+  replaying a file parses it once instead of twice. This also speeds up replica
+  recovery and the WAL cleanup that runs after every snapshot.
+  [#4528](https://github.com/memgraph/memgraph/pull/4528)
+- Path config filters are stricter: empty or bare filter entries, `*` in a
+  relationship filter, and blank sequence steps are rejected instead of
+  producing wrong results. On `path.subgraph_nodes` / `path.subgraph_all`,
+  `bfs` and `uniqueness` are accepted and ignored (those procedures are always
+  breadth-first, one visit per node).
+  [#4530](https://github.com/memgraph/memgraph/pull/4530)
+- Queries that filter with `IN` on an indexed label and property (for example
+  `MATCH (x:L) WHERE x.p IN ["a", "b"]`) now get accurate cardinality estimates,
+  so the planner picks better index plans for those filters.
+  [#4538](https://github.com/memgraph/memgraph/pull/4538)
+- Writing and loading a snapshot no longer fills the operating system's file
+  cache, so more memory stays free for queries while it happens. This works
+  automatically; `--storage-snapshot-writeback-window-mib` tunes how much of a
+  snapshot is cached before being written to disk (`0` restores the old
+  behaviour).
+  [#4546](https://github.com/memgraph/memgraph/pull/4546)
+- Variable-length expands that return distinct vertices (for example with
+  `DISTINCT`) no longer walk every edge-unique path. Memgraph can use a
+  pruning breadth-first search instead, which is much faster on wide or dense
+  graphs.
+  [#4558](https://github.com/memgraph/memgraph/pull/4558)
+- `CONTAINS`, `STARTS WITH`, and `ENDS WITH` on an indexed label and property
+  now use that index instead of scanning every node.
+  [#4562](https://github.com/memgraph/memgraph/pull/4562)
+- Replicating edge deletions is much faster on replicas. Large deletes that
+  were previously quadratic on the replica now scale with the number of edges
+  deleted, as they do on MAIN.
+  [#4564](https://github.com/memgraph/memgraph/pull/4564)
+- `WHERE NOT NOT n.prop = 42` (and similar double negation) now uses a property
+  index instead of scanning the label. Results are unchanged.
+  [#4594](https://github.com/memgraph/memgraph/pull/4594)
+- In `IN_MEMORY_ANALYTICAL`, `CREATE INDEX` and `DROP INDEX` no longer block
+  read queries. You can also build several supported indices in parallel, while
+  writes are still held off until the build finishes.
+  [#4633](https://github.com/memgraph/memgraph/pull/4633)
+- Fixed unnecessary work on property writes when fine-grained property
+  permissions are not configured.
+  [#4639](https://github.com/memgraph/memgraph/pull/4639)
+- Indexed `STARTS WITH` filters no longer re-check the prefix after the index
+  scan, so those queries do less work per row. Results are unchanged.
+  [#4643](https://github.com/memgraph/memgraph/pull/4643)
+- Commits on MAIN with replicas are faster: encoding work for replicas runs in
+  parallel with writing the local WAL, so commit time no longer grows as
+  steeply with the number of registered replicas.
+  [#4645](https://github.com/memgraph/memgraph/pull/4645)
+- Indexed `CONTAINS`, `ENDS WITH`, and `REGEX` filters are faster when many
+  nodes share the same property value: after one value fails the filter, the
+  scan skips the rest of that value instead of checking every duplicate.
+  [#4647](https://github.com/memgraph/memgraph/pull/4647)
+- Aggregations such as `count()`, `sum()`, and `avg()` are faster, especially
+  without a grouping key, because they do less work per input row. Results are
+  unchanged.
+  [#4655](https://github.com/memgraph/memgraph/pull/4655)
+- `path.expand_config`, `path.expand`, `path.subgraph_nodes`, and
+  `path.subgraph_all` are substantially faster, especially with selective
+  filters or a single relationship direction.
+  [#4727](https://github.com/memgraph/memgraph/pull/4727)
+- Cluster management queries forwarded from a follower coordinator to the leader
+  now have [explicit RPC
+  timeouts](/clustering/high-availability/how-high-availability-works#rpc-timeouts),
+  so a Bolt session can no longer block indefinitely against a leader that is
+  reachable but stuck. The same applies to MAIN-to-REPLICA system transaction
+  messages (auth, multi-tenancy, parameters), which now time out after 10s and
+  defer to system recovery. The unused `EnableWritingOnMainRpc` and its
+  Prometheus counters were removed.
+  [#4399](https://github.com/memgraph/memgraph/pull/4399)
+- `YIELD LEADERSHIP` and `SHOW COORDINATOR SETTINGS` can now be run on any
+  coordinator — followers forward them to the leader instead of failing or
+  answering from local state. When no leader can serve a cluster query,
+  Memgraph now says so explicitly: read queries (`SHOW INSTANCES`, `SHOW
+  COORDINATOR SETTINGS`, `SHOW REPLICATION LAG`) return no rows with a
+  `LeaderNotReachable` warning, `SHOW REPLICATION LAG` additionally reports why
+  the lag is unavailable via `ReplicationLagUnavailable` (no current main, main
+  unresponsive, leader still taking over, stale leader view), and
+  `ADD COORDINATOR`, `REMOVE COORDINATOR` and `UPDATE CONFIG` fail with a clear
+  "coordinator is not a leader" error instead of a misleading one.
+  [#4492](https://github.com/memgraph/memgraph/pull/4492)
+
+{<h4 className="custom-header">✨ New features</h4>}
+
+- Added global vertex-property indexes with `CREATE GLOBAL INDEX ON :(prop)`
+  (and `DROP GLOBAL INDEX ON :(prop)`). They speed up property lookups across
+  all nodes when there is no shared label, for example
+  `MATCH (n) WHERE n.uid = '123' RETURN n`.
+  [#4353](https://github.com/memgraph/memgraph/pull/4353)
+- Added `collections.disjunction`, `collections.subtract`, and
+  `collections.duplicates` to the MAGE `collections` module for set-style list
+  difference, subtraction, and finding repeated values.
+  [#4415](https://github.com/memgraph/memgraph/pull/4415)
+- Added `map.get` and `map.merge_list` to the MAGE `map` module. Existing
+  helpers such as `map.merge` and `map.set_key` now treat a `null` map as empty
+  (and a `null` key as a no-op) instead of failing, and accept nodes or
+  relationships by using their property maps.
+  [#4417](https://github.com/memgraph/memgraph/pull/4417)
+- Added `text.compare_cleaned(text1, text2)` to the MAGE `text` module. It
+  compares two strings for equality after keeping only ASCII letters and digits
+  (lowercased) and dropping everything else; `NULL` arguments return `false`.
+  [#4435](https://github.com/memgraph/memgraph/pull/4435)
+- C++ query-module authors can return a value whose type is only known at
+  runtime with a single `Result::SetValue(value)` call, instead of switching
+  on the value's type to pick a typed overload.
+  [#4436](https://github.com/memgraph/memgraph/pull/4436)
+- Added `convert.from_json_map`, `convert.from_json_list`, `convert.to_map`, and
+  `convert.to_json` for parsing and serializing JSON, with an optional `path`
+  selector on the from_* helpers and structured output for graph and temporal
+  types from `to_json`.
+  [#4443](https://github.com/memgraph/memgraph/pull/4443)
+- Added `search.node` and `search.node_all` procedures that find nodes by a
+  `{label: property}` map, a comparison operator, and a value. A property list
+  per label is OR-ed; `search.node` de-duplicates by node while
+  `search.node_all` keeps duplicates. An existing label-property index is used
+  automatically when available.
+  [#4460](https://github.com/memgraph/memgraph/pull/4460)
+- `--coordinator-id=0` is now a valid coordinator id (previously rejected).
+  [#4483](https://github.com/memgraph/memgraph/pull/4483)
+- `CREATE RANGE INDEX FOR ... ON ...` now works for nodes and relationships and
+  creates Memgraph’s usual property index.
+  [#4486](https://github.com/memgraph/memgraph/pull/4486)
+- [SSO authentication on high availability
+  coordinators](/clustering/high-availability/coordinator-authentication)
+  (Enterprise). Coordinators authenticate OIDC, SAML and Kerberos connections
+  against a Raft-replicated set of roles and enforce two privileges,
+  `COORDINATOR_READ` and `COORDINATOR_WRITE`. Manage them with `CREATE ROLE`,
+  `DROP ROLE`, `SHOW ROLES`, `GRANT` / `REVOKE COORDINATOR_READ |
+  COORDINATOR_WRITE | ALL PRIVILEGES`, and `SHOW PRIVILEGES FOR ROLE` on any
+  coordinator — follower queries are forwarded to the leader. Basic
+  authentication stays open until a `COORDINATOR_WRITE` role exists, so no
+  coordinator restart is needed to roll SSO out, and it reopens if the license
+  becomes invalid so a coordinator can never lock every session out.
+  [#4399](https://github.com/memgraph/memgraph/pull/4399)
+- `SHOW VERSION` can now be run on coordinators, alongside the other read-only
+  introspection queries such as `SHOW CONFIG` and `SHOW BUILD INFO`. It
+  previously failed with `Coordinator can run only coordinator queries!`. On
+  coordinators it is a `COORDINATOR_READ` query, so an SSO role with only
+  `COORDINATOR_READ` granted can run it.
+  [#4535](https://github.com/memgraph/memgraph/pull/4535)
+- Added the `SHOW ROUTING TABLE` query, which shows the routing table a
+  coordinator hands out to `bolt+routing` clients as `WRITE`, `READ` and `ROUTE`
+  rows. It can only be run on a coordinator, is always answered from the
+  leader's state, and returns an empty table if the leader cannot be contacted.
+  [#4502](https://github.com/memgraph/memgraph/pull/4502)
+- `EXISTS { ... }` and `exists((a)-[]->(b))` now work in `WITH` / `RETURN`
+  projections, `WITH ... WHERE`, `ORDER BY`, and aggregate arguments, not only
+  in a `MATCH` `WHERE`. You can write
+  `WITH p, EXISTS { MATCH (p)-[:ACTED_IN]->() } AS hasActed` instead of
+  rewriting it as an `OPTIONAL MATCH` plus a count.
+  [#4504](https://github.com/memgraph/memgraph/pull/4504)
+- Added `TERMINATE TRANSACTIONS "*"`, which terminates every transaction the
+  caller is authorized to terminate across all databases, instead of naming ids
+  one by one. The caller's own transaction is skipped, transactions it may not
+  terminate are omitted from the result, and rows come back ordered by
+  ascending transaction id. The wildcard cannot be combined with ids.
+  [#4534](https://github.com/memgraph/memgraph/pull/4534)
+- A data instance in a high availability cluster can now use the
+  `IN_MEMORY_ANALYTICAL` storage mode for a bulk import: unregister the
+  replicas, switch to analytical, import, switch back to
+  `IN_MEMORY_TRANSACTIONAL` and register the replicas again. The switch back
+  writes a snapshot of the imported data, archives the superseded durability
+  files and restarts WAL numbering, and replica recovery detects that the
+  imported data exists in no WAL file, so a re-registered replica catches up
+  from that snapshot without wiping its data directory. Starting a data instance
+  with `--storage-mode=IN_MEMORY_ANALYTICAL` remains forbidden. See [bulk import
+  in analytical mode](/clustering/high-availability/analytical-import).
+  [#4510](https://github.com/memgraph/memgraph/pull/4510)
+- Added property-value descriptions: attach a human-readable label to a
+  specific property value with `SET DESCRIPTION ON PROPERTY … VALUE …`, resolve
+  it in queries with `description(property, value)`, and manage them with the
+  existing `SHOW` / `DELETE DESCRIPTION` commands.
+  [#4526](https://github.com/memgraph/memgraph/pull/4526)
+- Added `path.expand_config(start, config)` and extended the path config map
+  with node-identity filters, `limit`, `uniqueness` (including `NODE_GLOBAL`),
+  and repeating label/relationship sequences. `path.subgraph_nodes` and
+  `path.subgraph_all` accept the new filter keys too.
+  [#4530](https://github.com/memgraph/memgraph/pull/4530)
+- Added `--storage-omit-vector-index-properties-on-return` (also a runtime
+  database setting, default `false`). When enabled, properties backed by a
+  vector index are omitted from whole nodes and relationships returned to the
+  client, which cuts payload size for embeddings. Explicit access such as
+  `n.embedding` still returns the value; dumps, WAL, and replication are
+  unchanged.
+  [#4556](https://github.com/memgraph/memgraph/pull/4556)
+- `*KSHORTEST` now accepts a filter lambda, `-[*KSHORTEST (r, n | pred)]->`, so
+  you can narrow the search while expanding instead of filtering whole paths
+  afterwards.
+  [#4559](https://github.com/memgraph/memgraph/pull/4559)
+- `EXISTS { ... }` can now be used inside a `CASE` expression, including in the
+  condition (for example `CASE WHEN EXISTS { ... } THEN ... END`).
+  [#4596](https://github.com/memgraph/memgraph/pull/4596)
+- Added `COUNT { ... }`, which counts the rows a subquery body produces (for
+  example `RETURN COUNT { MATCH (p)-[:KNOWS]->(f) }`). Use it instead of
+  building a list with a pattern comprehension and calling `size()`.
+  [#4598](https://github.com/memgraph/memgraph/pull/4598)
+- If a write cannot reach every SYNC replica but still commits on MAIN (and
+  reachable replicas), the query no longer fails with an exception. A WARNING
+  notification is returned instead, so the client result matches what was
+  actually committed. Writes that are rolled back everywhere (for example
+  STRICT_SYNC) still raise an error as before.
+  [#4601](https://github.com/memgraph/memgraph/pull/4601)
+- Added `COLLECT { ... }`, which returns a list built from a subquery body's
+  single return column, evaluated once per outer row (for example
+  `RETURN COLLECT { MATCH (p)-[:KNOWS]->(f) RETURN f.name }`). An empty match
+  yields `[]` rather than `null`.
+  [#4632](https://github.com/memgraph/memgraph/pull/4632)
+- Added
+  [`--storage-rocksdb-keep-log-file-num`](/database-management/configuration#storage)
+  (default `1000`), which caps how many RocksDB info log files are kept per
+  RocksDB instance. Since every restart rolls the current info log into a new
+  file, lowering it helps on deployments with constrained disk space.
+  `--storage-rocksdb-info-log-level` and the new flag now apply to every RocksDB
+  instance Memgraph opens — the key-value stores backing authentication,
+  triggers, streams, settings and replication or high availability state — and
+  not only to the `ON_DISK_TRANSACTIONAL` storage.
+  [#4579](https://github.com/memgraph/memgraph/pull/4579)
+
+### Lab v3.13.0 - September 9th, 2026
+
+<LabReleasesClient version="3.13.0" />
+
+## Previous releases
+
 ### Memgraph v3.12.0 - July 15th, 2026
 
 {<h4 className="custom-header">⚠️ Breaking changes</h4>}
@@ -199,8 +808,6 @@ guide.
 ### Lab v3.12.0 - July 15th, 2026
 
 <LabReleasesClient version="3.12.0" />
-
-## Previous releases
 
 ### Memgraph v3.11.0 - June 17th, 2026
 
@@ -1106,7 +1713,7 @@ the `username()` and `roles()` built-in functions. These functions allow users
 to programmatically retrieve current authentication details, simplifying
 auditing and the development of dynamic, role-based logic within queries.
 [#3563](https://github.com/memgraph/memgraph/pull/3563)
-- Added `--storage-enable-backup-dir` flag to control whether the `.old`
+- Added `--storage-backup-dir-enabled` flag to control whether the `.old`
 directory is used for storing old durability files during potential data loss
 scenarios. When disabled, old durability files are deleted instead of backed up.
 [#3631](https://github.com/memgraph/memgraph/pull/3631)
@@ -1450,7 +2057,7 @@ correctly for auditing and role-based logic.
   fine-grained access syntax and semantics of Memgraph 3.6 and earlier are no
   longer supported. Migrated databases must be manually configured to grant
   permissions based on the new rules. To migrate, please follow the [MIGRATION
-  GUIDE](https://memgraph.com/docs/database-management/authentication-and-authorization/mlbac-migration-guide).
+  GUIDE](/database-management/authentication-and-authorization/mlbac-migration-guide).
   [#3343](https://github.com/memgraph/memgraph/pull/3343)
 - Changed the way Memgraph is built (only relevant if you are building Memgraph
   from source) and dropped support for Debian 11.
@@ -1937,7 +2544,7 @@ correctly for auditing and role-based logic.
   on each instance and use this information to decide whether to perform a
   failover or not. [#3167](https://github.com/memgraph/memgraph/pull/3167)
 - Added [KShortest deep path
-  traversal](https://memgraph.com/docs/advanced-algorithms/deep-path-traversal)
+  traversal](/advanced-algorithms/deep-path-traversal)
   using the `((n1)-[*KShortest]->(n2))` syntax. The implementation offers
   shortest-path search between two nodes with path length filtering, hop
   limits, and result limits. Users can now query multiple shortest paths,
@@ -1996,7 +2603,7 @@ correctly for auditing and role-based logic.
   commands block for less time.
   [#3126](https://github.com/memgraph/memgraph/pull/3126)
 - [All shortest paths
-  traversal](https://memgraph.com/docs/advanced-algorithms/deep-path-traversal#all-shortest-paths)
+  traversal](/advanced-algorithms/deep-path-traversal#all-shortest-paths)
   should be roughly 5% faster.
   [#3127](https://github.com/memgraph/memgraph/pull/3127)
 - Improved recovery under HA while loading the WAL file after the instance's
@@ -2034,7 +2641,7 @@ correctly for auditing and role-based logic.
   have the correct libstd version (in the case Memgraph is natively installed).
   [3061](https://github.com/memgraph/memgraph/pull/3061)
 - [All shortest paths
-  traversal](https://memgraph.com/docs/advanced-algorithms/deep-path-traversal#all-shortest-paths)
+  traversal](/advanced-algorithms/deep-path-traversal#all-shortest-paths)
   was missing some paths. It correctly returns all results now.
   [#3119](https://github.com/memgraph/memgraph/pull/3119)
 - Fixed a bug when the query module is called inside another query module.
@@ -2901,7 +3508,7 @@ correctly for auditing and role-based logic.
   can now create vector index with `CREATE VECTOR INDEX index_name ON
   :Label(property) WITH CONFIG configmap;` query and drop it with `DROP VECTOR
   INDEX index_name;` query. To learn more about vector index, refer to the
-  [docs page](https://memgraph.com/docs/querying/vector-search).
+  [docs page](/querying/vector-search).
   [#2500](https://github.com/memgraph/memgraph/pull/2500)
 - Add RPC timeouts infrastructure increasing the robustness and reliability of
   the replication and high-availability automatic failover.
@@ -3017,8 +3624,8 @@ correctly for auditing and role-based logic.
   for failed queries. Configure retry limits and view
   details for each attempt.
 - Enterprise license users can now [manage Graph Style Script
-  (GSS)](/data-visualization/user-manual/graph-style-script-sharing) with
-  [remote storage](/data-visualization/user-manual/remote-storage), enabling
+  (GSS)](/memgraph-lab/features/sharing-features) with
+  [remote storage](/memgraph-lab/features/sharing-features), enabling
   team collaboration and script sharing. You can balance between locally stored
   and remotely saved scripts to suit your workflow.
 - A dismissable notice now alerts you if `vm.max_map_count`
@@ -3209,11 +3816,11 @@ correctly for auditing and role-based logic.
 {<h4 className="custom-header">🐞 Bug fixes </h4>}
 
 - [Link
-  prediction](https://memgraph.com/docs/advanced-algorithms/available-algorithms/gnn_link_prediction),
+  prediction](/advanced-algorithms/available-algorithms/gnn_link_prediction),
   [node
-  classification](https://memgraph.com/docs/advanced-algorithms/available-algorithms/gnn_node_classification)
+  classification](/advanced-algorithms/available-algorithms/gnn_node_classification)
   and
-  [text](https://memgraph.com/docs/advanced-algorithms/available-algorithms/text)
+  [text](/advanced-algorithms/available-algorithms/text)
   modules are available again.
   [#528](https://github.com/memgraph/mage/pull/528)
 - The built-in authentication module dependencies are now pre-installed also
@@ -3234,7 +3841,7 @@ correctly for auditing and role-based logic.
 {<h4 className="custom-header">✨ New features</h4>}
 
 - The Lab web application can now be started on a [custom base
-  path](/data-visualization/user-manual/custom-base-path) using the environment
+  path](/memgraph-lab/getting-started/installation-and-deployment) using the environment
   variable `BASE_PATH`, which is useful for reverse proxy configurations.
 
 {<h4 className="custom-header">🛠️ Improvements</h4>}
@@ -3388,8 +3995,8 @@ labeled with `jepsen`).
 
 {<h4 className="custom-header"> Bug fixes </h4>}
 
-- When a replica gets promoted to main upon [failover](/clustering/high-availability#failover), it will now use correctly incremented durable timestamp. [#2366](https://github.com/memgraph/memgraph/pull/2366)
-- Replica will now take MAIN's [uuid](/clustering/high-availability#how-replica-knows-which-main-to-listen) only when REPLICA's current sequence number is 0. [#2388](https://github.com/memgraph/memgraph/pull/2388)
+- When a replica gets promoted to main upon [failover](/clustering/high-availability/how-high-availability-works#automatic-failover), it will now use correctly incremented durable timestamp. [#2366](https://github.com/memgraph/memgraph/pull/2366)
+- Replica will now take MAIN's [uuid](/clustering/high-availability/how-high-availability-works#ensuring-replicas-follow-the-correct-main) only when REPLICA's current sequence number is 0. [#2388](https://github.com/memgraph/memgraph/pull/2388)
 - Eliminated deadlock caused by concurrent calls to Stop method on the Scheduler. Eliminated deadlock caused by calling Pause after Stop from different threads. [#2398](https://github.com/memgraph/memgraph/pull/2398)
 - Fixed a problem where [EdgeType index](/fundamentals/indexes#edge-type-index) would assign every element as obsolete which then caused the index to be incorrectly emptied by the GC. Fixed another problem where [EdgeTypeProperty index](/fundamentals/indexes#edge-type-property-index) never ran its GC. Now properly prevents edge index creation when properties-on-edges is disabled - the user must explicitly [provide](/database-management/configuration#storage) --storage-properties-on-edges. Now correctly prevents Edge indices being recovered when properties-on-edges is disabled by causing an assert during recovery. [Replication](/clustering/replication) now updates edge indices. [#2390](https://github.com/memgraph/memgraph/pull/2390)
 - Replica now correctly reflects database registration success or failure.  When replica receives a request for registering replica, it will now return status code NOT_MAIN.  If attempting to undo an incomplete registration fails, then the Memgraph instance will be intentionally crashed because the system is in unrecoverable state.  Main instance can now deal with stale RPC message GetReplicaUUID without crashing the instance.  [#2373](https://github.com/memgraph/memgraph/pull/2373)
@@ -3565,7 +4172,7 @@ non-negative integer due to bumping Gensim version.
 
 {<h4 className="custom-header"> New features and improvements </h4>}
 
-- Select [different connection types](/data-visualization/user-manual/connection-types):
+- Select [different connection types](/memgraph-lab/getting-started/connection-types):
   standalone Memgraph, Memgraph in replication mode, and Memgraph in HA
   cluster mode.
 - Connect to the Memgraph HA cluster and see the cluster status of your
@@ -3606,7 +4213,7 @@ coordinator. [#2138](https://github.com/memgraph/memgraph/pull/2138)
 {<h4 className="custom-header"> New features and improvements </h4>}
 
 - Added current amount of unreleased delta objects to the [`SHOW STORAGE
-INFO`](/configuration/server-stats) query.
+INFO`](/database-management/server-stats) query.
 [#2066](https://github.com/memgraph/memgraph/pull/2066)
 
 - Added a new query, [`SHOW METRICS
@@ -3682,7 +4289,7 @@ and how many times it was restarted.
 
 To prevent data loss in all cases, before upgrading to Memgraph v2.18.0,
 create a
-[backup of your data directory](https://memgraph.com/docs/deployment/linux#backup-data) (`var/lib/memgraph`).
+[backup of your data directory](/deployment/environments/linux#backup-data) (`var/lib/memgraph`).
 
 </Callout>
 
@@ -3723,7 +4330,7 @@ improving efficiency in replication setups. The replication durability version
 has been bumped to V4, and the corresponding migration function has been added.
 [#2060](https://github.com/memgraph/memgraph/pull/2060)
 
-- [`SHOW INSTANCES`](/clustering/high-availability#show-instances) now returns
+- [`SHOW INSTANCES`](/clustering/high-availability/ha-commands-reference#show-instances) now returns
 non-resolved IP addresses when using DNS in an HA cluster. DNS is resolved every
 time data is streamed using RPC connections, ensuring seamless reconnections in
 Kubernetes clusters even if a Pod is restarted. The `IPFamily` attribute is no
@@ -3752,7 +4359,7 @@ the location of NuRaft logs](/clustering/high-availability).
 [#2113](https://github.com/memgraph/memgraph/pull/2113)
 
 - Users can now see who is the leader and who are the followers in the output of
-[`SHOW INSTANCES`](/clustering/high-availability#show-instances). This
+[`SHOW INSTANCES`](/clustering/high-availability/ha-commands-reference#show-instances). This
 enhancement provides clearer visibility into the roles of instances within a
 high-availability cluster.
 [#2126](https://github.com/memgraph/memgraph/pull/2126)
@@ -3800,7 +4407,7 @@ Microsoft Entra ID and Okta.
 [#2049](https://github.com/memgraph/memgraph/pull/2049)
 
 - Added support for Single Sign-On (SSO) using [OIDC and OAuth2.0
-protocol](/database-management/authentication-and-authorization/auth-system-integrations#openid-connect-oidc).
+protocol](/database-management/authentication-and-authorization/auth-system-integrations#openid-connect).
 [#2045](https://github.com/memgraph/memgraph/pull/2045)
 
 - The support for the [Enum datatype](/fundamentals/data-types#enum) has been
@@ -4011,7 +4618,7 @@ successfully created once it behaves as a leader.
   [#1976](https://github.com/memgraph/memgraph/pull/1976)
 
 - Added `last_succ_resp_ms` and [coordinator health
-  status](/configuration/high-availability) to the output of the `SHOW
+  status](/clustering/high-availability) to the output of the `SHOW
   INSTANCES` command. This update allows users to see the elapsed time in
   milliseconds since the last successful response from instances to the leader's
   health ping, as well as the health status of the coordinator.
@@ -4020,18 +4627,18 @@ successfully created once it behaves as a leader.
 - Added environment variables for HA Kubernetes cluster setup. This update
   allows starting the coordinator and data instances using environment
   variables, enhancing flexibility and ease of configuration for [high
-  availability](/configuration/high-availability) clusters in Kubernetes
+  availability](/clustering/high-availability) clusters in Kubernetes
   environments. [#1951](https://github.com/memgraph/memgraph/pull/1951)
 
 - Added an option to register a replica after the main instance has already been
-  registered in a [high availability](/configuration/high-availability) (HA)
+  registered in a [high availability](/clustering/high-availability) (HA)
   setup. This feature enhances the flexibility of replica management in HA
   configurations. [#1911](https://github.com/memgraph/memgraph/pull/1911)
 
 - Improved the output of the `SHOW INSTANCES` command. Changes include renaming
   `raft_socket_addr` to `coord_server` and `coordinator_socket_addr` to
   `mgmt_server`, and [adding the Bolt server to the
-  output](/configuration/high-availability).
+  output](/clustering/high-availability).
   [#1965](https://github.com/memgraph/memgraph/pull/1965)
 
 
@@ -4073,7 +4680,7 @@ successfully created once it behaves as a leader.
 
 {<h4 className="custom-header"> New features and improvements </h4>}
 
-- Added a new command, [`DROP GRAPH`](/querying/clauses/drop-graph), that
+- Added a new command, [`DROP GRAPH`](/querying/clauses/drop#drop-graph), that
   deletes data in the database in an efficient manner.
   [#1723](https://github.com/memgraph/memgraph/pull/1723)
 - Fixed a bug that caused the incorrect coordinator to become the leader due to
@@ -4092,7 +4699,7 @@ successfully created once it behaves as a leader.
   functions to support temporal types, improving date and time manipulation
   capabilities.
   [#1790](https://github.com/memgraph/memgraph/pull/1790)
-- Renamed [HA flags](/configuration/configuration-settings#high-availability)
+- Renamed [HA flags](/database-management/configuration#high-availability)
   `--raft-server-id` to `--coordinator-id`, `--raft-server-port` to
   `--coordinator-port`, `--coordinator-server-port` to `--management-port`
   to improve cluster setup.
@@ -4102,24 +4709,24 @@ successfully created once it behaves as a leader.
 - Extended the C/C++ API to support [query
   execution](/custom-query-modules/cpp/cpp-api#executionheaders).
   [#1773](https://github.com/memgraph/memgraph/pull/1773)
-- [Updated queries](/configuration/high-availability) used for registering
+- [Updated queries](/clustering/high-availability) used for registering
   replication instances and coordinator instances.
   [#1809](https://github.com/memgraph/memgraph/pull/1809)
-- [Introduced the lock on operations](/configuration/high-availability) such as
+- [Introduced the lock on operations](/clustering/high-availability) such as
   `SETTING INSTANCE` to MAIN, `REGISTER INSTANCE`, `UNREGISTER INSTANCE`, and
   `FAILOVER` for better control of the cluster state.
   [#1819](https://github.com/memgraph/memgraph/pull/1819)
 - When doing failover, the Coordinator [chooses a new
-  MAIN](/configuration/high-availability) by comparing which `memgraph` database
+  MAIN](/clustering/high-availability) by comparing which `memgraph` database
   is up-to-date. [#1729](https://github.com/memgraph/memgraph/pull/1729)
-- [Changing instance's replication role](/configuration/high-availability) is
+- [Changing instance's replication role](/clustering/high-availability) is
   now backed by Raft. [#1728](https://github.com/memgraph/memgraph/pull/1728)
 - If REPLICA diverges from MAIN, MAIN will automatically initiate a forced data
   reset on REPLICA. [#1777](https://github.com/memgraph/memgraph/pull/1777)
 - User can create, set, or remove labels using property values.
   [#1762](https://github.com/memgraph/memgraph/pull/1762)
 - Introduced the ability to [fetch edges based on edge
-  ID](/configuration/configuration-settings#storage).
+  ID](/database-management/configuration#storage).
   [#1808](https://github.com/memgraph/memgraph/pull/1808)
 - Added support for [pattern
   comprehensions](/querying/expressions#pattern-comprehension) when used in
@@ -4127,7 +4734,7 @@ successfully created once it behaves as a leader.
   [#1827](https://github.com/memgraph/memgraph/pull/1827)
   [#1874](https://github.com/memgraph/memgraph/pull/1874)
   [#1903](https://github.com/memgraph/memgraph/pull/1903)
-- Introduced a [force reset](/configuration/high-availability) feature to revert
+- Introduced a [force reset](/clustering/high-availability) feature to revert
   the cluster to its pre-operation state in case of failure.
   [#1836](https://github.com/memgraph/memgraph/pull/1836)
 
@@ -4218,7 +4825,7 @@ successfully created once it behaves as a leader.
 
 {<h4 className="custom-header"> Bug fixes </h4>}
 
-- Fixed wrong [text search](/configuration/text-search) module name.
+- Fixed wrong [text search](/querying/text-search) module name.
   [#1900](https://github.com/memgraph/memgraph/pull/1900).
 
 ### Memgraph v2.15.1 - Mar 29, 2024
@@ -4226,12 +4833,12 @@ successfully created once it behaves as a leader.
 {<h4 className="custom-header"> New features and improvements </h4>}
 
 - Introduced a new flag,
-  [`storage-delta-on-identical-property-update`](/configuration/configuration-settings#storage),
+  [`storage-delta-on-identical-property-update`](/database-management/configuration#storage),
   which allows for the optional creation of a delta object when a property is
   updated with the same value.
   [#1791](https://github.com/memgraph/memgraph/pull/1791).
 
-- Added durable text indices and [basic text search](/configuration/text-search)
+- Added durable text indices and [basic text search](/querying/text-search)
 capabilities. [#1603](https://github.com/memgraph/memgraph/pull/1603)
 [#1739](https://github.com/memgraph/memgraph/pull/1739)
 
@@ -4362,12 +4969,12 @@ authentication data integrity.
   command reveals the currently used database, returning `NULL` if none is
   active. `SHOW DATABASES;` has been updated to display only the existing set of
   multitenant databases. For more details, refer to the [Multi-tenancy
-  documentation](/configuration/multi-tenancy).
+  documentation](/database-management/multi-tenancy).
   [#1550](https://github.com/memgraph/memgraph/pull/1550)
 
 - When using replication, flag `--replication-restore-state-on-startup` needs to
   be set to `true`.  For more details, refer to the [Configuration settings
-  documentation](/configuration/configuration-settings).
+  documentation](/database-management/configuration).
   [#1707](https://github.com/memgraph/memgraph/pull/1707)
 
 - REPLICAs are now configured to listen exclusively to a single MAIN instance.
@@ -4375,30 +4982,30 @@ authentication data integrity.
   of REPLICA instances. For configurations using replication without HA, the
   MAIN instance directly communicates its ID to each REPLICA. For more details,
   refer to the [High availability
-  documentation](/configuration/high-availability).
+  documentation](/clustering/high-availability).
   [#1674](https://github.com/memgraph/memgraph/pull/1674)
 
 - Added coordinator instance for managing HA cluster. For more details, refer to
-  the [High availability documentation](/configuration/high-availability).
+  the [High availability documentation](/clustering/high-availability).
   [#1608](https://github.com/memgraph/memgraph/pull/1608)
 
 - Added support for restart of replication instances. MAIN can restart as MAIN
   and as REPLICA depending on the cluster state in the moment of restart.
   REPLICA always stays REPLICA. For more details, refer to the [High
-  availability documentation](/configuration/high-availability).
+  availability documentation](/clustering/high-availability).
   [#1672](https://github.com/memgraph/memgraph/pull/1672)
 
 - Added automatic failover from a single coordinator. For more details refer to
-  [High availability documentation](/configuration/high-availability).
+  [High availability documentation](/clustering/high-availability).
   [#1646](https://github.com/memgraph/memgraph/pull/1646)
 
 - Added flags `--raft-server-id` and `--raft-server-port` for creating
   coordinators. For more details, refer to the [High availability
-  documentation](/configuration/high-availability).
+  documentation](/clustering/high-availability).
   [#1687](https://github.com/memgraph/memgraph/pull/1687)
 
 - Improved the authentication module with better user and role handling mechanisms. For more
-  details, refer to the [Auth module documentation](/configuration/auth-module).
+  details, refer to the [Auth module documentation](/database-management/authentication-and-authorization/auth-system-integrations).
   Key enhancements include:
   - Elimination of automatic user creation by the auth module
     - Introduction of checks to determine the presence of users or the use of an
@@ -4413,7 +5020,7 @@ authentication data integrity.
     `--auth-module-manage-roles`
     [#1699](https://github.com/memgraph/memgraph/pull/1699)
   - Introduced multi-tenancy and system information to [SHOW
-  REPLICAS](/configuration/replication).
+  REPLICAS](/clustering/replication).
   [#1735](https://github.com/memgraph/memgraph/pull/1735)
 
 {<h4 className="custom-header"> Bug fixes </h4>}
@@ -4478,14 +5085,14 @@ authentication data integrity.
 - [`toString()` function](/querying/functions#scalar-functions) returns double
   values with precision 15. [#1576](https://github.com/memgraph/memgraph/pull/1576)
 - When [dumping a
-  database](/configuration/data-durability-and-backup#database-dump), triggers
+  database](/database-management/backup-and-restore#database-dump), triggers
   are also included in the CYPHERL file.
   [#1610](https://github.com/memgraph/memgraph/pull/1610)
 
 {<h4 className="custom-header"> Bug fixes </h4>}
 
 - The [`--storage-mode` configuration
-  flag](/configuration/configuration-settings#storage) now works as expected.
+  flag](/database-management/configuration#storage) now works as expected.
   [#1609](https://github.com/memgraph/memgraph/pull/1609)
 - Memgraph returns an error instead of crashing when trying to execute the
   [`SHOW STORAGE INFO;`](/fundamentals/storage-memory-usage#check-storage-mode)
@@ -4493,7 +5100,7 @@ authentication data integrity.
   [#1566](https://github.com/memgraph/memgraph/pull/1566)
 - Memgraph returns an error instead of crashing when aborting a transaction due
   to lack of memory. [#1589](https://github.com/memgraph/memgraph/pull/1589)
-- [REPLICA](/configuration/replication) timestamp is now correctly propagated.
+- [REPLICA](/clustering/replication) timestamp is now correctly propagated.
   [#1615](https://github.com/memgraph/memgraph/pull/1615)
 - Index hinting now works as expected. [#1606](https://github.com/memgraph/memgraph/pull/1606)
 - Using the path identifier from the `CREATE` clause in other parts of the query
@@ -4557,14 +5164,14 @@ recovered in parallel, just like [indexes](/fundamentals/indexes). That is why
 the `storage-parallel-index-recovery` configuration flag has been deprecated,
 and now you can enable this behavior using the
 [`storage-parallel-schema-recovery`
-configuration](/configuration/configuration-settings#storage) flag.
+configuration](/database-management/configuration#storage) flag.
 
 </Callout>
 
 {<h4 className="custom-header"> New features and improvements </h4>}
 
 - Now you can check information about node labels and relationship types by
-  running the [schema-related queries](/querying/schema#schema-related-queries)
+  running the [schema-related queries](/querying/schema#querying-the-schema)
   `SHOW NODE_LABELS INFO;` and `SHOW EDGE_TYPES INFO;`.
   [#1466](https://github.com/memgraph/memgraph/pull/1466)
 - When the [`schema.node_type_properties()` and the
@@ -4577,23 +5184,23 @@ configuration](/configuration/configuration-settings#storage) flag.
 - Existence and unique [constraints](/fundamentals/constraints) can now also be
   recovered in parallel, just like [indexes](/fundamentals/indexes). To enable
   this behaviour, set the [`storage-parallel-schema-recovery`
-  configuration](/configuration/configuration-settings#storage) flag to `true`.
+  configuration](/database-management/configuration#storage) flag to `true`.
   As the new configuration flag includes the constraints, the
   `storage-parallel-index-recovery` has been deprecated.
   [#1545](https://github.com/memgraph/memgraph/pull/1545)
 - Now you can assert indexes and constraints using the
-  [`schema.assert()`](/querying/schema#schema-assert) procedure.
+  [`schema.assert()`](/querying/schema#assert) procedure.
   [#1485](https://github.com/memgraph/memgraph/pull/1485)
 - Improved the logic when checking [the `exist()`
   statements](/querying/functions#pattern-functions) within [the `WHERE`
-  clause](/querying/clauses/where#17-filter-with-pattern-expressions) in order
+  clause](/querying/clauses/where#18-filter-with-pattern-expressions) in order
   to improve performance.
   [#1539](https://github.com/memgraph/memgraph/pull/1539)
 - The filter information message of `EXPLAIN` and `PROFILE` queries displays the
   exact filtering in the filter expression.
   [#1481](https://github.com/memgraph/memgraph/pull/1481)
 - When the weight lambda of [Weighted Shortest Path and All Shortest Paths
-  algorithms](https://memgraph.com/docs/advanced-algorithms/built-in-graph-algorithms)
+  algorithms](/advanced-algorithms/deep-path-traversal)
   uses node properties, it will include all nodes of the path, even the start
   and end nodes. Also it's possible to mix node and relationships properties, by
   coalescing the relationship property in the weight lambda.
@@ -4604,12 +5211,12 @@ configuration](/configuration/configuration-settings#storage) flag.
 {<h4 className="custom-header"> Bug fixes </h4>}
 
 - If results of [aggregation
-  functions](https://memgraph.com/docs/querying/functions#aggregation-functions)
+  functions](/querying/functions#aggregation-functions)
   are returned grouped or if there is no input to aggregate over, rather than
   returing `0` or `empty` together with `NULL`, the functions won't return
   anything. [#1531](https://github.com/memgraph/memgraph/pull/1531)
 - If the initialisation CYPHERL file passed using the
-  [`--init-file`](https://memgraph.com/docs/configuration/configuration-settings#other)
+  [`--init-file`](/database-management/configuration#other)
   configuration flag tries to create a user that already exists, the exception
   will be caught and Memgraph will start successfully.
   [#1465](https://github.com/memgraph/memgraph/pull/1465)
@@ -4660,7 +5267,7 @@ Cached query plans are no longer saved during the time interval defined by the
 
 This means that you need to replace any custom setting of the
 `--query-plan-cache-ttl` with the `--query-plan-cache-max-size` [configuration
-flag](/configuration/configuration-settings#query). By default, the maximum
+flag](/database-management/configuration#query). By default, the maximum
 number of cached query plans is
 1000.
 
@@ -4674,7 +5281,7 @@ queries and variables.
 - Cached query plans are no longer saved during the time interval defined by the
   `--query-plan-cache-ttl`, rather they are cached by count. You can set the
   maximum number of cached query plans using the `--query-plan-cache-max-size`
-  [configuration flag](/configuration/configuration-settings#query). By default,
+  [configuration flag](/database-management/configuration#query). By default,
   the maximum number of cached query plans is
   1000. This change has been made to reduce the memory usage of queries with
   `MERGE` queries and variables.
@@ -4684,7 +5291,7 @@ queries and variables.
   procedures](/custom-query-modules/manage-query-modules#controlling-procedure-memory-usage)
   add `PROCEDURE MEMORY LIMIT 100 KB` after calling a procedure and before
   yielding results. [#1506](https://github.com/memgraph/memgraph/pull/1506)
-- The [`SHOW STORAGE INFO;`](/configuration/server-stats) query now returns the
+- The [`SHOW STORAGE INFO;`](/database-management/server-stats) query now returns the
   non-swapped physical RAM memory a task has used (as reported by the operating
   system) as `memory_res`, not `memory_usage`. `memory allocated` has been
   replaced with `memory_tracked`, and it still defines the amount of RAM
@@ -4697,11 +5304,11 @@ queries and variables.
   DELETE p;`](/querying/read-and-modify-data#delete-data).
   [#1383](https://github.com/memgraph/memgraph/pull/1383)
 - After
-  [recovery](https://memgraph.com/docs/configuration/data-durability-and-backup#restore-data),
+  [recovery](/database-management/backup-and-restore#restore-data),
   the logs show which indexes and constraints have been recovered.
   [#1480](https://github.com/memgraph/memgraph/pull/1480)
 - Information about using custom memory resources for handling memory when
-  running has been removed from the [logs](/configuration/logs) as it's
+  running has been removed from the [logs](/database-management/logs) as it's
   unnecessary. [#1452](https://github.com/memgraph/memgraph/pull/1425)
 - All the memory allocated inside a procedure is tracked in order to notify when
   limits are reached. [#1443](https://github.com/memgraph/memgraph/pull/1443)
@@ -4711,7 +5318,7 @@ queries and variables.
 
 {<h4 className="custom-header"> Bug fixes </h4>}
 
-- Query modules [`schema`](/querying/functions#schema) and
+- Query modules [`schema`](/querying/functions) and
   [`convert`](/querying/functions#conversion-functions) that had been moved from
   MAGE library to Memgraph now load properly and work as expected.
   [#1490](https://github.com/memgraph/memgraph/pull/1490)
@@ -4736,7 +5343,7 @@ queries and variables.
 - The hash join executes as expected when using WHERE subclause.
   [#1496](https://github.com/memgraph/memgraph/pull/1496)
 - When encountering corrupted [snapshot and WAL
-  files](/configuration/data-durability-and-backup#durability-mechanisms) during
+  files](/fundamentals/data-durability#durability-mechanisms) during
   recovery, Memgraph now deletes them.
   [#1385](https://github.com/memgraph/memgraph/pull/1385)
 - The snapshot thread is now stopped when switching from
@@ -4772,7 +5379,7 @@ queries and variables.
 
 <Callout type="info">
 
-- The [`SHOW STORAGE INFO;`](/configuration/server-stats) query now returns memory
+- The [`SHOW STORAGE INFO;`](/database-management/server-stats) query now returns memory
 allocations in B, KiB, MiB, GiB or TiB, rather than just B so if any of your
 code depends on this information be sure to make the appropriate adjustments.
 
@@ -4794,8 +5401,8 @@ Memgraph (v2.11.1 and lower).
 - Memgraph can now start the instance in any [storage
   mode](/fundamentals/storage-memory-usage#storage-modes), defined by the
   `--storage-mode` [configuration
-  flag](/configuration/configuration-settings#storage).
-- The [`SHOW STORAGE INFO;`](/configuration/server-stats) query now returns
+  flag](/database-management/configuration#storage).
+- The [`SHOW STORAGE INFO;`](/database-management/server-stats) query now returns
   memory allocations in B, KiB, MiB, GiB or TiB, rather than just B to make the
   information easily
   readable.[#1366](https://github.com/memgraph/memgraph/pull/1366)
@@ -4816,7 +5423,7 @@ Memgraph (v2.11.1 and lower).
 - The `SHOW INDEX INFO;` now also returns the information about the number of
   assigned indexes. [#1229](https://github.com/memgraph/memgraph/pull/1229)
 - Now, you can [register REPLICA
-  instances](/configuration/replication#registering-replica-instances) using DNS
+  instances](/clustering/replication/replication-commands-reference#replica-registration-commands) using DNS
   names. [#1323](https://github.com/memgraph/memgraph/pull/1323)
 - You can now use [`keys()` and `values()` functions](/querying/functions#maps)
   to get a list of keys and values of a map.
@@ -4855,7 +5462,7 @@ Memgraph (v2.11.1 and lower).
   operator](/querying/query-plan#query-plan-operators).
   [#1226](https://github.com/memgraph/memgraph/pull/1226)
 - The new [Cartesian product
-  operator](/querying/query-plan#cartesian-product) optimizes
+  operator](/querying/query-plan) optimizes
   queries that match nodes without relationship.
   [#1193](https://github.com/memgraph/memgraph/pull/1193)
 - Filtering and producing expressions in WITH and FILTER clauses have been
@@ -4887,7 +5494,7 @@ Memgraph (v2.11.1 and lower).
 - A bug has been fixed which would shut down Memgraph when fetching data from SQL
   database. [#1299](https://github.com/memgraph/memgraph/pull/1299)
 - When setting a memory limit using [`--memory-limit` config
-  flag](/configuration/configuration-settings#other), Memgraph now stops the
+  flag](/database-management/configuration#other), Memgraph now stops the
   transactions exceeding the limit as expected.
   [#1250](https://github.com/memgraph/memgraph/pull/1250)
   [#1340](https://github.com/memgraph/memgraph/pull/1340)
@@ -4981,7 +5588,7 @@ Memgraph (v2.11.1 and lower).
   [label](/advanced-algorithms/available-algorithms/label),
   [map](/advanced-algorithms/available-algorithms/map),
   [refactor](/advanced-algorithms/available-algorithms/refactor) and
-  [schema](/advanced-algorithms/available-algorithms/schema) query modules have
+  [schema](/querying/schema#schema-related-procedures) query modules have
   been changed to align with Memgraph's GraphQL mappings. Also some procedures
   are now functions. Functions can be called inline, while procedures are called
   using the `CALL` clause. [#361](https://github.com/memgraph/mage/pull/361)
@@ -5013,7 +5620,7 @@ execution time. Check your C++ query modules for possible code changes.
   active, the engine can import around 7500 relationships per second.
   [#1157](https://github.com/memgraph/memgraph/pull/1157).
 - The following [configurational
-  settings](/configuration/configuration-settings) can now be changed during
+  settings](/database-management/configuration) can now be changed during
   runtime: server name, query execution timeout, log level and the option to log
   to `stderr`. Use the following queries to set the configuration:
   ```
@@ -5024,7 +5631,7 @@ execution time. Check your C++ query modules for possible code changes.
   ```
   [#1183](https://github.com/memgraph/memgraph/pull/1183)
 - The default value of
-  [`--bolt-server-name-for-init`](/configuration/configuration-settings#bolt) is
+  [`--bolt-server-name-for-init`](/database-management/configuration#bolt) is
   now `Neo4j/v5.11.0 compatible graph database server - Memgraph`.
   [#1183](https://github.com/memgraph/memgraph/pull/1183)
 - During recovery from a snapshot, the recovery of each graph object or property
@@ -5087,7 +5694,7 @@ execution time. Check your C++ query modules for possible code changes.
   [#1024](https://github.com/memgraph/memgraph/pull/1204)
 - Certain queries execute faster due to the usage of custom allocators for
   [Delta
-  objects](/configuration/data-durability-and-backup#write-ahead-logging).
+  objects](/fundamentals/data-durability#write-ahead-logging).
   [#1129](https://github.com/memgraph/memgraph/pull/1129)
 
 {<h4 className="custom-header"> Bug fixes </h4>}
@@ -5145,7 +5752,7 @@ execution time. Check your C++ query modules for possible code changes.
 - The [`convert` module](/advanced-algorithms/available-algorithms/convert) is
   used for conversion of one data type to another.
   [#326](https://github.com/memgraph/mage/pull/326)
-- The [`schema` module](/advanced-algorithms/available-algorithms/schema) offers
+- The [`schema` module](/querying/schema#schema-related-procedures) offers
   procedures that allow you to interact with and retrieve information about the
   database schema. [#341](https://github.com/memgraph/mage/pull/341)
 - The [`neighbors` module](/advanced-algorithms/available-algorithms/neighbors)
@@ -5202,7 +5809,7 @@ execution time. Check your C++ query modules for possible code changes.
   processing the chain and improves performance. If you would benefit from
   changing at what length the delta chain should be cashed, adjust the value of
   the [`--delta-chain-cache-threshold` configuration
-  flag](/configuration/configuration-settings#other).
+  flag](/database-management/configuration#other).
   [#1124](https://github.com/memgraph/memgraph/pull/1124).
 
 {<h4 className="custom-header"> Bug fixes </h4>}
@@ -5244,33 +5851,6 @@ execution time. Check your C++ query modules for possible code changes.
   connection screen.
 - Logs no longer scroll automatically to new log records when you scroll up to
   check past log records.
-
-### Memgraph v2.10.1 - Aug 22, 2023
-
-{<h4 className="custom-header"> Improvements and bug fixes </h4>}
-
-- Improved performance on batch update of properties, e.g.:
-
-  ```cypher
-  MATCH (n) SET n += {prop1:1, prop2:2, ...};
-  ```
-  [#1115](https://github.com/memgraph/memgraph/pull/1115)
-- Added a delta cache to improve query performance. This helps in situations of
-  repeated reads of vertices which have many delta changes caused by another
-  transaction while the current transaction is operating with snapshot isolation
-  level and so needs to process those deltas. This can be tuned using
-  `--delta-chain-cache-threshold`.
-  [#1124](https://github.com/memgraph/memgraph/pull/1124)
-- Concurrent access to the same query module had a race-condition on the
-  pointer that was used to handle the custom memory management. A mapping has
-  been added that keeps the information about what thread used what pointer to
-  handle the memory resources, which should be fine since the respected query
-  executions are running on a dedicated thread. Access to the mapping itself is
-  thread-safe. A simple `RWLock` has been implemented here, as we shouldn't
-  include `memgraph::utils` from this header and a traditional mutex might be
-  overkill. A simple RAII wrapper for the mapping container has been also added
-  for simpler client-side use.
-  [#1158](https://github.com/memgraph/memgraph/pull/1158)
 
 ### Lab v2.8.0 - Aug 04, 2023
 
@@ -5323,7 +5903,7 @@ execution time. Check your C++ query modules for possible code changes.
 
 {<h4 className="custom-header"> New features and improvements </h4>}
 
-- The new [multi-tenant support](/configuration/multi-tenancy) available in
+- The new [multi-tenant support](/database-management/multi-tenancy) available in
   the Enterprise Edition of Memgraph enables you to manage multiple isolated
   databases within a single instance. The primary objective is to facilitate
   efficient resource isolation, maintain data integrity, and manage access for
@@ -5334,7 +5914,7 @@ execution time. Check your C++ query modules for possible code changes.
   the application code, you can define the mapping of the old and new procedure
   names in a JSON file, then set the path to the files as the value of the
   `query-callable-mappings-path` [configuration
-  flag](/configuration/configuration-settings).
+  flag](/database-management/configuration).
   [#1018](https://github.com/memgraph/memgraph/pull/1018)
 - The [C++
   API](/custom-query-modules/cpp/cpp-api)
@@ -5444,7 +6024,7 @@ instance, then the REPLICA instances.
   [#1026](https://github.com/memgraph/memgraph/pull/1026)
 - The `--replication-restore-state-on-startup` configuration flag allows you to
   define whether instances in the [replication
-  cluster](/configuration/replication) will regain their roles upon restart
+  cluster](/clustering/replication) will regain their roles upon restart
   (`true`) or restart as disconnected "blank" MAIN instances (default setting
   `false`). This flag resolved the unwanted behavior of restarted REPLICA
   instances disconnecting from the cluster, but it also needs to be introduced
@@ -5528,20 +6108,20 @@ instance, then the REPLICA instances.
   single-line (`// comment`) and multi-line (`/* comment */`) comments in the
   GSS code editor without losing previous state.
 - Change the canvas color of the graph view with the new property
-  `background-color` in [`@ViewStyle`](/data-visualization/graph-style-script/directive-properties).
+  `background-color` in [`@ViewStyle`](/memgraph-lab/features/graph-style-script/directive-properties).
 - Change the stack order of how nodes and edges are rendered in the graph view
   with the property `z-index` in
-  [`@NodeStyle`](/data-visualization/graph-style-script/directive-properties) and
-  [`@EdgeStyle`](/data-visualization/graph-style-script/directive-properties) directives. It works
+  [`@NodeStyle`](/memgraph-lab/features/graph-style-script/directive-properties) and
+  [`@EdgeStyle`](/memgraph-lab/features/graph-style-script/directive-properties) directives. It works
   the same as the CSS z-index property.
 - Set up transparent colors with the [new GSS
-  functions](/data-visualization/graph-style-script/built-in-elements) `RGBA` and `HSLA`. You can also get
+  functions](/memgraph-lab/features/graph-style-script/built-in-elements) `RGBA` and `HSLA`. You can also get
   the transparency value with the function `Alpha`.
-- [New functions](/data-visualization/graph-style-script/built-in-elements) allow more customizations: `Sort`, `Coalesce`, `Reverse`,
+- [New functions](/memgraph-lab/features/graph-style-script/built-in-elements) allow more customizations: `Sort`, `Coalesce`, `Reverse`,
   `IsMap`, `AsMap`, `Execute`, `Get`, `Set`, `Del`, `MapKeys`, `MapValues`,
   `AsIterator`, `IsIterator`, `Next`
 - [Global and local
-    variables](/data-visualization/graph-style-script#caching-results-for-faster-performance)
+    variables](/memgraph-lab/features/graph-style-script#caching-results-for-faster-performance)
     make developing new styles easier:
   - Variable graph is now available outside `@NodeStyle` and `@EdgeStyle`
     context
@@ -5572,12 +6152,12 @@ instance, then the REPLICA instances.
 
 - Data recovery is now up to 6x faster depending on the number of available
   cores, as [snapshot loading is distributed among several
-  threads](/configuration/data-durability-and-backup#snapshots).
+  threads](/fundamentals/data-durability#snapshots).
   [#868](https://github.com/memgraph/memgraph/pull/868)
 - During the recovery, indexes can also  be created using multiple threads, thus
   speeding up the process. [#882](https://github.com/memgraph/memgraph/pull/882)
 - In the Enterprise Edition, Memgraph now [exposes system
-  metrics](/configuration/monitoring-server) via an HTTP endpoint, so
+  metrics](/database-management/monitoring) via an HTTP endpoint, so
   you can get information about transactions, query latency and various other
   properties. [#940](https://github.com/memgraph/memgraph/pull/940)
 - It’s now possible to use the [map projection
@@ -5585,7 +6165,7 @@ instance, then the REPLICA instances.
   projections are convenient for building maps based on existing values and they
   are used by data access tools like GraphQL.
   [#892](https://github.com/memgraph/memgraph/pull/892)
-- You can now check if [the data directory](/configuration/data-durability-and-backup) is
+- You can now check if [the data directory](/fundamentals/data-durability) is
   (un)locked with the `DATA DIRECTORY LOCK STATUS;` query.
   [#933](https://github.com/memgraph/memgraph/pull/933)
 - You can now check the current [storage
@@ -5593,7 +6173,7 @@ instance, then the REPLICA instances.
   levels](/fundamentals/transactions) by running the `SHOW STORAGE INFO;`
   query. [#883](https://github.com/memgraph/memgraph/pull/883)
 - Check the suspected [build type of the Memgraph
-  executable](/configuration/server-stats#build-information) by
+  executable](/database-management/server-stats#build-information) by
   running the `SHOW BUILD INFO;` query.
   [#894](https://github.com/memgraph/memgraph/pull/894)
 - Performance has been improved by optimizing the deallocation of resources in
@@ -5628,7 +6208,7 @@ instance, then the REPLICA instances.
   Guide](https://www.markdownguide.org/extended-syntax/#syntax-highlighting).
   ![markdown](/pages/release-notes/lab-260/markdown.png)
 - [New functions of the Graph Style Script
-  language](/data-visualization/graph-style-script/built-in-elements) used for customizing graph appearance
+  language](/memgraph-lab/features/graph-style-script/built-in-elements) used for customizing graph appearance
   are: `Reduce`, `Sum`, `Avg`, `Min`, `Max`, `IsArray`, `Hue`, `Saturation`,
   `Lightness`, `HSL`.
   ![gss](/pages/release-notes/lab-260/gss.png)
@@ -5680,11 +6260,11 @@ instance, then the REPLICA instances.
   [#812](https://github.com/memgraph/memgraph/pull/812)
 - If, for example, you are no longer interested in the results of the query you
   ran, or the procedure you built is running in an infinite loop, you can [stop
-  the transaction](/fundamentals/transactions#managing-transactions)
+  the transaction](/fundamentals/transactions#manage-transactions)
   with the `TERMINATE TRANSACTIONS tid;` query; Find out the transaction ID with
   `SHOW TRANSACTIONS;` query.
   [#790](https://github.com/memgraph/memgraph/pull/790)
-- With the [new flag](/configuration/configuration-settings#other)
+- With the [new flag](/database-management/configuration#other)
   `password-encryption-algorithm` you can choose between `bcrypt`, `sha256`, and
   `sha256-multiple` encryption algorithms. SHA256 offers better performance
   compared to the more secure but less performant bcrypt.
@@ -5697,7 +6277,7 @@ instance, then the REPLICA instances.
 {<h4 className="custom-header"> Bug fixes </h4>}
 
 - The users who have [global visibility on the
-  graph](/configuration/security#label-based-access-control) will
+  graph](/database-management/authentication-and-authorization/role-based-access-control#label-based-access-control) will
   experience a slight improvement in performance regarding label-based access
   control as the engine no longer check privileges for each node.
   [#837](https://github.com/memgraph/memgraph/pull/837)
@@ -6048,7 +6628,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
   [#448](https://github.com/memgraph/memgraph/pull/448)
 - Corrected inconsistencies and incorrect behavior with regards to sync
   replicas. For more detail about the behavior, please check [Under the
-  hood view on replication](/configuration/replication).
+  hood view on replication](/clustering/replication).
   [#435](https://github.com/memgraph/memgraph/pull/435)
 - Fixed handling `ROUTE` Bolt message. Memgraph didn't handle the fields of
   `ROUTE` message properly. Therefore the session might be stuck in a state
@@ -6190,7 +6770,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Added [Bolt over WebSocket](/client-libraries/javascript) support to
   Memgraph. [#384](https://github.com/memgraph/memgraph/pull/384)
 - Added [user-defined Memgraph magic
-  functions](/querying/functions#user-defined-memgraph-magic-functions).
+  functions](/querying/functions#user-defined-functions).
   [#345](https://github.com/memgraph/memgraph/pull/345)
 
 {<h4 className="custom-header"> Bug Fixes </h4>}
@@ -6312,7 +6892,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Added support for compilation on ARM architectures (aarch64) and Docker
   support for running Memgraph on Apple M1 machines.
   [#340](https://github.com/memgraph/memgraph/pull/340)
-- Added [monitoring server](/configuration/monitoring-server) that forwards
+- Added [monitoring server](/database-management/monitoring) that forwards
   certain information from Memgraph to the clients connected to it (e.g. logs)
   using WebSocket. [#337](https://github.com/memgraph/memgraph/pull/337)
 - Added `CONFIGS` and `CREDENTIALS` options to [Kafka streams](/data-streams).
@@ -6325,14 +6905,14 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
   in your query module directories directly from Memgraph.
   [#330](https://github.com/memgraph/memgraph/pull/330)
 - Built-in procedures
-  [`mg.procedures`](/custom-query-modules/manage-query-modules#utility-query-module) and
+  [`mg.procedures`](/custom-query-modules/manage-query-modules#general-mg-procedures) and
   [`mg.transformations`](/data-streams/transformation-modules#utility-procedures-for-transformations)
   return additional information about the procedures and transformations
   scripts. `path` returns an absolute path to the module file containing the
   procedure, while `is_editable` returns `true` if the file can be edited using
   Memgraph or `false` otherwise.
   [#310](https://github.com/memgraph/memgraph/pull/310)
-- [Added `SHOW VERSION` query](/configuration/server-stats) that returns the version of the Memgraph server
+- [Added `SHOW VERSION` query](/database-management/server-stats) that returns the version of the Memgraph server
   which is being queried. [#265](https://github.com/memgraph/memgraph/pull/265)
 
 {<h4 className="custom-header"> Bug Fixes </h4>}
@@ -6533,7 +7113,7 @@ Golang's client. [#667](https://github.com/memgraph/memgraph/pull/667)
 - Added support for parameters with `CREATE` clause in the following form:
   `CREATE (n $param)`.
 - Introduced settings to Memgraph that can be modified during runtime. You can
-  check out more details [here](/configuration/enabling-memgraph-enterprise).
+  check out more details [here](/database-management/enabling-memgraph-enterprise).
 - Added writeable procedure support, so
   [procedures](/custom-query-modules/python/python-example)
   can modify the graph by creating and deleting vertices and edges, modifying

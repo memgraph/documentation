@@ -367,7 +367,7 @@ properties underneath the same parent property, provided the parent isn't also
 specified alone:
 
 ```cypher
-CREATE INDEX ON :Person(name.firstname, name.surname)`
+CREATE INDEX ON :Person(name.firstname, name.surname)
 ```
 
 To drop the label-property composite index use:
@@ -476,6 +476,53 @@ storage mode. Creating a descending index in `ON_DISK_TRANSACTIONAL` mode is
 not yet supported.
 
 </Callout>
+
+### Global vertex property index
+
+<Callout type="info">
+
+This index supports non-blocking creation: reads continue without interruption,
+while writes are briefly paused. For more information, see the [concurrent index
+creation](#concurrent-index-creation).
+
+</Callout>
+
+A label-property index requires you to know the label up front. But sometimes
+you just want to find a node by a property, say `uuid`, regardless of what
+labels the node has. Global vertex-property indices allow you to do exactly
+this. For example, to create an index on all nodes with a `uuid` property:
+
+```cypher
+CREATE GLOBAL INDEX ON :(uuid);
+```
+
+Once created, queries that search by that property can use the index
+automatically:
+
+```cypher
+MATCH (n) WHERE n.uuid = "abc-123" RETURN n;
+MATCH (n {uuid: "abc-123"}) RETURN n;
+```
+
+The planner also considers this index as a fallback when a query specifies a
+label but no matching label-property index exists. For example, if there is no
+index on `:Person(uuid)` but a global index on `uuid` exists,
+`MATCH (n:Person {uuid: "abc-123"}) RETURN n` can use the global index and
+filter by label afterwards.
+
+<Callout type="info">
+
+When both a label-property index and a global vertex property index could serve
+a query, the planner picks whichever has the lower estimated cardinality. In
+practice this usually means the label-property index wins, since it's scoped to
+a single label.
+
+</Callout>
+
+To drop the index:
+```cypher
+DROP GLOBAL INDEX ON :(uuid);
+```
 
 ### Edge-type index
 
@@ -646,11 +693,14 @@ DROP POINT INDEX ON :Label(property);
 When multiple label-property indexes exist, the database can sometimes select a
 non-optimal index due to the data's distribution.
 
-The [`ANALYZE GRAPH;`](/querying/performance-optimization#analyze-graph) query
-calculates the distribution of property values so the database can select a more
-optimal label-property index with the smallest average property value size. The
-query is run only once after all indexes have been created and data inserted in
-the database.
+The `ANALYZE GRAPH` query calculates the distribution of property values so the
+database can select a more optimal label-property index with the smallest
+average property value size. The query is run only once after all indexes have
+been created and data inserted in the database:
+
+```cypher
+ANALYZE GRAPH;
+```
 
 
 ### Schema-related procedures
@@ -696,7 +746,8 @@ memgraph> MATCH (n:Person) WHERE n.name =~ ".*an$" RETURN n.name;
 ## Show created indexes
 
 To see all the information on the label, label-property, edge-type, edge-type
-property, point indexes and vector indexes, run the following query:
+property, global vertex property, global edge property, point indexes and vector
+indexes, run the following query:
 
 ```cypher
 SHOW INDEX INFO;
@@ -740,6 +791,10 @@ DROP INDEX ON :Label(property1, property2);
 ```
 
 ```cypher
+DROP GLOBAL INDEX ON :(property_name);
+```
+
+```cypher
 DROP EDGE INDEX ON :EDGE_TYPE;
 ```
 
@@ -760,8 +815,8 @@ DROP POINT INDEX ON :Label(property);
 The `DROP ALL INDEXES` clause allows you to delete all indices in your database
 in a single operation. This includes all types of indices: label indices,
 label-property indices, edge type indices, edge type-property indices, global
-edge indices, point indices, text indices, vector indices, and vector edge
-indices.
+vertex property indices, global edge property indices, point indices, text
+indices, vector indices, and vector edge indices.
 
 ```cypher
 DROP ALL INDEXES;
@@ -814,8 +869,8 @@ indicates that no indexes should be asserted as existing, while the
 `drop_existing` set to `true` specifies that all existing indexes should be
 dropped.
 
-Primarily, the [`assert()`](querying/schema#assert) procedure is used to define a schema, but it's also
-useful if you need to [delete all constraints](/fundamentals/constraints#delete-all-constraints) or [delete all node indexes and constraints](/querying/schema#delete-all-node-indexes).
+Primarily, the [`assert()`](/querying/schema#assert) procedure is used to define a schema, but it's also
+useful if you need to [delete all constraints](/fundamentals/constraints#drop-all-constraints) or [delete all node indexes and constraints](/querying/schema#delete-all-node-indexes).
 
 ## Automatic index creation
 
@@ -826,9 +881,9 @@ Automatic index creation can only be used if the database has `IN_MEMORY_TRANSAC
 </Callout>
 
 Using the
-[`storage-automatic-label-index-creation-enabled`](/configuration/configuration-settings#storage)
+[`storage-automatic-label-index-creation-enabled`](/database-management/configuration#storage)
 and
-[`storage-automatic-edge-type-index-creation-enabled`](/configuration/configuration-settings#storage)
+[`storage-automatic-edge-type-index-creation-enabled`](/database-management/configuration#storage)
 flags, it is possible to create label and edge-type indices automatically. Every
 time the database encounters a label or edge-type that is currently not indexed,
 it will queue an index creation request that runs asynchronously in the background.
@@ -842,7 +897,7 @@ Auto-index creation operates with the following characteristics:
 Existence and unique [constraints](/fundamentals/constraints), and indexes can be
 recovered in parallel. To enable this behavior, set the
 [`storage-parallel-schema-recovery`
-configuration](/configuration/configuration-settings#storage) flag to `true`.
+configuration](/database-management/configuration#storage) flag to `true`.
 
 ## Query optimization
 ### Analyze graph
@@ -881,7 +936,7 @@ average group size and uniform distribution would be misleading. That's why the
 database always selects the label-property index with >= 10x fewer nodes than
 the other label-property index.
 
-{<h4 className="custom-header">Calculate the statistic</h4>}
+{<h4 id="calculate-the-statistic" className="custom-header">Calculate the statistic</h4>}
 
 Run the following query to calculate the statistics:
 
@@ -905,11 +960,11 @@ you can specify which labels to use by adding the labels to the query:
 ANALYZE GRAPH ON LABELS :Label1, :Label2;
 ```
 
-{<h4 className="custom-header">Delete statistic</h4>}
+{<h4 id="delete-statistic" className="custom-header">Delete statistic</h4>}
 
 Information about the graph is persistent between instance reruns as is
 recovered as all the other data, using [snapshots and WAL
-files](/configuration/data-durability-and-backup). If you want the database to
+files](/fundamentals/data-durability). If you want the database to
 ignore information about the average group size, the chi-squared statistic and
 the average degree, the existing statistic can be deleted by running:
 
@@ -954,6 +1009,10 @@ USING INDEX :Label(property) ...;
 
 ```cypher
 USING INDEX :Label(property1, property2) ...;
+```
+
+```cypher
+USING INDEX :(property) ...;
 ```
 
 It is also possible to specify multiple hints separated with comma. In that
@@ -1008,8 +1067,8 @@ b_1$, or $a_1 = b_1$ and $a_2 < b_2$.
 
 Memgraph supports **(almost) fully concurrent index creation** for all
 skiplist-based indices, including label, label-property, composite, edge-type,
-edge-type property, and global edge property, with minimal impact on
-performance.
+edge-type property, global edge property, and global vertex property, with
+minimal impact on performance.
 
 The three-phase implementation begins with a brief **registration phase** that
 requires `READ ONLY` access. This ensures that all pending write transactions

@@ -3,6 +3,7 @@ export default {
   "getting-started": "Getting started",
   "client-libraries": "Client libraries",
   "ai-ecosystem": "AI ecosystem",
+  "use-cases": "Use cases",
   "fundamentals": "Fundamentals",
   "data-modeling": "Data modeling",
   "data-migration": "Data migration",
@@ -17,4 +18,5 @@ export default {
   "memgraph-zero": "Memgraph Zero",
   "help-center": "Help center",
   "release-notes": "Release notes",
+  "coming-soon": "What's coming soon to Memgraph?"
 }

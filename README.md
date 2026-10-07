@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://memgraph.com/docs">
-    <img src="https://public-assets.memgraph.com/github-readme-images/memgraph-documentation.png" 
+    <img src=".github/images/memgraph-documentation.png" 
          alt="memgraph-docs" 
          title="memgraph-docs"
          style="width: 60%"/>
