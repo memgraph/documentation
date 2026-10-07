@@ -88,6 +88,7 @@ Rules for this format:
 4. **Changelog check**
    - Open `pages/release-notes.mdx` and locate the section for the new release (e.g. `### Memgraph v3.9.0`).
    - For each PR in **Changelog**, confirm it appears in that section (e.g. as `[#NNNN](https://github.com/memgraph/memgraph/pull/NNNN)` or equivalent).
+   - For each PR in **Docs needed**, confirm its entry links to the docs page for the change (a root-relative link such as `/querying/text-search#create-text-index`). The docs CI checks that the page and section exist; this step checks that the link is there. List entries without one as **missing docs link** and add the link.
    - Optionally cross-check the memgraph milestone: merged PRs with user-visible work (e.g. **Docs needed**, **Docs - changelog only**) that are absent from that release section should also be treated as **missing from changelog**, even if they were never added to **Changelog** on the docs PR.
    - List any **missing from changelog** with PR numbers (and titles if known).
 
@@ -131,6 +132,7 @@ Rules for this format:
    - Sort every PR list in the report by PR number ascending (smallest → largest).
    - **Docs label issues:** list every merged PR with a missing or questionable label, the recommended label, and a one-line reason. The canvas from step 1 serves as the primary deliverable for this section.
    - **Not in changelog:** summarize all gaps (PR numbers and titles). When remediating, apply the **one item at a time** rule from step 4. For each gap, state that remediation follows **`write_changelog_item`** per `skills/write-changelog-item/SKILL.md` (unless the user asked for report-only). Include PRs found only via milestone cross-check.
+   - **Missing docs links:** entries for **Docs needed** PRs that did not link their docs page, with the link added.
    - **Docs page missing:** list merged memgraph PRs labeled "Docs needed" with no doc PR on the tracking list; briefly note what's missing (e.g. "TLS .pem-only behavior").
    - **Docs PR tracking list gaps:** if any merged "Docs needed" or "Docs - changelog only" PR is absent from the **Docs Integration Tracking** checklist on the release docs PR, add it using the checklist format from the Assumptions section (unticked `[ ]`, correct section, author handle).
    - **Spelling/grammar fixes:** list each fix with file name and a short before → after summary.
