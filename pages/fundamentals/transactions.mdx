@@ -92,7 +92,7 @@ SHOW TRANSACTIONS;
 ```
 
 Each row in the result represents one transaction (or an in-progress snapshot
-creation or garbage collection) and contains seven columns:
+creation or garbage collection) and contains eight columns:
 
 | Column | Type | Description |
 |---|---|---|
@@ -103,6 +103,7 @@ creation or garbage collection) and contains seven columns:
 | `metadata` | `Map` | Metadata supplied by the client when the transaction was opened. For in-progress snapshots and garbage collection it contains progress details (see below). |
 | `start_time` | `ZonedDateTime` | UTC time at which the transaction started. |
 | `elapsed_ms` | `Integer` | How long the transaction has been running, in milliseconds. |
+| `database` | `String` | The database the transaction is running on. |
 
 ```copy=false
 memgraph> SHOW TRANSACTIONS;
@@ -337,8 +338,8 @@ following the same rules as the id list form:
 The wildcard must be the only argument. Mixing it with ids, such as
 `TERMINATE TRANSACTIONS "*", "9223372036854794885"`, raises an error.
 
-A parameterized id is treated exactly like a literal one, so running
-`TERMINATE TRANSACTIONS $id` with `$id = "*"` also terminates everything.
+Transaction ids, including `"*"`, must be string literals. Query parameters
+such as `$id` aren't supported and cause a syntax error.
 
 <Callout type="info">
 System transactions (for example an in-flight `CREATE DATABASE` or `GRANT`) are
@@ -437,6 +438,134 @@ The following message will appear in the session in which the infinite query was
 memgraph> CALL infinite.get() YIELD * RETURN *; 
 Client received exception: Transactions was asked to abort either because it was executing longer than time
 specified or another user asked to abort it.
+```
+
+## Manage sessions
+
+A session is one client connection to Memgraph over Bolt. You can list the
+open sessions and close any of them from another connection, for example an
+idle (often pooled) connection that still has a database selected and makes
+[`DROP DATABASE`](/database-management/multi-tenancy#drop-database-with-force)
+fail with `Cannot delete <name>, it is currently being used.` Available since
+Memgraph 3.14.
+
+Session queries run on data instances (MAIN and REPLICA), and each instance
+lists and closes only the sessions connected to it. On a high availability
+coordinator they fail with `Coordinator can run only coordinator queries!`.
+They run as implicit transactions only; running them inside an explicit
+transaction raises an error.
+
+### Show sessions
+
+To list the open sessions, run:
+
+```cypher
+SHOW SESSIONS;
+```
+
+Each row is one session that is currently logged in. A connection that hasn't
+logged in yet, or that has logged off, isn't listed. After it logs on again it
+reappears with the same `session_id`:
+
+| Column | Type | Description |
+|---|---|---|
+| `session_id` | `String` | Unique id of the session. Use this value with `TERMINATE SESSIONS`. |
+| `username` | `String` | The user the session logged in as, or `""` if authentication is disabled. With impersonation, this is still the login user. |
+| `database` | `String` | The database the session is using, or `""` if it isn't using one. |
+| `login_timestamp` | `String` | UTC time of the session's most recent login, formatted as `YYYY-MM-DD HH:MM:SS.ffffff` (no time zone suffix). |
+
+You see your own sessions, and the sessions on every database where you have
+the `TRANSACTION_MANAGEMENT` privilege. A session that isn't using a
+database counts as using the default database, `memgraph`. When
+authentication is disabled, every connection counts as the same user, so you
+see all sessions. With [user
+impersonation](/database-management/authentication-and-authorization/impersonate-user),
+a connection counts as the impersonated user, and its queries are checked
+against that user's privileges.
+
+In the following example, `admin` has `TRANSACTION_MANAGEMENT` on every
+database, and `alice` has two idle connections open, one on `analytics` and
+one on `memgraph`. The session running the query is listed too:
+
+```copy=false
+memgraph> SHOW SESSIONS;
++----------------------------------------+----------+-------------+------------------------------+
+| session_id                             | username | database    | login_timestamp              |
++----------------------------------------+----------+-------------+------------------------------+
+| "eba078f8-2c56-4e22-bf47-4545ac9d4b1a" | "admin"  | "memgraph"  | "2026-10-07 10:30:33.022574" |
+| "e9e40294-db31-4122-9875-75affefc1130" | "alice"  | "memgraph"  | "2026-10-07 10:30:32.391885" |
+| "f9892d9b-ca91-4e16-b3df-1ead198cc846" | "alice"  | "analytics" | "2026-10-07 10:30:32.228485" |
++----------------------------------------+----------+-------------+------------------------------+
+3 rows in set (round trip in 0.001 sec)
+```
+
+### Terminate sessions
+
+To close one or more sessions, run the following query from another
+connection:
+
+```plaintext
+TERMINATE SESSIONS 'SESSION_ID' [, 'SESSION_ID' ...];
+```
+
+`SESSION_ID` is a `session_id` from `SHOW SESSIONS`, written as a string
+literal. Query parameters such as `$id` aren't supported and cause a syntax
+error. Any other literal value raises the error `Session id must be a string.`
+
+An idle session is closed immediately. For a session that is running a query,
+Memgraph aborts its transaction and closes the connection as soon as that
+query returns. Most queries stop right away, but one that doesn't check for
+termination (for example, a long-running function call) runs until it
+finishes, and its transaction is then not committed. If the session has an
+open explicit transaction (it ran `BEGIN` but hasn't committed), that
+transaction is rolled back: its uncommitted changes are discarded and any
+writes it holds are released, so conflicting transactions can proceed. A
+transaction that is already committing isn't interrupted; it completes.
+
+The client of a terminated session loses its connection. A query it is
+running fails with the transient error `Transaction was asked to abort by
+another user.` An idle client gets a connection error on its next request.
+Because the error is transient, driver retry helpers (for example, the Python
+driver's `execute_write`) retry the transaction on a new connection, and the
+retry can commit, so terminating a session doesn't stop an application that
+uses them from running the same work again.
+
+You can terminate your own other sessions without any privilege. To terminate
+another user's session, you need the `TRANSACTION_MANAGEMENT` privilege on
+the database that session is using (the default database, `memgraph`, if it
+isn't using one). The session that runs `TERMINATE SESSIONS` can't terminate
+itself.
+
+<Callout type="info">
+These privilege checks apply only in Memgraph Enterprise. In Memgraph
+Community, every user has all privileges, so any user can see and terminate
+any other user's session.
+</Callout>
+
+The result has two columns, `session_id` and `killed`, with one row per id in
+the query, in the same order. A row reports `killed: true` if the session was
+found and you were allowed to close it. This means the close was requested: a
+session that is busy with a query can still appear in `SHOW SESSIONS` until
+that query returns. An id that matches no session, an id you're not allowed to
+terminate, the id of the session running the query, and every repeat of an id
+already in the list all report `killed: false`.
+
+For example, to close alice's `analytics` session (the second id doesn't
+match any session):
+
+```cypher
+TERMINATE SESSIONS 'f9892d9b-ca91-4e16-b3df-1ead198cc846', '00000000-0000-0000-0000-000000000000';
+```
+
+```copy=false
+memgraph> TERMINATE SESSIONS 'f9892d9b-ca91-4e16-b3df-1ead198cc846', '00000000-0000-0000-0000-000000000000';
++----------------------------------------+--------+
+| session_id                             | killed |
++----------------------------------------+--------+
+| "f9892d9b-ca91-4e16-b3df-1ead198cc846" | true   |
+| "00000000-0000-0000-0000-000000000000" | false  |
++----------------------------------------+--------+
+2 rows in set (round trip in 0.001 sec)
 ```
 
 ## Isolation levels
