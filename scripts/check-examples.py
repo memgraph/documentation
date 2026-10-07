@@ -234,7 +234,7 @@ class Box:
                 return
             time.sleep(0.5)
         logs = sh('docker', 'logs', '--tail', '3', self.name)
-        raise RuntimeError('Memgraph did not start: ' + (logs.stdout + logs.stderr).strip()[-200:])
+        raise RuntimeError(scrub('Memgraph did not start: ' + (logs.stdout + logs.stderr).strip()[-200:]))
 
     def q(self, stmt, retried=False):
         try:
