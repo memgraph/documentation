@@ -1,0 +1,221 @@
+---
+title: Amazon Redshift
+description: Connect MemGQL to Amazon Redshift.
+---
+
+# Amazon Redshift
+
+The Redshift connector (type `redshift`) translates GQL queries into Redshift
+SQL and runs them on a provisioned cluster or a Serverless workgroup. It
+requires a [mapping file](/memgraph-zero/memgql/reference#mapping-schema) that
+maps graph patterns to relational tables, in the same format as every other SQL
+backend.
+
+Redshift speaks the PostgreSQL wire protocol, so there is no ODBC layer or
+Redshift client to install. The connector supports **both reads and writes**,
+and authenticates with a database password or with **IAM temporary
+credentials**. It is available both in
+[`multi` mode](/memgraph-zero/memgql/multiple-graphs) (`ADD CONNECTOR … TYPE
+redshift`) and as the standalone `CONNECTOR_TYPE=redshift` mode.
+
+## 1. Prepare a database user
+
+Connect to your cluster or workgroup as an admin with any PostgreSQL client or
+the Redshift query editor, and create a user for MemGQL:
+
+```sql
+CREATE USER memgql PASSWORD '<Strong-Passw0rd>';
+GRANT USAGE ON SCHEMA public TO memgql;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO memgql;
+-- Only if you want writes:
+GRANT INSERT, DELETE ON ALL TABLES IN SCHEMA public TO memgql;
+```
+
+The endpoint is shown on the cluster or workgroup page in the AWS console, for
+example `analytics.abc123xyz.us-east-1.redshift.amazonaws.com:5439/dev`
+(provisioned) or
+`my-workgroup.123456789012.us-east-1.redshift-serverless.amazonaws.com:5439/dev`
+(Serverless).
+
+## 2. Write the mapping
+
+Save as `mapping.json`, the standard
+[mapping format](/memgraph-zero/memgql/reference#mapping-schema). Declare every
+property you plan to query. In `multi` mode the mapping is also the routing
+schema, so an undeclared property is a routing error, not a passthrough.
+
+```json
+{
+  "vertices": [
+    {
+      "label": "Person",
+      "mappedTableSource": {
+        "connector": "rs",
+        "schema": "public",
+        "table": "persons",
+        "metaFields": { "id": "id" }
+      },
+      "attributes": [
+        { "name": "name" },
+        { "name": "age", "type": "Int" }
+      ]
+    },
+    {
+      "label": "Company",
+      "mappedTableSource": {
+        "connector": "rs",
+        "schema": "public",
+        "table": "companies",
+        "metaFields": { "id": "id" }
+      },
+      "attributes": [ { "name": "name" } ]
+    }
+  ],
+  "edges": [
+    {
+      "label": "KNOWS",
+      "from": "Person",
+      "to": "Person",
+      "mappedTableSource": {
+        "connector": "rs",
+        "schema": "public",
+        "table": "knows",
+        "metaFields": { "id": "id", "from": "from_id", "to": "to_id" }
+      }
+    },
+    {
+      "label": "WORKS_AT",
+      "from": "Person",
+      "to": "Company",
+      "mappedTableSource": {
+        "connector": "rs",
+        "schema": "public",
+        "table": "works_at",
+        "metaFields": { "id": "id", "from": "person_id", "to": "company_id" }
+      }
+    }
+  ]
+}
+```
+
+## 3. Start MemGQL in multi mode
+
+```bash
+docker run --rm \
+    --name memgql \
+    --stop-timeout 2 \
+    -p 7688:7688 \
+    --env CONNECTOR_TYPE=multi \
+    -v ./mapping.json:/data/mapping.json \
+    memgraph/memgql:latest
+```
+
+For [IAM authentication](#authentication), also pass your AWS credentials, for
+example `--env AWS_ACCESS_KEY_ID --env AWS_SECRET_ACCESS_KEY --env
+AWS_SESSION_TOKEN`.
+
+## 4. Connect and register the backend
+
+```bash
+mgconsole --port 7688
+```
+
+Give the endpoint as the connector `URI`. The connector accepts the same URL
+shape as the Redshift JDBC driver, so you can paste the endpoint from the
+console:
+
+```gql
+ADD CONNECTOR rs TYPE redshift
+    URI 'redshift://analytics.abc123xyz.us-east-1.redshift.amazonaws.com:5439/dev'
+    USER 'memgql' PASSWORD '<Strong-Passw0rd>';
+CREATE GRAPH social FROM FILE '/data/mapping.json';
+MATCH (n:Person) RETURN n.name LIMIT 5;
+```
+
+The port defaults to `5439` and the database to `dev`. TLS is required by
+default. The server certificate is verified against the system roots, which
+include Amazon's.
+
+Because the parameters live on the connector, **changing them needs no MemGQL
+restart**. To rotate a password, re-register the connector:
+
+```gql
+DROP CONNECTOR rs;
+ADD CONNECTOR rs TYPE redshift
+    URI 'redshift://analytics.abc123xyz.us-east-1.redshift.amazonaws.com:5439/dev'
+    USER 'memgql' PASSWORD '<New-Passw0rd>';
+```
+
+## 5. Query
+
+```gql
+MATCH (p:Person) RETURN p.name, p.age;
+```
+
+```gql
+MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
+```
+
+```gql
+MATCH (a:Person)((-[:KNOWS]->()){1,3})(b:Person) RETURN DISTINCT b.name;
+```
+
+## Authentication
+
+The URI scheme selects the method:
+
+| Method | URI |
+|---|---|
+| **Database password** | `redshift://<user>:<password>@<endpoint>:5439/<db>`, or `USER` / `PASSWORD` options |
+| **IAM temporary credentials** | `redshift+iam://[<user>@]<endpoint>:5439/<db>` |
+
+`jdbc:redshift://…` and `jdbc:redshift:iam://…` URLs work too.
+
+With IAM, MemGQL exchanges your AWS identity for a short-lived database password
+on every connection, so there is no password to store or rotate. The identity
+comes from the standard AWS credential chain: environment variables, a profile
+(`?profile=<name>`), SSO, web identity, or an instance or task role.
+
+- **Provisioned clusters** call `GetClusterCredentials` when a user is given
+  (`redshift+iam://memgql@…`), with optional `?AutoCreate=true` and
+  `?DbGroups=group1,group2`. Without a user they call
+  `GetClusterCredentialsWithIAM`, which logs in as your IAM identity.
+- **Serverless workgroups** call `GetCredentials`, which always logs in as your
+  IAM identity, so a user in the URI is rejected.
+
+The cluster or workgroup and the region are read from the AWS endpoint name.
+Behind a custom DNS name or a VPC endpoint, add them to the URI:
+`?cluster=<cluster-id>` or `?workgroup=<name>`, plus `?region=<region>`.
+
+Every option you omit falls back to its environment variable (`REDSHIFT_URI`,
+`REDSHIFT_USER`, `REDSHIFT_PASSWORD`, `REDSHIFT_DATABASE`). The standalone
+`CONNECTOR_TYPE=redshift` mode takes all of them from the environment.
+
+## Dialect notes
+
+- Table references are `schema.table`. A `mappedTableSource` with a `database`
+  is spelled `database.schema.table`, for cross-database queries and data
+  sharing.
+- `AVG()` casts its argument to `DOUBLE PRECISION`. Redshift's `AVG` over
+  integers otherwise truncates.
+- Bounded variable-length patterns (`(){1,3}`) run as a recursive CTE with
+  trail semantics. Redshift limits recursion to 100 levels.
+- JSON attributes with a `path` read `VARCHAR` JSON columns with
+  `JSON_EXTRACT_PATH_TEXT`.
+- `DESCRIBE CONNECTOR` lists tables, columns, primary keys, and foreign keys.
+  Redshift records these constraints but does not enforce them.
+
+## Known limitations
+
+- **`collect()`** and **map projections** (`RETURN n {.a, .b}`) are not
+  available: Redshift has no array type to return them in.
+- **Inserting a node and an edge in one statement** requires the node to carry
+  its id (`INSERT (:Person {id: 7, name: 'Ann'})-[:KNOWS]->(…)`). Redshift
+  cannot report generated ids back. Without an explicit id, insert the node
+  first and connect it with `MATCH … INSERT`.
+- **Unbounded variable-length paths**, shortest path and graph algorithms are
+  not pushed down. Use a bounded form or a Cypher backend.
+- `SUPER` columns are not mapped yet.
+
+For connector configuration, see the
+[mapping reference](/memgraph-zero/memgql/reference#mapping-schema).
