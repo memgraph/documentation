@@ -43,6 +43,30 @@ Avoid:
 - Second-person or first-person address ("you get a warning", "you can now",
   "we fixed"). State the behavior without naming the reader.
 
+### Bug fixes
+
+For bug-fix bullets, lead with **what works now** (the correct, expected
+behavior). Do not narrate internal failure modes, races, or data structures
+when those details were never a documented or intentional user-facing
+surface.
+
+Prefer:
+
+- "Periodic snapshots on a replica record the correct epoch even when …"
+- "Edge vector indexes recover correctly after a crash or snapshot load."
+
+Avoid:
+
+- Long "no longer …" chains that explain the old crash path, dangling
+  pointers, or which lock was missing.
+- Contrasting before/after internals the operator could not observe or
+  configure.
+
+If the only user-visible effect was a crash, wrong result, or rejected
+replica, a short statement of the correct outcome is enough. Add a brief
+trigger or context only when it helps an operator recognize the situation
+(for example "while a new MAIN's first commit arrives").
+
 The changelog item should be benefit focused (highlight the why). The changelog
 item should be in the markdown format, don't remove ticks and markdown links,
 don't use bold and italic, use - at the beginning of the item.
