@@ -109,6 +109,15 @@ Trying to modify the database in a way that violates the constraint will yield
 an error `Unable to commit due to unique constraint violation on
 :Label(property)`.
 
+The constraint compares values with `=`, so it refuses a node only when its
+values are equal to another node's. A node that doesn't have one of the
+constrained properties is never a duplicate.
+
+A node where one of the constrained properties is `NaN`, or a list or map that
+holds `null` or `NaN` at any depth (`[1, null]`, `{code: null}`), is never a duplicate
+either, because `=` doesn't return `true` for those values. Before Memgraph
+3.14, the constraint refused a second node whose list or map held `null`.
+
 Constraints are dropped using the `DROP` clause:
 
 ```cypher
@@ -157,6 +166,30 @@ At this point, `SHOW CONSTRAINT INFO;` yields the following result:
 
 This means that two employees could have the same name **or** the same address,
 but they can not have the same name **and** the same address. 
+
+Two employees whose `id` is `NaN`, or a list holding `null`, don't
+violate the constraint on `id`, so both of these queries succeed:
+
+```cypher
+CREATE (:Employee {id: 0.0 / 0.0}), (:Employee {id: 0.0 / 0.0});
+CREATE (:Employee {id: [1, null]}), (:Employee {id: [1, null]});
+```
+
+Two employees whose `id` is the same list without a `null` do violate it:
+
+```cypher invalid
+CREATE (:Employee {id: [1, 2]}), (:Employee {id: [1, 2]});
+```
+
+```plaintext copy=false
+Unable to commit due to unique constraint violation on :Employee(id)
+```
+
+Delete the example employees before you continue:
+
+```cypher
+MATCH (n:Employee) DETACH DELETE n;
+```
 
 To drop the created constraints, use the following queries:
 
