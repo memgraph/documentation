@@ -121,7 +121,6 @@ Use this exact body template (fill in the placeholders):
 
 ~~~
 Make sure to do:
-* [ ] update sitemap
 * [ ] update direct download links
 
 Milestones
@@ -172,4 +171,4 @@ gh api repos/memgraph/memgraph/milestones/<milestone_number> \
 
 Print the PR URL and remind the user to:
 - Fill in the PR/author placeholders in the PR description.
-- Update the sitemap and direct download links before merging.
+- Update the direct download links before merging.
