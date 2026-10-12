@@ -210,6 +210,25 @@ DROP DATABASE database_name [FORCE];
   but actual deletion is deferred until it's safe to proceed. All active
   transactions using the database will be terminated.
 
+{<h4 id="sessions-on-a-dropped-database" className="custom-header"> Sessions on a dropped database </h4>}
+
+An idle connection that still has the database selected, such as a pooled
+driver connection, would keep a forced drop waiting. So while the drop waits,
+Memgraph closes every session whose current database is being dropped,
+usually within a few seconds, on MAIN and REPLICA instances. What a session
+sees depends on what it's doing:
+
+- **Idle:** Memgraph closes the session. The client reconnects on its next
+  request. A client that names the dropped database when it connects then
+  gets an error that the database doesn't exist.
+- **Sends a query before it's closed:** the query fails with the `Database
+  required for query execution.` error.
+- **In an open transaction:** the transaction is terminated, and its commit
+  fails with a transient error.
+
+Before Memgraph 3.14, an idle connection kept a forced drop waiting until its
+client sent another query.
+
 {<h4 id="use-cases-for-force" className="custom-header"> Use cases for FORCE </h4>} 
 
 - **Emergency cleanup**: Remove a database stuck in an inconsistent or
@@ -230,7 +249,9 @@ Using the `FORCE` option requires:
 
 - All active transactions on the target database will be forcibly terminated.
 - The database becomes immediately unavailable to new connections.
-- Actual deletion may be deferred until existing connections are properly closed.
+- Actual deletion waits until no session uses the database. Memgraph closes
+  idle sessions on it; see [sessions on a dropped
+  database](#sessions-on-a-dropped-database).
 - **This operation cannot be undone.**
 
 ### RENAME DATABASE
