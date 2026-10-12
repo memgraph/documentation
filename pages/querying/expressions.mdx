@@ -29,6 +29,103 @@ WHERE p.name STARTS WITH 'Joh'
 RETURN p.name;
 ```
 
+## Ordering comparisons
+
+The operators `<`, `<=`, `>` and `>=` compare two values of the same kind: two
+numbers (an integer and a float compare with each other), two strings, two
+booleans (`false` is less than `true`), two temporal values of the same type,
+such as two dates, or two lists.
+
+```cypher
+RETURN 1 < 2.5 AS numbers, 'apple' < 'banana' AS strings, false < true AS booleans,
+       date('2024-01-01') < date('2024-06-01') AS dates;
+```
+
+```plaintext copy=false
++----------+----------+----------+----------+
+| numbers  | strings  | booleans | dates    |
++----------+----------+----------+----------+
+| true     | true     | true     | true     |
++----------+----------+----------+----------+
+```
+
+When two values have no order between them, the comparison returns `null`.
+That's the case for values of different types, such as a number and a string,
+or a date and a duration. Enums, points and maps have no order of their own,
+so comparing two of them returns `null` too:
+
+```cypher
+RETURN 1 < 'one' AS number_and_string, {k: 1} < {k: 2} AS maps,
+       point({x: 1, y: 2}) < point({x: 3, y: 4}) AS points;
+```
+
+```plaintext copy=false
++-------------------+-------------------+-------------------+
+| number_and_string | maps              | points            |
++-------------------+-------------------+-------------------+
+| Null              | Null              | Null              |
++-------------------+-------------------+-------------------+
+```
+
+Two lists are compared element by element from the start, and the first pair
+that differs decides. If one list runs out first and the elements so far are
+equal, the shorter list is less. If the comparison reaches a pair it can't
+order, such as `null` or a number and a string, it returns `null`:
+
+```cypher
+RETURN [1, 2] < [1, 3] AS first_difference, [1] < [1, 0] AS shorter,
+       [null] < [1] AS with_null;
+```
+
+```plaintext copy=false
++------------------+------------------+------------------+
+| first_difference | shorter          | with_null        |
++------------------+------------------+------------------+
+| true             | true             | Null             |
++------------------+------------------+------------------+
+```
+
+In a `WHERE` clause, `null` counts as false, so a filter keeps only the rows
+whose values it can order, with or without an index on the property. Here,
+the sensor that reports a string is left out instead of failing the query:
+
+```cypher
+CREATE (:Sensor {name: 'boiler', reading: 72}), (:Sensor {name: 'pump', reading: 'offline'});
+```
+
+```cypher
+MATCH (s:Sensor) WHERE s.reading > 50 RETURN s.name;
+```
+
+```plaintext copy=false
++----------+
+| s.name   |
++----------+
+| "boiler" |
++----------+
+```
+
+`NaN` (not a number) has no order, not even against itself, so all four
+operators return `false` for it:
+
+```cypher
+WITH 0.0 / 0.0 AS nan
+RETURN nan < 1 AS less, nan >= 1 AS greater_or_equal, nan < nan AS against_itself;
+```
+
+```plaintext copy=false
++------------------+------------------+------------------+
+| less             | greater_or_equal | against_itself   |
++------------------+------------------+------------------+
+| false            | false            | false            |
++------------------+------------------+------------------+
+```
+
+`ORDER BY` isn't affected: it sorts values of every type, maps included.
+
+Before Memgraph 3.14, comparing two values that can't be ordered raised an
+error, and so did comparing two booleans.
+
 ## Parameters
 
 When automating the queries for Memgraph, it comes in handy to change only some
