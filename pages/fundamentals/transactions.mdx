@@ -105,14 +105,13 @@ creation or garbage collection) and contains eight columns:
 | `elapsed_ms` | `Integer` | How long the transaction has been running, in milliseconds. |
 | `database` | `String` | The database the transaction is running on. |
 
-```copy=false
-memgraph> SHOW TRANSACTIONS;
-+----------+-----------------------+-----------------------------------------------+--------------+----------+-------------------------------+------------+
-| username | transaction_id        | query                                         | status       | metadata | start_time                    | elapsed_ms |
-+----------+-----------------------+-----------------------------------------------+--------------+----------+-------------------------------+------------+
-| ""       | "9223372036854794885" | ["UNWIND range(1,100) AS i CREATE(:L{p:i});"] | "committing" | {}       | 2026-05-12T14:32:18.412Z[UTC] | 47         |
-| ""       | "9223372036854794896" | ["SHOW TRANSACTIONS"]                         | "running"    | {}       | 2026-05-12T14:32:18.451Z[UTC] | 8          |
-+----------+-----------------------+-----------------------------------------------+--------------+----------+-------------------------------+------------+
+```plaintext copy=false
++----------+-----------------------+------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
+| username | transaction_id        | query                                                | status    | metadata | start_time                             | elapsed_ms | database   |
++----------+-----------------------+------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
+| ""       | "9223372036854775816" | ["SHOW TRANSACTIONS"]                                | "running" | {}       | 2026-10-12 12:13:47.209533000[Etc/UTC] | 0          | "memgraph" |
+| ""       | "9223372036854775815" | ["UNWIND range(1, 100) AS i CREATE (:Item {id: i})"] | "running" | {}       | 2026-10-12 12:13:47.116640000[Etc/UTC] | 93         | "memgraph" |
++----------+-----------------------+------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
 ```
 
 #### Filter by status
@@ -148,13 +147,14 @@ rows contains:
 The top-level `start_time` and `elapsed_ms` columns are populated for snapshot
 rows as well, reflecting when the snapshot started.
 
-```copy=false
-memgraph> SHOW TRANSACTIONS;
-+----------+----------------+---------------------+-----------+------------------------------------------------------------------+-------------------------------+------------+
-| username | transaction_id | query               | status    | metadata                                                         | start_time                    | elapsed_ms |
-+----------+----------------+---------------------+-----------+------------------------------------------------------------------+-------------------------------+------------+
-| ""       | "snapshot"     | ["CREATE SNAPSHOT"] | "running" | {phase: "VERTICES", items_done: 142000, items_total: 500000, ... | 2026-05-12T14:32:17.205Z[UTC] | 1247       |
-+----------+----------------+---------------------+-----------+------------------------------------------------------------------+-------------------------------+------------+
+```plaintext copy=false
++----------+-----------------------+-----------------------+-----------+-----------------------------------------------------------------------------------+----------------------------------------+------------+------------+
+| username | transaction_id        | query                 | status    | metadata                                                                          | start_time                             | elapsed_ms | database   |
++----------+-----------------------+-----------------------+-----------+-----------------------------------------------------------------------------------+----------------------------------------+------------+------------+
+| ""       | "9223372036854775818" | ["SHOW TRANSACTIONS"] | "running" | {}                                                                                | 2026-10-12 12:13:47.275859000[Etc/UTC] | 0          | "memgraph" |
+| ""       | "9223372036854775817" | ["CREATE SNAPSHOT"]   | "running" | {}                                                                                | 2026-10-12 12:13:47.221765000[Etc/UTC] | 54         | "memgraph" |
+| ""       | "snapshot"            | ["CREATE SNAPSHOT"]   | "running" | {db_name: "memgraph", items_done: 53824, items_total: 3000100, phase: "vertices"} | 2026-10-12 12:13:47.221848000[Etc/UTC] | 55         | "memgraph" |
++----------+-----------------------+-----------------------+-----------+-----------------------------------------------------------------------------------+----------------------------------------+------------+------------+
 ```
 
 <Callout type="info">
@@ -444,9 +444,10 @@ specified or another user asked to abort it.
 
 A session is one client connection to Memgraph over Bolt. You can list the
 open sessions and close any of them from another connection, for example an
-idle (often pooled) connection that still has a database selected and makes
+idle (often pooled) connection that still has a database selected and makes a
 [`DROP DATABASE`](/database-management/multi-tenancy#drop-database-with-force)
-query fail with the `Cannot delete <name>, it is currently being used.` error.
+query without `FORCE` fail with the `Cannot delete <name>, it is currently
+being used.` error. With `FORCE`, Memgraph closes such sessions itself.
 Available since Memgraph 3.14.
 
 Session queries run on data instances (MAIN and REPLICA), and each instance
@@ -489,8 +490,7 @@ on every database, and `alice` has two idle connections open, one on the
 `analytics` database and one on the `memgraph` database. The session running
 the query is listed too:
 
-```copy=false
-memgraph> SHOW SESSIONS;
+```plaintext copy=false
 +----------------------------------------+----------+-------------+------------------------------+
 | session_id                             | username | database    | login_timestamp              |
 +----------------------------------------+----------+-------------+------------------------------+
@@ -498,7 +498,6 @@ memgraph> SHOW SESSIONS;
 | "e9e40294-db31-4122-9875-75affefc1130" | "alice"  | "memgraph"  | "2026-10-07 10:30:32.391885" |
 | "f9892d9b-ca91-4e16-b3df-1ead198cc846" | "alice"  | "analytics" | "2026-10-07 10:30:32.228485" |
 +----------------------------------------+----------+-------------+------------------------------+
-3 rows in set (round trip in 0.001 sec)
 ```
 
 ### Terminate sessions
@@ -542,15 +541,13 @@ match any session):
 TERMINATE SESSIONS 'f9892d9b-ca91-4e16-b3df-1ead198cc846', '00000000-0000-0000-0000-000000000000';
 ```
 
-```copy=false
-memgraph> TERMINATE SESSIONS 'f9892d9b-ca91-4e16-b3df-1ead198cc846', '00000000-0000-0000-0000-000000000000';
+```plaintext copy=false
 +----------------------------------------+--------+
 | session_id                             | killed |
 +----------------------------------------+--------+
 | "f9892d9b-ca91-4e16-b3df-1ead198cc846" | true   |
 | "00000000-0000-0000-0000-000000000000" | false  |
 +----------------------------------------+--------+
-2 rows in set (round trip in 0.001 sec)
 ```
 
 What happens to a terminated session depends on what it's doing:
@@ -570,7 +567,9 @@ The client of a terminated session loses its connection:
 
 - **A query it's running** fails with the transient `Transaction was asked to
   abort by another user.` error.
-- **An idle client** gets a connection error on its next request.
+- **An idle client** gets a connection error on its next request. A driver
+  with a connection pool opens a new connection instead, so the request
+  succeeds.
 
 Because the error is transient, driver retry helpers (for example, the Python
 driver's `execute_write`) retry the transaction on a new connection, and the
