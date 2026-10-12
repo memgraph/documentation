@@ -31,63 +31,11 @@ RETURN p.name;
 
 ## Ordering comparisons
 
-The operators `<`, `<=`, `>` and `>=` compare two values of the same kind: two
-numbers (an integer and a float compare with each other), two strings, two
-booleans (`false` is less than `true`), two temporal values of the same type,
-such as two dates, or two lists.
-
-```cypher
-RETURN 1 < 2.5 AS numbers, 'apple' < 'banana' AS strings, false < true AS booleans,
-       date('2024-01-01') < date('2024-06-01') AS dates;
-```
-
-```plaintext copy=false
-+----------+----------+----------+----------+
-| numbers  | strings  | booleans | dates    |
-+----------+----------+----------+----------+
-| true     | true     | true     | true     |
-+----------+----------+----------+----------+
-```
-
-When two values have no order between them, the comparison returns `null`.
-That's the case for values of different types, such as a number and a string,
-or a date and a duration. Enums, points and maps have no order of their own,
-so comparing two of them returns `null` too:
-
-```cypher
-RETURN 1 < 'one' AS number_and_string, {k: 1} < {k: 2} AS maps,
-       point({x: 1, y: 2}) < point({x: 3, y: 4}) AS points;
-```
-
-```plaintext copy=false
-+-------------------+-------------------+-------------------+
-| number_and_string | maps              | points            |
-+-------------------+-------------------+-------------------+
-| Null              | Null              | Null              |
-+-------------------+-------------------+-------------------+
-```
-
-Two lists are compared element by element from the start, and the first pair
-that differs decides. If one list runs out first and the elements so far are
-equal, the shorter list is less. If the comparison reaches a pair it can't
-order, such as `null` or a number and a string, it returns `null`:
-
-```cypher
-RETURN [1, 2] < [1, 3] AS first_difference, [1] < [1, 0] AS shorter,
-       [null] < [1] AS with_null;
-```
-
-```plaintext copy=false
-+------------------+------------------+------------------+
-| first_difference | shorter          | with_null        |
-+------------------+------------------+------------------+
-| true             | true             | Null             |
-+------------------+------------------+------------------+
-```
-
-In a `WHERE` clause, `null` counts as false, so a filter keeps only the rows
-whose values it can order, with or without an index on the property. Here,
-the sensor that reports a string is left out instead of failing the query:
+Comparing two values that have no order between them with `<`, `<=`, `>` or
+`>=`, such as a number and a string, returns `null` instead of raising an
+error. In a `WHERE` clause, `null` counts as false, so the filter leaves those
+rows out. Here, the sensor that reports a string is left out instead of
+failing the query:
 
 ```cypher
 CREATE (:Sensor {name: 'boiler', reading: 72}), (:Sensor {name: 'pump', reading: 'offline'});
@@ -105,28 +53,11 @@ MATCH (s:Sensor) WHERE s.reading > 50 RETURN s.name;
 +----------+
 ```
 
-`NaN` (not a number) has no order, not even against itself, so all four
-operators return `false` for it:
+To sort values of different types, use `ORDER BY`; see [order
+results](/querying/clauses/return#13-order-results).
 
-```cypher
-WITH 0.0 / 0.0 AS nan
-RETURN nan < 1 AS less, nan >= 1 AS greater_or_equal, nan < nan AS against_itself;
-```
-
-```plaintext copy=false
-+------------------+------------------+------------------+
-| less             | greater_or_equal | against_itself   |
-+------------------+------------------+------------------+
-| false            | false            | false            |
-+------------------+------------------+------------------+
-```
-
-`ORDER BY` doesn't use these operators, so it can sort a column that holds
-values of different types; see [order results](/querying/clauses/return#13-order-results). It can't sort two maps: that raises the
-`Comparison is not defined for values of type map.` error.
-
-Before Memgraph 3.14, comparing two values that can't be ordered raised an
-error, and so did comparing two booleans.
+Before Memgraph 3.14, comparing two values that can't be ordered, or two
+booleans, raised an error.
 
 ## Parameters
 
@@ -316,42 +247,11 @@ The [`exists()`](/querying/functions#pattern-functions) function and the `EXISTS
 predicate, `null` counts as false, so the row is filtered out or the branch
 isn't taken. To test for a missing value, use `IS NULL` or `IS NOT NULL`.
 
-The same rule applies inside lists and maps. Two lists are equal when they
-have the same length and equal elements in the same positions; two maps are
-equal when they have the same keys and equal values under each key. If one
-pair of elements differs, or the lengths or keys differ, the comparison
-returns `false`. Otherwise, if a pair of elements compares to `null`, the
-whole comparison returns `null`:
-
-| Comparison | Result |
-|---|---|
-| `[1] = [1]` | `true` |
-| `[null] = [null]` | `null` |
-| `[null] = [1]` | `null` |
-| `[null] <> [null]` | `null` |
-| `{k: null} = {k: null}` | `null` |
-| `[null, 1] = [null, 2]` | `false`: the second elements differ |
-| `[null] = [null, null]` | `false`: the lengths differ |
-| `{a: null} = {b: null}` | `false`: the keys differ |
-
-`IN` compares each element of the list with `=`, so it follows the same rule:
-`1 IN [1, null]` is `true`, while `3 IN [1, null]` and `[null] IN [[null]]`
-are `null`. As a result, `WHERE NOT (n.code IN ['A', 'B'])` keeps no row where
-`n.code` is `null`.
-
-A filter that compares a property with a list or map holding `null` matches
-nothing, with or without an index on the property:
-`MATCH (n:Order) WHERE n.tags = ['urgent', null] RETURN n` returns no nodes,
-because the comparison is never `true`. The same holds for relationship
-properties and for joins such as `WHERE a.tags = b.tags`.
-
-`DISTINCT` and grouping keys treat two `null` values, and two lists or maps
-that hold `null` in the same places, as the same value:
-`UNWIND [{k: null}, {k: null}] AS x RETURN DISTINCT x` returns one row.
-
-Comparing lists and maps that hold `null` changed in Memgraph 3.14. Before,
-`[null] = [null]` returned `true` and a map holding `null` was never equal to
-another map.
+The same applies to lists and maps that hold `null`: `[null] = [null]` is
+`null`, so a filter that compares a property with such a value matches
+nothing. `IN` compares with `=` too, so `WHERE NOT (n.code IN ['A', 'B'])`
+keeps no row where `n.code` is `null`. Before Memgraph 3.14, `[null] = [null]`
+returned `true`.
 
 ## Pattern existence (exists(pattern))
 
