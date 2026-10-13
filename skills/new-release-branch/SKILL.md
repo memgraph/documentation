@@ -16,7 +16,8 @@ PRs for the release have a branch and a milestone to target:
 - the release branch `release/<version>`
 - the docs milestone `<version>`
 - the release-notes titles on that branch
-- the release PR, in the docs milestone
+- the release PR, in the docs milestone, with an empty overview block for
+  `check-release` to fill
 - a `DOCS ->` link from the Memgraph milestone to the release PR
 
 The `write-docs-page` skill opens docs PRs on this branch and milestone and
@@ -190,10 +191,17 @@ Milestones
 
 Run the `check-release` skill to see what the release still needs; run it
 with "release day" before merging.
+
+<!-- check-release:start -->
+### Docs Integration Tracking
+
+Not built yet: run the `check-release` skill.
+<!-- check-release:end -->
 ~~~
 
-The PR keeps no checklist of product PRs: `check-release` works out what is
-missing from the Memgraph milestone, its docs labels and the docs milestone.
+`check-release` fills the block between the markers with the release
+overview (breaking changes, docs PRs, release notes) from the Memgraph
+milestone and its docs labels. Don't edit the block by hand.
 
 ## Step 7 — Link the release PR from the Memgraph milestone
 

@@ -1,14 +1,15 @@
 ---
 name: check-release
-description: Find what a Memgraph documentation release still needs, and on release day finish it. Checks the docs labels on every merged PR in the Memgraph milestone, release notes for every PR that needs one, a docs PR for every "Docs needed" PR, the docs milestone and `pnpm check`; on release day also sets the release dates, updates the direct download links and closes the docs milestone after the merge. Use while a release is in progress, before merging a release branch into main, or when asked to "check the release", "check before release", run "pre-release" steps or audit docs labels on a milestone.
+description: Find what a Memgraph documentation release still needs, keep the overview in the release PR up to date, and on release day finish the release. Checks the docs labels on every merged PR in the Memgraph milestone, release notes for every PR that needs one, a docs PR for every "Docs needed" PR, the docs milestone and `pnpm check`; on release day also sets the release dates, updates the direct download links and closes the docs milestone after the merge. Use while a release is in progress, before merging a release branch into main, or when asked to "check the release", "check before release", run "pre-release" steps or audit docs labels on a milestone.
 ---
 
 # Check release
 
 Works out what a release still needs from GitHub itself — the Memgraph
 milestone, the docs labels on its PRs, the docs milestone and the release
-branch — so nothing has to be tracked by hand. Run it as often as needed
-while the release is in progress. On release day, run it once more and
+branch — and writes the result as the overview in the release PR
+description, so nobody tracks it by hand. Run it as often as needed while
+the release is in progress. On release day, run it once more and
 finish with the release-day steps.
 
 Writing quality is not checked here: docs PRs follow the `write-docs-page`
@@ -131,7 +132,65 @@ On the release branch, run `pnpm check` (links, section links, redirects,
 sidebar, release-note versions). Fix what it reports in the release notes;
 report problems in other pages to the docs PR that introduced them.
 
-### 7. Report
+### 7. Update the overview in the release PR
+
+The release PR description holds the release overview between two markers.
+This skill is the only thing that writes between them: rebuild the block
+from steps 1–5 on every run, and leave everything outside the markers as it
+is. If the description has no markers yet, add the block at the end; if it
+has an older hand-kept "Docs Integration Tracking" section, replace that
+section with the block.
+
+~~~
+<!-- check-release:start -->
+### Docs Integration Tracking
+
+Rebuilt by the `check-release` skill on <YYYY-MM-DD>; edits here are
+overwritten. To change what is listed, fix the product PR's docs label.
+
+#### Breaking changes PRs
+
+- [x] https://github.com/memgraph/memgraph/pull/NNNN — short title @author
+
+#### Docs needed (Memgraph PR → Docs PR)
+
+- [x] https://github.com/memgraph/memgraph/pull/NNNN → https://github.com/memgraph/documentation/pull/MMMM @author
+- [ ] https://github.com/memgraph/memgraph/pull/NNNN → no doc PR yet @author
+
+#### Changelog (all PRs requiring a changelog entry)
+
+- [ ] https://github.com/memgraph/memgraph/pull/NNNN @author
+
+#### Missing docs labels
+
+- [ ] https://github.com/memgraph/memgraph/pull/NNNN @author
+<!-- check-release:end -->
+~~~
+
+What goes in each section, in ascending PR number order:
+
+- **Breaking changes PRs:** merged PRs labeled `breaking`. Ticked when the
+  entry is under the Breaking changes heading in the release notes.
+- **Docs needed:** merged PRs labeled `Docs needed`, with their docs PR (or
+  `no doc PR yet`). Ticked when the docs PR is merged. A product PR with
+  several docs PRs lists all of them; tick it when all are merged.
+- **Changelog:** merged PRs labeled `Docs needed` or `Docs - changelog only`.
+  This deliberately repeats the `Docs needed` PRs: it tracks the release
+  note apart from the docs page. Ticked when the entry is in the release
+  notes.
+- **Missing docs labels:** merged PRs with no docs label. Leave the section
+  out when there are none.
+
+Write the description with `gh api`, not `gh pr edit` (which can fail on
+this repo):
+
+```bash
+gh api repos/memgraph/documentation/pulls/<release_pr> --jq .body > body.md
+# replace the block between the markers in body.md
+gh api repos/memgraph/documentation/pulls/<release_pr> -X PATCH -F body=@body.md
+```
+
+### 8. Report
 
 Sort every PR list by PR number ascending, and skip sections with nothing to
 report:
@@ -145,21 +204,22 @@ report:
 - **Docs milestone:** PRs added to it, PRs in it with the wrong base.
 - **Site checks:** what `pnpm check` reported and what was fixed.
 
-If every section is empty, say the release is ready.
+Link the release PR so the user can see the updated overview. If every
+section is empty, say the release is ready.
 
 ## Release day
 
-Run these only when the user says it's release day, after steps 1–7 report
+Run these only when the user says it's release day, after steps 1–8 report
 the release ready.
 
-### 8. Set the release dates
+### 9. Set the release dates
 
 In `pages/release-notes.mdx`, set the date on the release's
 `### Memgraph v<version> - <date>` heading (and its `### Lab v<version> -
 <date>` heading, if Lab ships with it) to today, in the same format (e.g.
 `May 6th, 2026` → `May 13th, 2026`).
 
-### 9. Update the direct download links
+### 10. Update the direct download links
 
 In `pages/getting-started/install-memgraph/direct-download-links.mdx`,
 replace **every** occurrence of the previous version with the new one.
@@ -173,7 +233,7 @@ replace **every** occurrence of the previous version with the new one.
 
 Run `pnpm check` again, then commit and push to the release branch.
 
-### 10. After the release PR is merged
+### 11. After the release PR is merged
 
 Close the docs milestone. If PRs are still open in it, ask the user whether
 to move them to the next release's milestone first.
