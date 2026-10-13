@@ -1,11 +1,13 @@
 ---
-name: check_before_release
-description: Run before every release to ensure all merged memgraph PRs have a docs label assigned, have changelog entries, have docs pages where required, that all changed text is free of spelling and grammar issues, and that existing documentation cross-links the new content. Use when preparing a release branch, before merging into the main branch, or when asked to "check before release". Also use standalone when asked to audit docs labels on a milestone.
+name: check-release-milestone
+description: Run during and before every release to ensure all merged memgraph PRs have a docs label assigned, have changelog entries and have docs pages where required, that the release PR's tracking checklist and the docs milestone match the Memgraph milestone, and that the release branch passes `pnpm check`. Use when preparing a release branch, before merging into the main branch, or when asked to "check before release". Also use standalone when asked to audit docs labels on a milestone.
 ---
 
-# Check before release
+# Check release milestone
 
-Run this check before every release to audit docs labels on every merged PR, find PRs that are missing from the changelog or that have no documentation page despite being labeled "Docs needed", and to catch spelling/grammar issues in changed documentation.
+Run this check as PRs merge and before every release to audit docs labels on every merged PR, find PRs that are missing from the changelog or that have no documentation page despite being labeled "Docs needed", and keep the release PR and the docs milestone in step with the Memgraph milestone.
+
+Writing quality is not checked here: docs PRs follow the `write-docs-page` skill (`memgraph/infra`, `agents/docs/skills/write-docs-page`), which covers names, terms and links to new pages, and CI checks links, anchors, names and Cypher examples.
 
 ## When to use
 
@@ -16,7 +18,7 @@ Run this check before every release to audit docs labels on every merged PR, fin
 ## Assumptions
 
 - **PR list order:** Whenever you present a list of PRs to the user (gaps, backlog,
-  docs tracking, changelog queue, audit findings, canvas tables, etc.), sort by PR
+  docs tracking, changelog queue, audit findings, report tables, etc.), sort by PR
   number **ascending** (smallest → largest). Apply the same order when listing
   documentation PRs linked to memgraph PRs, unless the user asks for a different sort.
 - Memgraph PRs that need docs are labeled **"Docs needed"** or **"Docs - changelog only"**.
@@ -66,16 +68,17 @@ Rules for this format:
      ```
      gh pr view <number> --repo memgraph/memgraph --json title,body,labels,author
      ```
-   - Produce a **canvas** (read and follow `~/.cursor/skills-cursor/canvas/SKILL.md`) showing:
+   - Report in chat:
      - Summary stats: total merged, count per label, count needing attention.
-     - An "Issues requiring action" section listing PRs with missing or questionable labels, with a recommended label and a one-line reason (**sorted by PR # ascending**).
-     - A filterable table of all merged PRs with their current docs label highlighted (**default sort: PR # ascending**).
+     - An "Issues requiring action" table listing PRs with missing or questionable labels, with a recommended label and a one-line reason (**sorted by PR # ascending**).
    - **Fix or flag:** For PRs missing a label, recommend the correct one. For questionable ones, surface them to the reviewer — do not change the label unilaterally unless it is obviously wrong (e.g. no docs label at all on a pure test PR).
 
 2. **Identify versions**
    - Current release (e.g. `3.9`) and previous one (e.g. `3.8.0`).
    - Memgraph milestone for the release (e.g. `mg-v3.9.0`, milestone 43).
-   - The open documentation release PR (e.g. `memgraph/documentation#1530`).
+   - The docs version, release branch and docs milestone: drop `mg-v` and a trailing `.0` from the Memgraph milestone title (`mg-v3.9.0` → `3.9`, `release/3.9`, docs milestone `3.9`; a patch keeps its last number, `mg-v3.13.2` → `3.13.2`).
+   - The open documentation release PR: linked as `DOCS ->` in the Memgraph milestone description (e.g. `memgraph/documentation#1530`).
+   - If the branch, the docs milestone or the release PR is missing, the release hasn't been started: run the `new-release-branch` skill first.
 
 3. **Get the authoritative lists from the docs PR**
    - Fetch the PR body via `gh api repos/memgraph/documentation/pulls/<N> --jq .body`.
@@ -98,62 +101,51 @@ Rules for this format:
 
 5. **Docs page check**
    - For each memgraph PR in the **Docs needed** section, confirm the line links to a documentation PR (not `no doc PR yet`).
-   - Fetch the documentation milestone (e.g. `memgraph/documentation/milestone/<id>`) and cross-reference: any doc PR in the milestone that maps to a memgraph "Docs needed" PR should be reflected on the docs PR's tracking list.
    - List any **docs page missing**: merged memgraph PRs labeled "Docs needed" with no corresponding doc PR on the tracking list.
 
-6. **Grammar and spelling check**
-   - Run `git diff main...HEAD -- '*.mdx' '*.md'` (or the appropriate base branch) to get all text changes on the release branch.
-   - Review every added or modified line for:
-     - **Spelling mistakes** (typos, wrong words).
-     - **Broken sentence structure** (e.g. "Fixed X causes Y" instead of "Fixed a bug where X caused Y").
-     - **Missing articles** ("creation of init container" → "creation of **an** init container").
-     - **Wrong word forms** ("set-up" used as a verb → "set up"; "additionally to" → "in addition to").
-     - **Stray punctuation** (accidental periods, double spaces in non-trailing positions).
-     - **Names and terms** that don't follow the writing rules engineers use, in the `write-docs-page` skill's `references/tone.md` (`memgraph/infra`, `agents/docs/skills/write-docs-page`): product names, MAIN and REPLICA in capitals (MAINs and REPLICAs in the plural), American English. Add a new naming rule there, not here, so docs written with the skill follow it too.
+6. **Docs milestone check**
+   - Fetch every PR in the docs milestone and every open or merged PR into the release branch:
+     ```
+     gh pr list --repo memgraph/documentation --state all --search "milestone:<version>" \
+       --json number,title,state,baseRefName
+     gh pr list --repo memgraph/documentation --state all --base release/<version> \
+       --json number,title,state,milestone
+     ```
+   - Cross-reference:
+     - Every docs PR into `release/<version>` (except closed-without-merge) is in the docs milestone. Add the missing ones to it.
+     - Every PR in the docs milestone targets `release/<version>`. Flag the others.
+     - Every docs PR in the milestone that maps to a memgraph "Docs needed" PR is on the release PR's tracking list.
+     - The release PR itself is in the docs milestone.
+   - List open docs PRs in the milestone: they block the release.
 
-   - Do **not** rewrite for style or restructure paragraphs. Only fix clear errors: misspellings, missing/wrong articles, broken grammar, and wrong word forms.
-   - Apply fixes directly, then list what was changed in the report.
-
-7. **Cross-linking integration check**
-   - Run `git diff main...HEAD --name-only -- '*.mdx' '*.md'` to get every file changed on the release branch.
-   - For each changed file, identify the **key new concepts** it introduces (new pages, new sections, new Cypher commands, new configuration, renamed behavior). These are the integration targets.
-   - Scan the existing documentation on `main` for pages that discuss the same topic area but do **not** yet link to the new content. Efficient approach:
-     - Grep for related keywords (e.g. feature name, command name, config flag) across `pages/`.
-     - Check hub/landing pages (`_meta.ts` siblings, parent `.mdx` files) that list sub-pages — a new page may be missing from the hub.
-     - Check pages that mention the old behavior or a related workflow.
-   - Propose **up to 5** high-leverage, minimal edits. Prioritize:
-     1. Hub/landing pages missing a link to a new sub-page or section.
-     2. Pages that describe a related concept without linking to the new dedicated page (e.g. client-side parameters page not mentioning server-side parameters).
-     3. Pages that reference a command or workflow whose behavior changed, where a one-line note + link avoids reader surprise.
-   - For each proposal, state: **file**, **location** (section or line range), **what to add** (sentence or callout), and **why** (what reader journey it fixes).
-   - After user approval, apply the edits directly.
+7. **Site checks**
+   - On the release branch, run `pnpm check` (links, section links, redirects, sidebar, release-note versions) and fix what it reports in the release notes. Report problems in other pages to the docs PR that introduced them.
 
 8. **Report**
    - Sort every PR list in the report by PR number ascending (smallest → largest).
-   - **Docs label issues:** list every merged PR with a missing or questionable label, the recommended label, and a one-line reason. The canvas from step 1 serves as the primary deliverable for this section.
-   - **Not in changelog:** summarize all gaps (PR numbers and titles). When remediating, apply the **one item at a time** rule from step 4. For each gap, state that remediation follows **`write_changelog_item`** per `skills/write-changelog-item/SKILL.md` (unless the user asked for report-only). Include PRs found only via milestone cross-check.
+   - **Docs label issues:** list every merged PR with a missing or questionable label, the recommended label, and a one-line reason.
+   - **Not in changelog:** summarize all gaps (PR numbers and titles). When remediating, apply the **one item at a time** rule from step 4. For each gap, state that remediation follows **`write-changelog-item`** per `skills/write-changelog-item/SKILL.md` (unless the user asked for report-only). Include PRs found only via milestone cross-check.
    - **Missing docs links:** entries for **Docs needed** PRs that did not link their docs page, with the link added.
    - **Docs page missing:** list merged memgraph PRs labeled "Docs needed" with no doc PR on the tracking list; briefly note what's missing (e.g. "TLS .pem-only behavior").
    - **Docs PR tracking list gaps:** if any merged "Docs needed" or "Docs - changelog only" PR is absent from the **Docs Integration Tracking** checklist on the release docs PR, add it using the checklist format from the Assumptions section (unticked `[ ]`, correct section, author handle).
-   - **Spelling/grammar fixes:** list each fix with file name and a short before → after summary.
-   - **Cross-link improvements:** list each proposed (or applied) edit with file, location, what was added, and why.
-   - If all lists are empty, state that the release is clear for label audit, changelog, docs, grammar, and cross-links.
+   - **Docs milestone gaps:** docs PRs added to the milestone, PRs in it with the wrong base, and open docs PRs that still block the release.
+   - **Site checks:** what `pnpm check` reported and what was fixed.
+   - If all lists are empty, state that the release is clear for label audit, changelog, docs pages, docs milestone and site checks.
 
 ## References
 
-- **Canvas skill:** `~/.cursor/skills-cursor/canvas/SKILL.md` — required for producing the label audit canvas in step 1.
+- **Starting a release:** `skills/new-release-branch/SKILL.md` — creates the release branch, docs milestone and release PR.
 - **Missing changelog items:** `skills/write-changelog-item/SKILL.md` — authoritative procedure to add entries and sync the docs release PR.
 - Memgraph commits (since last release): `https://github.com/memgraph/memgraph/commits/master/`
 - Memgraph milestone (e.g. 3.9): `https://github.com/memgraph/memgraph/milestone/43?closed=1`
+- Docs milestones: `https://github.com/memgraph/documentation/milestones`
 - Release notes file: `pages/release-notes.mdx`
 - Documentation release PR: linked from the milestone or repo (e.g. `memgraph/documentation` open PR for the release).
 
 ## Notes
 
-- **Label audit scope:** Step 1 can be run standalone (without the full release check) when asked to "audit docs labels" or "check labels on milestone". When run standalone, produce only the canvas and a brief chat summary — skip steps 2–8.
+- **Label audit scope:** Step 1 can be run standalone (without the full release check) when asked to "audit docs labels" or "check labels on milestone". When run standalone, produce only the step 1 report — skip steps 2–8.
 - **Changelog workflow:** Multiple missing entries are common; never merge several proposed bullets into one reviewer-facing message. One PR → one proposed changelog item → pause for review → next PR.
 - **Merged PRs only:** always filter the milestone by `merged_at != null` (use `gh api "repos/memgraph/memgraph/issues?milestone=<id>&state=closed" --jq '[.[] | select(.pull_request != null and .pull_request.merged_at != null)]'`). Closed-without-merge PRs must be ignored entirely.
 - PRs labeled **"Docs unnecessary"** (e.g. CI, tests, internal tooling) are excluded; no changelog or docs page required.
-- If work landed in a different PR than originally planned, the changelog should reference the **merged** PR that shipped the behavior; if user-visible behavior still has no line in `release-notes.mdx`, treat it as a gap and use **write_changelog_item**.
-- The grammar check scope is the diff against `main` (or the base branch). Existing text that was not touched in this release is out of scope.
-- When writing the local tracking file (`.release-tracking/vX.Y.Z.md`), keep it in sync with the docs PR body — both should reflect the same checklist state.
+- If work landed in a different PR than originally planned, the changelog should reference the **merged** PR that shipped the behavior; if user-visible behavior still has no line in `release-notes.mdx`, treat it as a gap and use **write-changelog-item**.
