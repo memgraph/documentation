@@ -16,8 +16,7 @@ PRs for the release have a branch and a milestone to target:
 - the release branch `release/<version>`
 - the docs milestone `<version>`
 - the release-notes titles on that branch
-- the release PR, in the docs milestone, with the Docs Integration Tracking
-  checklist
+- the release PR, in the docs milestone
 - a `DOCS ->` link from the Memgraph milestone to the release PR
 
 The `write-docs-page` skill opens docs PRs on this branch and milestone and
@@ -48,7 +47,7 @@ gh api repos/memgraph/memgraph/milestones/<milestone_number> \
 - **Release notes version:** the full version from the title (`v3.15.0`,
   `v3.13.2`).
 - **Date:** the milestone's `due_on`, written like `December 2nd, 2026`. The
-  `pre-release` skill sets the real date on release day.
+  `check-release` skill sets the real date on release day.
 
 If the branch already exists (`git ls-remote --heads origin release/<version>`),
 stop and tell the user: the release has already been started.
@@ -182,45 +181,19 @@ gh pr create --draft --base main --head release/<version> \
   --title "Memgraph <new_version>" --milestone "<version>" --body-file <file>
 ```
 
-Use this exact body template (fill in the placeholders):
+Use this body (fill in the placeholders):
 
 ~~~
-Make sure to do:
-* [ ] run the `pre-release` skill (release dates, direct download links)
-
 Milestones
 * Memgraph -> <memgraph_milestone_url>
 * Docs -> <docs_milestone_url>
 
-### Docs Integration Tracking
-
-#### Breaking changes PRs
-
-- [ ] https://github.com/memgraph/memgraph/pull/NNNN — short title @author
-
-#### Docs needed (Memgraph PR → Docs PR)
-
-- [ ] https://github.com/memgraph/memgraph/pull/NNNN → https://github.com/memgraph/documentation/pull/MMMM @author
-- [ ] https://github.com/memgraph/memgraph/pull/NNNN → no doc PR yet @author
-
-#### Changelog (all PRs requiring a changelog entry)
-
-- [ ] https://github.com/memgraph/memgraph/pull/NNNN @author
+Run the `check-release` skill to see what the release still needs; run it
+with "release day" before merging.
 ~~~
 
-The `NNNN` / `MMMM` / `@author` / `short title` placeholders are filled in
-as PRs are merged — remove the example lines and replace them with real
-entries (the `check-release-milestone` skill does this). Rules for each
-section:
-- **Breaking changes PRs** — one line per merged PR carrying the `breaking` label.
-- **Docs needed** — one line per merged PR labeled `Docs needed`; end with the doc PR link
-  (or `no doc PR yet`) and the code PR author's `@handle`. Tick `[x]` once the doc PR is merged.
-- **Changelog** — one line per merged PR labeled `Docs needed` **or** `Docs - changelog only`;
-  end with the author's `@handle`. This section deliberately duplicates `Docs needed` entries —
-  it tracks the changelog entry independently of the doc page. Tick `[x]` once the entry lands
-  in `release-notes.mdx`.
-
-Keep every list in ascending PR number order.
+The PR keeps no checklist of product PRs: `check-release` works out what is
+missing from the Memgraph milestone, its docs labels and the docs milestone.
 
 ## Step 7 — Link the release PR from the Memgraph milestone
 
@@ -239,4 +212,4 @@ gh api repos/memgraph/memgraph/milestones/<milestone_number> --method PATCH \
 Print the PR URL and the docs milestone URL, and remind the user to:
 - Point docs PRs for the release at `release/<version>` and the `<version>`
   milestone (`write-docs-page` does this on its own).
-- Run `check-release-milestone` as PRs merge, and `pre-release` before merging.
+- Run `check-release` as PRs merge, and on release day before merging.
