@@ -14,6 +14,7 @@ export default {
   "memgraph-lab": "Memgraph Lab",
   "help-center": "Help center",
   "release-notes": "Release notes",
+  "coming-soon": "What's coming soon to Memgraph?",
   "--": {
     type: "separator",
   },

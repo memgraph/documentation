@@ -170,6 +170,16 @@ export default withNextra({
         permanent: true
       },
       {
+        source: '/database-management/experimental-features',
+        destination: '/querying/text-search',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/amazon-linux',
+        destination: '/getting-started/install-memgraph',
+        permanent: true
+      },
+      {
         source: '/deployment/docker',
         destination: '/deployment/environments/docker',
         permanent: true
@@ -2409,12 +2419,12 @@ export default withNextra({
       },
       {
         source: '/memgraph/getting-help/getting-help',
-        destination: '/help-center/',
+        destination: '/help-center',
         permanent: true
       },
       {
         source: '/mage/getting-help',
-        destination: '/help-center/',
+        destination: '/help-center',
         permanent: true
       },
       {
@@ -3144,7 +3154,7 @@ export default withNextra({
       },
       {
         source: '/advanced-algorithms/available-algorithms/schema',
-        destination: '/querying/functions#schema',
+        destination: '/querying/schema#schema-related-procedures',
         permanent: true
       },
       {
@@ -3382,7 +3392,7 @@ export default withNextra({
       },
       {
         source: '/ai-ecosystem/graphchat',
-        destination: '/ai-ecosystem#graphchat',
+        destination: '/memgraph-lab/features/graphchat',
         permanent: true
       },
       {

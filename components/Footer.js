@@ -46,7 +46,7 @@ const Footer = () => {
           <Link href="/custom-query-modules">Create an app</Link>
         </div>
         <div className="text-[#231F20] text-[16px] leading-[31px] font-normal dark:text-[#E6E6E6]">
-          <Link href="/data-visualization">Visualize data</Link>
+          <Link href="/memgraph-lab">Visualize data</Link>
         </div>
         <div className="text-[#231F20] text-[16px] leading-[31px] font-normal dark:text-[#E6E6E6]">
           <Link href="/advanced-algorithms">Use advanced algorithms</Link>
