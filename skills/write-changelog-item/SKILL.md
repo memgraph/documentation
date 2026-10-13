@@ -1,5 +1,5 @@
 ---
-name: write_changelog_item
+name: write-changelog-item
 description: Create/write the changelog item / release note for a given Github PR and update the docs release PR description.
 ---
 
@@ -23,6 +23,9 @@ Write for someone who runs Memgraph, writes Cypher, operates a cluster, or
 authors modules — not for someone reading the PR diff. Prefer:
 
 - What changed for the user (faster connect, no crash, new query, new flag).
+- For a bug fix, what works now: "Edge vector indexes recover correctly after
+  a crash or snapshot load." Add the trigger only when it helps an operator
+  recognize the situation ("while a new MAIN's first commit arrives").
 - Symptoms and outcomes over internals (cache key, planner rewrite, cursor).
 - Plain language; spell out jargon unless it is a product term the user
   already knows (`EXISTS`, `SHOW INSTANCES`, config flag names).
@@ -33,7 +36,8 @@ authors modules — not for someone reading the PR diff. Prefer:
 Avoid:
 
 - Describing the implementation ("rewrote X as Y", "removed the Limit
-  operator the branch never needed").
+  operator the branch never needed"), including how a bug used to fail: the
+  crash path, the race, the dangling pointer or the missing lock.
 - Wording that sounds like a recommendation not to use a feature (e.g. "faster
   when permissions are not used") when the point is that unnecessary work was
   removed.
