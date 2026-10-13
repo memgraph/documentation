@@ -35,7 +35,12 @@ The short version, for everyone:
 ## Branches and PRs
 
 - Docs for a product change go to the docs release branch for that release
-  (`release/<version>`); other changes go to `main`.
+  (`release/<version>`, in the docs milestone `<version>`); other changes go
+  to `main`.
+- Releases follow the skills in `skills/`: `new-release-branch` creates the
+  release branch, docs milestone and release PR; `check-release-milestone`
+  keeps them in step with the Memgraph milestone; `write-changelog-item`
+  writes each release note; `pre-release` runs on release day.
 - Use `.github/pull_request_template.md` and name the product PR as
   `memgraph/memgraph#NNNN`.
 
