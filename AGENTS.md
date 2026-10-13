@@ -43,6 +43,8 @@ The short version, for everyone:
   needs and, on release day, finishes it.
 - Use `.github/pull_request_template.md` and name the product PR as
   `memgraph/memgraph#NNNN`.
+- Keep the headings and line format of "Release note corrections" and
+  "Noticed, not fixed" in a docs PR description: `check-release` reads them.
 
 ## Run locally
 
