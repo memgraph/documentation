@@ -30,16 +30,6 @@ export default withNextra({
         permanent: true
       },
       {
-        source: '/ai-ecosystem/machine-learning',
-        destination: '/advanced-algorithms/machine-learning',
-        permanent: true
-      },
-      {
-        source: '/ai-ecosystem/machine-learning.md',
-        destination: '/advanced-algorithms/machine-learning.md',
-        permanent: true
-      },
-      {
         source: '/ai-ecosystem/graph-rag/knowledge-graph-creation',
         destination: '/ai-ecosystem/knowledge-graph-creation',
         permanent: true
