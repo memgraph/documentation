@@ -38,9 +38,9 @@ The short version, for everyone:
   (`release/<version>`, in the docs milestone `<version>`); other changes go
   to `main`.
 - Releases follow the skills in `skills/`: `new-release-branch` creates the
-  release branch, docs milestone and release PR; `check-release-milestone`
-  keeps them in step with the Memgraph milestone; `write-changelog-item`
-  writes each release note; `pre-release` runs on release day.
+  release branch, docs milestone and release PR; `write-changelog-item`
+  writes each release note; `check-release` finds what the release still
+  needs and, on release day, finishes it.
 - Use `.github/pull_request_template.md` and name the product PR as
   `memgraph/memgraph#NNNN`.
 
