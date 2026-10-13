@@ -1,6 +1,6 @@
 ---
 name: check-release
-description: Find what a Memgraph documentation release still needs, keep the overview in the release PR up to date, and on release day finish the release. Checks the docs labels on every merged PR in the Memgraph milestone, release notes for every PR that needs one, a docs PR for every "Docs needed" PR, the docs milestone and `pnpm check`; on release day also sets the release dates, updates the direct download links and closes the docs milestone after the merge. Use while a release is in progress, before merging a release branch into main, or when asked to "check the release", "check before release", run "pre-release" steps or audit docs labels on a milestone.
+description: Find what a Memgraph documentation release still needs, keep the overview in the release PR up to date, and on release day finish the release. Reports how much of the Memgraph milestone is merged, checks the docs labels on every merged PR in it, release notes for every PR that needs one, a docs PR for every "Docs needed" PR, the docs milestone and `pnpm check`; on release day also sets the release dates, updates the direct download links and closes the docs milestone after the merge. Use while a release is in progress, before merging a release branch into main, or when asked to "check the release", "check before release", run "pre-release" steps or audit docs labels on a milestone.
 ---
 
 # Check release
@@ -50,13 +50,27 @@ From the version or Memgraph milestone the user gives (e.g. `mg-v3.15.0`):
 If the branch, the docs milestone or the release PR is missing, the release
 hasn't been started: run the `new-release-branch` skill first.
 
-Fetch every merged PR in the Memgraph milestone once and reuse it below:
+Fetch every PR in the Memgraph milestone once and reuse it below:
 
 ```bash
-gh api --paginate "repos/memgraph/memgraph/issues?milestone=<id>&state=closed&per_page=100" \
-  --jq '.[] | select(.pull_request != null and .pull_request.merged_at != null) |
-        {number, title, author: .user.login, labels: [.labels[].name]}'
+gh api --paginate "repos/memgraph/memgraph/issues?milestone=<id>&state=all&per_page=100" \
+  --jq '.[] | select(.pull_request != null) |
+        {number, title, author: .user.login, labels: [.labels[].name],
+         status: (if .pull_request.merged_at then "merged"
+                  elif .state == "open" then (if .draft then "draft" else "open" end)
+                  else "closed" end)}'
 ```
+
+Steps 2–5 use the merged PRs only. Open and draft PRs count only toward
+progress; PRs closed without merging are left out entirely.
+
+**Progress:** how much of the Memgraph milestone is merged, which tells how
+much docs work can be done now and how much has to wait:
+
+- **All PRs:** merged out of merged + open + draft, as a percentage.
+- **Docs work:** the same for PRs labeled `Docs needed` or
+  `Docs - changelog only`, split by label: merged ones can be documented
+  now, open and draft ones can't yet.
 
 ### 2. Docs labels
 
@@ -152,6 +166,16 @@ section with the block.
 Rebuilt by the `check-release` skill on <YYYY-MM-DD>; edits here are
 overwritten. To change what is listed, fix the product PR's docs label.
 
+#### Progress
+
+Memgraph milestone: 166 of 217 PRs merged (76%); 29 open, 22 draft.
+
+| Docs work | Merged (can be done now) | Open or draft (waiting) |
+| --- | --- | --- |
+| Docs needed | 17 | 10 |
+| Docs - changelog only | 53 | 24 |
+| **Total** | **70 of 104 (67%)** | **34** |
+
 #### Breaking changes PRs
 
 - [x] https://github.com/memgraph/memgraph/pull/NNNN — short title @author
@@ -172,7 +196,10 @@ overwritten. To change what is listed, fix the product PR's docs label.
 <!-- check-release:end -->
 ~~~
 
-What goes in each section, in ascending PR number order:
+What goes in each section, in ascending PR number order (the numbers in
+Progress are an example):
+
+- **Progress:** from step 1, counted fresh on every run.
 
 - **Breaking changes PRs:** merged PRs labeled `breaking`. Ticked when the
   entry is under the Breaking changes heading in the release notes.
@@ -202,6 +229,7 @@ gh api repos/memgraph/documentation/pulls/<release_pr> -X PATCH -F body=@body.md
 Sort every PR list by PR number ascending, and skip sections with nothing to
 report:
 
+- **Progress:** the step 1 numbers, as in the overview.
 - **Docs labels:** missing or questionable labels, the recommended label and
   a one-line reason.
 - **Release notes:** PRs with no entry, breaking changes outside the Breaking
