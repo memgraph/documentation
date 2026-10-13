@@ -17,7 +17,7 @@ order to avoid problems with performance or results.
 
 1. [Basic usage](#1-basic-usage)<br />
    1.1. [Boolean Operators](#11-boolean-operators)<br />
-   1.2. [Inequality Operators Operators](#12-inequality-operators-operators)<br />
+   1.2. [Inequality Operators](#12-inequality-operators)<br />
    1.3. [Filter with node labels](#13-filter-with-node-labels)<br />
    1.4. [Filter with node properties](#14-filter-with-node-properties)<br />
    1.5. [Filter with relationship properties](#15-filter-with-relationship-properties)<br />
@@ -57,7 +57,7 @@ Output:
 +----------------+
 ```
 
-### 1.2. Inequality Operators Operators
+### 1.2. Inequality Operators
 
 Standard inequality operators like `<`, `<=`, `>` and `>=` can be used:
 

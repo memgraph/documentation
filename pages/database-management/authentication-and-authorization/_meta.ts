@@ -5,5 +5,6 @@ export default {
     "multiple-roles": "Multiple roles per user and multi-tenant roles",
     "auth-system-integrations": "Auth system integrations",
     "impersonate-user": "Impersonate user",
-    "user-profiles": "User profiles"
+    "user-profiles": "User profiles",
+    "query-privileges": "Query privileges reference"
 }
