@@ -12,6 +12,8 @@ export default {
   "database-management": "Database management",
   "deployment": "Deployment",
   "memgraph-lab": "Memgraph Lab",
+  "help-center": "Help center",
+  "release-notes": "Release notes",
   "--": {
     type: "separator",
   },
@@ -19,6 +21,4 @@ export default {
   "---": {
     type: "separator",
   },
-  "help-center": "Help center",
-  "release-notes": "Release notes",
 }
