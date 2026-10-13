@@ -62,6 +62,16 @@ no link.
 Usually the PR has the item written in one of the comments under the PR. Try to
 extract that first and improve according to the above description.
 
+Then read the docs PR that covers the product PR: the open or merged one
+whose description names it as `memgraph/memgraph#NNNN`, not the release PR
+(titled `Memgraph v<version>`) and not one closed without merging. Its
+`### Release note corrections` section lists, for the whole series of
+product PRs, where the release note is wrong or misses something, checked
+against the build after the last PR in the series. Where it disagrees with
+the comment, follow the docs PR. An older docs PR without that section may
+still note release-note problems in its description; read them the same
+way.
+
 If that changelog item is not already there, feel free to create one, again
 according to the above guidelines.
 

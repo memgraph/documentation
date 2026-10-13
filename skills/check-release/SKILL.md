@@ -112,6 +112,10 @@ gh pr list --repo memgraph/documentation --state all --search "milestone:<versio
 ```
 
 - Ignore docs PRs in state `CLOSED`: they were closed without merging.
+- Ignore the release PR (titled `Memgraph v<version>`): it names every PR in
+  the release.
+- Note the docs PRs whose description has a `### Release note corrections`
+  section, and which product PRs it lists. The overview points to them.
 - Every merged PR labeled `Docs needed` has a docs PR. If none names it,
   check the product PR's "Documentation PR link" comment
   (`gh api repos/memgraph/memgraph/issues/<N>/comments`) before calling it
@@ -160,6 +164,7 @@ overwritten. To change what is listed, fix the product PR's docs label.
 #### Changelog (all PRs requiring a changelog entry)
 
 - [ ] https://github.com/memgraph/memgraph/pull/NNNN @author
+- [ ] https://github.com/memgraph/memgraph/pull/NNNN @author ⚠ corrections in memgraph/documentation#MMMM
 
 #### Missing docs labels
 
@@ -177,7 +182,9 @@ What goes in each section, in ascending PR number order:
 - **Changelog:** merged PRs labeled `Docs needed` or `Docs - changelog only`.
   This deliberately repeats the `Docs needed` PRs: it tracks the release
   note apart from the docs page. Ticked when the entry is in the release
-  notes.
+  notes. When a docs PR lists release note corrections for the product PR,
+  end the line with `⚠ corrections in memgraph/documentation#MMMM`, so
+  whoever writes the entry starts from them.
 - **Missing docs labels:** merged PRs with no docs label. Leave the section
   out when there are none.
 
@@ -198,7 +205,9 @@ report:
 - **Docs labels:** missing or questionable labels, the recommended label and
   a one-line reason.
 - **Release notes:** PRs with no entry, breaking changes outside the Breaking
-  section, `Docs needed` entries with no docs link.
+  section, `Docs needed` entries with no docs link, and docs PRs with release
+  note corrections for entries already written (check the entry follows
+  them).
 - **Docs PRs:** `Docs needed` PRs with no docs PR (with the author's
   `@handle`), and open docs PRs.
 - **Docs milestone:** PRs added to it, PRs in it with the wrong base.
