@@ -1,6 +1,6 @@
 ---
 name: write-changelog-item
-description: Create/write the changelog item / release note for a given Github PR and update the docs release PR description.
+description: Create/write the changelog item / release note for a given Github PR in `pages/release-notes.mdx` on the release branch. Use when asked to write a release note or changelog entry, or when `check-release` finds a PR missing from the release notes.
 ---
 
 For a given Github PR write a changelog item.
@@ -78,9 +78,8 @@ that should be **only in the release notes**, or whether it needs to be
 
 Apply this check primarily when the memgraph PR is labeled
 **`Docs - changelog only`**. If it is labeled **`Docs needed`**, a docs page
-(or docs PR) is expected as part of the normal docs workflow — track it on the
-release docs PR, but do not treat "should this go into the docs?" as an open
-question for that label.
+(or docs PR) is expected as part of the normal docs workflow, so do not treat
+"should this go into the docs?" as an open question for that label.
 
 For **`Docs - changelog only`**, before proposing or applying a changelog
 bullet, ask:
@@ -105,9 +104,9 @@ Then decide and **surface the decision to the reviewer** with the draft:
 Grep the repo for the new flag, command, or concept name before claiming it is
 undocumented.
 
-For **`Docs needed`**, point at the linked docs PR (or `no doc PR yet` on the
-tracking list). Keep the release-note bullet aligned with that docs wording
-where useful.
+For **`Docs needed`**, find the docs PR (its body names the product PR as
+`memgraph/memgraph#NNNN`) and keep the release-note bullet aligned with its
+wording where useful. If there is none yet, say so.
 
 Any docs text you write for propagation must follow the same user-friendly,
 user-centric rules as the release note.
@@ -121,26 +120,3 @@ user-centric rules as the release note.
    end unless this PR is the highest number already in that section.
 3. Do not re-sort an in-progress release to fix historical ordering unless the
    user explicitly asks.
-
-## Updating the docs release PR description
-
-After writing the changelog item in `pages/release-notes.mdx`, also update the
-description of the open documentation release PR (e.g.
-`memgraph/documentation#1530` for 3.9) so the PR keeps a complete overview of
-everything integrated in the release.
-
-1. Fetch the current PR body via `gh api`.
-2. In the **Docs Integration Tracking** section, add the memgraph PR to
-   **Changelog (all PRs requiring a changelog entry)** if it is not already
-   listed, or tick its line. Use the format the section already uses:
-   `- [x] https://github.com/memgraph/memgraph/pull/XXXX @author`
-   Keep the list in ascending PR number order.
-3. If the memgraph PR has the **"Docs needed"** label, also make sure it is
-   listed under **Docs needed (Memgraph PR → Docs PR)**:
-   `- [x] https://github.com/memgraph/memgraph/pull/XXXX → https://github.com/memgraph/documentation/pull/YYYY @author`
-   Tick it only when the docs PR exists; otherwise leave it unticked with
-   `→ no doc PR yet`.
-4. If the memgraph PR has the `breaking` label, make sure it is listed under
-   **Breaking changes PRs**:
-   `- [x] https://github.com/memgraph/memgraph/pull/XXXX — short title @author`
-5. Push the updated body back via `gh api ... -X PATCH -F "body=@file"`.
