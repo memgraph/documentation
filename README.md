@@ -9,9 +9,8 @@
 <p align="center">
   <a href="https://memgraph.com/docs">
     <img src=".github/images/memgraph-documentation.png"
-         alt="memgraph-docs"
-         title="memgraph-docs"
-         style="width: 60%"/>
+         alt="The Memgraph documentation home page, with the sidebar of docs sections"
+         style="width: 80%"/>
   </a>
 </p>
 
