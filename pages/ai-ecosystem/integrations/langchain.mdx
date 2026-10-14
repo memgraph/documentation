@@ -17,112 +17,66 @@ import {CommunityLinks} from '/components/social-card/CommunityLinks'
   />
 </Cards>
 
-[LangChain](https://www.langchain.com/) is a framework for developing applications powered by large language
-models (LLMs). 
+[LangChain](https://www.langchain.com/) is a framework for building
+applications with large language models (LLMs). The Memgraph integration,
+`langchain-memgraph`, has three parts:
 
-Memgraph has an [integration with
-LangChain](https://github.com/memgraph/ai-toolkit/tree/main/integrations/langchain-memgraph) which supports
-**Memgraph toolkit** for building agentic applications, **knowledge graph
-construction** from unstructured data and **MemgraphQAChain** for querying via
-natural language.
+- **`MemgraphToolkit`** gives a [LangGraph](https://www.langchain.com/langgraph)
+  agent tools for querying Memgraph and reading its schema.
+- **`LLMGraphTransformer`** with `add_graph_documents()` builds a knowledge
+  graph in Memgraph from unstructured text.
+- **`MemgraphQAChain`** answers questions in natural language by generating
+  and running Cypher queries.
 
+You need a running Memgraph instance. To start one, see [Getting
+started](/getting-started). The examples use OpenAI, so you also need an
+OpenAI API key.
 
-## Memgraph toolkit   
+## Build an agent with the Memgraph toolkit
 
-The [LangGraph](https://www.langchain.com/langgraph) framework enables users to
-build agentic applications. Memgraph now offers a toolkit for building agents
-that can autonomously interact with the Memgraph database. 
+The toolkit is built on the [Memgraph
+Toolbox](/ai-ecosystem/integrations#memgraph-toolbox) and has these tools:
 
-The Memgraph [toolkit](https://github.com/memgraph/ai-toolkit/blob/main/integrations/langchain-memgraph/langchain_memgraph/toolkits.py)
-is built on the [Memgraph Toolbox](/ai-ecosystem/integrations#memgraph-toolbox)
-and has these tools:
-
-- **RunQueryTool**: Executes Cypher queries on the Memgraph database.
-- **RunShowIndexInfoTool**: Retrieves information about the indexes in the
-  database.
-- **RunShowSchemaInfoTool**: Retrieves information about the schema in the
-  database.
-- **RunShowConfigTool**: Retrieves information about the configuration of the
-  database.
-- **RunShowStorageInfoTool**: Retrieves information about the storage engine of
-  the database.
-- **RunShowTriggersTool**: Retrieves information about the triggers in the
-  database.
-- **RunShowConstraintInfoTool**: Retrieves information about the constraints in
-  the database.
-- **RunBetweennessCentralityTool**: Calculates the betweenness centrality of
-  nodes in the graph.
-- **RunPageRankMemgraphTool**: Calculates the PageRank of nodes in the graph.
-
+| Tool | What it does |
+| --- | --- |
+| `RunQueryTool` | Runs a Cypher query |
+| `RunSearchSchemaTool` | Searches the graph schema by a regular expression |
+| `RunNodeSchemaTool` | Returns the schema of a node by its labels |
+| `RunRelationshipSchemaTool` | Returns the schema of a relationship |
+| `RunEnumSchemaTool` | Returns the definition of an enum by its name |
 
 To ask for another tool, open an
 [issue](https://github.com/memgraph/ai-toolkit/issues) in the Memgraph AI
 Toolkit repository, or contribute one with a [pull
 request](https://github.com/memgraph/ai-toolkit/pulls).
 
-{<h4 className="custom-header">Installation</h4>}
+Install the packages. The toolkit needs `langgraph`:
 
-Before starting to write code, make sure you have installed the required
-packages in your environment:
-
-```shell
+```bash
 pip install langchain langchain-openai langchain-memgraph langgraph
 ```
 
-Don't forget to install `langgraph`, as it is a prerequisite to use Memgraph
-toolkit.
-
-{<h4 className="custom-header">Environment setup </h4>}
-
-Make sure you have [Memgraph](/getting-started) running
-in the background.
-
-After that, you can instantiate `Memgraph` in your Python code. This object holds the
-connection to the running Memgraph instance. 
+Connect to Memgraph, create the toolkit and give its tools to an agent. The
+connection settings come from the `MEMGRAPH_URL`, `MEMGRAPH_USER` and
+`MEMGRAPH_PASSWORD` environment variables, with defaults for a local Memgraph
+without authentication:
 
 ```python
 import os
-from getpass import getpass
-
-import pytest
-from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
+from langchain_memgraph import MemgraphToolkit
+from langchain_memgraph.graphs.memgraph import MemgraphLangChain
 from langgraph.prebuilt import create_react_agent
 
-from langchain_memgraph import MemgraphToolkit
-from memgraph_toolbox.api.memgraph import Memgraph
-
-
-"""Setup Memgraph connection fixture."""
-url = os.getenv("MEMGRAPH_URI", "bolt://localhost:7687")
-username = os.getenv("MEMGRAPH_USERNAME", "")
+url = os.getenv("MEMGRAPH_URL", "bolt://localhost:7687")
+username = os.getenv("MEMGRAPH_USER", "")
 password = os.getenv("MEMGRAPH_PASSWORD", "")
-
-graph = MemgraphLangChain(
-    url=url, username=username, password=password, refresh_schema=False
-)
-
-"""Set up Memgraph agent with React pattern."""
-if not os.environ.get("OPENAI_API_KEY"):
-    os.environ["OPENAI_API_KEY"] = getpass("Enter API key for OpenAI: ")
 
 llm = init_chat_model("gpt-4o-mini", model_provider="openai")
 
-db = Memgraph(url=url, username=username, password=password)
+db = MemgraphLangChain(url=url, username=username, password=password)
 toolkit = MemgraphToolkit(db=db, llm=llm)
 
-```
-
-The `refresh_schema` is initially set to `False` because there is still no data
-in the database, and we want to avoid unnecessary database calls. The code above
-also initializes the LLM chat model from OpenAI and gets the toolkit for Memgraph.
-
-{<h4 id="agent-setup" className="custom-header">Agent setup: </h4>}
-
-After setting up Memgraph and the toolkit, you can create an agent that will use the toolkit to 
-solve particular problem:
-
-```python
 agent_executor = create_react_agent(
     llm,
     toolkit.get_tools(),
@@ -130,91 +84,52 @@ agent_executor = create_react_agent(
 )
 ```
 
-This is a simple example of an agent using a tool which executes Cypher query.
-
-
-{<h4 id="running-agent" className="custom-header">Running agent</h4>}
-
-Now, we can create a node in the database and run the agent:
+Run the agent with a request. It chooses a tool from the toolkit and uses it
+to answer:
 
 ```python
-
-query = """
-    CREATE (c:Character {name: 'Jon Snow', house: 'Stark', title: 'King in the North'})
-"""
-memgraph_connection.query(query)
-memgraph_connection.refresh_schema()
-
 example_query = "MATCH (n) WHERE n.name = 'Jon Snow' RETURN n"
-events = memgraph_agent.stream(
+events = agent_executor.stream(
     {"messages": [("user", example_query)]},
     stream_mode="values",
 )
 
-last_event = None
 for event in events:
-    last_event = event
     event["messages"][-1].pretty_print()
-
-print (last_event)
-
 ```
-The agent will autonomously pick a tool and use the toolkit to solve the requested problem. 
 
-## Querying unstructured data
+## Build and query a knowledge graph
 
-You can follow the example on [LangChain
-docs](https://python.langchain.com/docs/integrations/graphs/memgraph/) or go
-through quick start below.
+You can also follow this example in the [LangChain
+docs](https://python.langchain.com/docs/integrations/graphs/memgraph/).
 
+Install the packages:
 
-{<h4 className="custom-header">Installation</h4>}
-
-To install all the required packages, run:
-
-```shell
+```bash
 pip install langchain langchain-openai langchain-memgraph langchain-experimental
 ```
 
-{<h4 className="custom-header">Environment setup</h4>}
-
-Before you get started, make sure you have [Memgraph](/getting-started) running
-in the background.
-
-Then, instantiate `Memgraph` in your Python code. This object holds the
-connection to the running Memgraph instance. Make sure to set up all the
-environment variables properly.
+Connect to Memgraph. `refresh_schema=False` skips reading the schema, because
+the database is still empty:
 
 ```python
 import os
-from langchain_openai import ChatOpenAI
+from langchain_core.documents import Document
 from langchain_experimental.graph_transformers import LLMGraphTransformer
-from langchain_memgraph.graphs.graph_document import Document
 from langchain_memgraph.chains.graph_qa import MemgraphQAChain
-from langchain_memgraph.graphs.memgraph import Memgraph
+from langchain_memgraph.graphs.memgraph import MemgraphLangChain
+from langchain_openai import ChatOpenAI
 
-url = os.environ.get("MEMGRAPH_URI", "bolt://localhost:7687")
-username = os.environ.get("MEMGRAPH_USERNAME", "")
-password = os.environ.get("MEMGRAPH_PASSWORD", "")
+url = os.getenv("MEMGRAPH_URL", "bolt://localhost:7687")
+username = os.getenv("MEMGRAPH_USER", "")
+password = os.getenv("MEMGRAPH_PASSWORD", "")
 
-graph = MemgraphGraph(
+graph = MemgraphLangChain(
     url=url, username=username, password=password, refresh_schema=False
 )
 ```
 
-The `refresh_schema` is initially set to `False` because there is still no data in
-the database and we want to avoid unnecessary database calls.
-
-To interact with the LLM, you must configure it. Here is how you can set API key as an
-environment variable for OpenAI:
-
-```python
-os.environ["OPENAI_API_KEY"] = "your-key-here"
-```
-
-{<h4 id="graph-construction" className="custom-header">Graph construction</h4>}
-
-For the dataset, we'll use the following text about Charles Darwin:
+The example builds the graph from this text about Charles Darwin:
 
 ```python
 text = """
@@ -231,8 +146,7 @@ text = """
 """
 ```
 
-To construct the graph, first initialize `LLMGraphTransformer` from the desired
-LLM and convert the document to the graph structure.
+`LLMGraphTransformer` uses the LLM to turn the text into graph documents:
 
 ```python
 llm = ChatOpenAI(temperature=0, model_name="gpt-4-turbo")
@@ -241,53 +155,53 @@ documents = [Document(page_content=text)]
 graph_documents = llm_transformer.convert_to_graph_documents(documents)
 ```
 
-The graph structure in the `GraphDocument` format can be forwarded to the
-`add_graph_documents()` procedure to import in into Memgraph:
+`add_graph_documents()` turns the graph documents into Cypher queries and runs
+them in Memgraph. This example empties the database first:
 
 ```python
-# Make sure the database is empty
 graph.query("STORAGE MODE IN_MEMORY_ANALYTICAL")
 graph.query("DROP GRAPH")
 graph.query("STORAGE MODE IN_MEMORY_TRANSACTIONAL")
 
-# Create KG
 graph.add_graph_documents(graph_documents)
 ```
 
-The `add_graph_documents()` procedure transforms the list of `graph_documents`
-into appropriate Cypher queries and executes them in Memgraph.
-
-In the below image, you can see how the text was transformed into a knowledge
-graph and stored into Memgraph.
+The text becomes a knowledge graph in Memgraph:
 
 ![A paragraph about Charles Robert Darwin is turned by LLMGraphTransformer and add_graph_documents() into a knowledge graph in Memgraph, with Darwin connected to his occupations, nationality, collaborator Alfred Russel Wallace and theories](/pages/ai-ecosystem/integrations/langchain-kg-creation.png)
 
-For additional options, check the [full
-guide](https://python.langchain.com/docs/integrations/graphs/memgraph/#additional-options)
-on the LangChain docs. 
+For more options, see the [LangChain
+guide](https://python.langchain.com/docs/integrations/graphs/memgraph/#additional-options).
 
-{<h4 id="querying" className="custom-header">Querying</h4>}
-
-In the end, you can query the knowledge graph:
+To query the graph in natural language, create a `MemgraphQAChain`. It reads
+the schema, so refresh it first:
 
 ```python
+graph.refresh_schema()
+
 chain = MemgraphQAChain.from_llm(
     ChatOpenAI(temperature=0),
     graph=graph,
     model_name="gpt-4-turbo",
     allow_dangerous_requests=True,
 )
-print(chain.invoke("Who Charles Robert Darwin collaborated with?")["result"])
+print(chain.invoke("Who did Charles Robert Darwin collaborate with?")["result"])
 ```
-Here is the result:
-```plaintext
+
+The chain generates and runs this query, and answers with the result:
+
+```plaintext copy=false
 MATCH (:Person {id: "Charles Robert Darwin"})-[:COLLABORATION]->(collaborator)
 RETURN collaborator;
 Alfred Russel Wallace
 ```
 
-In the image below, you can see what's happening under the hood to get the
-answer. 
+`allow_dangerous_requests=True` confirms that you allow the chain to run the
+queries the LLM generates. Use a database user with only the privileges the
+chain needs.
+
+The chain generates a Cypher query with the LLM, runs it in Memgraph and sends
+the result back to the LLM for the answer:
 
 ![MemgraphQAChain translates the question into a Cypher query with an LLM, runs it in Memgraph, and sends the results back to the LLM, which answers Alfred Russel Wallace](/pages/ai-ecosystem/integrations/langchain-retrieval.png)
 
