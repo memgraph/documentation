@@ -6,14 +6,6 @@
   </a>
 </p>
 
-<p align="center">
-  <a href="https://memgraph.com/docs">
-    <img src=".github/images/memgraph-documentation.png"
-         alt="The Memgraph documentation home page, with the sidebar of docs sections"
-         style="width: 80%"/>
-  </a>
-</p>
-
 This repository is the source of the Memgraph documentation at
 [memgraph.com/docs](https://memgraph.com/docs). The site is built with
 [Nextra](https://nextra.site/), and each page is an `.mdx` file in `pages/`.
