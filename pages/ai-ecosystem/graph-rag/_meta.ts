@@ -1,5 +1,4 @@
 export default {
-    "atomic-pipelines": "Retrieval pipelines",
-    "agentic-graphrag": "Agentic GraphRAG",
-    "examples-and-demos": "Examples & demos"
+    "atomic-pipelines": "Atomic GraphRAG",
+    "agentic-graphrag": "Agentic GraphRAG"
 }

@@ -40,6 +40,16 @@ export default withNextra({
         permanent: true
       },
       {
+        source: '/ai-ecosystem/graph-rag/examples-and-demos',
+        destination: '/ai-ecosystem/graph-rag#examples',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/graph-rag/examples-and-demos.md',
+        destination: '/ai-ecosystem/graph-rag.md',
+        permanent: true
+      },
+      {
         source: '/ai-ecosystem/use-cases',
         destination: '/ai-ecosystem',
         permanent: true
