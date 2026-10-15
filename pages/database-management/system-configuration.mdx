@@ -17,31 +17,96 @@ The steps may vary slightly depending on the Linux distribution you are using.
 
 ## Handle numerous open files simultaneously
 
-The `fs.file-max` parameter in Linux sets the maximum number of file handles
-that the Linux kernel will allocate. This adjustment is important when the
-system needs to handle numerous open files simultaneously. To adjust this
-parameter, do the following:
+Every client connection, every database, every text index and every replica
+connection consumes file descriptors. When a process runs out of them, it fails
+with one of two errors:
+
+- `Too many open files` (`EMFILE`): the **per-process** limit
+  (`RLIMIT_NOFILE`) has been reached. This is the one you will normally hit.
+- `Too many open files in system` (`ENFILE`): the **system-wide** limit
+  (`fs.file-max`) has been reached.
+
+<Callout type="warning">
+Under systemd the default per-process limit is **1024** (hard limit `524288` on
+recent systemd versions), which means Memgraph starts failing at roughly 950
+client connections. Starting with Memgraph v3.14, the Memgraph package sets
+`LimitNOFILE=1048576` in its systemd unit, Memgraph raises its soft limit to the
+hard limit at startup, logs the resulting limits and warns if the limit is below
+`65536`. On earlier releases, or if you use your own unit file or container
+setup, follow the steps below.
+</Callout>
+
+### Sizing the limit
+
+Memgraph needs roughly one descriptor per client connection plus files per
+database (WAL, snapshots, indexes); `65536` or more is recommended.
+
+<Callout type="info">
+`LimitNOFILE` (and `--ulimit nofile`) cannot exceed the kernel's `fs.nr_open`.
+The kernel default is `1048576`, but systemd 240 and later raises it at boot.
+Higher values are rejected (the service or container fails to start). Check the
+current ceiling with `cat /proc/sys/fs/nr_open`.
+</Callout>
+
+### Linux with systemd
+
+`/etc/security/limits.conf` does **not** apply to systemd services. Set the limit
+in the service unit instead:
 
 <Steps>
 
-{<h3 id="open-etcsysctlconf-in-a-text-editor" className="custom-header">Open `/etc/sysctl.conf` in a text editor</h3>}
-You need root privileges to
-edit this file, which is used for configuring kernel parameters at runtime.
+{<h3 id="edit-the-service" className="custom-header">Edit the service</h3>}
+Run `sudo systemctl edit memgraph` and add:
 
+```ini
+[Service]
+LimitNOFILE=1048576
+```
 
-{<h3 id="set-the-file-handle-limit" className="custom-header">Set the file handle limit</h3>}
-Add the line `fs.file-max=100000` to
-`sysctl.conf`. 
+{<h3 id="reload-and-restart" className="custom-header">Reload and restart</h3>}
+Run `sudo systemctl daemon-reload` and `sudo systemctl restart memgraph`.
 
-{<h3 className="custom-header">Apply the changes</h3>}
-Save your changes and exit the text editor. Run
-`sudo sysctl -p` to apply the changes immediately without rebooting.
+{<h3 id="verify-the-limit" className="custom-header">Verify the limit</h3>}
+Run the following command. Both the soft and the hard limit should show `1048576`:
 
-{<h3 className="custom-header">Verify the changes</h3>}
-Run `sysctl fs.file-max` to check that the new
-value has been applied. It should return `100000`.
+```bash
+grep 'open files' /proc/$(pidof memgraph)/limits
+```
 
 </Steps>
+
+### Docker
+
+Pass the limit to the container with `--ulimit`:
+
+```bash
+docker run --ulimit nofile=1048576:1048576 -p 7687:7687 memgraph/memgraph
+```
+
+With Docker Compose:
+
+```yaml
+services:
+  memgraph:
+    image: memgraph/memgraph
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+```
+
+### Kubernetes
+
+Kubernetes does not set the open files limit itself. The containers inherit it
+from the container runtime (containerd or CRI-O) on the node, so check the
+runtime's `LimitNOFILE` setting if you see the warning in the Memgraph log.
+
+### System-wide limit
+
+Modern kernels and systemd already set `fs.file-max` very high, so there is
+usually nothing to do. Do not lower it. Only if `cat /proc/sys/fs/file-max`
+returns a low value, raise it by adding `fs.file-max=<value>` to
+`/etc/sysctl.conf` and running `sudo sysctl -p`.
 
 ## Increasing memory map areas
 
