@@ -237,13 +237,13 @@ Aggregations functions can be also used with `DISTINCT` operator, which will per
 
 ```cypher
 MATCH ()-[:LIVING_IN]->(c)
-RETURN AVG(DISTINCT c.population) as average population;
+RETURN AVG(DISTINCT c.population) AS average_population;
 ```
 Output:
 
 ```nocopy
 +-----------------------------------------------------------------------------------------------------+
-| population                                                                                          |
+| average_population                                                                                  |
 +-----------------------------------------------------------------------------------------------------+
 | 74,500,000                                                                                            |
 +-----------------------------------------------------------------------------------------------------+

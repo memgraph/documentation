@@ -200,7 +200,7 @@ of pairs of nodes and the corresponding rank values (rank is a number
 representing the "popularity" of a given node).
 
 ```cypher
-CALL pagerank.pagerank() YIELD node, rank
+CALL pagerank.get() YIELD node, rank
 WITH node, rank
 WHERE node:Hero
 RETURN node.name AS most_popular_heroes
@@ -213,7 +213,7 @@ How do the results of this query match with your own list? Not bad, right?
 Now, let's figure out the most popular comic series:
 
 ```cypher
-CALL pagerank.pagerank() YIELD node, rank
+CALL pagerank.get() YIELD node, rank
 WITH node, rank
 WHERE node:ComicSeries
 RETURN node.title AS most_popular_comic_series

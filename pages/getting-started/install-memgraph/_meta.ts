@@ -4,15 +4,8 @@ export default {
   "ubuntu": "Ubuntu",
   "centos": "CentOS",
   "fedora": "Fedora",
-  "rocky": {
-    title: "Rocky",
-    display: "hidden"
-  },
+  "rocky": "Rocky",
   "redhat": "Red Hat",
-  "amazon-linux": {
-    title: "Amazon Linux",
-    display: "hidden"
-  },
   "memgraph-cloud": "Memgraph Cloud",
   "docker-compose": "Docker Compose",
   "kubernetes": "Kubernetes",

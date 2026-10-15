@@ -4,7 +4,6 @@ export default {
   "configuration": "Configuration",
   "debugging": "Debugging",
   "enabling-memgraph-enterprise": "Enabling Memgraph Enterprise",
-  "experimental-features": { display: "hidden" },
   "logs": "Logs",
   "monitoring": "Monitoring",
   "multi-tenancy": "Multi-tenancy",
