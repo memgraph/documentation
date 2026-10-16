@@ -628,8 +628,9 @@ Output:
 To test whether anything matched, leave the aggregation out and let the `MATCH`
 decide, as in the [EXISTS section](#exists).
 
-`EXISTS` and `COUNT` do not require a `RETURN` at all; `COLLECT` does, because it
-needs a column to gather.
+`EXISTS` and `COUNT` do not require a `RETURN` at all, except in a
+[`WHEN` branch](#conditional-bodies-with-when); `COLLECT` does, because it needs a
+column to gather.
 
 ### UNION
 
@@ -703,6 +704,68 @@ Output:
 | ["Bob", "Carol", "Carol"] |
 +---------------------------+
 ```
+
+### Conditional bodies with `WHEN`
+
+A body may be a list of `WHEN` branches, as in a
+[conditional `CALL` subquery](/querying/clauses/call#18-conditional-subqueries-with-when).
+For each row of the enclosing query, the expression reduces the rows of the
+first branch whose predicate is `true`. Here actors collect their movies and
+everyone else collects the people they know:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       COLLECT {
+         WHEN EXISTS { (p)-[:ACTED_IN]->() } THEN
+           MATCH (p)-[:ACTED_IN]->(m) RETURN m.title AS item ORDER BY item
+         ELSE
+           MATCH (p)-[:KNOWS]->(f) RETURN f.name AS item ORDER BY item
+       } AS items
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+----------------------------------------------+
+| name    | items                                        |
++---------+----------------------------------------------+
+| "Alice" | ["Johnny Mnemonic", "Jumanji", "The Matrix"] |
+| "Bob"   | ["Jumanji"]                                  |
+| "Carol" | []                                           |
+| "Dave"  | []                                           |
++---------+----------------------------------------------+
+```
+
+When no branch matches and there is no `ELSE`, the expression gives its empty
+value, as for a body that matched nothing:
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name,
+       COUNT  { WHEN p.nickname IS NOT NULL THEN MATCH (p)-[:KNOWS]->(f) RETURN f } AS friends,
+       EXISTS { WHEN p.nickname IS NOT NULL THEN MATCH (p)-[:KNOWS]->(f) RETURN f } AS hasFriends
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+---------+------------+
+| name    | friends | hasFriends |
++---------+---------+------------+
+| "Alice" | 2       | true       |
+| "Bob"   | 1       | true       |
+| "Carol" | 0       | false      |
+| "Dave"  | 0       | false      |
++---------+---------+------------+
+```
+
+Every branch must end with `RETURN`, also in `EXISTS` and `COUNT`. A branch
+follows the same rules as a plain body: the
+[supported clauses](#supported-clauses), and one column for `COLLECT`. A branch
+may contain `UNION` or another `WHEN` in braces.
 
 ## Nesting
 

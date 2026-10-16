@@ -23,7 +23,8 @@ Switch to MAGE documentation if you want to CALL a graph algorithm or some other
     1.4. [Observing changes from previous executions](#14-observing-changes-from-previous-executions)<br />
     1.5. [Unit subqueries](#15-unit-subqueries) <br />
     1.6. [Scoped variables with `CALL (...)`](#16-scoped-variables-with-call-) <br />
-    1.7. [Optional subqueries with `OPTIONAL CALL`](#17-optional-subqueries-with-optional-call)
+    1.7. [Optional subqueries with `OPTIONAL CALL`](#17-optional-subqueries-with-optional-call) <br />
+    1.8. [Conditional subqueries with `WHEN`](#18-conditional-subqueries-with-when)
 
 2. [Invalid uses of CALL subquery](#2-invalid-uses-of-call-subquery) <br />
     2.1. [Returning variables with the same name as those in the outer scope](#21-returning-variables-with-the-same-name-as-those-in-the-outer-scope) <br />
@@ -266,6 +267,104 @@ Variables imported from the outer scope keep their values; only the columns the
 subquery itself introduces are set to `null`. A
 [unit subquery](#15-unit-subqueries) returns no columns, so `OPTIONAL` has
 nothing to set to `null` and the number of rows is the same either way.
+
+### 1.8. Conditional subqueries with `WHEN`
+
+A conditional subquery runs, for each input row, the first branch whose
+predicate is `true`:
+
+```cypher
+CALL (...) {
+  WHEN predicate THEN body
+  [WHEN predicate THEN body ...]
+  [ELSE body]
+}
+```
+
+```cypher
+UNWIND [{name: 'Ana', age: 65}, {name: 'Ivan', age: 25}, {name: 'Marko', age: 39}] AS person
+CALL (person) {
+  WHEN person.age > 60 THEN RETURN 'senior' AS bracket
+  WHEN person.age > 30 THEN RETURN 'adult' AS bracket
+  ELSE RETURN 'young' AS bracket
+}
+RETURN person.name AS name, bracket;
+```
+
+Output:
+```nocopy
++---------+----------+
+| name    | bracket  |
++---------+----------+
+| "Ana"   | "senior" |
+| "Ivan"  | "young"  |
+| "Marko" | "adult"  |
++---------+----------+
+```
+
+A body is a single query, or a query in braces that may contain `UNION` or
+another `WHEN`:
+
+```cypher
+UNWIND [1, 2] AS i
+CALL (i) {
+  WHEN i = 1 THEN {
+    RETURN 'a' AS x
+    UNION
+    RETURN 'b' AS x
+  }
+  ELSE {
+    WHEN i > 5 THEN RETURN 'big' AS x
+    ELSE RETURN 'small' AS x
+  }
+}
+RETURN i, x;
+```
+
+Output:
+```nocopy
++---+---------+
+| i | x       |
++---+---------+
+| 1 | "a"     |
+| 1 | "b"     |
+| 2 | "small" |
++---+---------+
+```
+
+When no branch matches a row, the result depends on the body:
+
+- A body that returns rows drops the input row, as a `CALL` subquery that
+  returns no rows does. [`OPTIONAL CALL`](#17-optional-subqueries-with-optional-call)
+  keeps the row and sets the returned columns to `null`.
+- A body without `RETURN`, such as one that only updates the graph, keeps every
+  input row, as a [unit subquery](#15-unit-subqueries) does.
+
+```cypher
+UNWIND [1, 2, 3] AS i
+CALL (i) {
+  WHEN i = 1 THEN CREATE (:Tier {i: i, level: 'gold'})
+  WHEN i = 2 THEN CREATE (:Tier {i: i, level: 'silver'})
+}
+RETURN i;
+```
+
+The query returns the rows `1`, `2` and `3`, and creates two `:Tier` nodes.
+
+The branches of one conditional subquery must agree:
+
+- All branches return rows, all branches update the graph without `RETURN`, or
+  all branches are a standalone procedure call.
+- Branches that return rows return the same column names. The order of the
+  columns can differ.
+
+A conditional subquery needs a scope clause: `CALL { WHEN ... }` is an error, and
+`CALL () { WHEN ... }` is valid. A branch cannot set a query memory limit or
+start with `USING`. The whole conditional subquery can run
+[`IN TRANSACTIONS`](/querying/read-and-modify-data#call-subqueries-in-transactions).
+
+The same branches can form the body of `EXISTS`, `COUNT` and `COLLECT`. Refer to
+[subquery expressions](/querying/subquery-expressions#conditional-bodies-with-when).
 
 ## 2. Invalid uses of CALL subquery
 
