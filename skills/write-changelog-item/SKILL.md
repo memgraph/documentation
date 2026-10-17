@@ -1,6 +1,6 @@
 ---
-name: write_changelog_item
-description: Create/write the changelog item / release note for a given Github PR and update the docs release PR description.
+name: write-changelog-item
+description: Create/write the changelog item / release note for a given Github PR in `pages/release-notes.mdx` on the release branch. Use when asked to write a release note or changelog entry, or when `check-release` finds a PR missing from the release notes.
 ---
 
 For a given Github PR write a changelog item.
@@ -23,6 +23,9 @@ Write for someone who runs Memgraph, writes Cypher, operates a cluster, or
 authors modules — not for someone reading the PR diff. Prefer:
 
 - What changed for the user (faster connect, no crash, new query, new flag).
+- For a bug fix, what works now: "Edge vector indexes recover correctly after
+  a crash or snapshot load." Add the trigger only when it helps an operator
+  recognize the situation ("while a new MAIN's first commit arrives").
 - Symptoms and outcomes over internals (cache key, planner rewrite, cursor).
 - Plain language; spell out jargon unless it is a product term the user
   already knows (`EXISTS`, `SHOW INSTANCES`, config flag names).
@@ -33,7 +36,8 @@ authors modules — not for someone reading the PR diff. Prefer:
 Avoid:
 
 - Describing the implementation ("rewrote X as Y", "removed the Limit
-  operator the branch never needed").
+  operator the branch never needed"), including how a bug used to fail: the
+  crash path, the race, the dangling pointer or the missing lock.
 - Wording that sounds like a recommendation not to use a feature (e.g. "faster
   when permissions are not used") when the point is that unnecessary work was
   removed.
@@ -47,8 +51,26 @@ The changelog item should be benefit focused (highlight the why). The changelog
 item should be in the markdown format, don't remove ticks and markdown links,
 don't use bold and italic, use - at the beginning of the item.
 
+Link the docs page for the change in the item whenever there is one: the page
+from the docs PR for a **Docs needed** PR, or the existing page that covers the
+changed flag, command or behavior. Link the section when there is one, with a
+root-relative link: `[text search](/querying/text-search#create-text-index)`.
+Readers and agents look at the release notes first to learn what changed; the
+link takes them to how it works now. A bug fix with no page to point to needs
+no link.
+
 Usually the PR has the item written in one of the comments under the PR. Try to
 extract that first and improve according to the above description.
+
+Then read the docs PR that covers the product PR: the open or merged one
+whose description names it as `memgraph/memgraph#NNNN`, not the release PR
+(titled `Memgraph v<version>`) and not one closed without merging. Its
+`### Release note corrections` section lists, for the whole series of
+product PRs, where the release note is wrong or misses something, checked
+against the build after the last PR in the series. Where it disagrees with
+the comment, follow the docs PR. An older docs PR without that section may
+still note release-note problems in its description; read them the same
+way.
 
 If that changelog item is not already there, feel free to create one, again
 according to the above guidelines.
@@ -66,9 +88,8 @@ that should be **only in the release notes**, or whether it needs to be
 
 Apply this check primarily when the memgraph PR is labeled
 **`Docs - changelog only`**. If it is labeled **`Docs needed`**, a docs page
-(or docs PR) is expected as part of the normal docs workflow — track it on the
-release docs PR, but do not treat "should this go into the docs?" as an open
-question for that label.
+(or docs PR) is expected as part of the normal docs workflow, so do not treat
+"should this go into the docs?" as an open question for that label.
 
 For **`Docs - changelog only`**, before proposing or applying a changelog
 bullet, ask:
@@ -93,9 +114,9 @@ Then decide and **surface the decision to the reviewer** with the draft:
 Grep the repo for the new flag, command, or concept name before claiming it is
 undocumented.
 
-For **`Docs needed`**, point at the linked docs PR (or `no doc PR yet` on the
-tracking list). Keep the release-note bullet aligned with that docs wording
-where useful.
+For **`Docs needed`**, find the docs PR (its body names the product PR as
+`memgraph/memgraph#NNNN`) and keep the release-note bullet aligned with its
+wording where useful. If there is none yet, say so.
 
 Any docs text you write for propagation must follow the same user-friendly,
 user-centric rules as the release note.
@@ -109,21 +130,3 @@ user-centric rules as the release note.
    end unless this PR is the highest number already in that section.
 3. Do not re-sort an in-progress release to fix historical ordering unless the
    user explicitly asks.
-
-## Updating the docs release PR description
-
-After writing the changelog item in `pages/release-notes.mdx`, also update the
-description of the open documentation release PR (e.g.
-`memgraph/documentation#1530` for 3.9) so the PR keeps a complete overview of
-everything integrated in the release.
-
-1. Fetch the current PR body via `gh api`.
-2. Add the memgraph PR to the **Release Notes Required** section if it is not
-   already listed. Use the same format as the existing entries:
-   `- [x] https://github.com/memgraph/memgraph/pull/XXXX @author`
-   Append the new entry at the end of the list (before the blank line / TODO).
-3. If the memgraph PR has the **"Docs needed"** label and a corresponding
-   documentation PR exists, also add it to the **Memgraph PRs Docs Needed**
-   section using the existing format:
-   `- [x] https://github.com/memgraph/memgraph/pull/XXXX -> https://github.com/memgraph/documentation/pull/YYYY @author`
-4. Push the updated body back via `gh api ... -X PATCH -F "body=@file"`.
