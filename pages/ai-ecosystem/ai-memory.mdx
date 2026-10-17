@@ -1,0 +1,122 @@
+---
+title: AI memory
+description: Store what an AI system knows, did and knows how to do as one graph in Memgraph, and set it up for your coding agents with one command.
+---
+
+import { Tabs } from 'nextra/components'
+
+# AI memory
+
+AI memory lets an AI system remember across sessions. In Memgraph, memory is a
+graph of entities and typed relationships, so recall follows the connections
+between what the system knows, what it did and what it knows how to do, not
+only what sounds similar to the question.
+
+## How Memgraph stores memory
+
+Memgraph stores three types of long-term memory in one graph:
+
+| Memory type | What it holds | How it's stored |
+| --- | --- | --- |
+| **Semantic** | What the system knows, such as facts and preferences | `(:User)-[:HAS_MEMORY]->(:Memory)` |
+| **Episodic** | What the system did, such as past interactions | `(:Session)-[:HAS_ACTION]->(:Action)`, in order by `FOLLOWED_BY` |
+| **Procedural** | What the system knows how to do, such as workflows | `(:Session)-[:USED_SKILL]->(:Skill)` |
+
+The `User` and `Session` nodes are shared by all three types, so one traversal
+can recall facts, past actions and skills together.
+
+## Set up memory for your coding agents
+
+[Context Graph](https://github.com/memgraph/ai-toolkit/tree/main/context-graph),
+part of the Memgraph AI Toolkit, records the sessions of your coding agents in
+Memgraph as these three types of memory, so the agents can recall them in
+later sessions. It works with Claude Code, Codex, GitHub Copilot CLI, Cursor,
+OpenCode, Antigravity CLI and Grok Build.
+
+You need [Docker](https://docs.docker.com/get-docker/), unless you already run
+Memgraph 3.6 or later, and a terminal. Start the setup:
+
+<Tabs items={['Linux/macOS', 'Windows']}>
+<Tabs.Tab>
+```bash
+curl -sSL https://install.memgraph.com/ai-memory | bash
+```
+</Tabs.Tab>
+<Tabs.Tab>
+Run the setup from WSL or Git Bash. In PowerShell, this command prints the
+command to run there:
+
+```powershell
+iwr https://install.memgraph.com/ai-memory/windows -useb | iex
+```
+</Tabs.Tab>
+</Tabs>
+
+The setup shows its plan and changes nothing until you confirm. Then it:
+
+1. **Finds or starts Memgraph.** It uses the Memgraph in its configuration,
+   then one on `localhost:7687`, and otherwise starts the
+   `memgraph/memgraph-mage` image in a container named
+   `context-graph-memgraph`, with a data volume. If port 7687 is taken, it
+   picks a free port.
+2. **Saves its configuration:** the Memgraph URL and your user ID, which
+   defaults to your git `user.name`.
+3. **Installs the packages:** `uv` if it's missing, the
+   `memgraph-context-graph` command-line tool and its connectors.
+4. **Connects your agents.** Claude Code and Codex get the Context Graph
+   plugin for your user. The other agents get hooks in the current project
+   directory.
+5. **Checks the setup** and prints the command to rerun for any step that
+   failed.
+
+Without a terminal, for example in CI, the command only prints the setup
+command to run. Set `AI_MEMORY_SKIP_SETUP=1` to get the same behavior.
+
+After the setup, every session of a connected agent writes `Memory`, `Action`
+and `Skill` nodes to the graph, and the next session reads its memory back.
+To manage the setup:
+
+- `memgraph-context-graph ui` shows what your agents record, in the terminal.
+- `memgraph-context-graph setup` changes your choices and skips what's already
+  done.
+- `memgraph-context-graph uninstall` disconnects the agents. The graph and the
+  configuration stay.
+
+For the other options and how to look at the graph in Memgraph Lab, see the
+[Context Graph guide](https://github.com/memgraph/ai-toolkit/blob/main/context-graph/README.md#getting-started).
+
+## Query the memory graph
+
+Because the three types share the `User` and `Session` nodes, one query can
+answer a request such as "schedule a follow-up with the client like last
+time". This query returns what the system knows about a user, their most
+recent session in which a meeting was scheduled, and the skill used in it:
+
+```cypher template
+MATCH (u:User {user_id: "USER_ID"})-[:HAS_MEMORY]->(mem:Memory)
+MATCH (u)-[:HAD_SESSION]->(s:Session)-[:HAS_ACTION]->(a:Action {tool_name: "schedule_meeting"})
+WITH u, mem, s, a ORDER BY s.started_at DESC LIMIT 1
+OPTIONAL MATCH (s)-[:USED_SKILL]->(sk:Skill)
+RETURN mem.content AS client_facts, s.session_id AS last_session,
+       a.timestamp AS last_meeting_at, sk.name AS skill, sk.content AS how_to
+```
+
+`USER_ID` is the user ID from the setup. To see all the labels, relationship
+types and properties the memory graph uses, run:
+
+```cypher
+SHOW SCHEMA INFO;
+```
+
+The Memgraph that the setup starts has schema info enabled. If you use your
+own instance, start it with `--schema-info-enabled=true`.
+
+## Use another memory framework
+
+If you already use an agent memory framework, you can keep it and store its
+memory in Memgraph:
+
+- [Mem0](/ai-ecosystem/integrations/mem0): Use Memgraph as the backend for Mem0
+  graph memory, in Mem0 1.x.
+- [Cognee](/ai-ecosystem/integrations/cognee): Use Memgraph as the graph
+  database for Cognee's knowledge graph.

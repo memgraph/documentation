@@ -1,49 +1,50 @@
 ---
-title: Query-Focused Summarization
-description: Learn how to generate targeted summaries from graph-based retrieval to maximize answer relevance in GraphRAG pipelines.
+title: Query-focused summarization
+description: Answer global questions across a whole knowledge graph by summarizing its communities with an LLM and combining the summaries.
 ---
 
-# Query-focused Summarization
+# Query-focused summarization
 
-Query-focused summarization (QFS) is a text analysis process that generates a
-concise summary of documents specifically tailored to address a user's query or
-topic of interest. Unlike generic summarization that covers the overall main
-points, QFS filters, prioritizes, and compresses information relevant to the
-user's specific information needs.
+Query-focused summarization (QFS) answers a question from a summary of the
+whole dataset, tailored to that question. It's the GraphRAG pipeline for
+global questions, such as "What are the main themes?", where no single node or
+neighborhood holds the answer.
+
+In a knowledge graph, QFS summarizes the graph's communities once, then
+answers each question from the community summaries.
 
 ## Prerequisites
 
-- homogeneous graph
-- each node having the `text` property
+- A homogeneous graph: nodes with the same label, connected by relationships.
+  Community detection finds meaningful communities on this kind of graph.
+- A `text` property on each node, which the summaries are written from.
+- The [`llm.complete`](/advanced-algorithms/available-algorithms/llm) function,
+  configured with your LLM.
 
-## How to do QFS?
+## Run query-focused summarization
 
-When working with a knowledge graph, you can create summaries based on its
-underlying communities. Keep in mind: community detection works best on
-homogeneous graphs, that is, graphs where nodes of the same type (with the same
-label) are connected by edges. This structure ensures that the detected
-communities are meaningful. Once your graph is structured this way, you can
-detect and assign communities using queries such as the following ([multiple
-community detection algorithms are
-possible](/advanced-algorithms/available-algorithms)):
-```Cypher
+Assign each node to a community. This example uses the Louvain algorithm, and
+you can use [another community detection
+algorithm](/advanced-algorithms/available-algorithms):
+
+```cypher
 CALL community_detection.get() YIELD node, community_id
 SET node.community_id = community_id;
 ```
 
-After assigning community IDs, you can generate summaries for each community and
-create corresponding `Community` nodes.  These nodes are then connected to their
-community members using the Cypher query below:
-```Cypher
+Summarize each community with the LLM, store the summary on a `Community`
+node and connect the community's members to it:
+
+```cypher
 WITH "You are summarizing a community (cluster)." +
      " Write a concise summary in 2–4 paragraphs that:" +
-     " - Captures the main themes and recurring topics."
+     " - Captures the main themes and recurring topics." +
      " - Describes the kind of work or concerns this cluster represents." +
      " - Does not list individual entities; synthesize into a coherent narrative."
      AS SUMMARY_TEMPLATE
 MATCH (n) WHERE n.community_id IS NOT NULL
 WITH n.community_id AS c_id, count(n) AS c_count, collect(n) AS c_members,
-     llm.complete(reduce(s=SUMMARY_TEMPLATE, m IN collect(n) | s + m.text "; ")) AS c_summary
+     llm.complete(reduce(s=SUMMARY_TEMPLATE, m IN collect(n) | s + m.text + "; ")) AS c_summary
 MERGE (community:Community {id: c_id, nodes_count: c_count})
 SET community.summary = c_summary
 WITH community, c_members
@@ -52,9 +53,10 @@ MERGE (c_member)-[:BELONGS_TO]->(community)
 RETURN community.id AS community_id, community.summary AS community_summary;
 ```
 
-Once all the preprocessing is done, a typical query to perform query-focused
-summarization follows:
-```Cypher
+To answer a question, ask the LLM how each large community relates to it,
+then combine the partial answers into one:
+
+```cypher
 WITH "... the question ..." AS USER_QUESTION
 // 1. Identify relevant communities (thresholding)
 MATCH (c:Community) WHERE c.nodes_count > 5  // only use significant communities

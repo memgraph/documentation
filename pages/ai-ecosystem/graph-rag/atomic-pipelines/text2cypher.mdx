@@ -1,63 +1,49 @@
 ---
-title: Text-to-Cypher Generation
-description: Learn how to convert natural language questions into precise Cypher queries for powerful knowledge retrieval in GraphRAG pipelines.
+title: Text2Cypher
+description: Turn natural language questions into Cypher queries with an LLM, for exact answers from a knowledge graph in GraphRAG.
 ---
 
 # Text2Cypher
 
-Text2Cypher is the process of translating plain language questions or commands
-into Cypher queries (the language used to interact with graph databases like
-Memgraph). This automation enables users to retrieve, manipulate, or analyze
-graph data without needing to write Cypher themselves. By leveraging natural
-language processing and language models, Text2Cypher bridges the gap between
-human-friendly questions and database operations, making knowledge retrieval
-from graph data both accessible and powerful.
+Text2Cypher turns a question in natural language into a Cypher query, so users
+and agents can get exact answers from the graph without writing Cypher. It's
+the GraphRAG pipeline for analytical questions, where the answer is a value in
+the graph, such as a count or a statistic.
 
-Text2Cypher is usually involves:
-1. running the [`SHOW SCHEMA INFO` query](/querying/schema)
-2. asking an LLM to generate a Cypher query that would based on the schema and
-the question give the relevant data to answer the user question
-3. often some kind of a feedback loop where the user can validate or change the
-query before running or in the case query is not correct (syntax of semantic is
-wrong), the LLM gets the error message and tries to improve the query.
+A Text2Cypher pipeline usually has three steps:
 
-This method is most effective when the user’s question requires a traditional
-analytical database query, such as deterministic counting or extracting
-statistical information.
+1. Get the graph's schema with the [`SHOW SCHEMA INFO`
+   query](/querying/schema).
+2. Send the schema and the question to an LLM, which writes a Cypher query
+   that returns the data needed for the answer.
+3. Run the query. If it fails, send the error message back to the LLM so it
+   can correct the query, or let the user review and edit the query before it
+   runs.
 
-NOTE: Sometimes the generated queries might not be correct or optimal because or
-various reasones:
-  * LLM doesn't understand the actual user intention
-  * not all schema details are well defined or understood
-  * LLM can't get the syntax right .
-To improve Cypher query generation from natural language, [effective prompt
-engineering](#cypher-generation) is essential.
+The generated query can be wrong when the LLM misreads the question, when the
+schema doesn't explain what labels and properties mean, or when the LLM gets
+the syntax wrong. To improve the results:
 
-You can also enrich the schema sent to the LLM with
-[server-side descriptions](/database-management/server-side-descriptions): plain-text
-annotations on labels, edge types and properties (units, semantics, how a
-label relates to upstream systems) that are persisted in the database and
-surfaced as `description` fields inside `SHOW SCHEMA INFO`. This gives the
-LLM the kind of domain context that names alone don't convey.
+- Give the LLM a prompt written for Memgraph. See [Cypher
+  generation](#cypher-generation).
+- Add [server-side descriptions](/database-management/server-side-descriptions)
+  to labels, edge types and properties. `SHOW SCHEMA INFO` returns them as
+  `description` fields, so the LLM gets the units, meaning and relationships
+  to other systems that names alone don't convey.
 
-Perfect Text2Cypher use-cases are:
-* [Memgraph Lab - GraphChat](/memgraph-lab/features/graphchat), check this out
-if you are looking for a chatbot (has all the above components implemented)
-* generating a query to run over [run_query MCP tool](/ai-ecosystem/mcp).
+Text2Cypher is built into [GraphChat](/memgraph-lab/features/graphchat) in
+Memgraph Lab, with all three steps. An agent connected through the [Memgraph
+MCP server](/ai-ecosystem/integrations/mcp) can also generate a query and run
+it with the `run_query` tool.
 
 ## Cypher generation
 
-LLMs are trained on publicly available resources, including openCypher. Memgraph
-supports openCypher but has also extended its Cypher implementation with
-advanced constructs. While these enhancements improve usability, they can make
-it harder for LLMs to generate optimal Cypher queries tailored for Memgraph.
+LLMs learn Cypher mostly from public openCypher and Neo4j examples. Memgraph
+extends openCypher and uses MAGE procedures instead of APOC, so a prompt
+written for Memgraph produces better queries. The [integrations](/ai-ecosystem/integrations)
+use this prompt:
 
-To address this, we're continually increasing compatibility with each release
-and enhancing Memgraph's error messages. Here's a prompt that has been
-particularly helpful in the process, and mostly used in the
-[integrations](/ai-ecosystem/integrations) with other AI tools:
-
-```
+```plaintext
 MEMGRAPH_GENERATION_TEMPLATE = """Your task is to directly translate natural language inquiry into precise and executable Cypher query for Memgraph database.
 You will utilize a provided database schema to understand the structure, nodes and relationships within the Memgraph database.
 Instructions:
@@ -85,11 +71,10 @@ The question is:
 {question}"""
 ```
 
-Still, there are some other advanced techniques that can be done. In
-[GraphChat](/memgraph-lab/features/graphchat), Memgraph Lab feature, we currently
-provide the following prompt:
+[GraphChat](/memgraph-lab/features/graphchat) in Memgraph Lab uses this
+prompt:
 
-```
+```plaintext
 Your task is to directly translate natural language inquiry into precise and executable Cypher query for Memgraph database. You will utilize a provided database schema to understand the structure, nodes and relationships within the Memgraph database.
 
 Rules:
@@ -101,10 +86,12 @@ Do not include any text except the generated Cypher statement.
 For queries that ask for information or functionalities outside the direct generation of Cypher queries, use the Cypher query format to communicate limitations or capabilities. For example: RETURN "I am designed to generate Cypher queries based on the provided schema only."
 ```
 
-We also attach schema, history of conversations (if needed), constraints for write permissions (e.g., if it is a `DELETE` command, dismiss that with the message: Sorry, can't do that! `DELETE` queries are not permitted.).
-Also, we attach some Cypher specifics to the prompt:
+GraphChat also sends the schema, the conversation history when it's needed,
+and rules for write permissions. For example, if writes aren't allowed, it
+refuses a `DELETE` query with "Sorry, can't do that! `DELETE` queries are not
+permitted." It adds notes on Cypher that Memgraph handles differently:
 
-```
+```plaintext
 Atom expressions
 Atom expressions are not supported, so if you need to do something like this:
 MATCH (n)
@@ -116,11 +103,10 @@ OPTIONAL MATCH (n)-[r]->()
 RETURN n, count(r) AS edgeCount
 ```
 
-To further improve Cypher query generation, we attach the failed attempts from
-Memgraph in a form of invalid Cypher queries and error messages they produced
-with the following instructions:
+When a generated query fails, GraphChat sends the query and Memgraph's error
+message back to the LLM with these instructions:
 
-```
+```plaintext
 Generate a new correct version of the Cypher query:
 Do not include any explanations or apologies in your responses.
 Do not wrap the Cypher query in backticks.
