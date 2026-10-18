@@ -28,7 +28,7 @@ supports.
 | Multi-label pattern `(n:A&B)`; shared label over several mappings  | ✓               | ✓            | ✗       |
 | Untyped edge `()-[]->(b)` (union over types)                       | ✓               | ✗            | ✗       |
 | `UNION` / `UNION ALL` / `UNION DISTINCT`                           | ✓               | ✓            | ✗       |
-| `INTERSECT` / `EXCEPT`                                             | ✓               | ✓            | ✗       |
+| `INTERSECT` / `EXCEPT`                                             | ✓               | ✓            | ✓       |
 | Quantified path `(){m,n}` (bounded)                                | ✓               | ✓            | ✓       |
 | Quantified path `(){m,}` (unbounded)                               | ✓               | ✗            | ✓       |
 | Shortest-path (`ALL SHORTEST` / `ANY SHORTEST` / `SHORTEST k`)     | ✓               | ✗            | ✗       |
@@ -67,9 +67,11 @@ supports.
 - **`FOR x IN [...]` (UNWIND-style) on SQL backends** returns an
   actionable error pointing users at running the query on a Cypher
   backend. The form is still accepted natively on Cypher backends.
-- **`DETACH DELETE` on SQL backends** currently executes as a plain `DELETE`;
-  relationship rows are not detached. It deletes a node that has no relationship
-  rows and otherwise surfaces the backend's constraint error; don't rely on it.
+- **`DETACH DELETE` on SQL backends** returns an actionable error: delete the
+  relationships first, or use a Cypher backend. `REMOVE` on SQL backends
+  returns an actionable error as well.
+- **Label-less `MATCH (n)` on SQL backends** returns an actionable error listing
+  the labels the mapping defines; a label is what picks the table.
 - **Path variables on variable-length patterns**:
   `MATCH p = (a){1,3}(b) RETURN p` is not yet supported on SQL backends or
   MongoDB. Drop the `p =` binding (or query a Cypher backend) and `RETURN` the
@@ -84,8 +86,9 @@ supports.
 
 #### MongoDB-specific
 
-- **`UNION` / `UNION ALL` / `INTERSECT` / `EXCEPT`** return an actionable error.
-  Compose the arms client-side, or run the query on another backend.
+- **`UNION` / `UNION ALL`** return an actionable error. Compose the arms
+  client-side, or run the query on another backend. `INTERSECT` / `EXCEPT` work:
+  MemGQL runs each arm and combines the results itself.
 - **Quantified paths are reachability, not path enumeration.** MongoDB runs
   `(){m,n}` on `$graphLookup`, which never revisits an edge document. That
   matches trail semantics (no edge repeats) and terminates on cycles, but it
@@ -176,12 +179,17 @@ ADD CONNECTOR <name> TYPE <type>
     [WAREHOUSE '<wh>'] [ROLE '<role>']
     [PRIVATE_KEY_PATH '<path>'] [TOKEN '<token>']
     [TENANT_ID '<tid>'] [CLIENT_ID '<cid>'] [CLIENT_SECRET '<secret>']
-    [LANGUAGE '<gql|cypher>'];
+    [LANGUAGE '<gql|cypher>']
+    [OPTIONS '{"max_in_list_size": <n>}'];
 DROP CONNECTOR <name>;
 PING <connector>;
 
 -- Session
 SET SESSION LANGUAGE GQL|CYPHER [<version>];  -- language for bare queries on this session
+SESSION SET GRAPH <graph>;        -- soft default graph for this session
+SESSION RESET GRAPH;
+SESSION SET CONNECTION <name>;    -- fallback connection for queries nothing else routes
+SESSION RESET CONNECTION;
 
 -- Graphs (mappings over connectors)
 CREATE GRAPH <name> FROM '<json>';        -- inline { "vertices": …, "edges": … } body
@@ -210,10 +218,25 @@ apply depends on the type:
 | `TENANT_ID` / `CLIENT_ID` / `CLIENT_SECRET` | Fabric service-principal auth (Microsoft Entra ID)     |
 | `PATH '<path>'`                             | DuckDB (database file; `:memory:` by default)                        |
 | `LANGUAGE '<lang>'`                         | Any connector — default [query language](/memgraph-zero/memgql/reference#query-languages) (`gql` / `cypher`) for `USE <graph>` queries whose graph maps to it |
+| `OPTIONS '{"max_in_list_size": <n>}'`       | Any connector — most join-key values MemGQL sends it in one [piped](/memgraph-zero/memgql/multiple-graphs#piping-fetching-only-what-joins) cross-backend join (default 10 000; Oracle and Pinot 1 000, Snowflake 16 384, ClickHouse 50 000). Above it the join runs unpiped. Schema file key: `maxInListSize` |
 
 An option a connector doesn't read is ignored, and one that is omitted falls
-back to that connector's environment variable. Re-adding a connector replaces
-its config; `DROP CONNECTOR` is refused while a graph still references it.
+back to that connector's environment variable. `DROP CONNECTOR` is refused
+while a graph still references it.
+
+Running `ADD CONNECTOR` again for an existing name is safe: an identical
+declaration replies `Connector '<name>' already exists (unchanged)`, and a
+changed one replaces the config, reconnects, and replies
+`Connector '<name>' replaced (changed: uri, password)`, naming the changed
+options but never their values. A new name replies `Connector '<name>' added`.
+
+`SESSION SET GRAPH <graph>` gives the session a **soft default graph**. An
+explicit `USE` always wins and a query whose labels match exactly one graph
+still routes there; the default graph breaks ties when a label exists in
+several graphs, and runs queries with no label to route by.
+`SESSION SET CONNECTION <name>` names the connection such a query falls back
+to when no default graph is set (`SHOW CONNECTIONS` marks it with `*`). Both last until
+the matching `SESSION RESET` or the end of the Bolt session.
 
 `CREATE GRAPH … FROM` registers a graph from a `{ "vertices": …, "edges": … }`
 body and auto-connects the connectors it references. The mapping format is
