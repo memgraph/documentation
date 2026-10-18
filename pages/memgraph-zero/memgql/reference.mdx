@@ -403,7 +403,7 @@ USE <graph2> <query>;
 <query>;
 ```
 
-In `multi` mode, a query with no `USE` clause routes automatically when its
+A query with no `USE` clause routes automatically when its
 schema signals (labels, relationship types, properties) match exactly one
 source; zero or multiple matches hard-error. Identifier matching is **exact**
 (`:person` ≠ `Person`). Memgraph sources must run with `--schema-info-enabled`
@@ -416,10 +416,14 @@ for property-level introspection. See
 
 | Variable                  | Default          | Description                                                       |
 |---------------------------|------------------|-------------------------------------------------------------------|
-| `CONNECTOR_TYPE`          | `memgraph`       | Connector to use (see table below)                                |
-| `CONNECTION_TYPE`         | _(none)_         | Alias for `CONNECTOR_TYPE`                                        |
 | `BOLT_LISTEN_ADDR`        | `0.0.0.0:7688`   | `<ip>:<port>` the Bolt listener binds — every interface by default, as in Memgraph. Use `127.0.0.1:7688` to accept only connections from the same host. An IP, not a hostname; IPv6 in brackets (`[::]:7688`). `--bolt-address` / `--bolt-port` override it. |
 | `MEMGQL_DEFAULT_LANGUAGE` | `gql`            | [Query language](/memgraph-zero/memgql/reference#query-languages) for bare (unprefixed) queries |
+| `SCHEMA_FILE`             | _(none)_         | Same as `--schema=<path>`: boot from a [schema file](/memgraph-zero/memgql/schema-file) |
+
+Backends are not configured through environment variables: declare each one as
+a connector in the [schema file](/memgraph-zero/memgql/schema-file) or register
+it at runtime with `ADD CONNECTOR`. Without `--schema`, MemGQL starts with no
+connectors.
 
 ### Logging
 
@@ -503,21 +507,21 @@ refused with a `Compute limit reached` error; the client can retry.
 - `SHOW CONFIG` reports the effective budget as `compute.cores`, alongside
   `compute.host_cores` and `compute.queue_timeout_ms`.
 - `SHOW STATS COMPUTE` shows the live picture — cores busy, queued, peak and
-  refused, queries in flight, and the server's own CPU time — and works in
-  every connector mode, not just `multi`.
+  refused, queries in flight, and the server's own CPU time.
 
 ### Connector Types
 
+The connector type goes in a schema file connector's `type`, or in
+`ADD CONNECTOR <name> TYPE <type>`.
+
 | Connector        | Translation                 | Backend                          |
 |------------------|-----------------------------|----------------------------------|
-| `memgraph`       | None (passthrough)          | Memgraph                         |
-| `memgraph-gql`   | GQL -> Cypher               | Memgraph                         |
-| `neo4j`          | None (passthrough)          | Neo4j                            |
-| `neo4j-gql`      | GQL -> Cypher               | Neo4j                            |
+| `memgraph`       | GQL -> Cypher               | Memgraph                         |
+| `neo4j`          | GQL -> Cypher               | Neo4j                            |
 | `postgres`       | GQL -> SQL                  | PostgreSQL                       |
 | `mysql`          | GQL -> SQL                  | MySQL 8.0+                       |
 | `oracle`         | GQL -> SQL                  | Oracle 19c+ (incl. Free 23ai)    |
-| `sqlserver`      | GQL -> SQL                  | Microsoft SQL Server (multi mode only) |
+| `sqlserver`      | GQL -> SQL                  | Microsoft SQL Server             |
 | `duckdb`         | GQL -> SQL                  | DuckDB (embedded)                |
 | `clickhouse`     | GQL -> SQL                  | ClickHouse                       |
 | `iceberg`        | GQL -> SQL                  | Iceberg via Trino                |
@@ -526,47 +530,50 @@ refused with a `Compute limit reached` error; the client can retry.
 | `mongodb`        | GQL -> aggregation pipeline | MongoDB 5.0+                     |
 | `hana`           | GQL -> SQL                  | SAP HANA 2.0 SPS05+, HANA Cloud, HANA Express |
 | `redshift`       | GQL -> SQL                  | Amazon Redshift (provisioned and Serverless) |
-| `multi`          | Per-connector               | Multiple backends simultaneously |
 
+On `memgraph` and `neo4j`, a query prefixed with `CYPHER` runs on the backend
+verbatim (see [Query Languages](#query-languages)).
 
-#### Memgraph (`memgraph`, `memgraph-gql`)
+Each connector takes the options below, written as a field of the schema file's
+`connection` block or as the matching `ADD CONNECTOR` keyword (`uri` → `URI`,
+`database` → `DATABASE`, …). Relational connectors also need a graph mapped
+over them: a `graphs` entry in the schema file, or `CREATE GRAPH … FROM`.
 
-| Variable        | Default          | Description    |
-|-----------------|------------------|----------------|
-| `MEMGRAPH_URI`  | `127.0.0.1:7687` | Connection URI |
-| `MEMGRAPH_USER` | `user`           | Username       |
-| `MEMGRAPH_PASS` | `pass`           | Password       |
-| `MEMGRAPH_DB`   | `memgraph`       | Database name  |
+#### Memgraph (`memgraph`)
 
-#### Neo4j (`neo4j`, `neo4j-gql`)
+| Option     | Default          | Description    |
+|------------|------------------|----------------|
+| `uri`      | `127.0.0.1:7687` | Bolt address   |
+| `user`     | `user`           | Username       |
+| `password` | `pass`           | Password       |
+| `database` | `memgraph`       | Database name (`GRAPH <db>` in `ADD CONNECTOR`) |
 
-| Variable     | Default          | Description    |
-|--------------|------------------|----------------|
-| `NEO4J_URI`  | `127.0.0.1:7687` | Connection URI |
-| `NEO4J_USER` | `neo4j`          | Username       |
-| `NEO4J_PASS` | `password`       | Password       |
-| `NEO4J_DB`   | `neo4j`          | Database name  |
+#### Neo4j (`neo4j`)
+
+| Option     | Default          | Description    |
+|------------|------------------|----------------|
+| `uri`      | `127.0.0.1:7687` | Bolt address   |
+| `user`     | `neo4j`          | Username       |
+| `password` | `password`       | Password       |
+| `database` | `neo4j`          | Database name (`GRAPH <db>` in `ADD CONNECTOR`) |
 
 #### PostgreSQL (`postgres`)
 
-| Variable       | Default                                                          | Description               |
-|----------------|------------------------------------------------------------------|---------------------------|
-| `POSTGRES_URL` | `host=localhost user=postgres password=postgres dbname=postgres` | libpq connection string   |
-| `MAPPING_FILE` | _(required)_                                                     | Path to JSON mapping file |
+| Option | Default                                                          | Description             |
+|--------|------------------------------------------------------------------|-------------------------|
+| `uri`  | `host=localhost user=postgres password=postgres dbname=postgres` | libpq connection string or `postgresql://` URL |
 
 #### MySQL (`mysql`)
 
-| Variable       | Default                                       | Description                              |
-|----------------|-----------------------------------------------|------------------------------------------|
-| `MYSQL_URL`    | `mysql://root:mysql@localhost:3306/test`      | MySQL connection URL (`mysql://user:pass@host:port/database`) |
-| `MAPPING_FILE` | _(required)_                                  | Path to JSON mapping file                |
+| Option | Default                                  | Description                                                   |
+|--------|------------------------------------------|---------------------------------------------------------------|
+| `uri`  | `mysql://root:mysql@localhost:3306/test` | MySQL connection URL (`mysql://user:pass@host:port/database`) |
 
 #### Oracle (`oracle`)
 
-| Variable        | Default                                                  | Description                              |
-|-----------------|----------------------------------------------------------|------------------------------------------|
-| `ORACLE_URL`    | `oracle://system:oracle@localhost:1521/FREEPDB1`         | Easy Connect URL (`oracle://user:pass@host:port/service_name`). The default targets [Oracle Database Free 23ai](https://www.oracle.com/database/free/) (service `FREEPDB1`). |
-| `MAPPING_FILE`  | _(required)_                                             | Path to JSON mapping file (same format as Postgres) |
+| Option | Default                                          | Description                              |
+|--------|--------------------------------------------------|------------------------------------------|
+| `uri`  | `oracle://system:oracle@localhost:1521/FREEPDB1` | Easy Connect URL (`oracle://user:pass@host:port/service_name`). The default targets [Oracle Database Free 23ai](https://www.oracle.com/database/free/) (service `FREEPDB1`). |
 
 The Oracle connector uses [oracle-rs](https://crates.io/crates/oracle-rs), a
 pure-Rust implementation of Oracle's TNS wire protocol, pooled via
@@ -577,10 +584,7 @@ macOS, Linux, and Windows without any extra system packages.
 
 #### SQL Server (`sqlserver`)
 
-SQL Server has no standalone environment-variable mode; `CONNECTOR_TYPE=sqlserver`
-is not supported. Register it at runtime in
-[`multi` mode](/memgraph-zero/memgql/multiple-graphs) with an ADO-style
-connection string:
+Register SQL Server with an ADO-style connection string:
 
 ```gql
 ADD CONNECTOR mssql TYPE sqlserver
@@ -596,58 +600,58 @@ type. The connection string also takes `NoLock=true` (every read carries
 
 #### DuckDB (`duckdb`)
 
-| Variable       | Default                         | Description               |
-|----------------|---------------------------------|---------------------------|
-| `DUCKDB_PATH`  | `:memory:`                      | Path to DuckDB file       |
-| `MAPPING_FILE` | _(required)_ | Path to JSON mapping file |
+| Option | Default    | Description         |
+|--------|------------|---------------------|
+| `path` | `:memory:` | Path to DuckDB file |
 
 #### ClickHouse (`clickhouse`)
 
-| Variable          | Default                   | Description               |
-|-------------------|---------------------------|---------------------------|
-| `CLICKHOUSE_URL`  | `http://localhost:8123`   | ClickHouse HTTP API URL   |
-| `CLICKHOUSE_USER` | `default`                 | ClickHouse user           |
-| `CLICKHOUSE_PASS` | _(none)_                  | ClickHouse password       |
-| `CLICKHOUSE_DB`   | `default`                 | ClickHouse database       |
-| `MAPPING_FILE`    | _(required)_              | Path to JSON mapping file |
+| Option     | Default                 | Description             |
+|------------|-------------------------|-------------------------|
+| `uri`      | `http://localhost:8123` | ClickHouse HTTP API URL |
+| `user`     | `default`               | ClickHouse user         |
+| `password` | _(none)_                | ClickHouse password     |
+| `database` | `default`               | ClickHouse database     |
 
 #### Apache Pinot (`pinot`)
 
-| Variable              | Default                    | Description                                      |
-|-----------------------|----------------------------|--------------------------------------------------|
-| `PINOT_URL`           | `http://localhost:8099`    | Pinot broker base URL or full SQL endpoint       |
-| `PINOT_QUERY_OPTIONS` | `useMultistageEngine=true` | Query options sent with broker SQL requests      |
-| `MAPPING_FILE`        | _(required)_               | Path to JSON mapping file                        |
+| Option | Default                 | Description                                |
+|--------|-------------------------|--------------------------------------------|
+| `uri`  | `http://localhost:8099` | Pinot broker base URL or full SQL endpoint |
+
+Query options sent with every broker SQL request come from the
+`PINOT_QUERY_OPTIONS` environment variable (default `useMultistageEngine=true`).
 
 #### MongoDB (`mongodb`)
 
 Translates to MongoDB aggregation pipelines rather than SQL. `mongo` is accepted
 as an alias for the connector type.
 
-| Variable       | Default                     | Description                              |
-|----------------|-----------------------------|------------------------------------------|
-| `MONGODB_URL`  | `mongodb://localhost:27017` | Connection string (`mongodb+srv://` too) |
-| `MONGODB_DB`   | `test`                      | Default database                         |
-| `MAPPING_FILE` | _(required)_                | Path to JSON mapping file                |
+| Option     | Default                     | Description                              |
+|------------|-----------------------------|------------------------------------------|
+| `uri`      | `mongodb://localhost:27017` | Connection string (`mongodb+srv://` too) |
+| `database` | `test`                      | Default database                         |
 
-Every collection in one graph must live in the same database — MongoDB's
-`$lookup` cannot join across databases.
+Omitted options fall back to the `MONGODB_URL` / `MONGODB_DB` environment
+variables. Every collection in one graph must live in the same database —
+MongoDB's `$lookup` cannot join across databases.
 
 #### SAP HANA (`hana`)
 
-| Variable        | Default                                     | Description                                                |
-|-----------------|---------------------------------------------|------------------------------------------------------------|
-| `HANA_URL`      | `hdbsql://SYSTEM:HXEHana1@localhost:39017`  | Connection URL. The scheme selects the transport: `hdbsql://` plaintext, `hdbsqls://` TLS (required by SAP HANA Cloud) |
-| `HANA_USER`     | _(from the URL)_                            | DB user, when not written into the URL                      |
-| `HANA_PASSWORD` | _(from the URL)_                            | Password, when not written into the URL                     |
-| `HANA_DATABASE` | _(none)_                                    | Tenant database of a multitenant (MDC) system               |
-| `MAPPING_FILE`  | _(required)_                                | Path to JSON mapping file (same format as Postgres)         |
+| Option     | Default          | Description                                                |
+|------------|------------------|------------------------------------------------------------|
+| `uri`      | _(required)_     | Connection URL. The scheme selects the transport: `hdbsql://` plaintext, `hdbsqls://` TLS (required by SAP HANA Cloud) |
+| `user`     | _(from the URL)_ | DB user, when not written into the URL                      |
+| `password` | _(from the URL)_ | Password, when not written into the URL                     |
+| `database` | _(none)_         | Tenant database of a multitenant (MDC) system               |
 
-`sap-hana`, `sap_hana`, and `saphana` are accepted aliases for the `hana` type.
+Omitted options fall back to the `HANA_URL`, `HANA_USER`, `HANA_PASSWORD` and
+`HANA_DATABASE` environment variables, which keeps a password out of the schema
+file. `sap-hana`, `sap_hana`, and `saphana` are accepted aliases for the `hana`
+type.
 
-Prefer `HANA_USER` / `HANA_PASSWORD` (or the `USER` / `PASSWORD` connector
-options) over embedding credentials in the URL: a HANA password often contains
-`@` or `:`, which cannot be expressed inside a URL.
+Prefer `user` / `password` over embedding credentials in the URL: a HANA
+password often contains `@` or `:`, which cannot be expressed inside a URL.
 
 The connector uses [hdbconnect](https://crates.io/crates/hdbconnect), a
 pure-Rust implementation of HANA's SQL Command Network Protocol. No ODBC, no
@@ -674,31 +678,34 @@ says `?sslmode=disable`. See the
 
 #### Iceberg (`iceberg`)
 
-| Variable        | Default                 | Description               |
-|-----------------|-------------------------|---------------------------|
-| `TRINO_URL`     | `http://localhost:8080` | Trino REST API URL        |
-| `TRINO_USER`    | `trino`                 | Trino user                |
-| `TRINO_CATALOG` | `iceberg`               | Trino catalog             |
-| `TRINO_SCHEMA`  | `default`               | Trino schema              |
-| `MAPPING_FILE`  | _(required)_            | Path to JSON mapping file |
+| Option    | Default                 | Description        |
+|-----------|-------------------------|--------------------|
+| `uri`     | `http://localhost:8080` | Trino REST API URL |
+| `user`    | `trino`                 | Trino user         |
+| `catalog` | `iceberg`               | Trino catalog      |
+| `schema`  | `default`               | Trino schema       |
 
 #### Iceberg Direct (`iceberg-direct`)
 
 Native, in-process execution over Iceberg: reads the REST catalog and object
-storage (S3/MinIO) directly, no Trino. Read-only.
+storage (S3/MinIO) directly, no Trino.
 
-| Variable                              | Default                 | Description                          |
-|---------------------------------------|-------------------------|--------------------------------------|
-| `ICEBERG_REST_URI`                    | `http://localhost:8181` | Iceberg REST Catalog URI             |
-| `ICEBERG_WAREHOUSE`                   | `iceberg`               | Warehouse / catalog name             |
-| `ICEBERG_SCHEMA`                      | `default`               | Default namespace (schema)           |
-| `ICEBERG_DIRECT_S3_ENDPOINT`          | `http://localhost:9000` | S3/MinIO endpoint                    |
-| `ICEBERG_DIRECT_S3_REGION`            | `us-east-1`             | S3 region                            |
-| `ICEBERG_DIRECT_S3_ACCESS_KEY_ID`     | `admin`                 | S3/MinIO access key                  |
-| `ICEBERG_DIRECT_S3_SECRET_ACCESS_KEY` | `password`              | S3/MinIO secret key                  |
-| `MAPPING_FILE`                        | _(required)_            | Path to JSON mapping file    |
+| Option    | Default                 | Description              |
+|-----------|-------------------------|--------------------------|
+| `uri`     | `http://localhost:8181` | Iceberg REST Catalog URI |
+| `catalog` | `iceberg`               | Warehouse / catalog name |
 
-S3 path-style access is always enabled (`s3.path-style-access=true`).
+Object storage is configured through environment variables:
+
+| Variable                              | Default                 | Description         |
+|---------------------------------------|-------------------------|---------------------|
+| `ICEBERG_DIRECT_S3_ENDPOINT`          | `http://localhost:9000` | S3/MinIO endpoint   |
+| `ICEBERG_DIRECT_S3_REGION`            | `us-east-1`             | S3 region           |
+| `ICEBERG_DIRECT_S3_ACCESS_KEY_ID`     | `admin`                 | S3/MinIO access key |
+| `ICEBERG_DIRECT_S3_SECRET_ACCESS_KEY` | `password`              | S3/MinIO secret key |
+
+S3 path-style access is always enabled (`s3.path-style-access=true`). A table's
+namespace is its mapping's `schema` (default `default`).
 
 ## Mapping Schema
 
@@ -711,8 +718,6 @@ The same mapping body is used everywhere a graph is defined:
 
 - **`--schema=<path>`** at boot: connectors + graphs in one file.
 - **`CREATE GRAPH <name> FROM '<json>'`** / **`FROM FILE '<path>'`** at runtime.
-- **`MAPPING_FILE`** in single-connector mode: a bare `{ "vertices": …, "edges": … }`
-  body (the connector comes from the environment).
 
 A mapping with a required field missing (for example a relational edge without
 `metaFields.from` / `metaFields.to`) is rejected before the server serves
