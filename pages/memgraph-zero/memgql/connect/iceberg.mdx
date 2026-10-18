@@ -11,7 +11,7 @@ different ways. Both reuse the same
 Iceberg tables, and both fully qualify table references as
 `catalog.schema.table`.
 
-| Connector        | Type             | Execution                                                                 | Writes |
+| Connector        | `CONNECTOR_TYPE` | Execution                                                                 | Writes |
 |------------------|------------------|---------------------------------------------------------------------------|--------|
 | Direct (native)  | `iceberg-direct` | Native, in-process; reads Iceberg as Arrow directly from object storage   | ❌ read-only |
 | Trino            | `iceberg`        | GQL → Trino-dialect SQL, executed by a Trino engine                       | ✓ |
@@ -35,7 +35,7 @@ one works against the other.
 
 ## Direct execution (`iceberg-direct`)
 
-The direct connector (type `iceberg-direct`) performs **native,
+The direct connector (`CONNECTOR_TYPE=iceberg-direct`) performs **native,
 in-process** graph execution on Iceberg. It uses the
 [`iceberg`](https://crates.io/crates/iceberg) and
 [`iceberg-catalog-rest`](https://crates.io/crates/iceberg-catalog-rest) Rust
@@ -136,8 +136,8 @@ for name, (schema, data) in tables.items():
 
 ### 3. Start MemGQL
 
-The direct connector reads object storage settings from the
-`ICEBERG_DIRECT_S3_*` environment variables.
+The direct connector resolves the REST catalog and object storage from the
+`ICEBERG_*` environment variables.
 
 ```bash
 docker run --rm \
@@ -145,23 +145,23 @@ docker run --rm \
     --network memgql-net \
     --stop-timeout 2 \
     -p 7688:7688 \
+    --env CONNECTOR_TYPE=iceberg-direct \
+    --env ICEBERG_REST_URI=http://iceberg-rest-dev:8181 \
+    --env ICEBERG_WAREHOUSE=iceberg \
+    --env ICEBERG_SCHEMA=default \
     --env ICEBERG_DIRECT_S3_ENDPOINT=http://minio-dev:9000 \
     --env ICEBERG_DIRECT_S3_REGION=us-east-1 \
     --env ICEBERG_DIRECT_S3_ACCESS_KEY_ID=admin \
     --env ICEBERG_DIRECT_S3_SECRET_ACCESS_KEY=password \
+    --env MAPPING_FILE=/data/mapping.json \
     -v ./mapping.json:/data/mapping.json \
     memgraph/memgql:latest
 ```
 
-### 4. Connect and register the backend
+### 4. Connect
 
 ```bash
 mgconsole --port 7688
-```
-
-```gql
-ADD CONNECTOR ice TYPE iceberg-direct URI 'http://iceberg-rest-dev:8181';
-CREATE GRAPH social FROM FILE '/data/mapping.json';
 ```
 
 ### 5. Query
@@ -178,13 +178,13 @@ MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
 MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
 ```
 
-For connector options, see [Reference](/memgraph-zero/memgql/reference#iceberg-direct-iceberg-direct).
+For environment variables, see [Reference](/memgraph-zero/memgql/reference#iceberg-direct-iceberg-direct).
 
 ---
 
 ## Trino (`iceberg`)
 
-The Trino-backed connector (type `iceberg`) translates GQL queries
+The Trino-backed connector (`CONNECTOR_TYPE=iceberg`) translates GQL queries
 into Trino-dialect SQL with fully-qualified table references
 (`catalog.schema.table`) and executes them against Iceberg tables via Trino's
 REST API. Trino performs joins, pruning, aggregation, and writes server-side.
@@ -263,19 +263,19 @@ docker run --rm \
     --network memgql-net \
     --stop-timeout 2 \
     -p 7688:7688 \
+    --env CONNECTOR_TYPE=iceberg \
+    --env TRINO_URL=http://trino-dev:8080 \
+    --env TRINO_CATALOG=iceberg \
+    --env TRINO_SCHEMA=default \
+    --env MAPPING_FILE=/data/mapping.json \
     -v ./mapping.json:/data/mapping.json \
     memgraph/memgql:latest
 ```
 
-### 4. Connect and register the backend
+### 4. Connect
 
 ```bash
 mgconsole --port 7688
-```
-
-```gql
-ADD CONNECTOR trino TYPE iceberg URI 'http://trino-dev:8080' CATALOG 'iceberg' SCHEMA 'default';
-CREATE GRAPH social FROM FILE '/data/mapping.json';
 ```
 
 ### 5. Query
@@ -292,7 +292,7 @@ MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
 MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name;
 ```
 
-For connector options, see [Reference](/memgraph-zero/memgql/reference#iceberg-iceberg).
+For environment variables, see [Reference](/memgraph-zero/memgql/reference#iceberg-iceberg).
 
 ---
 
