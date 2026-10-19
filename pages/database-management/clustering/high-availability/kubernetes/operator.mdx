@@ -36,8 +36,6 @@ coordinators, MAIN and REPLICAs are new to you.
   rules need it.
 - `kubectl` and Helm 3.
 - A Memgraph Enterprise license and the organization name it was issued to.
-- Room for the default cluster: three coordinators and two data instances are
-  five pods and five PersistentVolumeClaims of 10Gi each.
 
 ## Install the operator
 
@@ -174,15 +172,27 @@ cluster](#check-the-cluster) for what each column and condition means.
 
 ### 4. Run a query
 
-Every pod serves Bolt on port 7687, and the Memgraph image includes
-`mgconsole`. Find the MAIN, the data instance that accepts writes:
+To check that the cluster works, run a query directly on the MAIN, the data
+instance that accepts writes. This is for testing only; applications connect
+through the coordinators, as in [Connect your
+application](#5-connect-your-application).
+
+<Callout type="warning">
+Don't point an application at a data instance pod. The MAIN moves to another
+data instance on failover and during restarts and scale-downs, and a client
+pinned to one pod then writes to a REPLICA, which refuses writes. In
+production, connect with routing to any coordinator.
+</Callout>
+
+Find the MAIN:
 
 ```bash
 kubectl get mgc memgraph -n memgraph -o jsonpath='{.status.main}'
 ```
 
-The data instance `instance_N` runs in the pod `memgraph-data-N`. If the MAIN
-is `instance_0`, run a query on `memgraph-data-0`:
+The data instance `instance_N` runs in the pod `memgraph-data-N`. Every pod
+serves Bolt on port 7687, and the Memgraph image includes `mgconsole`. If the
+MAIN is `instance_0`, run a query on `memgraph-data-0`:
 
 ```bash
 kubectl exec -i -n memgraph memgraph-data-0 -c memgraph -- mgconsole <<'EOF'
@@ -191,15 +201,33 @@ MATCH (n:Greeting) RETURN n.text;
 EOF
 ```
 
-To connect with [Memgraph Lab](/memgraph-lab) or another client from your
-machine, forward the port of the MAIN's pod:
+To try [Memgraph Lab](/memgraph-lab) or another client from your machine,
+forward the port of the MAIN's pod:
 
 ```bash
 kubectl port-forward -n memgraph pod/memgraph-data-0 7687:7687
 ```
 
-To reach the cluster from outside Kubernetes without a port forward, see [Expose the cluster
-outside Kubernetes](#expose-the-cluster-outside-kubernetes).
+### 5. Connect your application
+
+Applications connect with routing: the `neo4j://` scheme and the address of
+any coordinator. The driver gets the routing table from the coordinator, sends
+writes to the current MAIN and reads to the REPLICAs. After a failover, the
+coordinators route the driver to the new MAIN, so the application needs no
+change. See [querying the
+cluster](/clustering/high-availability/querying-the-cluster-in-high-availability).
+
+Inside Kubernetes, use a coordinator's DNS name in the `memgraph-coordinator`
+headless Service:
+
+```plaintext
+neo4j://memgraph-coordinator-0.memgraph-coordinator.memgraph.svc.cluster.local:7687
+```
+
+Any coordinator works, such as `memgraph-coordinator-1` or
+`memgraph-coordinator-2`. For applications outside Kubernetes, [expose the
+cluster](#expose-the-cluster-outside-kubernetes) and connect with routing to
+the coordinators' external address.
 
 ## Check the cluster
 
@@ -280,10 +308,9 @@ kubectl exec -n memgraph memgraph-coordinator-0 -c memgraph -- \
 
 Applications inside Kubernetes reach each pod at its DNS name in the role's
 headless Service, such as
-`memgraph-data-0.memgraph-data.memgraph.svc.cluster.local:7687`. To send
-writes to the MAIN and reads to REPLICAs automatically, connect with the
-`neo4j://` scheme to a coordinator; see [querying the
-cluster](/clustering/high-availability/querying-the-cluster-in-high-availability).
+`memgraph-data-0.memgraph-data.memgraph.svc.cluster.local:7687`. Applications
+connect through the coordinators instead; see [Connect your
+application](#5-connect-your-application).
 
 ## Scale the cluster
 
