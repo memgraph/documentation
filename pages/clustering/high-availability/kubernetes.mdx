@@ -37,8 +37,15 @@ chart, after which the chart receives only necessary and critical bug fixes.
 | Workloads | One StatefulSet per instance | One StatefulSet per role |
 | Registration | A Job, on every `helm install` and `helm upgrade` | The operator, continuously: a lost registration is restored without a `helm upgrade` |
 | Scaling | Add or remove instance entries, then `helm upgrade` | Change a count; the operator moves the MAIN off a retiring instance first |
-| Changing a flag | `helm upgrade` | Edit the resource; flags Memgraph can change at run time apply without a restart |
-| Restarting pods | The StatefulSet `updateStrategy` | The operator, one pod at a time: data instances first, the MAIN last, then coordinators |
+| Changing a flag | Flags are container arguments: every change restarts the pods | Edit `flags`. A flag Memgraph can change at run time is applied to every running instance with **no restart**; only startup-only flags restart pods |
+| Coordinator settings | Run `SET COORDINATOR SETTING` yourself | Set them in `flags.coordinators`; the operator writes them once, with no restart |
+| Renewing the license | Run `SET DATABASE SETTING` on every instance, then update the Secret | Update the Secret; the operator applies the new license to every instance, with no restart, and reports it in the `LicenseApplied` condition |
+| Restarting pods | The StatefulSet `updateStrategy`; ISSU by hand with `OnDelete` | The operator, one pod at a time in the ISSU order: data instances first, the MAIN last, then coordinators with the leader last |
+| Storage | Separate claims for data and logs, 1Gi by default | One claim per pod for data and logs (10Gi by default), or no log files at all (`logFile: None`); claims grow on a live cluster without a restart, and are kept on delete and scale-down by default |
+| Probes | Startup, readiness and liveness probes; the startup probe must outlast the longest recovery | One readiness probe with three timings, and no liveness or startup probe, so a long recovery is never killed |
+| Scheduling | Four affinity modes (`default`, `unique`, `parity`, `nodeSelection`) | One anti-affinity rule with `type`, `scope` and `topologyKey`, plus per-role node selectors, tolerations, topology spread constraints and priority classes |
+| Security context | `memgraphUserId` and `memgraphGroupId` | `securityContext`, defaulting to the Memgraph image's user; `{}` lets the platform assign it, as OpenShift requires |
+| External access | Five methods chosen per tier; addresses registered by the setup Job on `helm upgrade`, or with `UPDATE CONFIG` by hand | One `type` (`LoadBalancer` or `Gateway`); the operator finds each member's external address and keeps the routing table pointing at it as the address changes |
 | Bolt authentication | Supported; you create users with Cypher | Not supported yet |
 
 Start a new cluster with the operator, and check its
