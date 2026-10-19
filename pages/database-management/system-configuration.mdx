@@ -26,15 +26,36 @@ with one of two errors:
 - `Too many open files in system` (`ENFILE`): the **system-wide** limit
   (`fs.file-max`) has been reached.
 
-<Callout type="warning">
-Under systemd the default per-process limit is **1024** (hard limit `524288` on
-recent systemd versions), which means Memgraph starts failing at roughly 950
-client connections. Starting with Memgraph v3.14, the Memgraph package sets
-`LimitNOFILE=1048576` in its systemd unit, Memgraph raises its soft limit to the
-hard limit at startup, logs the resulting limits and warns if the limit is below
-`65536`. On earlier releases, or if you use your own unit file or container
-setup, follow the steps below.
-</Callout>
+When Memgraph reaches the per-process limit, new client connections fail at the
+Bolt handshake, and the Memgraph log shows:
+
+```plaintext
+Bolt accept failed (Too many open files); retrying every 500ms, further occurrences logged at most every 10s
+```
+
+Connections succeed again once other connections close.
+
+Starting with v3.14, Memgraph raises its soft limit to the hard limit
+at startup. It never changes the hard limit, so only the hard limit matters.
+With a hard limit of `1024`, Memgraph starts failing at roughly 950 client
+connections. The Memgraph package sets `LimitNOFILE=1048576` in its systemd
+unit, so both limits are `1048576`.
+
+If the limit after the raise is below `65536`, Memgraph logs a warning at
+startup. The warning begins with `Open files limit is too low (soft N, hard N)`.
+Both numbers are the hard limit, so raise the hard limit. Memgraph still starts
+and serves queries.
+
+A custom unit file or container setup with a high hard limit needs no action. A
+systemd unit without `LimitNOFILE` gets a soft limit of `1024` and a hard limit
+that depends on the systemd version. If the hard limit is low, or on releases
+before v3.14, follow the steps below.
+
+Memgraph also logs the resulting limits as
+`Open files limit (RLIMIT_NOFILE): soft N, hard N.` at `INFO` level. The default
+log level is `WARNING`, so this line isn't written unless you start Memgraph
+with `--log-level=INFO`. To check the limits Memgraph runs with, read
+`/proc/<pid>/limits` as shown in the steps below.
 
 ### Sizing the limit
 
@@ -97,9 +118,9 @@ services:
 
 ### Kubernetes
 
-Kubernetes does not set the open files limit itself. The containers inherit it
-from the container runtime (containerd or CRI-O) on the node, so check the
-runtime's `LimitNOFILE` setting if you see the warning in the Memgraph log.
+Starting with v3.14, Memgraph raises its soft limit to the container's hard limit
+at startup, so only the hard limit counts. If you see the warning in the Memgraph
+log, raise the hard open files limit that containers get on the node.
 
 ### System-wide limit
 
