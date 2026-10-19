@@ -4,7 +4,7 @@ export default {
     "coordinator-authentication": "Coordinator authentication",
     "setup-ha-cluster-docker": "Set up HA cluster with Docker",
     "setup-ha-cluster-docker-compose": "Set up HA cluster with Docker Compose",
-    "setup-ha-cluster-k8s": "Set up HA cluster with K8s",
+    "kubernetes": "Memgraph HA in K8s",
     "best-practices": "Best practices",
     "analytical-import": "Bulk import in analytical mode",
     "ha-commands-reference": "Reference commands",
