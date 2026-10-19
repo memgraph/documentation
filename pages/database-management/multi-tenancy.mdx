@@ -152,10 +152,16 @@ Users interact with multi-tenant features through specialized Cypher queries:
    database is currently in use. You can also use `SHOW CURRENT DATABASE` for
    the same functionality. This command does not require any special privileges.
 5. `SHOW DATABASES`: Shows only the existing set of multitenant databases. The
-   result includes a `Name` column, a `State` column (`HOT`/`COLD`) and a
-   `Health` column (`ready`/`broken`). `HOT` databases are resident in memory while `COLD` are suspended, but still listed. A database is reported as `broken` when it
+   result includes a `Name` column, a `State` column (`HOT`/`COLD`/`DROPPING`) and a
+   `Health` column (`ready`/`broken`/`draining`). `HOT` databases are resident in memory while `COLD` are suspended, but still listed. A database is reported as `broken` when it
    failed durability recovery and came up empty — see
    [recovery failure handling](/fundamentals/data-durability#recovery-failure-handling).
+
+   A `HOT` database dropped with `FORCE` stays listed as `DROPPING`/`draining`
+   until its teardown finishes. The row is named `<name> (<uuid>)` if a live
+   database or another draining copy has the same name. Users without access
+   to all databases don't see it; see
+   [DROP DATABASE with FORCE](#drop-database-with-force).
 6. `USE DATABASE name`: Switches focus to a specific database (disabled during
    transactions).
 7. `GRANT DATABASE name TO user_or_role`: Grants a user or role access to a
@@ -223,15 +229,68 @@ DROP DATABASE database_name [FORCE];
 
 Using the `FORCE` option requires:
 - `MULTI_DATABASE_EDIT` privilege
-- Access to the `memgraph` database
+- Access to the database being dropped
 - `TRANSACTION_MANAGEMENT` privilege (to terminate active transactions)
 
 {<h4 className="custom-header"> Important considerations </h4>} 
 
 - All active transactions on the target database will be forcibly terminated.
+  A query module procedure that doesn't check for abort runs until it returns;
+  its commit then fails.
 - The database becomes immediately unavailable to new connections.
 - Actual deletion may be deferred until existing connections are properly closed.
 - **This operation cannot be undone.**
+
+{<h4 id="after-a-forced-drop" className="custom-header"> After a forced drop </h4>}
+
+A forced drop returns immediately. A `COLD` database is removed at once. A `HOT`
+database is torn down in the background. Until that finishes,
+`SHOW DATABASES` lists it with State `DROPPING` and Health `draining`.
+
+A worker that runs every 10 seconds removes it once nothing holds it. So even a
+`HOT` database nothing uses stays listed for up to about 10 seconds.
+
+While the database is listed as `DROPPING`:
+
+- `DROP DATABASE x`, with or without `FORCE`, fails with
+  `Database x is currently being dropped.` It's a client error, so drivers
+  don't retry it. Once the row is gone, it fails with a `does not exist` error.
+- `USE DATABASE x` fails with an `unknown database` error.
+- `CREATE DATABASE x` creates a new, empty database. A later
+  `DROP DATABASE x` drops this new database.
+- A procedure that doesn't check for abort keeps the database listed, but
+  `SHOW TRANSACTIONS` no longer shows it. When it returns, its commit fails with
+  `Aborting transaction commit because the transaction was requested to stop from other session.`
+- A running `AFTER COMMIT` trigger on the database is asked to abort too.
+  The database stays listed until the trigger stops.
+
+A database still held after 5 minutes gets a server-log warning that names it,
+starting `Deferred teardown has been pending for over 5 minutes`.
+The usual cause is a procedure that doesn't check for abort.
+
+The draining row is named `<name> (<uuid>)`, with the dropped database's
+UUID, if a live database or another draining copy has the same name:
+
+```cypher
+DROP DATABASE x FORCE;
+CREATE DATABASE x;
+SHOW DATABASES;
+```
+
+```plaintext copy=false
++--------------------------------------------+------------+------------+
+| Name                                       | State      | Health     |
++--------------------------------------------+------------+------------+
+| "memgraph"                                 | "HOT"      | "ready"    |
+| "x"                                        | "HOT"      | "ready"    |
+| "x (3beec4b5-1d20-4a9b-99c3-5af905d871c2)" | "DROPPING" | "draining" |
++--------------------------------------------+------------+------------+
+```
+
+Only users with access to all databases see a draining row; with auth
+disabled, every session does. The drop removes the database from every user's
+and role's grants and denies. Users and roles that had it by name must be
+granted the recreated database again.
 
 ### RENAME DATABASE
 
@@ -427,7 +486,9 @@ granted.
 
 <Callout type="warning">
 
-User-role mappings are simple maps located in the user. Deleting or renaming the database will not update this information. The admin needs to make sure the correct access is maintained at all times.
+User-role mappings are simple maps located in the user. Renaming the database will not update this information. The admin needs to make sure the correct access is maintained at all times.
+
+`DROP DATABASE` removes the database from every user's and role's grants and denies. A database recreated under the same name must be granted or denied again to users and roles that had it by name.
 
 </Callout>
 
