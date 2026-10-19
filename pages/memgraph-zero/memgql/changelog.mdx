@@ -16,6 +16,37 @@ description: MemGQL release notes
   fetched for your AWS identity on every connection. The endpoint from the AWS
   console, or a `jdbc:redshift://` URL, works as the connector URI. See
   [Amazon Redshift](/memgraph-zero/memgql/connect/redshift).
+- **Schema discovery for native connectors.** A graph that lists a Memgraph or
+  Neo4j connector under `"discover": ["mg"]` reads that connector's schema at
+  boot and on `REFRESH SCHEMA` instead of repeating it: every node type becomes
+  a vertex (its label set spelled `CAT:Product`, properties as attributes),
+  every relationship type one edge per endpoint pair. Anything the graph
+  declares itself wins, so declaring an element is how you restrict what is
+  exposed. `EXPORT SCHEMA` writes `discover` back, not the discovered elements.
+  See [Discovered native schema](/memgraph-zero/memgql/schema-file#discovered-native-schema).
+- **Multi-label native vertices and shared relationship types.** A native
+  vertex spelled `"label": "CAT:Product"` routes under each of its labels, so
+  `MATCH (p:CAT)`, `` MATCH (p:CAT&`Product`) `` and `CYPHER MATCH (p:CAT:Product)`
+  all reach it; a backticked `` :`CAT:Product` `` in a `CYPHER` passthrough is
+  sent as the label conjunction (it used to match nothing). A
+  `mappedGraphSource` edge label may be declared once per `from`/`to` pair,
+  and the declared pairs constrain a pattern end left unlabelled. `SHOW SCHEMA`
+  lists the declared or discovered attributes of native labels instead of
+  "(not introspected)". See [Vertices](/memgraph-zero/memgql/schema-file#vertices)
+  and [Edges](/memgraph-zero/memgql/schema-file#edges).
+- **Query parameters are bound.** `MATCH (s:Store) WHERE s.region = $r …` with
+  `{r: 'North'}` sent by the driver now binds on every backend (as a prepared
+  placeholder on SQL, natively on Memgraph and Neo4j, including a `CYPHER`
+  passthrough). A parameter the client did not send is reported by name.
+- **More of the expression language in GQL mode.** String and numeric
+  functions (`lower(s.name)`, `char_length`, `size`, `abs`, `floor`, …),
+  `CAST(x AS STRING | INT | FLOAT | BOOLEAN)`, concatenation with `||` or
+  `+`, and `EXISTS { … }` are translated per backend instead of being copied
+  into the backend query as text, so they work on renamed attributes and on
+  every SQL dialect (`CAST(x AS TEXT)`, `CONCAT`, `||`). `EXISTS { … }` runs
+  natively on Memgraph and Neo4j and is refused with a rewrite hint on SQL
+  backends. See
+  [Functions and reserved words](/memgraph-zero/memgql/reference#functions-and-reserved-words-in-gql-mode).
 
 ### 🐞 Bug fixes
 
@@ -26,6 +57,36 @@ description: MemGQL release notes
   `RETURN` also has a grouping key. On ClickHouse, SQL Server, and SAP HANA,
   every `collect()` form, including `collect(DISTINCT …)`, now fails with an
   actionable error; `collect(DISTINCT …)` used to return `null` there.
+- **`SET` and `REMOVE` on a `READ ONLY` graph.** They were not routed by the
+  labels they touch, so the read-only check never saw a graph and the write
+  went to whichever backend the session had used last. They now route like
+  `DELETE` and are refused before any backend, the same as `INSERT`.
+- **`OPTIONAL MATCH` filters.** On Memgraph a `WHERE` on the `MATCH` before an
+  `OPTIONAL MATCH` was attached to the optional pattern, so every row came
+  back; on SQL backends `count(n)` after an `OPTIONAL MATCH … WHERE` counted
+  the rows the filter had turned into `null`s (`500` instead of `1, 0, 0`).
+  Each filter now stays with its own clause, and `count(n)` counts matched
+  elements only.
+- **An unlabelled end of a native edge.** `(p:Product)-[:inGroup]->(g)` could
+  return nodes of labels the graph never declared; the edge's declared `to`
+  label (or labels) now constrains `g`.
+- **`CONTAINS` / `STARTS WITH` / `ENDS WITH` inside `CASE` on SQL backends**
+  always fell through to `ELSE`: the pattern was emitted without wildcards.
+- **Functions on renamed attributes** (`lower(s.name)` where `name` maps to
+  `store_name`) emitted the GQL name into the SQL. `CAST(x AS STRING)` lost its
+  spaces, `size()` passed through unchanged, `||` and `+` on strings were not
+  translated.
+- **`n.id` on a table whose key is not called `id`** emitted a column `id`;
+  it now reads the `metaFields.id` column.
+- **Variable-length paths over `varchar(n)` keys** failed with a recursive
+  CTE type mismatch on PostgreSQL.
+- **A later `MATCH` that reaches an already bound variable only at its end**
+  (`MATCH (i:Item) … MATCH (s:Store)-[:stocks]->(i)`) referenced a table
+  before it was in scope; it now joins back to the bound variable.
+- **`count(r)` of a relationship carried through `WITH`** referenced a column
+  the derived table did not have.
+- **Parse errors inside a backticked label** (`` (p:`CAT:Product`) ``) no
+  longer carry an unrelated "`Product` is a reserved word" hint.
 
 ## MemGQL v0.13.0 - October 7th, 2026
 
