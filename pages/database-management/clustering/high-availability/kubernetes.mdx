@@ -1,0 +1,61 @@
+---
+title: Memgraph HA in Kubernetes
+description: Choose between the memgraph-high-availability Helm chart and the Memgraph Kubernetes operator to run a Memgraph high availability cluster on Kubernetes.
+---
+
+import { Callout } from 'nextra/components'
+
+# Memgraph HA in Kubernetes <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+You can run a Memgraph [high availability](/clustering/high-availability)
+cluster on Kubernetes in two ways: with the `memgraph-high-availability` Helm
+chart, or with the Memgraph Kubernetes operator. Both run the same Memgraph
+coordinators and data instances, and both need a [Memgraph Enterprise
+license](/database-management/enabling-memgraph-enterprise).
+
+- **[Memgraph high availability Helm
+  chart](/clustering/high-availability/kubernetes/helm-chart)**: the supported
+  way to run Memgraph HA in production. You list every coordinator and data
+  instance in the chart values, and a Job registers them on every `helm
+  install` and `helm upgrade`.
+- **[Memgraph Kubernetes
+  operator](/clustering/high-availability/kubernetes/operator)**: one
+  `MemgraphCluster` resource describes the cluster, and the operator creates
+  it, registers its members and keeps them registered. It also carries out
+  scaling, flag changes, storage growth and rolling restarts. The operator is
+  in early development.
+
+<Callout type="info">
+The operator is the successor to the `memgraph-high-availability` chart. Until
+it reaches functional parity with the chart, the chart remains the supported
+way to run HA in production, and the operator is an alpha for evaluation.
+</Callout>
+
+## Choose between the chart and the operator
+
+| | Helm chart | Operator |
+|---|---|---|
+| Status | Supported for production | Early development (`v1alpha1`) |
+| How you describe the cluster | Helm values, one block per instance | One `MemgraphCluster` resource with a count per role |
+| Workloads | One StatefulSet per instance | One StatefulSet per role |
+| Registration | A Job, on every `helm install` and `helm upgrade` | The operator, continuously: a lost registration is restored without a `helm upgrade` |
+| Scaling | Add or remove instance entries, then `helm upgrade` | Change a count; the operator moves the MAIN off a retiring instance first |
+| Changing a flag | `helm upgrade` | Edit the resource; flags Memgraph can change at run time apply without a restart |
+| Restarting pods | The StatefulSet `updateStrategy` | The operator, one pod at a time: data instances first, the MAIN last, then coordinators |
+| Bolt authentication | Supported; you create users with Cypher | Not supported yet |
+
+Use the Helm chart for production clusters. Use the operator to evaluate it,
+and check its [limitations](/clustering/high-availability/kubernetes/operator#limitations)
+before you rely on it.
+
+## Move from the chart to the operator
+
+The operator never takes over a cluster that the chart deployed. To move,
+create a new cluster with the operator and transfer the data to it, with a
+[backup and restore](/database-management/backup-and-restore) or a replication
+cutover.
+
+Where a setting exists in both, the operator uses the chart's name for it. The
+`secrets` block that names the license Secret, for example, is the same in
+both. The topology is where they differ: the chart's per-instance blocks become
+two counts, `coordinators` and `dataInstances`.
