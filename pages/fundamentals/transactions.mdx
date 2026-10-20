@@ -103,7 +103,7 @@ creation or garbage collection) and contains eight columns:
 | `metadata` | `Map` | Metadata supplied by the client when the transaction was opened. For in-progress snapshots and garbage collection it contains progress details (see below). |
 | `start_time` | `ZonedDateTime` | UTC time at which the transaction started. |
 | `elapsed_ms` | `Integer` | How long the transaction has been running, in milliseconds. |
-| `database` | `String` | The database the transaction is running on. |
+| `database` | `String` | The database the listed transaction is running on, not the database of the session that runs `SHOW TRANSACTIONS`. In Memgraph Community it's always `memgraph`. |
 
 ```plaintext copy=false
 +----------+-----------------------+------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
@@ -467,13 +467,14 @@ SHOW SESSIONS;
 
 Each row is one session that is currently logged in. A connection that hasn't
 logged in yet, or that has logged off, isn't listed. After it logs on again it
-reappears with the same `session_id`:
+reappears with the same `session_id`. If another user logs on, the row shows
+that user and the database of the new login:
 
 | Column | Type | Description |
 |---|---|---|
 | `session_id` | `String` | Unique id of the session. Use this value with the `TERMINATE SESSIONS` query to close the session. |
-| `username` | `String` | The user the session logged in as, or `""` if authentication is disabled. With impersonation, this is still the login user. |
-| `database` | `String` | The database the session is using, or `""` if it isn't using one. |
+| `username` | `String` | The user the session logged in as, or `""` for a session that logged in while authentication was disabled. With impersonation, this is still the login user. |
+| `database` | `String` | The database the session is using: the one selected with `USE DATABASE`, the one named when connecting, or otherwise the user's main database (`memgraph` by default). `""` if the session has no database, for example after its database was dropped. |
 | `login_timestamp` | `String` | UTC time of the session's most recent login, formatted as `YYYY-MM-DD HH:MM:SS.ffffff` (no time zone suffix). |
 
 The `SHOW SESSIONS` query shows your own sessions, and the sessions on every
@@ -566,10 +567,13 @@ What happens to a terminated session depends on what it's doing:
 The client of a terminated session loses its connection:
 
 - **A query it's running** fails with the transient `Transaction was asked to
-  abort by another user.` error.
-- **An idle client** gets a connection error on its next request. A driver
-  with a connection pool opens a new connection instead, so the request
-  succeeds.
+  abort by another user.` error. A query that doesn't check for termination
+  fails when it finishes, with the transient `Aborting transaction commit
+  because the transaction was requested to stop from other session.` error.
+- **An idle client** gets a connection error on its next request, and the
+  driver opens a new connection for the request after that. Driver retry
+  helpers (for example, the Python driver's `execute_read`) retry on that
+  error, so their request succeeds.
 
 Because the error is transient, driver retry helpers (for example, the Python
 driver's `execute_write`) retry the transaction on a new connection, and the
