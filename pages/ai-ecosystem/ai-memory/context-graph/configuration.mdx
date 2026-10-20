@@ -1,6 +1,6 @@
 ---
 title: Configure Context Graph
-description: Configure Context Graph's Memgraph connection, identity and recorded data, and update or uninstall it for your coding agents.
+description: Configure Context Graph's Memgraph connection, identity and what it records, keep secrets out of the graph, and update or uninstall it.
 ---
 
 import { Callout } from 'nextra/components'
@@ -8,8 +8,8 @@ import { Callout } from 'nextra/components'
 # Configure Context Graph
 
 Context Graph keeps its settings in one configuration file. This page covers
-the file, connecting to your own Memgraph, choosing what is recorded, and
-updating or removing Context Graph.
+the file, connecting to your own Memgraph, choosing what is recorded, keeping
+secrets out of the graph, and updating or removing Context Graph.
 
 ## Configuration file
 
@@ -37,6 +37,10 @@ memgraph-context-graph config set identity.user_id alice
 | `memgraph.password` | Empty | The Memgraph password. `config set memgraph.password` without a value prompts for it. |
 | `memgraph.database` | `memgraph` | The database, on a Memgraph with [multi-tenancy](/database-management/multi-tenancy) |
 | `capture.connectors` | `skills-graph, actions-graph, sessions-graph` | What the hooks record. See [Choose what is recorded](#choose-what-is-recorded). |
+| `capture.redact` | `true` | Whether secrets are redacted before they're stored. See [Keep secrets out of the graph](#keep-secrets-out-of-the-graph). |
+| `capture.max_chars` | `100000` | The most characters kept from one text field, such as a tool's output. `0` keeps everything. |
+| `capture.exclude_tools` | None | Tools whose calls and results aren't recorded, by name or glob |
+| `capture.exclude_projects` | None | Directories in which nothing is recorded, by path or glob |
 | `memory.backend` | Unset | `context-graph` when Context Graph is the agents' [memory](/ai-ecosystem/ai-memory/context-graph/recall-and-memory#use-context-graph-as-your-agents-memory). Set it with setup's `--memory-backend`, which also changes the agents' settings. |
 | `session_start.resume` | `true` | Whether a session starts with the [note on where you left off](/ai-ecosystem/ai-memory/context-graph/recall-and-memory#where-you-left-off) |
 | `recall.embedding_model` | `BAAI/bge-small-en-v1.5` | The embedding model for recall |
@@ -49,8 +53,8 @@ memgraph-context-graph config set identity.user_id alice
 | `edition` | `community` | `enterprise` to use [shared spaces](/ai-ecosystem/ai-memory/context-graph/shared-spaces). Set it with `memgraph-context-graph join`. |
 | `github.token` | Unset | A GitHub token for `resources-graph`, used instead of your `gh` login. Prompts for the value. |
 
-Recall's other settings and the `[extraction]` settings are edited in the file
-directly. See [Tune recall](/ai-ecosystem/ai-memory/context-graph/recall-and-memory#tune-recall)
+Recall's other settings, the `[extraction]` settings and `[redact]` patterns
+are edited in the file directly. See [Tune recall](/ai-ecosystem/ai-memory/context-graph/recall-and-memory#tune-recall)
 and [Tune extraction](/ai-ecosystem/ai-memory/context-graph/knowledge-graph#tune-extraction).
 
 <Callout type="warning">
@@ -113,6 +117,111 @@ memgraph-context-graph setup
 
 Setup installs the connectors the setting names. An empty value records
 nothing, without disconnecting the agents.
+
+## Keep secrets out of the graph
+
+The hooks record prompts, replies, and tool input and output in full, so a
+session can contain an API key from a `.env` file or text you don't want
+stored. Before anything reaches Memgraph, Context Graph removes what you mark
+as private, redacts secrets, and shortens long text. What it removes is never
+stored.
+
+These rules apply to everything the hooks record, for every agent. They don't
+apply to memory files the agent writes with the
+[`memory` tool](/ai-ecosystem/ai-memory/context-graph/recall-and-memory#how-the-agent-uses-memory),
+which are stored as written. Sessions recorded before an update that added the
+rules stay as they were.
+
+### Mark text as private
+
+Text between `<private>` and `</private>` is removed from prompts, replies and
+tool input and output:
+
+```plaintext
+Connect to the staging database. <private>The password is in the team vault under "staging-db".</private>
+```
+
+Context Graph stores only "Connect to the staging database.". The agent still
+gets the whole prompt. If a prompt has nothing outside its private block, it
+isn't stored at all. An unclosed `<private>` hides the rest of the text.
+
+### Redact secrets
+
+Context Graph replaces known kinds of secrets with `[REDACTED:NAME]`, where
+`NAME` says what was removed:
+
+| Name | What it matches |
+| --- | --- |
+| `private_key` | PEM private key blocks |
+| `aws_access_key` | AWS access key IDs |
+| `github_token` | GitHub tokens and fine-grained personal access tokens |
+| `anthropic_key` | Anthropic API keys |
+| `openai_key` | OpenAI API keys |
+| `slack_token` | Slack tokens |
+| `stripe_key` | Stripe secret and restricted keys |
+| `google_api_key` | Google API keys |
+| `jwt` | JSON Web Tokens |
+| `url_password` | Passwords in URLs, such as `postgres://user:PASSWORD@host` |
+| `config_secret` | The Memgraph password, API keys and GitHub token in the configuration file, if they're at least 6 characters long |
+
+To redact your own patterns, add a `[redact]` section to the configuration
+file. Each key is the name in the replacement, and each value is a
+[Python regular expression](https://docs.python.org/3/library/re.html#regular-expression-syntax)
+in single quotes:
+
+```toml
+[redact]
+ticket = 'ACME-[0-9]+'
+customer_email = '[A-Za-z0-9._%+-]+@acme\.com'
+```
+
+An invalid pattern is ignored and reported as a configuration warning, and
+recording continues.
+
+Redaction matches known shapes of secrets, so it doesn't catch every secret.
+Use `<private>` or `capture.exclude_projects` for anything it might miss.
+
+To turn redaction off, so that only `<private>` blocks are removed:
+
+```bash
+memgraph-context-graph config set capture.redact false
+```
+
+### Shorten long text
+
+Each text field, such as a tool's output, is cut after `capture.max_chars`
+characters, 100,000 by default, and ends with a note of how many characters
+were removed. To change the limit, or to keep everything with `0`:
+
+```bash
+memgraph-context-graph config set capture.max_chars 20000
+```
+
+### Exclude tools and projects
+
+To stop recording some tools' calls and results, list their names. A name can
+be a glob, such as `mcp__vault__*` for every tool of one MCP server:
+
+```bash
+memgraph-context-graph config set capture.exclude_tools "TodoWrite, mcp__vault__*"
+```
+
+To record nothing from some projects, list their directories. A session that
+starts in one of them, or in a directory inside one, isn't recorded. `~` stands
+for your home directory, and a path can be a glob:
+
+```bash
+memgraph-context-graph config set capture.exclude_projects "~/clients/*, ~/personal"
+```
+
+The agent works as usual in an excluded project, and recall still finds your
+other sessions there.
+
+Setting a list replaces the previous one. To clear it, set an empty value:
+
+```bash
+memgraph-context-graph config set capture.exclude_projects ""
+```
 
 ## Update Context Graph
 
