@@ -102,11 +102,13 @@ Routing is strict and deterministic:
   pointing you at `SHOW SCHEMA`.
 - **Two or more candidates** → an *ambiguous* hard error listing the candidates.
   Disambiguate by referencing a property or relationship type that exists in
-  only one of them, or add an explicit `USE`.
+  only one of them, add an explicit `USE`, or set a session default with
+  `SESSION SET GRAPH <graph>` (it wins when it is one of the candidates).
 - **Explicit `USE` always wins** and bypasses inference entirely.
 - **No-signal queries** (`MATCH (n) RETURN n` with no label, relationship
   type, or property to route by) have nothing to infer from; pin them with an
-  explicit `USE <graph>`.
+  explicit `USE <graph>`, or run them on the session default set with
+  `SESSION SET GRAPH <graph>`.
 
 Identifier matching is **exact**: `:person` does not match a mapping (or
 introspected schema) that declares `Person`. Routing, translation, and the
@@ -144,8 +146,8 @@ follow-up read routes without needing a `REFRESH SCHEMA`.
   declared as a
   [cross-connector edge](#traversing-across-backends-with-an-edge), which is
   split automatically.
-- A label-less `MATCH (n)` against a SQL backend still surfaces a raw backend
-  error (there's nothing to route or translate by).
+- A label-less `MATCH (n)` against a SQL backend returns an actionable error
+  listing the labels the mapping defines (a label is what picks the table).
 
 ## Schema discovery
 
@@ -223,6 +225,28 @@ Execution flow:
 1. The `USE social` part executes on `neo4j_prod`, returning `(p, c)` bindings
 2. The `USE warehouse` part executes on `postgres_dw`, using `c.name` values as filters
 3. Results are joined locally and returned
+
+Whole nodes and relationships can be returned from either side (`RETURN p, co`);
+whole paths can't, so return their nodes and relationships instead. Node ids in
+a cross-backend result are unique across backends, but differ from the id the
+same node gets in a single-backend query.
+
+Aggregates over the joined rows work too: `count`, `sum`, `min`, `max`, `avg`
+and `count(DISTINCT …)`. `collect()` is not supported over a cross-backend
+join.
+
+A `WITH` may follow the first `USE` block (and chain, `WITH … WITH …`). MemGQL
+evaluates it over that block's rows before the next block runs, so it can
+rename, filter, aggregate, and apply `DISTINCT` / `ORDER BY` / `LIMIT`; later
+blocks see only its output columns. A `WITH` after a later block returns an
+actionable error.
+
+```gql
+USE social MATCH (p:Person)-[:WORKS_AT]->(c:Company)
+           WITH c.name AS company, count(p) AS staff WHERE staff > 10
+USE warehouse MATCH (co:Company {name: company})
+RETURN company, staff, co.revenue;
+```
 
 Another example correlating social connections with event logs:
 
@@ -547,20 +571,20 @@ routed by its labels:
 
 In a cross-backend query (split by explicit `USE`, or routed by label), each
 cache-enabled part is served from its cache independently while the other parts
-run on their own sources. `UNION` / `UNION ALL` queries are the exception: they
-dispatch as a whole and never consult the cache, even when every scope they
-touch is resident.
+run on their own sources. The same holds for the arms of a `UNION`,
+`INTERSECT` or `EXCEPT`: each arm over a cache-enabled graph is checked against
+the cache on its own.
 
 Inspect what is cached with `SHOW GRAPH CACHES` (returns each cache-enabled
 graph, its cache connector, `TTL`, `MAX_BYTES`, and the number of cached
 fragments). Cache activity is logged at `DEBUG` as `[CACHE] MISS … teeing …`
 and `[CACHE] HIT … serving from cache connector …`.
 
-> **Note:** The query-driven cache is exercised in CI against PostgreSQL, MySQL,
-> DuckDB, SQL Server, SAP HANA, ClickHouse and the native Iceberg connector, each
-> replaying the same query corpus from its cache that it runs against the
-> source, and asserting identical rows. Graph-native sources (Memgraph, Neo4j) cannot be cached —
-> there is no relational mapping to copy from.
+> **Note:** The query-driven cache is verified against PostgreSQL, MySQL,
+> DuckDB, SQL Server, SAP HANA, ClickHouse and the native Iceberg connector:
+> the same queries return identical rows from the cache and from the source.
+> Graph-native sources (Memgraph, Neo4j) cannot be cached — there is no
+> relational mapping to copy from.
 
 ## Cross-Graph Query Rules
 

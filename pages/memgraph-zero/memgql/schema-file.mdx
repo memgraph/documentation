@@ -144,6 +144,7 @@ Every `connection` field is optional; supply what a given backend needs:
 | `sslRootCert`      | PEM bundle of CA certificates to trust instead of the system roots (PostgreSQL). |
 | `trustServerCertificate` | Encrypt without verifying the server's certificate (PostgreSQL). Mutually exclusive with `sslRootCert`. |
 | `language`         | Default [query language](/memgraph-zero/memgql/reference#query-languages) (`gql` / `cypher`) for `USE <graph>` queries whose graph maps to this connector. |
+| `maxInListSize`    | Most join-key values sent to this backend in one [piped](/memgraph-zero/memgql/multiple-graphs#piping-fetching-only-what-joins) cross-backend join; the same as `ADD CONNECTOR … OPTIONS '{"max_in_list_size": N}'`. |
 
 **Supported `type` values:** `memgraph`, `neo4j`, `postgres` (`postgresql`),
 `mysql`, `sqlserver`, `oracle`, `duckdb`, `iceberg`, `iceberg-direct`,
@@ -192,6 +193,48 @@ runtime and persists it back to this file; `EXPORT SCHEMA` round-trips it.
 }
 ```
 
+### Discovered native schema
+
+A Memgraph or Neo4j connector already knows its own labels, relationship types
+and properties, so a graph does not have to repeat them. List the connector
+under `discover` and its schema is read at boot and on `REFRESH SCHEMA`:
+every node type becomes a vertex, with the label set spelled `A:B` and the
+introspected properties as attributes, and every relationship type becomes one
+edge per `(type, start labels, end labels)` pair.
+
+```json
+{
+  "name": "shop",
+  "accessMode": "readOnly",
+  "discover": ["mg"],
+  "vertices": [
+    {
+      "label": "Item",
+      "mappedTableSource": { "connector": "pg", "table": "item", "metaFields": { "id": "item_key" } },
+      "attributes": [{ "name": "sku" }]
+    }
+  ],
+  "edges": [
+    {
+      "label": "catalogEntry",
+      "from": "Item",
+      "to": "CAT:Product",
+      "mappedJoinSource": { "fromKey": "sku", "toKey": "sku" }
+    }
+  ]
+}
+```
+
+What the graph declares itself wins: a declared vertex (matched by its label
+set) keeps its attributes and renames, and a declared relationship type keeps
+exactly its declared pairs, so declaring an element is how you restrict or
+refine what discovery exposes. An edge may name a vertex that is discovered
+later, as above, as long as exactly one connector is discovered from. `EXPORT
+SCHEMA` and the persisted file write the `discover` entry back, not the
+discovered elements. Memgraph must run with `--schema-info-enabled`;
+`discover` is refused on a relational connector (declare the tables, or draft
+them with `GENERATE MAPPING FOR CONNECTOR`).
+
 ### Vertices
 
 A vertex maps a **label** to a backend source. Exactly one source kind is set:
@@ -199,7 +242,8 @@ A vertex maps a **label** to a backend source. Exactly one source kind is set:
 - **`mappedTableSource`**: a relational table (PostgreSQL, MySQL, Oracle,
   SQL Server, DuckDB, ClickHouse, Iceberg). Rows become nodes.
 - **`mappedGraphSource`**: a native graph backend (Memgraph / Neo4j). Queries
-  pass through as Cypher; only the connector is declared.
+  pass through as Cypher; only the connector is declared, plus `label` when
+  the backend stores the element under another name.
 
 ```json
 {
@@ -278,6 +322,15 @@ start from one table, so on a shared label both are refused with a pointer to
 the identifying label. A label no mapping carries together with the others
 matches nothing.
 
+A **native** node type that carries several labels is one vertex spelled with
+a colon, `"label": "CAT:Product"`, and written backticked in GQL
+(`` MATCH (p:`CAT:Product`) ``). Each member label routes as well:
+`MATCH (p:CAT)` reads every `CAT` node whatever its other labels,
+`` MATCH (p:CAT&`Product`) `` and Cypher's `MATCH (p:CAT:Product)` reach the
+same vertex, and a backticked `` :`CAT:Product` `` in a `CYPHER` passthrough is
+sent to the backend as the label conjunction `:CAT:Product`. This is also the
+spelling [schema discovery](#discovered-native-schema) produces.
+
 | Field | Source kind | Description |
 |-------|-------------|-------------|
 | `label` / `labels` | both | The node label, or a list of labels whose first entry identifies the mapping (unique per graph) and whose others may be shared with other mappings. |
@@ -287,6 +340,7 @@ matches nothing.
 | `mappedTableSource.table`     | relational | The backing table or view. |
 | `mappedTableSource.metaFields.id` | relational | Primary-key column, or a list of columns for a composite key (`["region", "order_no"]`); the node's identity and the join key for edges. Each column is also exposed as a property, so `RETURN n` includes it and `n.<id_column>` reads it by name. |
 | `mappedGraphSource.connector` | native      | Connector name (Memgraph / Neo4j); the query passes through as Cypher. |
+| `mappedGraphSource.label`     | native      | Optional backend label (on an edge, backend relationship type) exposed under this element's `label`. Queries use the exposed name, MemGQL rewrites it for the backend, and returned nodes and relationships carry the exposed name. Two elements cannot share a backend name. |
 
 ### Edges
 
@@ -332,6 +386,21 @@ entry of a `labels` list).
   }
 }
 ```
+
+A native relationship type is often used between several label pairs. Declare
+it once per pair; this is the one case where an edge label repeats within a
+graph (a table-backed edge label stays unique):
+
+```json
+{ "label": "inGroup", "from": "CAT:Product", "to": "CAT:Group", "mappedGraphSource": { "connector": "mg" } },
+{ "label": "inGroup", "from": "CAT:Product", "to": "CAT:Note",  "mappedGraphSource": { "connector": "mg" } }
+```
+
+The declared ends also constrain a pattern end you leave bare:
+`` MATCH (p:`CAT:Product`)-[:inGroup]->(g) `` reaches the backend as
+`(g:CAT:Group)` with one pair declared and as `WHERE g:CAT:Group OR g:CAT:Note`
+with two, never as an unconstrained `(g)` that would return nodes of labels
+the graph does not declare.
 
 A relational edge adds two more `metaFields` on top of `id`:
 
