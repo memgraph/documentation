@@ -37,6 +37,10 @@ supports.
 | Connection-less `RETURN 1` / `RETURN 1 + 2` (liveness)             | ✓               | ✓            | ✓       |
 | `IN` list membership `WHERE x IN […]`                              | ✓               | ✓            | ✓       |
 | `STARTS WITH` / `ENDS WITH` / `CONTAINS`                           | ✓               | ✓            | ✓       |
+| Query parameters (`WHERE n.id = $id`, sent by the driver)          | ✓               | ✓            | ✓       |
+| String concatenation (`a \|\| b`, `'x' + a`)                        | ✓               | ✓            | ✓       |
+| `CAST(x AS STRING \| INT \| FLOAT \| BOOLEAN)`                      | ✓               | ✓            | ✗       |
+| `EXISTS { (n)-[:R]->() }` / `EXISTS { MATCH … }` in `WHERE`         | ✓               | ✗            | ✗       |
 | `FOR x IN […]` (UNWIND-style loop)                                 | ✓               | ✗            | ✓       |
 | `collect()` / `collect_list()` (aggregate)                         | ✓               | ✓            | ✓       |
 | `count`, `sum`, `avg`, `min`, `max`                                | ✓               | ✓            | ✓       |
@@ -44,7 +48,7 @@ supports.
 | Arithmetic `+ - * / %`                                             | ✓               | ✓            | ✓       |
 | `CASE WHEN … THEN … ELSE … END`                                    | ✓               | ✓            | ✓       |
 | `COALESCE`, `NULLIF`                                               | ✓               | ✓            | ✓       |
-| Scalar functions in `RETURN` (`upper(x)`, `abs(x)`, …)             | ✓               | ✓            | ✗       |
+| Scalar functions in `RETURN` (`upper(x)`, `abs(x)`, …)             | ✓               | ✓            | partial |
 | Temporals (`date`, `datetime`, `localTime`, …)                     | ✓               | ✗            | ✗       |
 | `INSERT (a {…})`                                                   | ✓               | ✓            | ✓       |
 | `INSERT (a {…}) RETURN a.x` (post-insert projection)               | ✓               | ✓            | ✗       |
@@ -76,6 +80,9 @@ supports.
   returns an actionable error as well.
 - **Label-less `MATCH (n)` on SQL backends** returns an actionable error listing
   the labels the mapping defines; a label is what picks the table.
+- **`EXISTS { … }` on SQL backends** returns an actionable error. Write the
+  check as a traversal (`MATCH (s)-[:R]->(t) … RETURN DISTINCT s`) or as
+  `OPTIONAL MATCH … WHERE t IS NOT NULL`; Cypher backends run it as written.
 - **Path variables on variable-length patterns**:
   `MATCH p = (a){1,3}(b) RETURN p` is not yet supported on SQL backends or
   MongoDB. Drop the `p =` binding (or query a Cypher backend) and `RETURN` the
@@ -102,12 +109,12 @@ supports.
 - **Undirected variable-length** (`(-[:R]-()){m,n}`) returns an actionable error:
   `$graphLookup` follows a single connect-from/connect-to field pair. Give the
   pattern a direction.
-- **Scalar functions inside `RETURN`** (`upper(n.name)`, `abs(-7)`,
-  `char_length(s)`) return an actionable error. MemGQL passes such a call to
-  the other backends as raw query text, which happens to parse in their SQL or
-  Cypher dialect; an aggregation pipeline has no expression string to run one.
-  Aggregates (`count`, `sum`, `avg`, `min`, `max`, `collect`, and their
-  `DISTINCT` forms) are unaffected and run natively.
+- **Scalar functions inside `RETURN`** run where MongoDB has an aggregation
+  operator (`upper`, `lower`, `trim`, `abs`, `ceil`, `floor`, `sqrt`, `size`,
+  `char_length`, `round`, `coalesce`, `nullif`, `CAST`, `substring`); one
+  without an operator (`left`, `right`, `exp`, `power`, …) returns an
+  actionable error naming the supported set. Aggregates run natively. See
+  [MongoDB](/memgraph-zero/memgql/connect/mongodb).
 - **`INSERT … RETURN` drops the projection** and reports the affected count
   instead. Re-read the inserted node with a follow-up `MATCH`.
 - **Every collection in one graph must live in the same database.** MongoDB's
@@ -121,6 +128,38 @@ supports.
   inside the optional pattern is folded into the `$lookup` that binds the
   variable it constrains; one spanning two variables returns an actionable
   error rather than silently dropping rows.
+
+### Functions and reserved words in GQL mode
+
+GQL (the default language) has a fixed set of function names; Cypher's
+`camelCase` spellings are not among them. Use the GQL name, or the `CYPHER`
+prefix for the Cypher one.
+
+| Kind | GQL mode (every backend) | Cypher mode (Memgraph / Neo4j) |
+|------|--------------------------|--------------------------------|
+| Case and trimming | `UPPER`, `LOWER`, `TRIM`, `BTRIM`, `LTRIM`, `RTRIM`, `LEFT`, `RIGHT` | `toUpper`, `toLower`, `trim`, `lTrim`, `rTrim`, `left`, `right` |
+| Length | `CHAR_LENGTH`, `SIZE`, `CARDINALITY` | `size` |
+| Numeric | `ABS`, `MOD`, `FLOOR`, `CEIL`, `SQRT`, `EXP`, `LN`, `LOG10`, `LOG(base, x)`, `POWER`, `SIN`, `COS`, `TAN`, `ASIN`, `ACOS`, `ATAN` | the same, lower-case; `^` for `POWER` |
+| Conversion | `CAST(x AS STRING)`, `CAST(x AS INT)`, `CAST(x AS FLOAT)`, `CAST(x AS BOOLEAN)` | `toString`, `toInteger`, `toFloat`, `toBoolean` |
+| Null handling | `COALESCE`, `NULLIF`, `IS [NOT] NULL` | the same |
+| Strings | `\|\|` and `+` concatenate; `STARTS WITH`, `ENDS WITH`, `CONTAINS` | `+`; `STARTS WITH`, `ENDS WITH`, `CONTAINS`, `=~` |
+| Aggregates | `count`, `sum`, `avg`, `min`, `max`, `collect`, each with `DISTINCT` | the same |
+| Elements | — | `labels(n)`, `keys(n)`, `type(r)`, `id(n)`, `properties(n)` |
+
+On SQL backends `SIZE(x)` is the string length (`CHAR_LENGTH`), and a `+`
+concatenates only when one side is a string literal or a string function; a
+`+` between two columns stays numeric. A function GQL does not know fails to
+parse (`mismatched input '('`); `toUpper(p.sku)` becomes `UPPER(p.sku)`, or
+`CYPHER MATCH … RETURN toUpper(p.sku)`.
+
+Some words that are ordinary labels or properties elsewhere are **reserved in
+GQL** and must be backtick-quoted when used as a label, relationship type,
+property or alias: among the ones that come up in practice are `Product`,
+`Project`, `path`, `reference`, `size`, `unit`, `value` and `year`. A parse
+error on such a word says so and shows the quoted form
+(`` MATCH (p:`Product`) ``). A quoted name may contain a colon: `` :`CAT:Product` ``
+is the [multi-label native vertex](/memgraph-zero/memgql/schema-file#vertices)
+spelling.
 
 ## Query Languages
 
@@ -278,7 +317,7 @@ SHOW MAPPINGS;                   -- per-graph mappings
 SHOW SCHEMA [FOR <graph>] [AS GRAPH];  -- unified routing index: labels, rel-types, properties;
                                  --   AS GRAPH returns it as Bolt nodes and relationships
 EXPORT SCHEMA [TO '<path>'];     -- merged catalog as canonical schema JSON (round-trippable)
-REFRESH SCHEMA;                  -- re-introspect live Cypher connections (Memgraph/Neo4j)
+REFRESH SCHEMA;                  -- re-introspect live Cypher connections (Memgraph/Neo4j) and re-run schema discovery
 
 -- Source onboarding (see below)
 DESCRIBE CONNECTOR <name>;       -- the source's physical catalog: tables, columns, types, keys
