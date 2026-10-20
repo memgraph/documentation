@@ -50,10 +50,11 @@ guide.
 
 {<h4 className="custom-header">⚠️ Breaking changes</h4>}
 
-- `SHOW TRANSACTIONS` and `SHOW ACTIVE USERS INFO` each gain a `database`
-  column with the name of the database the session is using. `SHOW ACTIVE
-  USERS INFO` also gains `database marked for deletion`. Clients that parse
-  these results by column position need to account for the new fields.
+- `SHOW TRANSACTIONS` gains a `database` column with the database each
+  transaction runs on (for snapshot and garbage collection rows, the database
+  being processed). `SHOW ACTIVE USERS INFO` gains `database` and `database
+  marked for deletion`. Clients that parse these results by column position
+  need to account for the new fields.
   [#4571](https://github.com/memgraph/memgraph/pull/4571)
 - Edge index operator metrics are merged into
   `memgraph_scan_all_by_edge_type_property_operator_total` and
@@ -101,18 +102,18 @@ guide.
 
 {<h4 className="custom-header">✨ New features</h4>}
 
-- `DROP DATABASE ... FORCE` no longer blocks other databases on the instance
-  while the tenant is torn down. A database still draining is shown as
-  `DROPPING` in `SHOW DATABASES`. If the same name is created again while
-  the old tenant is draining, that row is shown as `name (uuid)`. Plain
-  `DROP DATABASE` is unchanged.
+- `DROP DATABASE ... FORCE` returns immediately and the database is torn
+  down in the background. Until that finishes, `SHOW DATABASES` lists it as
+  `DROPPING` with health `draining`, for up to about 10 seconds even when
+  nothing uses it. If the same name is created again meanwhile, the draining
+  row is shown as `name (uuid)`. Dropping a name that is still draining fails
+  with `Database <name> is currently being dropped.`
   [#4573](https://github.com/memgraph/memgraph/pull/4573)
 - `SHOW SESSIONS` lists active Bolt sessions (`session_id`, `username`,
   `database`, `login_timestamp`). `TERMINATE SESSIONS` evicts sessions by
   uuid from another connection. A user may manage their own sessions;
   terminating another user's session requires `TRANSACTION_MANAGEMENT` on
-  that session's database. `SESSIONS` is a reserved keyword; quote it as a
-  bare identifier.
+  that session's database.
   [#4577](https://github.com/memgraph/memgraph/pull/4577)
 - The `collections` query module adds `index_of(coll, value)`: the position
   of the first element equal to `value`, or `-1`. A null collection or
@@ -128,10 +129,9 @@ guide.
   `OPTIONAL`, that row is dropped. Supported with a scope clause,
   `(*)`, no scope, `UNION`, nesting, and `IN TRANSACTIONS`.
   [#4833](https://github.com/memgraph/memgraph/pull/4833)
-- After `DROP DATABASE ... FORCE`, idle Bolt sessions still using that
-  database are closed so the drop can finish draining. Busy sessions are
-  left alone until they become idle. Clients see a disconnect and can
-  reconnect. Plain `DROP DATABASE` is unchanged.
+- After `DROP DATABASE ... FORCE`, Memgraph closes the Bolt sessions still
+  using that database within about 10 seconds, so the drop can finish.
+  Clients see a disconnect and can reconnect.
   [#4843](https://github.com/memgraph/memgraph/pull/4843)
 - Aggregation functions can be used inside a `CASE` expression in
   `RETURN` and `WITH`. They were previously refused. Aggregations in
@@ -280,7 +280,10 @@ guide.
   the cluster.
   [#4911](https://github.com/memgraph/memgraph/pull/4911)
 - Switching users on a pooled Bolt connection now clears the previous
-  user's `SET SESSION` settings.
+  user's session state: `SET SESSION` and pending `SET NEXT` isolation levels,
+  `SET SESSION SETTING` values, `SET SESSION TRACE` and the database selected
+  with `USE DATABASE`. The new session's requested impersonated user is
+  applied and checked against the new user's privileges.
   [#4932](https://github.com/memgraph/memgraph/pull/4932)
 - Setting a property to the value it already holds no longer fires an
   `ON UPDATE` trigger when that value is a NaN, or a list or map that
@@ -331,6 +334,11 @@ guide.
 - Memory from abandoned commits is reclaimed again, instead of growing
   until restart.
   [#5017](https://github.com/memgraph/memgraph/pull/5017)
+- A session whose user, or every one of whose roles, was dropped is denied
+  all privileges until it reconnects, even if a user with the same name is
+  created again. Losing only some roles still removes just those roles'
+  privileges.
+  [#5029](https://github.com/memgraph/memgraph/pull/5029)
 - When an edge delete fails part-way and rolls back, the graph no longer
   keeps duplicate edges. Traversals do not over-count them, and replicas
   can apply the WAL without a full snapshot catch-up.
@@ -339,6 +347,20 @@ guide.
   as `CREATE USER` or `CREATE INDEX`. A trigger of that kind stored by an
   earlier version is skipped with a warning at startup.
   [#5108](https://github.com/memgraph/memgraph/pull/5108)
+- When Memgraph runs out of file descriptors, the Bolt, HTTP metrics and
+  WebSocket listeners wait and retry, logging the error at most once every 10
+  seconds, and accept connections again once descriptors are available.
+  [#5129](https://github.com/memgraph/memgraph/pull/5129)
+- The Memgraph systemd service sets `LimitNOFILE=1048576`, and Memgraph raises
+  its soft open files limit to the hard limit at startup. A warning is logged
+  when the limit stays below `65536`. Deployments that kept the default soft
+  limit of 1024 no longer hit `Too many open files` at around 950 connections.
+  [#5132](https://github.com/memgraph/memgraph/pull/5132)
+- A pooled Bolt connection whose database was renamed or dropped gets an
+  "unknown database" client error instead of running its queries on another
+  database. A refused database or impersonation switch leaves the session
+  unchanged.
+  [#5135](https://github.com/memgraph/memgraph/pull/5135)
 
 {<h4 className="custom-header">🛠️ Improvements</h4>}
 
