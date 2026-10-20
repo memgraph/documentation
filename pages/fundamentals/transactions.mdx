@@ -147,10 +147,10 @@ rows contains:
 
 | Key | Description |
 |---|---|
-| `phase` | Current phase of snapshot creation: `EDGES`, `VERTICES`, `INDICES`, `CONSTRAINTS`, or `FINALIZING`. |
+| `phase` | Current phase of snapshot creation: `edges`, `vertices`, `indices`, `constraints`, or `finalizing`; `idle` until the first phase starts. |
 | `items_done` | Number of objects serialized in the current phase so far. |
 | `items_total` | Total number of objects expected in the current phase. |
-| `db_name` | Name of the database whose snapshot is being created. |
+| `db_name` | Name of the database whose snapshot is being created. The `database` column shows the same value. |
 
 The top-level `start_time` and `elapsed_ms` columns are populated for snapshot
 rows as well, reflecting when the snapshot started.
@@ -189,19 +189,31 @@ map for these rows contains:
 | `phase` | Current phase of the cycle: `unlink` (detach obsolete versions no active transaction can still see), `index_cleanup` (remove stale index and constraint entries — usually the most expensive phase), or `delete` (free the unlinked versions). |
 | `trigger` | `periodic` for the background cycle, or `forced` for a `FREE MEMORY` query or a storage-mode switch. |
 | `exclusive_lock` | `true` when the collection holds the storage lock exclusively and is therefore blocking all transactions. |
-| `db_name` | Name of the database whose garbage is being collected. |
+| `db_name` | Name of the database whose garbage is being collected. The `database` column shows the same value. |
 
 The top-level `start_time` and `elapsed_ms` columns reflect when the collection
 started; a large `elapsed_ms` is the clearest signal of a stuck collection. One
 `gc` row appears per database that currently has a collection running.
 
-```copy=false
-memgraph> SHOW TRANSACTIONS;
-+----------+----------------+------------------------+-----------+-------------------------------------------------------------------------------------------+-------------------------------+------------+
-| username | transaction_id | query                  | status    | metadata                                                                                  | start_time                    | elapsed_ms |
-+----------+----------------+------------------------+-----------+-------------------------------------------------------------------------------------------+-------------------------------+------------+
-| ""       | "gc"           | ["GARBAGE COLLECTION"] | "running" | {db_name: "memgraph", exclusive_lock: true, phase: "index_cleanup", trigger: "periodic"}  | 2026-05-12T14:32:17.881Z[UTC] | 395        |
-+----------+----------------+------------------------+-----------+-------------------------------------------------------------------------------------------+-------------------------------+------------+
+For example, a `FREE MEMORY` query on the `tenant1` database starts a forced
+collection. While that collection runs, run the following query from another
+session:
+
+```cypher
+SHOW TRANSACTIONS;
+```
+
+The result lists the `FREE MEMORY` transaction and its `gc` row, both on
+`tenant1`:
+
+```plaintext copy=false
++----------+-----------------------+------------------------+-----------+---------------------------------------------------------------------------------+----------------------------------------+------------+------------+
+| username | transaction_id        | query                  | status    | metadata                                                                        | start_time                             | elapsed_ms | database   |
++----------+-----------------------+------------------------+-----------+---------------------------------------------------------------------------------+----------------------------------------+------------+------------+
+| ""       | "9223372036854775814" | ["FREE MEMORY"]        | "running" | {}                                                                              | 2026-10-19 12:01:18.288170000[Etc/UTC] | 4          | "tenant1"  |
+| ""       | "9223372036854775815" | ["SHOW TRANSACTIONS"]  | "running" | {}                                                                              | 2026-10-19 12:01:18.292917000[Etc/UTC] | 0          | "memgraph" |
+| ""       | "gc"                  | ["GARBAGE COLLECTION"] | "running" | {db_name: "tenant1", exclusive_lock: false, phase: "unlink", trigger: "forced"} | 2026-10-19 12:01:18.288188000[Etc/UTC] | 5          | "tenant1"  |
++----------+-----------------------+------------------------+-----------+---------------------------------------------------------------------------------+----------------------------------------+------------+------------+
 ```
 
 <Callout type="info">
@@ -415,42 +427,42 @@ Managing transactions is done by establishing a new connection to the database.
 **Show and terminate transactions**
 
 The output of the `SHOW TRANSACTIONS` command shows that a query is
-currently being run as part of the transaction ID "9223372036854794885".
+being run on the `memgraph` database as part of the transaction ID
+"9223372036854775809".
 
 ```copy=false
 memgraph> SHOW TRANSACTIONS;
-+----------+-----------------------+-------------------------------------------+-----------+----------+-------------------------------+------------+
-| username | transaction_id        | query                                     | status    | metadata | start_time                    | elapsed_ms |
-+----------+-----------------------+-------------------------------------------+-----------+----------+-------------------------------+------------+
-| ""       | "9223372036854794885" | ["CALL infinite.get() YIELD * RETURN *;"] | "running" | {}       | 2026-05-12T14:32:00.000Z[UTC] | 18230      |
-| ""       | "9223372036854794896" | ["SHOW TRANSACTIONS"]                     | "running" | {}       | 2026-05-12T14:32:18.230Z[UTC] | 0          |
-+----------+-----------------------+-------------------------------------------+-----------+----------+-------------------------------+------------+
++----------+-----------------------+-------------------------------------------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
+| username | transaction_id        | query                                                                                     | status    | metadata | start_time                             | elapsed_ms | database   |
++----------+-----------------------+-------------------------------------------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
+| ""       | "9223372036854775810" | ["SHOW TRANSACTIONS"]                                                                     | "running" | {}       | 2026-10-19 12:11:16.345268000[Etc/UTC] | 0          | "memgraph" |
+| ""       | "9223372036854775809" | ["UNWIND range(1, 100000) AS a UNWIND range(1, 100000) AS b WITH a WHERE a < 0 RETURN a"] | "running" | {}       | 2026-10-19 12:11:14.342553000[Etc/UTC] | 2002       | "memgraph" |
++----------+-----------------------+-------------------------------------------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
 ```
 
 To terminate the transaction, run the following query:
 
 ```cypher
-TERMINATE TRANSACTIONS "9223372036854794885";
+TERMINATE TRANSACTIONS "9223372036854775809";
 ```
 
 Upon the transaction termination, the following confirmation will appear:
 
 ```copy=false
-memgraph> TERMINATE TRANSACTIONS "9223372036854794885";
+memgraph> TERMINATE TRANSACTIONS "9223372036854775809";
 +-----------------------+-----------------------+
 | transaction_id        | killed                |
 +-----------------------+-----------------------+
-| "9223372036854794885" | true                  |
+| "9223372036854775809" | true                  |
 +-----------------------+-----------------------+
 1 row in set (round trip in 0.000 sec)
 ```
 
-The following message will appear in the session in which the infinite query was being run:
+The following message will appear in the session in which the long-running query was being run:
 
 ```copy=false
-memgraph> CALL infinite.get() YIELD * RETURN *; 
-Client received exception: Transactions was asked to abort either because it was executing longer than time
-specified or another user asked to abort it.
+memgraph> UNWIND range(1, 100000) AS a UNWIND range(1, 100000) AS b WITH a WHERE a < 0 RETURN a;
+Client received query exception: Transaction was asked to abort by another user.
 ```
 
 ## Isolation levels
