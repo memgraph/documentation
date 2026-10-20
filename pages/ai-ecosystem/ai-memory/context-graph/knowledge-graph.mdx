@@ -1,0 +1,182 @@
+---
+title: Knowledge graph from sessions
+description: Extract the people, projects and facts your agent sessions mention into a knowledge graph in Memgraph, and control its schema.
+---
+
+# Knowledge graph from sessions
+
+Context Graph can extract the entities your sessions mention, such as people,
+organizations, projects and tools, and the facts that connect them, into a
+knowledge graph. Each entity links back to the messages and memory files it
+came from. Recall uses the knowledge graph to find facts that are spread over
+many sessions.
+
+Extraction runs on your machine with [GLiNER2](https://github.com/fastino-ai/GLiNER2),
+a local extraction model, and needs no LLM API key. This process is called
+**reconciliation**.
+
+## Install the extraction packages
+
+Setup doesn't install the extraction model, because it's large. Add it to the
+`memgraph-context-graph` tool, together with the `sessions-graph` command:
+
+```bash
+uv tool install --force 'memgraph-context-graph[mcp]' \
+  --with 'skills-graph[memgraph-context-graph]' \
+  --with 'actions-graph[memgraph-context-graph]' \
+  --with 'sessions-graph[memgraph-context-graph,reconciliation]' \
+  --with context-graph-viewer \
+  --with-executables-from sessions-graph
+```
+
+The first extraction downloads the model.
+
+## Build the knowledge graph
+
+When a session ends, Context Graph marks it as pending reconciliation. To
+extract every pending session:
+
+```bash
+sessions-graph reconcile --pending
+```
+
+To extract one session, pass its ID:
+
+```bash
+sessions-graph reconcile --session SESSION_ID
+```
+
+`SESSION_ID` is the `session_id` property of the `Session` node. The terminal
+viewer shows it for each session.
+
+Extraction takes longer than an agent allows a hook to run, so it never runs
+inside a hook. Choose how it runs:
+
+- **After each session,** in a background process:
+
+  ```bash
+  memgraph-context-graph config set reconcile.auto_reconcile true
+  ```
+
+  If the background process stops, the session stays pending, and the next
+  `reconcile --pending` extracts it.
+- **On a schedule,** with `sessions-graph reconcile --pending --limit 50` in
+  cron or another scheduler. `--limit` caps how many sessions one run
+  extracts.
+
+Codex, Antigravity CLI and `opencode run` don't report when a session ends.
+Their sessions are marked pending at the end of each turn, so
+`reconcile --pending` extracts them too.
+
+Memory files are extracted on their own, because a file outlives the session
+that wrote it. Each change to a file marks it pending, and
+`reconcile --pending` extracts pending files before sessions. When a file
+changes or is deleted, Context Graph first removes what its previous text
+produced.
+
+## What reconciliation writes
+
+Reconciliation splits the text of a session's messages, tool calls and memory
+files into `Chunk` nodes and extracts entities from them:
+
+```plaintext copy=false
+(:Action)-[:HAS_CHUNK]->(:Chunk)<-[:MENTIONED_IN]-(:Entity)
+(:Memory)-[:HAS_CHUNK]->(:Chunk)
+```
+
+Each entity gets a label for its type from your schema, such as `Person` or
+`Organization`. An entity of a type outside the schema is kept, with the
+property `ontology_conformant` set to `false`. Facts are relationships between
+entities, typed by the schema, with the sentence they were read from.
+
+An entity mentioned in several sessions is one node, so its relationships
+connect the sessions that mention it. Content seen before isn't extracted
+again.
+
+Reconciliation also computes the embeddings recall uses for the new entities
+and facts. Messages are embedded at the end of every turn, whether or not you
+build the knowledge graph.
+
+## Schema
+
+Entities are extracted under a schema, called an **ontology**: the entity
+types and relationship types to look for. Every user starts with a default
+schema. It has people, organizations, locations and events, value types such
+as dates and amounts, and two catch-all types, `Topic` and `Artifact`.
+
+### Use your own schema
+
+To extract the types that matter in your work, write a schema file and set it
+in the configuration:
+
+```bash
+memgraph-context-graph config set ontology.path ~/schemas/coding.yaml
+```
+
+The schema file uses the format of the
+[HyGM manual strategy](https://github.com/memgraph/ai-toolkit/tree/main/hygm).
+The next `sessions-graph reconcile` applies the file, and applies it again
+whenever it changes. If the file isn't valid, reconcile reports it and keeps
+the current schema.
+
+`ontology.derive` sets what may happen to your schema afterwards:
+
+- **`extend`** (the default): your types are kept as written, together with
+  the default core types, and Context Graph may add types next to them.
+- **`off`:** the schema is used exactly as written, and no types are added.
+
+To see the schema in use:
+
+```bash
+sessions-graph ontology show
+```
+
+### Learn the schema from your sessions
+
+With an LLM API key in the configuration, Context Graph learns new types from
+your sessions:
+
+```bash
+memgraph-context-graph config set llm.anthropic_api_key
+```
+
+`config set` prompts for the key. With `llm.openai_api_key` instead, the
+default model is `gpt-5`; set another model with `llm.derive_model`.
+
+Learning starts on its own when you have 2, 4, 8 and so on up to 128 sessions
+with enough of your own text (at least 2 of your messages and 1,000
+characters), and then every 128 sessions. Each run reads up to 64 recent
+sessions, proposes new schemas, and keeps one only if it types more of your
+messages without adding more catch-all entities. To run it now:
+
+```bash
+sessions-graph derive --force
+```
+
+Each schema is stored as an `OntologyVersion` node, and `sessions-graph
+ontology show` shows the one in use. Without an API key, the schema doesn't
+change, and extraction still works.
+
+## Tune extraction
+
+The `[extraction]` section of the configuration file sets how sessions are
+read. Edit it in the file; all keys are optional:
+
+| Key | Default | What it sets |
+| --- | --- | --- |
+| `model` | `fastino/gliner2.5-base-v1` | The GLiNER2 model |
+| `entity_threshold` | GLiNER2's default | The lowest confidence, from 0 to 1, at which an entity is kept |
+| `relation_threshold` | GLiNER2's default | The lowest confidence, from 0 to 1, at which a fact is kept |
+| `chunk_size` | GLiNER2's default | Words per chunk |
+| `chunk_overlap` | GLiNER2's default | Words shared by neighboring chunks |
+
+For example:
+
+```toml
+[extraction]
+model = "fastino/gliner2.5-base-v1"
+entity_threshold = "0.3"
+```
+
+Reconciliation and schema learning use the same settings, so a session is
+always read the same way.

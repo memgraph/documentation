@@ -1,0 +1,131 @@
+---
+title: Agents
+description: See what Context Graph setup changes for Claude Code, Codex, GitHub Copilot CLI, Cursor, OpenCode, Antigravity CLI and Grok Build.
+---
+
+import { Tabs } from 'nextra/components'
+
+# Agents
+
+Context Graph works with seven coding agents. For each one, setup installs
+hooks that record sessions, registers the MCP server that serves the `recall`
+and `memory` tools, and can turn off the agent's own memory. This page lists
+what setup changes for each agent, so you know which files it edits.
+
+## Supported agents
+
+| Agent | Runtime name | How it's connected | Applies to |
+| --- | --- | --- | --- |
+| Claude Code | `claude-code` | Context Graph plugin | Your user |
+| Codex | `codex` | Context Graph plugin | Your user |
+| GitHub Copilot CLI | `copilot-cli` | `.github/hooks/memgraph-context-graph.json` | One project |
+| Cursor | `cursor` | `.cursor/hooks.json` | One project |
+| OpenCode | `opencode` | `.opencode/plugins/memgraph-context-graph/index.js` | One project |
+| Antigravity CLI | `antigravity-cli` | `.agents/hooks.json` | One project |
+| Grok Build | `grok` | `.grok/hooks/memgraph-context-graph.json` | One project |
+
+Use the runtime name to choose agents in `memgraph-context-graph setup`,
+`update`, `uninstall` and `doctor`.
+
+- **Claude Code and Codex** get the Context Graph plugin, installed for your
+  user. Every session of the agent is recorded, in any directory.
+- **The other agents** get hook files in the project directory, never in your
+  home directory. Only sessions started in a connected project are recorded.
+  Setup connects the current directory; connect more projects with
+  `--project-dir`. If a hook file already exists, setup keeps your own hooks
+  in it.
+
+## MCP server registration
+
+The `recall` and `memory` tools are served by `memgraph-context-graph mcp`, an
+MCP server named `context-graph`. Memory belongs to you, not to one project,
+so the server is registered in each agent's user-level configuration:
+
+| Agent | Where the server is registered | How its tools are allowed |
+| --- | --- | --- |
+| Claude Code | The plugin | The plugin |
+| Codex | The plugin | The plugin |
+| GitHub Copilot CLI | `~/.copilot/mcp-config.json` | Copilot CLI has no allow list: approve the tools once, or start it with `--allow-tool=context-graph` |
+| Cursor | `~/.cursor/mcp.json` | `Mcp(context-graph:*)` in `~/.cursor/cli-config.json` |
+| OpenCode | `mcp.servers` in `~/.config/opencode/opencode.json` | An allow rule in `permissions` |
+| Antigravity CLI | `~/.gemini/config/mcp_config.json` | `mcp(context-graph/*)` in `~/.gemini/antigravity-cli/settings.json` |
+| Grok Build | `~/.grok/config.toml` | `MCPTool(context-graph__*)` |
+
+Setup adds the tools to the agent's allow list because an agent that runs
+without a person, for example in a script, refuses a tool that needs approval.
+Each file setup edits keeps the rest of its content and is backed up once, to
+`FILE_NAME.context-graph.bak` next to it.
+
+## Built-in memory
+
+When you make Context Graph the agents' memory, setup turns off the agent's
+own memory, so the agent doesn't keep two. Some agents have no memory of their
+own to turn off.
+
+| Agent | Built-in memory | What setup changes |
+| --- | --- | --- |
+| Claude Code | Auto memory | Sets `autoMemoryEnabled: false` in `~/.claude/settings.json` and imports the existing memory files |
+| Codex | Memories | Turns off `features.memories`, `memories.use_memories` and `memories.generate_memories` in `~/.codex/config.toml` and imports the existing memory |
+| GitHub Copilot CLI | Copilot Memory, stored on GitHub | Sets `"memory": false` in `~/.copilot/settings.json`; the memory stays on GitHub and isn't imported |
+| Cursor | None | Nothing |
+| OpenCode | None | Nothing |
+| Antigravity CLI | None in the CLI | Nothing |
+| Grok Build | Topic notes in `~/.grok/memory-v2/` | Sets `[memory_v2] enabled = false` and imports the notes to `/memories/grok/` |
+
+See [Use Context Graph as your agents' memory](/ai-ecosystem/ai-memory/context-graph/recall-and-memory#use-context-graph-as-your-agents-memory)
+for how the import works and how to switch back.
+
+## Differences between agents
+
+The agents' hooks don't all expose the same events, so some features work
+differently:
+
+- **Session-start note.** Every agent gets the note on where you left off at
+  the start of a session. Grok Build's start hooks can't add text for the
+  model, so it gets the note through the MCP server's instructions instead.
+  Codex limits hook text to about 2,500 tokens, so a long memory index is cut
+  from its end.
+- **Note before a tool call.** Only Claude Code and Codex can show the agent a
+  note just before a tool runs, such as that a GitHub issue it's about to
+  fetch is already in the graph. The other agents' pre-tool hooks can only
+  allow, block or rewrite the call.
+- **End of a session.** Codex, Antigravity CLI and `opencode run` don't report
+  when a session ends. Their sessions are processed at the end of each turn
+  instead, so nothing is lost.
+- **Antigravity CLI** hooks don't carry the prompt or reply text. Context Graph
+  reads the turns from the session transcript the agent writes.
+- **Cursor:** the session-start note reaches the Cursor CLI. The agent window
+  in the Cursor editor may not show it to the model.
+- **Codex** also reloads the memory index after it compacts the context.
+
+## Connect an agent manually
+
+Setup is the recommended way to connect agents. To install the Claude Code or
+Codex plugin yourself, for example on a machine where you manage plugins by
+hand:
+
+<Tabs items={['Claude Code', 'Codex']}>
+<Tabs.Tab>
+```bash
+claude plugin marketplace add memgraph/ai-toolkit --sparse .claude-plugin
+claude plugin install context-graph@context-graph-plugins -y
+```
+</Tabs.Tab>
+<Tabs.Tab>
+```bash
+codex plugin marketplace add memgraph/ai-toolkit --sparse .agents/plugins
+codex plugin add context-graph@context-graph-plugins
+```
+</Tabs.Tab>
+</Tabs>
+
+For the per-project agents, `memgraph-context-graph hook init RUNTIME` writes
+the hook file in the current directory, where `RUNTIME` is `copilot-cli`,
+`cursor`, `opencode`, `antigravity-cli` or `grok`:
+
+```bash
+memgraph-context-graph hook init cursor
+```
+
+`hook init` writes only the hooks. Run `memgraph-context-graph setup` for the
+MCP server registration and the memory switch.
