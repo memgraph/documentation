@@ -215,18 +215,35 @@ DROP DATABASE database_name [FORCE];
 An idle connection that still has the database selected, such as a pooled
 driver connection, would keep a forced drop waiting. So while the drop waits,
 Memgraph closes every session whose current database is being dropped,
-usually within a few seconds, on MAIN and REPLICA instances. What a session
+An idle connection that still has the database selected, such as a pooled
+driver connection, would keep the database from being deleted. So Memgraph
+closes such sessions the next time the drop worker runs, within about 10
+seconds. On a REPLICA, this happens when the drop replicates from MAIN, with or
+without `FORCE`. What a session sees depends on what it's doing:
 sees depends on what it's doing:
 
-- **Idle:** Memgraph closes the session. The client reconnects on its next
+- **Idle:** Memgraph closes the connection. The client's next request fails
+  with a connection error, unless the driver's retry helpers rerun it on a new
+  connection. A client that names the dropped database when it connects then
+  gets `Tried to retrieve an unknown database "<name>".` A session that had
+  switched with `USE DATABASE` reconnects on its default database.
   request. A client that names the dropped database when it connects then
   gets an error that the database doesn't exist.
-- **Sends a query before it's closed:** the query fails with the `Database
+- **Sends a query before it's closed:** if the client named the database when
+  it connected, the query fails with `Tried to retrieve an unknown database "<name>".`
+  and the connection is closed on the next pass. A session that selected the
+  database with `USE DATABASE` keeps its connection but has no database. Its
+  queries fail with a `Database required for ...` error until it runs
+  `USE DATABASE` with another database.
   required for query execution.` error.
-- **In an open transaction:** the transaction is terminated, and its commit
+- **In an open transaction:** on MAIN, the drop terminates the transaction.
+  Its commit fails with a transient error, or with a connection error once the
+  session is closed. On a REPLICA, the transaction runs to completion, and the
+  session is closed on a later pass.
   fails with a transient error.
 
-Before Memgraph 3.14, an idle connection kept a forced drop waiting until its
+Before Memgraph 3.14, an idle connection delayed the database's deletion until
+its client sent another query.
 client sent another query.
 
 {<h4 id="use-cases-for-force" className="custom-header"> Use cases for FORCE </h4>} 
@@ -249,7 +266,9 @@ Using the `FORCE` option requires:
 
 - All active transactions on the target database will be forcibly terminated.
 - The database becomes immediately unavailable to new connections.
-- Actual deletion waits until no session uses the database. Memgraph closes
+- Actual deletion waits until nothing holds the database. Memgraph closes
+  idle sessions on it; see [sessions on a dropped
+  database](#sessions-on-a-dropped-database).
   idle sessions on it; see [sessions on a dropped
   database](#sessions-on-a-dropped-database).
 - **This operation cannot be undone.**
