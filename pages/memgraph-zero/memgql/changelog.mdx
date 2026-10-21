@@ -49,6 +49,70 @@ description: MemGQL release notes
   to be refused. `EXISTS { … }` runs natively on Memgraph and Neo4j and is
   refused with a rewrite hint on SQL backends. See
   [Functions and reserved words](/memgraph-zero/memgql/reference#functions-and-reserved-words-in-gql-mode).
+- **Richer cross-backend queries.** A query joining `USE` blocks on different
+  backends can return whole nodes and relationships (`RETURN p, co`), and can
+  aggregate over the joined rows (`count`, `sum`, `min`, `max`, `avg`,
+  `count(DISTINCT …)`); the aggregate is partly pushed into each backend and
+  finished after the join. A `WITH` may follow the first `USE` block to
+  rename, filter or aggregate its rows before the next block runs. Joins on
+  several keys and chains of three or more blocks are now
+  [piped](/memgraph-zero/memgql/multiple-graphs#piping-fetching-only-what-joins)
+  too, each join deciding on its own. See
+  [Focused Multi-Graph Queries](/memgraph-zero/memgql/multiple-graphs#focused-multi-graph-queries).
+- **Session defaults.** `SESSION SET GRAPH <graph>` gives the session a soft
+  default graph: it breaks ties when a label exists in several graphs and runs
+  queries with no label to route by, while an explicit `USE` still wins.
+  `SESSION SET CONNECTION <name>` names the fallback connection when no
+  default graph is set. Both last until `SESSION RESET …` or the end of the
+  session. See
+  [Graph Management Query Syntax](/memgraph-zero/memgql/reference#graph-management-query-syntax).
+- **`max_in_list_size` per connector.** `ADD CONNECTOR … OPTIONS
+  '{"max_in_list_size": N}'` (schema file key `maxInListSize`) caps how many
+  join-key values one piped cross-backend join sends to that backend; above it
+  the join runs unpiped.
+- **Re-running `ADD CONNECTOR` is safe.** An identical declaration replies
+  `already exists (unchanged)`; a changed one reconnects and replies
+  `replaced (changed: uri, password)`, naming the changed options but never
+  their values.
+- **`INTERSECT` / `EXCEPT` on more backends.** PostgreSQL, MySQL, DuckDB,
+  ClickHouse and MongoDB now run them; on MongoDB MemGQL runs each arm and
+  combines the results itself. A `UNION`,
+  `INTERSECT` or `EXCEPT` over a cache-enabled graph checks each arm against
+  the [cache](/memgraph-zero/memgql/multiple-graphs#caching-a-graph-in-memgraph)
+  on its own.
+- **`CALL` on PostgreSQL and MySQL.** `CALL fn(…) YIELD …` reads a PostgreSQL
+  set-returning function, and `CALL proc(…) YIELD …` the first result set of a
+  MySQL stored procedure. See [PostgreSQL](/memgraph-zero/memgql/connect/postgres)
+  and [MySQL](/memgraph-zero/memgql/connect/mysql).
+- **Renaming native labels.** `mappedGraphSource.label` exposes a Memgraph or
+  Neo4j label or relationship type under another name: queries use the
+  exposed name, and returned nodes and relationships carry it. See
+  [Vertices](/memgraph-zero/memgql/schema-file#vertices).
+- **More list and map results.** `collect()` runs on ClickHouse
+  (`groupArray`) and Oracle (`JSON_ARRAYAGG`, without `DISTINCT`), and map
+  projections on Oracle. On SQL Server `INSERT … RETURN` returns the inserted
+  values instead of a row count.
+- **Large results are paged.** MemGQL answers the driver's fetch size and
+  signals `has_more`, so a result of any size reaches the client page by page.
+- **Concurrent queries.** Queries to the same backend no longer wait for each
+  other; each connection keeps its own pool of handlers.
+
+### ⚠️ Behavior changes
+
+- **A routed query no longer changes the session's connection.** A query that
+  routed to a graph by its labels used to become the session's default for the
+  next query with nothing to route by. Use `SESSION SET GRAPH` or
+  `SESSION SET CONNECTION` to set a default on purpose.
+- **Unsupported writes and projections fail instead of doing something
+  else.** On SQL backends `DETACH DELETE`, `REMOVE` and `DELETE r` on a
+  relationship return an actionable error; `DETACH DELETE` used to run as a
+  plain `DELETE` and `DELETE r` deleted every row of the relationship table.
+  Map projections (`RETURN n {.a, .b}`) on SQL Server, SAP HANA and Redshift
+  return an actionable error instead of `null`.
+- **A label-less `MATCH (n)` on a SQL backend** returns an error listing the
+  labels the mapping defines, instead of a raw backend error.
+- **`USE CONNECTION` / `USE CONNECTOR`** return an error pointing to
+  `USE <graph>`.
 
 ### 🐞 Bug fixes
 
@@ -89,6 +153,31 @@ description: MemGQL release notes
   the derived table did not have.
 - **Parse errors inside a backticked label** (`` (p:`CAT:Product`) ``) no
   longer carry an unrelated "`Product` is a reserved word" hint.
+- **Oracle** queries failed on quoted identifiers, derived-table aliases and
+  `FLOAT` casts; `NUMBER` values came back as text, and integer division did
+  not truncate.
+- **ClickHouse** `UNION` failed without `DISTINCT`, unmatched `OPTIONAL MATCH`
+  values came back as defaults instead of `null`, and integer division
+  returned a float.
+- **DuckDB** dropped the fraction of a float division.
+- **A `UNION` without `USE` across graphs** could return no rows; each arm is
+  now routed and its rows collected.
+- **A `NEXT` chain** dropped the `USE` of its first part.
+- **Whole-node `WITH n` carry-through** on SQL backends read columns the
+  derived table did not have.
+- **Two Memgraph or Neo4j connections with different schemas** shared one
+  introspected schema; each connection is now introspected at boot.
+- **Single-connector Cypher mode** ran only the first arm of `INTERSECT`,
+  `EXCEPT` and `OTHERWISE`.
+
+### 🚧 Known limitations
+
+- Whole paths cannot be returned across backends, and `collect()` is not
+  supported over a cross-backend join.
+- Results are paged to the client, but each connector still reads its full
+  result before the first page.
+- On ClickHouse, integer division needs the attribute typed as an integer
+  (`"type": "Int"`) in the mapping; otherwise it divides as floating point.
 
 ## MemGQL v0.13.0 - October 7th, 2026
 
