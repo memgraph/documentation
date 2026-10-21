@@ -78,6 +78,63 @@ the cluster.
 the `latest` tag can lead to unexpected behavior if pods restart and pull newer,
 incompatible images. </Callout>
 
+### Rotate the license
+
+When your license expires or you receive a new key, you can rotate it without
+restarting any pod. The chart injects the `memgraph-secrets` keys as
+environment variables, and Kubernetes resolves them only when a container
+starts. Editing the Secret therefore has no effect on running pods, and neither
+a Secret edit nor `helm upgrade` triggers a rollout on its own. Rotating the
+license is a two-step process: apply the new key at runtime on every instance,
+then update the Secret so future restarts pick it up.
+
+<Steps>
+
+{<h4 className="custom-header">Set the new license at runtime</h4>}
+
+Connect to **every** coordinator and **every** data instance and run:
+
+```cypher
+SET DATABASE SETTING 'enterprise.license' TO '<new-license-key>';
+SET DATABASE SETTING 'organization.name' TO '<your-organization-name>';
+SHOW LICENSE INFO;
+```
+
+Database settings are per instance and are not replicated, so the queries must
+be run on each instance separately. They work on replicas as well as on the
+main, and coordinators accept them too (the `COORDINATOR_WRITE` privilege is
+required when [coordinator
+authentication](/clustering/high-availability/coordinator-authentication) is
+enabled). The new value is persisted in the data directory on the instance's
+PersistentVolumeClaim.
+
+{<h4 className="custom-header">Update the Secret</h4>}
+
+The Secret is not managed by Helm, so patch it directly:
+
+```bash
+kubectl create secret generic memgraph-secrets \
+  --from-literal=MEMGRAPH_ENTERPRISE_LICENSE='<new-license-key>' \
+  --from-literal=MEMGRAPH_ORGANIZATION_NAME='<your-organization-name>' \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+This does not restart anything. It only changes what the next container start
+sees. Adjust the Secret name and keys if you overrode `secrets.name`,
+`secrets.licenseKey` or `secrets.organizationKey`.
+
+</Steps>
+
+<Callout type="warning">
+Do not skip the Secret update. On Memgraph v3.9.0 and newer, a restarted pod
+compares the persisted setting with the environment variable and keeps the
+license with the furthest expiry, so the runtime-set key wins over a stale
+Secret. On older versions, the environment variable overwrites the persisted
+setting at startup and a restarted pod falls back to the expired key. In both
+cases, a data instance recreated with a fresh volume has no persisted setting
+and relies solely on the Secret.
+</Callout>
+
 ### Install Memgraph HA with `kind`
 
 For local development, we suggest using `kind`. Running:
@@ -1073,16 +1130,17 @@ helm install memgraph-ha memgraph/memgraph-high-availability \
 <Callout type="warning">
 When using an existing Gateway, ensure it has listeners whose **names** match the
 TCPRoute `sectionName` references. The chart expects listener names in the format
-`data-{id}-bolt` for data instances and `coordinator-{id}-bolt`
-for coordinators. The listener ports are your choice in this mode, 
+`data-{id}-bolt` for data instances and a single listener named `coordinators-bolt`
+for the entire coordinator tier. The listener ports are your choice in this mode,
 but keeping them aligned with the chart defaults avoids surprises. For example,
 the default HA setup (2 data instances, 3 coordinators) needs these listeners:
 
 - `data-0-bolt` on port 9000
 - `data-1-bolt` on port 9001
-- `coordinator-1-bolt` on port 10001
-- `coordinator-2-bolt` on port 10002
-- `coordinator-3-bolt` on port 10003
+- `coordinators-bolt` on port 7687 (`ports.boltPort`)
+
+Adding coordinators needs no new listener, while every new data instance needs
+one on `dataPortBase + id`.
 
 A standalone Gateway manifest with these pre-configured listeners is available in the [Helm charts repository](https://github.com/memgraph/helm-charts/blob/main/examples/gateway/gateway.yaml).
 </Callout>
@@ -1691,9 +1749,14 @@ To start the HA chart with direct scraping you need:
    `kube-prometheus-stack` selects it, and it is created in `prometheus.namespace`
    (falls back to the release namespace). Both must match the `kube-prometheus-stack`
    Helm release name and namespace you used when installing the stack.
+6. **The right scheme** – when instances run with `tls.bolt.enabled: true`, their
+   monitoring endpoint is served over HTTPS and Prometheus must scrape it with
+   `prometheus.serviceMonitor.scheme: https` (see
+   [ServiceMonitor TLS for direct scraping](#servicemonitor-tls-for-direct-scraping)).
 
 A minimal values file for the default installation of `kube-prometheus-stack`
-(release `kube-prometheus-stack` in namespace `monitoring`) looks like this:
+(release `kube-prometheus-stack` in namespace `monitoring`) and instances without
+Bolt TLS looks like this:
 
 ```yaml
 # Every coordinator and data instance serves OpenMetrics; the chart exposes their
@@ -1707,6 +1770,7 @@ prometheus:
     enabled: true         # in-cluster: kube-prometheus-stack scrapes each instance directly
     kubePrometheusStackReleaseName: kube-prometheus-stack  # must equal the Helm release name
     interval: 15s
+    scheme: http          # https when tls.bolt.enabled is true on the instances
   grafanaDashboard:
     enabled: true         # optional: ship the "Memgraph OpenMetrics" dashboard
     namespace: monitoring # a namespace the Grafana sidecar watches
@@ -1745,7 +1809,85 @@ kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:909
 Open `http://localhost:9090/targets` and look for the
 `serviceMonitor/monitoring/<release-name>-memgraph/0` job; every coordinator and data
 instance should be listed as `UP`. If the job is missing, the `release` label or
-namespace does not match your `kube-prometheus-stack` installation.
+namespace does not match your `kube-prometheus-stack` installation. If the targets are
+`DOWN` with a TLS or protocol error, the `scheme` does not match whether Bolt TLS is
+enabled on the instances.
+
+#### ServiceMonitor TLS for direct scraping
+
+When an instance has `tls.bolt.enabled: true`, Memgraph serves its HTTP monitoring
+endpoint over HTTPS as well, so Prometheus must scrape it with `https`. Set
+`prometheus.serviceMonitor.scheme` and, if needed, a Prometheus Operator
+[`TLSConfig`](https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.TLSConfig)
+through `prometheus.serviceMonitor.tlsConfig`. A complete example with Bolt TLS on
+all instances and a self-signed certificate:
+
+```yaml
+scrapeMemgraphDirectly: true
+
+prometheus:
+  enabled: false
+  namespace: monitoring
+  serviceMonitor:
+    enabled: true
+    kubePrometheusStackReleaseName: kube-prometheus-stack
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+
+data:
+  - id: "0"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+  - id: "1"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+
+coordinators:
+  - id: "1"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+  - id: "2"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+  - id: "3"
+    tls:
+      bolt:
+        enabled: true
+        secretName: bolt-tls-secret
+```
+
+The `scheme` applies to every instance selected by the `ServiceMonitor`, so all
+coordinators and data instances must expose their metrics endpoint using the same
+protocol: either enable `tls.bolt` on all of them and use `https`, or on none of them
+and use `http`. `insecureSkipVerify: true` is convenient for self-signed certificates but
+not suitable for production; prefer `caFile`/`ca` together with `serverName` instead:
+
+```yaml
+prometheus:
+  serviceMonitor:
+    enabled: true
+    scheme: https
+    tlsConfig:
+      ca:
+        secret:
+          name: bolt-ca-bundle
+          key: ca.crt
+      serverName: memgraph.example.com
+```
+
+`tlsConfig` is rendered verbatim into the `ServiceMonitor` endpoint, so any field
+supported by your Prometheus Operator version can be used. The referenced `Secret`
+(`bolt-ca-bundle` above) must exist in the namespace where the Prometheus instance
+runs, because the operator mounts it into the Prometheus pod.
 
 #### Grafana dashboard for direct scraping
 
@@ -2106,6 +2248,8 @@ and their default values.
 | `prometheus.serviceMonitor.enabled`                        | If enabled, a `ServiceMonitor` object will be deployed.                                                      | `false`                        |
 | `prometheus.serviceMonitor.kubePrometheusStackReleaseName` | The release name under which `kube-prometheus-stack` chart is installed. Rendered as the `release` label on the `ServiceMonitor`, which is how the stack discovers it. | `kube-prometheus-stack`        |
 | `prometheus.serviceMonitor.interval`                       | How often will Prometheus pull data from Memgraph's Prometheus exporter.                                     | `15s`                          |
+| `prometheus.serviceMonitor.scheme`                         | Protocol Prometheus uses when scraping Memgraph directly (`http` or `https`). Applies to every instance selected by the `ServiceMonitor`. | `http`        |
+| `prometheus.serviceMonitor.tlsConfig`                      | Prometheus Operator `TLSConfig` for direct HTTPS scraping (e.g. `insecureSkipVerify: true`, or `ca`/`serverName` for production).        | `{}`          |
 | `prometheus.grafanaDashboard.enabled`                      | Ship the bundled "Memgraph OpenMetrics" Grafana dashboard as a `ConfigMap` for a Grafana sidecar to auto-load. | `false`                      |
 | `prometheus.grafanaDashboard.namespace`                    | Namespace for the dashboard `ConfigMap`; must be one the Grafana sidecar watches. Defaults to `prometheus.namespace`, else release namespace. | `""`           |
 | `prometheus.grafanaDashboard.label`                        | Label the Grafana sidecar selects dashboards by.                                                             | `grafana_dashboard`            |
