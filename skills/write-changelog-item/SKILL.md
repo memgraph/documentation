@@ -3,21 +3,13 @@ name: write-changelog-item
 description: Create/write the changelog item / release note for a given Github PR in `pages/release-notes.mdx` on the release branch. Use when asked to write a release note or changelog entry, or when `check-release` finds a PR missing from the release notes.
 ---
 
-For a given Github PR write a changelog item.
-
-## Listing PRs
-
-When you present more than one PR to the user (missing changelog queue, docs
-gaps, suggested next item with alternatives, etc.), always sort by PR number
-**ascending** (smallest → largest).
+Writes one release note for a Memgraph PR. When listing several PRs, sort
+them by PR number ascending.
 
 ## Writing the changelog item
 
 Release notes and any related documentation must be **user friendly and
-user-centric**.
-
-We are not describing the engineering work we did, but the impact the user
-sees.
+user-centric**: describe the impact the user sees, not the engineering work.
 
 Write for someone who runs Memgraph, writes Cypher, operates a cluster, or
 authors modules — not for someone reading the PR diff. Prefer:
@@ -47,9 +39,8 @@ Avoid:
 - Second-person or first-person address ("you get a warning", "you can now",
   "we fixed"). State the behavior without naming the reader.
 
-The changelog item should be benefit focused (highlight the why). The changelog
-item should be in the markdown format, don't remove ticks and markdown links,
-don't use bold and italic, use - at the beginning of the item.
+Lead with the benefit. Write the item as one Markdown bullet starting with
+`-`: keep code ticks and links, and use no bold or italic.
 
 Link the docs page for the change in the item whenever there is one: the page
 from the docs PR for a **Docs needed** PR, or the existing page that covers the
@@ -59,8 +50,11 @@ Readers and agents look at the release notes first to learn what changed; the
 link takes them to how it works now. A bug fix with no page to point to needs
 no link.
 
-Usually the PR has the item written in one of the comments under the PR. Try to
-extract that first and improve according to the above description.
+Start from the release note in the product PR's comments, if there is one,
+and improve it by the rules above. The PR description and that note describe
+the PR as it was opened. If a later PR in the same series (one stacked on it
+or changing the same behavior) changed what users see, describe the behavior
+that ships: read the later PRs, or the code at the release tag.
 
 Then read the docs PR that covers the product PR: the open or merged one
 whose description names it as `memgraph/memgraph#NNNN`, not the release PR
@@ -72,8 +66,7 @@ the comment, follow the docs PR. An older docs PR without that section may
 still note release-note problems in its description; read them the same
 way.
 
-If that changelog item is not already there, feel free to create one, again
-according to the above guidelines.
+If the product PR has no release note, write one by the same rules.
 
 If the PR introduces a breaking change, put it **only** under the Breaking
 section — do not also list it under New features, Improvements, or Bug fixes.

@@ -105,6 +105,12 @@ Insert the new Memgraph title immediately after the line
 The patch stays under "Latest release" with the minor release it patches.
 Add a Lab title only if Lab ships with this patch.
 
+If the next minor release branch is already open, its release notes have
+moved the patched minor under `## Previous releases`. When `main` is merged
+into that branch after the patch ships, put the patch heading there, above
+the minor it patches, and keep a single `## Previous releases` heading.
+`pnpm check` fails on a repeated `##` section.
+
 ### Minor release
 
 Make **two** changes:
