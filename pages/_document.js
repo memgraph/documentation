@@ -13,10 +13,7 @@ class MyDocument extends Document {
               data-project-logo="https://avatars.githubusercontent.com/u/17707542?s=200&v=4"
               data-search-mode-enabled="true"
               data-modal-override-open-class-search="nextra-search"
-              data-mcp-enabled="true"
-              data-mcp-server-url="https://mcp-docs.memgraph.com"
-              data-mcp-button-text="Connect with MCP"
-              data-mcp-button-hidden="false"
+              data-mcp-enabled="false"
             ></script>
           </Head>
           <body>
