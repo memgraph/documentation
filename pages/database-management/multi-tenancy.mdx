@@ -152,10 +152,16 @@ Users interact with multi-tenant features through specialized Cypher queries:
    database is currently in use. You can also use `SHOW CURRENT DATABASE` for
    the same functionality. This command does not require any special privileges.
 5. `SHOW DATABASES`: Shows only the existing set of multitenant databases. The
-   result includes a `Name` column, a `State` column (`HOT`/`COLD`) and a
-   `Health` column (`ready`/`broken`). `HOT` databases are resident in memory while `COLD` are suspended, but still listed. A database is reported as `broken` when it
+   result includes a `Name` column, a `State` column (`HOT`/`COLD`/`DROPPING`) and a
+   `Health` column (`ready`/`broken`/`draining`). `HOT` databases are resident in memory while `COLD` are suspended, but still listed. A database is reported as `broken` when it
    failed durability recovery and came up empty — see
    [recovery failure handling](/fundamentals/data-durability#recovery-failure-handling).
+
+   A `HOT` database dropped with `FORCE` stays listed as `DROPPING`/`draining`
+   until its teardown finishes. The row is named `<name> (<uuid>)` if a live
+   database or another draining copy has the same name. Users without access
+   to all databases don't see it; see
+   [DROP DATABASE with FORCE](#drop-database-with-force).
 6. `USE DATABASE name`: Switches focus to a specific database (disabled during
    transactions).
 7. `GRANT DATABASE name TO user_or_role`: Grants a user or role access to a
@@ -210,6 +216,35 @@ DROP DATABASE database_name [FORCE];
   but actual deletion is deferred until it's safe to proceed. All active
   transactions using the database will be terminated.
 
+{<h4 id="sessions-on-a-dropped-database" className="custom-header"> Sessions on a dropped database </h4>}
+
+An idle connection that still has the database selected, such as a pooled
+driver connection, would keep the database from being deleted. So Memgraph
+closes such sessions the next time the drop worker runs, within about 10
+seconds. On a REPLICA, this happens when the drop replicates from MAIN, with or
+without `FORCE`. What a session sees depends on what it's doing:
+
+- **Idle:** Memgraph closes the connection. The client's next request fails
+  with a connection error, unless the driver's retry helpers rerun it on a new
+  connection. A client that names the dropped database when it connects then
+  gets `Tried to retrieve an unknown database "<name>".` A session that had
+  switched with `USE DATABASE` reconnects on its default database.
+  request. A client that names the dropped database when it connects then
+  gets an error that the database doesn't exist.
+- **Sends a query before it's closed:** if the client named the database when
+  it connected, the query fails with `Tried to retrieve an unknown database "<name>".`
+  and the connection is closed on the next pass. A session that selected the
+  database with `USE DATABASE` keeps its connection but has no database. Its
+  queries fail with a `Database required for ...` error until it runs
+  `USE DATABASE` with another database.
+- **In an open transaction:** on MAIN, the drop terminates the transaction.
+  Its commit fails with a transient error, or with a connection error once the
+  session is closed. On a REPLICA, the transaction runs to completion, and the
+  session is closed on a later pass.
+
+Before Memgraph 3.14, an idle connection delayed the database's deletion until
+its client sent another query.
+
 {<h4 id="use-cases-for-force" className="custom-header"> Use cases for FORCE </h4>} 
 
 - **Emergency cleanup**: Remove a database stuck in an inconsistent or
@@ -223,15 +258,70 @@ DROP DATABASE database_name [FORCE];
 
 Using the `FORCE` option requires:
 - `MULTI_DATABASE_EDIT` privilege
-- Access to the `memgraph` database
+- Access to the database being dropped
 - `TRANSACTION_MANAGEMENT` privilege (to terminate active transactions)
 
 {<h4 className="custom-header"> Important considerations </h4>} 
 
 - All active transactions on the target database will be forcibly terminated.
+  A query module procedure that doesn't check for abort runs until it returns;
+  its commit then fails.
 - The database becomes immediately unavailable to new connections.
-- Actual deletion may be deferred until existing connections are properly closed.
+- Actual deletion waits until nothing holds the database. Memgraph closes
+  idle sessions on it; see [sessions on a dropped
+  database](#sessions-on-a-dropped-database).
 - **This operation cannot be undone.**
+
+{<h4 id="after-a-forced-drop" className="custom-header"> After a forced drop </h4>}
+
+A forced drop returns immediately. A `COLD` database is removed at once. A `HOT`
+database is torn down in the background. Until that finishes,
+`SHOW DATABASES` lists it with State `DROPPING` and Health `draining`.
+
+A worker that runs every 10 seconds removes it once nothing holds it. So even a
+`HOT` database nothing uses stays listed for up to about 10 seconds.
+
+While the database is listed as `DROPPING`:
+
+- `DROP DATABASE x`, with or without `FORCE`, fails with
+  `Database x is currently being dropped.` It's a client error, so drivers
+  don't retry it. Once the row is gone, it fails with a `does not exist` error.
+- `USE DATABASE x` fails with an `unknown database` error.
+- `CREATE DATABASE x` creates a new, empty database. A later
+  `DROP DATABASE x` drops this new database.
+- A procedure that doesn't check for abort keeps the database listed, but
+  `SHOW TRANSACTIONS` no longer shows it. When it returns, its commit fails with
+  `Aborting transaction commit because the transaction was requested to stop from other session.`
+- A running `AFTER COMMIT` trigger on the database is asked to abort too.
+  The database stays listed until the trigger stops.
+
+A database still held after 5 minutes gets a server-log warning that names it,
+starting `Deferred teardown has been pending for over 5 minutes`.
+The usual cause is a procedure that doesn't check for abort.
+
+The draining row is named `<name> (<uuid>)`, with the dropped database's
+UUID, if a live database or another draining copy has the same name:
+
+```cypher
+DROP DATABASE x FORCE;
+CREATE DATABASE x;
+SHOW DATABASES;
+```
+
+```plaintext copy=false
++--------------------------------------------+------------+------------+
+| Name                                       | State      | Health     |
++--------------------------------------------+------------+------------+
+| "memgraph"                                 | "HOT"      | "ready"    |
+| "x"                                        | "HOT"      | "ready"    |
+| "x (3beec4b5-1d20-4a9b-99c3-5af905d871c2)" | "DROPPING" | "draining" |
++--------------------------------------------+------------+------------+
+```
+
+Only users with access to all databases see a draining row; with auth
+disabled, every session does. The drop removes the database from every user's
+and role's grants and denies. Users and roles that had it by name must be
+granted the recreated database again.
 
 ### RENAME DATABASE
 
@@ -427,7 +517,9 @@ granted.
 
 <Callout type="warning">
 
-User-role mappings are simple maps located in the user. Deleting or renaming the database will not update this information. The admin needs to make sure the correct access is maintained at all times.
+User-role mappings are simple maps located in the user. Renaming the database will not update this information. The admin needs to make sure the correct access is maintained at all times.
+
+`DROP DATABASE` removes the database from every user's and role's grants and denies. A database recreated under the same name must be granted or denied again to users and roles that had it by name.
 
 </Callout>
 
@@ -584,6 +676,8 @@ with driver.session(database="db2") as session:
     session.run(...)  # Executes on db2
     session.run("USE DATABASE db1")  # Error: database switching disabled
 ```
+
+The database selected with `USE DATABASE` stays selected for the client connection. A failed query or a rollback keeps it, including the Bolt `RESET` a driver sends after a failure. Switching to another user on the same connection (the driver re-authenticates, sending `LOGOFF` and `LOGON`) clears it. Queries then run on the database the new session requests, or on the new user's [main database](#users-main-database).
 
 ### Audit Logs
 

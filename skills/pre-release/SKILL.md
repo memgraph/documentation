@@ -6,7 +6,8 @@ description: Run final pre-release tasks for the documentation site. Updates rel
 # Pre-release
 
 Run these steps right before publishing a new documentation release to ensure
-release dates are correct and download links point to the latest Memgraph version.
+release dates are correct and download links point to the latest Memgraph
+version.
 
 ## When to use
 
@@ -42,3 +43,6 @@ replace **every** occurrence of the previous version with the new one.
   `3.9.0`) — this covers both patterns in a single pass.
 - Verify the result: every URL in the file should reference only the new
   version.
+
+Do **not** regenerate or commit `sitemap.xml` as part of a release. The sitemap
+is no longer updated per release.
