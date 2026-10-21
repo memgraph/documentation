@@ -1,6 +1,6 @@
 ---
 name: check-release
-description: Find what a Memgraph documentation release still needs, keep the overview in the release PR up to date, and on release day finish the release. Reports how much of the Memgraph milestone is merged, checks the docs labels on every merged PR in it, release notes for every PR that needs one, a docs PR for every "Docs needed" PR (and no docs for product PRs outside the milestone), the docs milestone and `pnpm check`, and fixes the problems docs PRs noticed in one PR per release; on release day also sets the release dates, updates the direct download links, gets the release PR's examples check passing and closes the docs milestone after the merge. Use while a release is in progress, before merging a release branch into main, or when asked to "check the release", "check before release", run "pre-release" steps or audit docs labels on a milestone.
+description: Find what a Memgraph documentation release still needs, keep the overview in the release PR up to date, and on release day finish the release. Reports how much of the Memgraph milestone is merged, checks the docs labels on every merged PR in it, release notes for every PR that needs one, a docs PR for every "Docs needed" PR (and no docs for product PRs outside the milestone), the docs milestone and `pnpm check`, and fixes the problems docs PRs noticed in one PR per release; on release day also sets the release dates, updates the direct download links, gets the release PR's examples check passing, and after the merge creates the GitHub release and closes the docs milestone. Use while a release is in progress, before merging a release branch into main, or when asked to "check the release", "check before release", run "pre-release" steps or audit docs labels on a milestone.
 ---
 
 # Check release
@@ -320,8 +320,22 @@ broken example goes back to the docs PR that introduced it.
 
 ### 12. After the release PR is merged
 
-Close the docs milestone. If PRs are still open in it, ask the user whether
-to move them to the next release's milestone first.
+Create the GitHub release for the docs at the release PR's merge commit. The
+tag is `v<version>` (`v3.15`, `v3.13.2`), the title `Docs for Memgraph
+<version>`, and the notes start from the previous release's tag:
+
+```bash
+gh release list --repo memgraph/documentation --limit 1   # previous tag
+gh release create v<version> --repo memgraph/documentation \
+  --target <merge_commit_sha> --title "Docs for Memgraph <version>" \
+  --generate-notes --notes-start-tag <previous_tag>
+```
+
+A patch of an older minor (a `3.13.3` after `3.14` is out) adds
+`--latest=false`.
+
+Then close the docs milestone. If PRs are still open in it, ask the user
+whether to move them to the next release's milestone first.
 
 ```bash
 gh api repos/memgraph/documentation/milestones/<milestone_number> \
