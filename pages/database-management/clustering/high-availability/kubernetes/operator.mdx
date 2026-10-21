@@ -1,6 +1,6 @@
 ---
 title: Memgraph Kubernetes operator
-description: Run a Memgraph high availability cluster on Kubernetes from one MemgraphCluster resource that the operator creates, registers, scales and keeps registered.
+description: Run a Memgraph high availability cluster on Kubernetes from one MemgraphDBCluster resource that the operator creates, registers, scales and keeps registered.
 ---
 
 import { Callout } from 'nextra/components'
@@ -9,7 +9,7 @@ import { Callout } from 'nextra/components'
 
 The Memgraph Kubernetes operator runs a Memgraph [high
 availability](/clustering/high-availability) cluster from one custom resource,
-`MemgraphCluster`. You declare how many coordinators and data instances the
+`MemgraphDBCluster`. You declare how many coordinators and data instances the
 cluster has. The operator creates them, registers them with each other,
 promotes the first MAIN and registers again any instance that loses its
 registration. It also scales the cluster, applies Memgraph flags, grows storage
@@ -22,7 +22,7 @@ plans to deprecate. High availability needs a [Memgraph Enterprise
 license](/database-management/enabling-memgraph-enterprise).
 </Callout>
 
-This page uses operator 1.1.0. The operator runs HA clusters only: one
+The operator runs HA clusters only: one
 StatefulSet of coordinators and one of data instances. It doesn't run a
 standalone Memgraph instance; use the [Memgraph Helm
 chart](/getting-started/install-memgraph/kubernetes#memgraph-standalone-helm-chart)
@@ -32,14 +32,14 @@ coordinators, MAIN and REPLICAs are new to you.
 
 ## Prerequisites
 
-- A Kubernetes cluster, version 1.29 or newer. The `MemgraphCluster` validation
-  rules need it.
+- A Kubernetes cluster, version 1.29 or newer. The `MemgraphDBCluster`
+  validation rules need it.
 - `kubectl` and Helm 3.
 - A Memgraph Enterprise license and the organization name it was issued to.
 
 ## Install the operator
 
-The `memgraph-operator` Helm chart installs the `MemgraphCluster` custom
+The `memgraph-operator` Helm chart installs the `MemgraphDBCluster` custom
 resource definition (CRD), the operator's RBAC rules and the operator
 Deployment. The operator watches every namespace, so you install it once per
 Kubernetes cluster.
@@ -60,6 +60,7 @@ The values you're most likely to change:
 | Value | Default | Description |
 |---|---|---|
 | `image.tag` | the chart's `appVersion` | Operator image tag. |
+| `crds.enabled` | `true` | Install and upgrade the `MemgraphDBCluster` CRD with the chart. Set it to `false` to manage the CRD yourself, for example from a GitOps tool; it must exist before the operator starts. |
 | `replicaCount` | `1` | Operator replicas. With leader election, a second replica stands by. |
 | `leaderElection.enabled` | `true` | Elect one active operator replica. |
 | `resources` | requests 10m CPU and 2Gi memory, limits 500m CPU and 2Gi memory | Operator container resources. Memory grows with the number of clusters. |
@@ -69,20 +70,19 @@ The values you're most likely to change:
 | `nodeSelector`, `tolerations`, `affinity`, `priorityClassName` | empty | Scheduling of the operator pod. |
 
 The [chart
-README](https://github.com/memgraph/kubernetes-operator/blob/v1.1.0/charts/memgraph-operator/README.md)
+README](https://github.com/memgraph/kubernetes-operator/blob/main/charts/memgraph-operator/README.md)
 lists every value.
 
 ### Upgrade the operator
 
-`helm upgrade` doesn't update a CRD that Helm already installed. Apply the CRD
-of the new version first, then upgrade the chart:
+`helm upgrade` updates the operator and the `MemgraphDBCluster` CRD together:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/memgraph/kubernetes-operator/vVERSION/charts/memgraph-operator/crds/memgraph.com_memgraphclusters.yaml
+helm repo update
 helm upgrade memgraph-operator memgraph/memgraph-operator --namespace memgraph-operator-system --wait
 ```
 
-Replace `VERSION` with the operator version you upgrade to, such as `1.1.0`.
+With `crds.enabled: false`, apply the new CRD yourself before you upgrade.
 
 ### Uninstall the operator
 
@@ -90,12 +90,12 @@ Replace `VERSION` with the operator version you upgrade to, such as `1.1.0`.
 helm uninstall memgraph-operator --namespace memgraph-operator-system
 ```
 
-Helm leaves the CRD in place, so your `MemgraphCluster` resources and their
-data survive. Delete the CRD only when no cluster needs it, because deleting it
-deletes every `MemgraphCluster`:
+The chart keeps the CRD when you uninstall it, so your `MemgraphDBCluster`
+resources and their data survive. Delete the CRD only when no cluster needs it, because deleting it
+deletes every `MemgraphDBCluster`:
 
 ```bash
-kubectl delete crd memgraphclusters.memgraph.com
+kubectl delete crd memgraphdbclusters.memgraph.com
 ```
 
 ## Create a cluster
@@ -105,7 +105,7 @@ data instances in the `memgraph` namespace.
 
 ### 1. Create the license Secret
 
-The cluster reads the license from a Secret you create. The `MemgraphCluster`
+The cluster reads the license from a Secret you create. The `MemgraphDBCluster`
 resource only names the Secret, so the resource carries no license and you can
 keep it in Git.
 
@@ -121,13 +121,13 @@ the organization name it was issued to. Without the Secret, the pods stay in
 `ContainerCreating`, and the `LicenseApplied` condition says
 `the Secret memgraph-secrets does not exist`.
 
-### 2. Create the MemgraphCluster
+### 2. Create the MemgraphDBCluster
 
 Save the resource as `memgraph-cluster.yaml`:
 
 ```yaml
 apiVersion: memgraph.com/v1alpha1
-kind: MemgraphCluster
+kind: MemgraphDBCluster
 metadata:
   name: memgraph
   namespace: memgraph
@@ -162,11 +162,11 @@ promotes the first MAIN. If the nodes have to pull the Memgraph image, this
 takes a few minutes.
 
 ```bash
-kubectl wait --namespace memgraph --for=condition=Ready memgraphcluster/memgraph --timeout=10m
+kubectl wait --namespace memgraph --for=condition=Ready memgraphdbcluster/memgraph --timeout=10m
 ```
 
-`kubectl get mgc -n memgraph` shows the cluster (`mgc` is the short name of
-`MemgraphCluster`). When it's done, `MAIN` names a data instance, such as
+`kubectl get mgdbc -n memgraph` shows the cluster (`mgdbc` is the short name of
+`MemgraphDBCluster`). When it's done, `MAIN` names a data instance, such as
 `instance_0`, and `READY` and `CONVERGED` are `True`. See [Check the
 cluster](#check-the-cluster) for what each column and condition means.
 
@@ -187,7 +187,7 @@ production, connect with routing to any coordinator.
 Find the MAIN:
 
 ```bash
-kubectl get mgc memgraph -n memgraph -o jsonpath='{.status.main}'
+kubectl get mgdbc memgraph -n memgraph -o jsonpath='{.status.main}'
 ```
 
 The data instance `instance_N` runs in the pod `memgraph-data-N`. Every pod
@@ -231,7 +231,7 @@ the coordinators' external address.
 
 ## Check the cluster
 
-`kubectl get mgc` shows these columns:
+`kubectl get mgdbc` shows these columns:
 
 | Column | Meaning |
 |---|---|
@@ -240,7 +240,7 @@ the coordinators' external address.
 | `READY` | The `Ready` condition. |
 | `CONVERGED` | The `Converged` condition. |
 
-`kubectl get mgc -o wide` adds `REGISTERED-COORDINATORS` and `REGISTERED-DATA`:
+`kubectl get mgdbc -o wide` adds `REGISTERED-COORDINATORS` and `REGISTERED-DATA`:
 how many of each role's declared members are registered in the cluster. Watch
 these during a scale.
 
@@ -261,7 +261,7 @@ it. Tools that read `Ready` alone, such as `kubectl wait` and Flux, wait for the
 whole change to finish.
 
 When a condition is `False`, its reason and message say why.
-`kubectl describe mgc memgraph -n memgraph` shows them. The reasons you're most
+`kubectl describe mgdbc memgraph -n memgraph` shows them. The reasons you're most
 likely to see:
 
 | Reason | Condition | What it means |
@@ -317,8 +317,8 @@ application](#5-connect-your-application).
 Change `coordinators` or `dataInstances`, or both in one edit, by any step:
 
 ```bash
-kubectl patch mgc memgraph -n memgraph --type=merge -p '{"spec":{"coordinators":5,"dataInstances":3}}'
-kubectl wait --namespace memgraph --for=condition=Converged memgraphcluster/memgraph --timeout=10m
+kubectl patch mgdbc memgraph -n memgraph --type=merge -p '{"spec":{"coordinators":5,"dataInstances":3}}'
+kubectl wait --namespace memgraph --for=condition=Converged memgraphdbcluster/memgraph --timeout=10m
 ```
 
 `coordinators` must be odd and at least 3, so the Raft quorum can't split.
@@ -480,7 +480,7 @@ until every pod is ready and the cluster has a Raft leader.
 To wait for a restart to finish:
 
 ```bash
-kubectl wait --namespace memgraph --for=condition=Updated memgraphcluster/memgraph --timeout=30m
+kubectl wait --namespace memgraph --for=condition=Updated memgraphdbcluster/memgraph --timeout=30m
 ```
 
 Give the operator a moment to see your edit first, or `Updated` may still be
@@ -495,7 +495,7 @@ its time-to-live, that the restarted pod's name didn't exist.
 To upgrade Memgraph, change `image.tag`:
 
 ```bash
-kubectl patch mgc memgraph -n memgraph --type=merge -p '{"spec":{"image":{"tag":"NEW_VERSION"}}}'
+kubectl patch mgdbc memgraph -n memgraph --type=merge -p '{"spec":{"image":{"tag":"NEW_VERSION"}}}'
 ```
 
 Replace `NEW_VERSION` with the Memgraph version to upgrade to.
@@ -543,7 +543,7 @@ files. Size it for snapshots, WAL files and logs, or lower `log-level` or
 
 You can't change `libStorageClassName` or `libStorageAccessMode` on a live
 cluster: Kubernetes doesn't allow changing them on an existing claim. The API
-server rejects the edit. To change them, delete the `MemgraphCluster`, which
+server rejects the edit. To change them, delete the `MemgraphDBCluster`, which
 keeps the claims under the default `Retain` policy, and create it again with the
 new value.
 
@@ -553,8 +553,8 @@ Raise `libPVCSize` and the operator grows every claim of the role under the
 running pods, without a restart:
 
 ```bash
-kubectl patch mgc memgraph -n memgraph --type=merge -p '{"spec":{"storage":{"data":{"libPVCSize":"50Gi"}}}}'
-kubectl wait --namespace memgraph --for=condition=Converged memgraphcluster/memgraph --timeout=10m
+kubectl patch mgdbc memgraph -n memgraph --type=merge -p '{"spec":{"storage":{"data":{"libPVCSize":"50Gi"}}}}'
+kubectl wait --namespace memgraph --for=condition=Converged memgraphdbcluster/memgraph --timeout=10m
 ```
 
 The StorageClass must set `allowVolumeExpansion: true`, and its storage driver
@@ -570,7 +570,7 @@ of these reasons:
 - `VolumeExpansionFailed`: the storage provider gave up on the resize.
 
 A driver that can only grow a volume no pod uses keeps the resize waiting. To
-finish it, delete the `MemgraphCluster`, wait for the claims to report their
+finish it, delete the `MemgraphDBCluster`, wait for the claims to report their
 new size, and create the cluster again.
 
 ### Collect core dumps
@@ -650,8 +650,8 @@ kubectl -n memgraph-operator-system rollout restart deploy/memgraph-operator-con
 Wait for `Converged`, then read the addresses from the status:
 
 ```bash
-kubectl wait --namespace memgraph --for=condition=Converged memgraphcluster/memgraph --timeout=10m
-kubectl get mgc memgraph -n memgraph -o jsonpath='{.status.externalAccess}'
+kubectl wait --namespace memgraph --for=condition=Converged memgraphdbcluster/memgraph --timeout=10m
+kubectl get mgdbc memgraph -n memgraph -o jsonpath='{.status.externalAccess}'
 ```
 
 `status.externalAccess.coordinators` is the coordinators' address, and
@@ -779,7 +779,7 @@ spec:
 Decide on intra-cluster TLS when you create the cluster. A member with it can't
 talk to a member without it, so the API server rejects adding or removing
 `tls.intraCluster` on a live cluster. To change it, delete the
-`MemgraphCluster`, which keeps its claims under the default `Retain` policy, and
+`MemgraphDBCluster`, which keeps its claims under the default `Retain` policy, and
 create it again.
 
 ### Renew certificates
@@ -981,7 +981,7 @@ OpenShift's default `restricted-v2` security context constraint assigns each
 pod's user and `fsGroup` from the namespace's range and rejects pods that name
 other values. To run there:
 
-- Set `securityContext: {}` on the `MemgraphCluster`. Leave out
+- Set `securityContext: {}` on the `MemgraphDBCluster`. Leave out
   `fixOwnershipInitContainer`, which runs as root, and `sysctlInitContainer`,
   which is privileged. If you collect core dumps, set
   `coreDumps.corePattern: Node`.
@@ -1109,7 +1109,7 @@ built on the `VolumeSnapshot` API, such as Velero, Kasten or PX-Backup.
 
 To restore a cluster in place:
 
-1. Delete the `MemgraphCluster` and keep its manifest. The pods go, and under
+1. Delete the `MemgraphDBCluster` and keep its manifest. The pods go, and under
    the default `retentionPolicy: Retain` the claims stay.
 2. Replace each claim with one restored from its snapshot, under the same name.
    The snapshot of `lib-storage-memgraph-data-0` goes behind
@@ -1119,7 +1119,7 @@ To restore a cluster in place:
    `app.kubernetes.io/name: memgraph`, `app.kubernetes.io/instance: memgraph`
    (the cluster's name) and `app.kubernetes.io/component: data` (or
    `coordinator`). Without them, the operator can't grow the claim later.
-3. Create the `MemgraphCluster` again. The pods start on the restored data, and
+3. Create the `MemgraphDBCluster` again. The pods start on the restored data, and
    the operator registers whatever is missing.
 
 You can restore into another Kubernetes cluster only into a namespace with the
@@ -1130,7 +1130,7 @@ resource names there first.
 ## Delete a cluster
 
 ```bash
-kubectl delete mgc memgraph -n memgraph
+kubectl delete mgdbc memgraph -n memgraph
 ```
 
 Deleting the resource deletes its pods, StatefulSets, Services and other
@@ -1143,12 +1143,12 @@ kubectl delete pvc -n memgraph -l app.kubernetes.io/instance=memgraph
 
 ## Events
 
-The operator records a Kubernetes Event on the `MemgraphCluster` for every
+The operator records a Kubernetes Event on the `MemgraphDBCluster` for every
 action it takes, including every command it sends to Memgraph. See them with
-`kubectl describe mgc memgraph -n memgraph`, or as a list:
+`kubectl describe mgdbc memgraph -n memgraph`, or as a list:
 
 ```bash
-kubectl events -n memgraph --for mgc/memgraph
+kubectl events -n memgraph --for mgdbc/memgraph
 ```
 
 | Reason | Type | When |
@@ -1174,16 +1174,13 @@ kubectl events -n memgraph --for mgc/memgraph
 Each action is its own Event, and an Event that concerns one member names
 that member's pod as its related object. The same action on the same object
 within about six minutes is counted on the earlier Event instead of listed
-again. In operator 1.1.0, every refused registration command has the reason
-`RegistrationFailed`.
+again.
 
 Events never contain the license or other Secret values. Kubernetes keeps Events
 for about an hour by default; to keep them longer, export them with your log
 pipeline.
 
 ## Limitations
-
-In operator 1.1.0:
 
 - **No Bolt authentication.** The operator connects to the instances without
   credentials, so don't enable authentication on a cluster it manages.
