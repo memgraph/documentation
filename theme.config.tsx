@@ -1,5 +1,6 @@
 import React from "react";
 import { DocsThemeConfig } from "nextra-theme-docs";
+import ConnectAI from "./components/connect-ai/ConnectAI";
 import Footer from "./components/Footer";
 import { HeadComponent } from "./components/HeadComponent";
 import { MemgraphLogo } from "./components/icons/MemgraphLogo";
@@ -13,6 +14,9 @@ const config: DocsThemeConfig = {
   },
   chat: {
     link: "https://discord.gg/memgraph",
+  },
+  navbar: {
+    extraContent: <ConnectAI />,
   },
   docsRepositoryBase: "https://github.com/memgraph/documentation/tree/main",
   footer: { component: Footer},
