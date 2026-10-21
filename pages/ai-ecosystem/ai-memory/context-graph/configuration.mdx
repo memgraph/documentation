@@ -9,7 +9,8 @@ import { Callout } from 'nextra/components'
 
 Context Graph keeps its settings in one configuration file. This page covers
 the file, connecting to your own Memgraph, choosing what is recorded, keeping
-secrets out of the graph, and updating or removing Context Graph.
+secrets out of the graph, forgetting sessions, and updating or removing
+Context Graph.
 
 ## Configuration file
 
@@ -223,6 +224,47 @@ Setting a list replaces the previous one. To clear it, set an empty value:
 memgraph-context-graph config set capture.exclude_projects ""
 ```
 
+## Forget sessions
+
+`forget` deletes sessions from your graph for good, with everything recorded in
+them and everything extracted from them. Delete sessions by ID:
+
+```bash
+memgraph-context-graph forget session SESSION_ID
+```
+
+`SESSION_ID` is the session's `session_id`, shown in the
+[terminal viewer](/ai-ecosystem/ai-memory/context-graph/explore-the-graph#terminal-viewer).
+Pass several IDs to delete several sessions.
+
+To delete every session that ran in a directory or inside it, pass the
+directory:
+
+```bash
+memgraph-context-graph forget project ~/work/client-repo
+```
+
+`forget` lists the matching sessions and asks before it deletes them. Add
+`--dry-run` to only list them, and `--yes` to skip the question. Without a
+terminal, `--yes` is required.
+
+For each session, `forget` deletes:
+
+- its prompts, replies, tool calls and results, its skill uses, and its
+  records of GitHub resources;
+- what reconciliation extracted from it, and every entity no other session or
+  memory file mentions;
+- its lines in the log of failed recordings.
+
+Entities that other sessions mention, skills, stored GitHub resources and your
+memory files stay, including files the session wrote. A forgotten session
+leaves only a `ForgottenSession` node with its ID, which stops a hook that is
+still running, or a resumed session, from recording it again.
+
+Only the agent's user can forget sessions: the agent has no tool for it. With
+[shared spaces](/ai-ecosystem/ai-memory/context-graph/shared-spaces), `forget`
+deletes from your personal space only.
+
 ## Update Context Graph
 
 `update` upgrades the packages, then refreshes everything setup installed: the
@@ -252,20 +294,38 @@ registrations, and turns the agents' own memory back on.
 memgraph-context-graph uninstall
 ```
 
-Name agents to disconnect only those, and pass `--project-dir` for projects
-other than the current directory.
+On a terminal, it then asks about each of these, and keeps it unless you
+answer yes:
 
-The graph, the configuration file and the `memgraph-context-graph` command
-stay, and `uninstall` prints how to remove each of them. To also remove the
-Memgraph that setup started, together with its data, remove its container and
-volume:
+- **The graph:** the Memgraph container that setup started and its data
+  volume, with every recorded session and memory.
+- **The configuration:** the configuration file and the log of failed
+  recordings.
+- **The tool:** the `memgraph-context-graph` command and its packages.
+
+To remove everything without questions, for example in a script:
 
 ```bash
-docker rm -f context-graph-memgraph
-docker volume rm context-graph-memgraph-data
+memgraph-context-graph uninstall --all
 ```
 
+| Flag | What it does |
+| --- | --- |
+| `RUNTIME ...` | Disconnect only these agents. The default is every connected agent. |
+| `--project-dir DIR` | A project to disconnect the per-project agents from. Repeat it for more projects. The default is the current directory. |
+| `--graph` | Also delete the graph: setup's Memgraph container and its volume |
+| `--config` | Also delete the configuration file and the log of failed recordings |
+| `--tool` | Also uninstall the `memgraph-context-graph` tool |
+| `--all` | `--graph`, `--config` and `--tool` together |
+| `--memgraph-container NAME` | The container setup started. The default is `context-graph-memgraph`. |
+| `--no-tui` | Don't ask; remove the agent connections and what the flags name |
+
+Without a terminal, `uninstall` removes only the agent connections and what the
+flags name. It deletes only the container setup started, by name, never a
+Memgraph you run yourself. On Windows, the running tool can't remove itself,
+so `uninstall` prints the `uv tool uninstall` command to run afterwards.
+
 <Callout type="warning">
-Removing the volume deletes everything your agents recorded, including your
-memories.
+Deleting the graph deletes everything your agents recorded, including your
+memories, and can't be undone.
 </Callout>
