@@ -1,6 +1,6 @@
 ---
 name: check-release
-description: Find what a Memgraph documentation release still needs, keep the overview in the release PR up to date, and on release day finish the release. Reports how much of the Memgraph milestone is merged, checks the docs labels on every merged PR in it, release notes for every PR that needs one, a docs PR for every "Docs needed" PR, the docs milestone and `pnpm check`, and fixes the problems docs PRs noticed in one PR per release; on release day also sets the release dates, updates the direct download links and closes the docs milestone after the merge. Use while a release is in progress, before merging a release branch into main, or when asked to "check the release", "check before release", run "pre-release" steps or audit docs labels on a milestone.
+description: Find what a Memgraph documentation release still needs, keep the overview in the release PR up to date, and on release day finish the release. Reports how much of the Memgraph milestone is merged, checks the docs labels on every merged PR in it, release notes for every PR that needs one, a docs PR for every "Docs needed" PR (and no docs for product PRs outside the milestone), the docs milestone and `pnpm check`, and fixes the problems docs PRs noticed in one PR per release; on release day also sets the release dates, updates the direct download links, gets the release PR's examples check passing and closes the docs milestone after the merge. Use while a release is in progress, before merging a release branch into main, or when asked to "check the release", "check before release", run "pre-release" steps or audit docs labels on a milestone.
 ---
 
 # Check release
@@ -138,6 +138,10 @@ gh pr list --repo memgraph/documentation --state all --search "milestone:<versio
   check the product PR's "Documentation PR link" comment
   (`gh api repos/memgraph/memgraph/issues/<N>/comments`) before calling it
   missing.
+- Every product PR a docs PR names is merged and in this Memgraph milestone.
+  A docs PR can cover several product PRs, and one of them may move to a
+  later release. Its content then documents a feature that doesn't ship:
+  move that part to a new docs PR in the next release's docs milestone.
 - Open docs PRs still block the release.
 
 ### 5. Docs milestone
@@ -270,11 +274,13 @@ report:
   note corrections for entries already written (check the entry follows
   them).
 - **Docs PRs:** `Docs needed` PRs with no docs PR (with the author's
-  `@handle`), and open docs PRs.
+  `@handle`), open docs PRs, and docs PRs that name a product PR not merged
+  in this milestone (with that PR's milestone).
 - **Docs milestone:** PRs added to it, PRs in it with the wrong base.
 - **Noticed problems:** items found, and the noticed-fixes PR (or that it
   hasn't been opened yet).
-- **Site checks:** what `pnpm check` reported and what was fixed.
+- **Site checks:** what `pnpm check` reported and what was fixed. On
+  release day, also the release PR's `Examples and names` result.
 
 Link the release PR so the user can see the updated overview. If every
 section is empty, say the release is ready.
@@ -304,6 +310,13 @@ replace **every** occurrence of the previous version with the new one.
 - Verify every URL in the file references only the new version.
 
 Run `pnpm check` again, then commit and push to the release branch.
+
+Before the release PR is merged, its `Examples and names` CI job must pass.
+It runs the Cypher examples the release changes on the new version's image,
+so it can only pass once that image is published; rerun it then. Fix what it
+reports on the release branch: a block that isn't meant to run gets a fence
+mark (` ```cypher invalid `, `template`, `neo4j` or `output`), and a real
+broken example goes back to the docs PR that introduced it.
 
 ### 12. After the release PR is merged
 
