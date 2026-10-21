@@ -4,104 +4,62 @@
   <a href="https://memgr.ph/join-discord">
     <img src="https://img.shields.io/badge/Discord-7289DA?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/>
   </a>
-  <a href="https://stackoverflow.com/questions/tagged/memgraphdb">
-    <img src="https://img.shields.io/badge/Stack_Overflow-FE7A16?style=for-the-badge&logo=stack-overflow&logoColor=white" alt="Stack Overflow"/>
-  </a>
 </p>
 
-<p align="center">
-  <a href="https://memgraph.com/docs">
-    <img src=".github/images/memgraph-documentation.png" 
-         alt="memgraph-docs" 
-         title="memgraph-docs"
-         style="width: 60%"/>
-  </a>
-</p>
+This repository is the source of the Memgraph documentation at
+[memgraph.com/docs](https://memgraph.com/docs). The site is built with
+[Nextra](https://nextra.site/), and each page is an `.mdx` file in `pages/`.
 
-This repository contains the source files and various generators for the
-Memgraph documentation available at
-[memgraph.com/docs](https://memgraph.com/docs).
+## Run the docs locally
 
-## :hammer_and_wrench: Run docs locally
+You need [Node.js](https://nodejs.org/en/download/) 22 and
+[pnpm](https://pnpm.io/installation) 10.
 
-To run the documentation website locally, you will need to install:
-
-- [Node.js](https://nodejs.org/en/download/) version >= 16.0.0 or above (which
-  can be checked by running `node -v`). You can use
-  [nvm](https://github.com/nvm-sh/nvm) for managing multiple Node versions on a
-  single machine installed.
-- [pnpm](https://pnpm.io/installation) 
-
-### Run the development server
-
-To preview your changes as you edit the files, you can run a local development
-server that will serve your website and reflect the latest changes.
-
-First install `node` and `pnpm`. After that, clone this repository:
-
-```
+```bash
 git clone https://github.com/memgraph/documentation.git
-```
-
-Change the working directory to the one of the cloned repository and install the dependencies:
-
-```bash
+cd documentation
 pnpm i
-```
-
-Now, you can start the server:
-
-```bash
 pnpm dev
 ```
 
-Open the URL [http://localhost:3000/docs](http://localhost:3000/docs) in your browser.
+Open [http://localhost:3000/docs](http://localhost:3000/docs). The page
+reloads as you edit.
 
-## :construction: Build
-
-Install the dependencies:
-
-```bash
-pnpm i
-```
-
-Build the website:
+To build the site as it's deployed, and serve the build:
 
 ```bash
 pnpm build
-```
-
-Contents will be generated within the `/build` directory. 
-
-Test your build locally:
-
-```bash
 pnpm start
 ```
 
-## :writing_hand: Contribute
+The build also generates the sitemap and the `llms.txt` files.
 
-We are grateful for any community contributions to the documentation, as they are
-the best way of improving the overall user experience. If at any point you
-believe that something is misleading, could be worded better, or is missing
-additional information, then please feel free to make a pull request or report
-an [issue](https://github.com/memgraph/documentation/issues).
+## Check your changes
 
-### Contributing guide
+Two checks run on every pull request. You can run them before you push:
 
-If you want to change the documentation, create a new branch and make the
-appropriate changes. Then, create a pull request to merge these changes into the
-`main` branch.
+```bash
+pnpm check
+python3 scripts/check-examples.py --base origin/main
+```
 
-The pull request should describe the changes it's proposing and all checks must
-be completed. 
+- `pnpm check` checks links, section links, redirects and the sidebar. It
+  takes about a second.
+- `check-examples.py` runs the Cypher examples on the pages you changed on
+  Memgraph in Docker, and checks the procedure, function and flag names they
+  use. It needs Docker.
 
-Add an appropriate label to the PR, either `status: draft` if you are still
-working on the PR, or `status: ready` if the PR is ready for review. 
+## Contribute
 
-When the PR is reviewed and approved, the label will be changed to `status: ship
-it` and merged into the main by the repo admins.
+To fix or improve a page, open a pull request to `main`. To report a problem
+without fixing it, open an [issue](https://github.com/memgraph/documentation/issues).
 
-If the PR requires changes, the label will be changed to `status: change`.
-Address the comments and change the documentation appropriately, then re-request
-a review and change the label to `status: ready` again. 
+- **How to write a page:** see [AGENTS.md](AGENTS.md). It has the rules for
+  frontmatter, headings, links, images, code blocks, the sidebar and
+  redirects.
+- **Docs for an unreleased Memgraph version** go to that release's branch,
+  `release/<version>`, not to `main`.
+- **Pull request description:** fill in the [pull request
+  template](.github/pull_request_template.md).
+
+For questions, ask on [Discord](https://memgr.ph/join-discord).

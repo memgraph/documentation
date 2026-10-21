@@ -17,31 +17,117 @@ The steps may vary slightly depending on the Linux distribution you are using.
 
 ## Handle numerous open files simultaneously
 
-The `fs.file-max` parameter in Linux sets the maximum number of file handles
-that the Linux kernel will allocate. This adjustment is important when the
-system needs to handle numerous open files simultaneously. To adjust this
-parameter, do the following:
+Every client connection, every database, every text index and every replica
+connection consumes file descriptors. When a process runs out of them, it fails
+with one of two errors:
+
+- `Too many open files` (`EMFILE`): the **per-process** limit
+  (`RLIMIT_NOFILE`) has been reached. This is the one you will normally hit.
+- `Too many open files in system` (`ENFILE`): the **system-wide** limit
+  (`fs.file-max`) has been reached.
+
+When Memgraph reaches the per-process limit, new client connections fail at the
+Bolt handshake, and the Memgraph log shows:
+
+```plaintext
+Bolt accept failed (Too many open files); retrying every 500ms, further occurrences logged at most every 10s
+```
+
+Connections succeed again once other connections close.
+
+Starting with v3.14, Memgraph raises its soft limit to the hard limit
+at startup. It never changes the hard limit, so only the hard limit matters.
+With a hard limit of `1024`, Memgraph starts failing at roughly 950 client
+connections. The Memgraph package sets `LimitNOFILE=1048576` in its systemd
+unit, so both limits are `1048576`.
+
+If the limit after the raise is below `65536`, Memgraph logs a warning at
+startup. The warning begins with `Open files limit is too low (soft N, hard N)`.
+Both numbers are the hard limit, so raise the hard limit. Memgraph still starts
+and serves queries.
+
+A custom unit file or container setup with a high hard limit needs no action. A
+systemd unit without `LimitNOFILE` gets a soft limit of `1024` and a hard limit
+that depends on the systemd version. If the hard limit is low, or on releases
+before v3.14, follow the steps below.
+
+Memgraph also logs the resulting limits as
+`Open files limit (RLIMIT_NOFILE): soft N, hard N.` at `INFO` level. The default
+log level is `WARNING`, so this line isn't written unless you start Memgraph
+with `--log-level=INFO`. To check the limits Memgraph runs with, read
+`/proc/<pid>/limits` as shown in the steps below.
+
+### Sizing the limit
+
+Memgraph needs roughly one descriptor per client connection plus files per
+database (WAL, snapshots, indexes); `65536` or more is recommended.
+
+<Callout type="info">
+`LimitNOFILE` (and `--ulimit nofile`) cannot exceed the kernel's `fs.nr_open`.
+The kernel default is `1048576`, but systemd 240 and later raises it at boot.
+Higher values are rejected (the service or container fails to start). Check the
+current ceiling with `cat /proc/sys/fs/nr_open`.
+</Callout>
+
+### Linux with systemd
+
+`/etc/security/limits.conf` does **not** apply to systemd services. Set the limit
+in the service unit instead:
 
 <Steps>
 
-{<h3 id="open-etcsysctlconf-in-a-text-editor" className="custom-header">Open `/etc/sysctl.conf` in a text editor</h3>}
-You need root privileges to
-edit this file, which is used for configuring kernel parameters at runtime.
+{<h3 id="edit-the-service" className="custom-header">Edit the service</h3>}
+Run `sudo systemctl edit memgraph` and add:
 
+```ini
+[Service]
+LimitNOFILE=1048576
+```
 
-{<h3 id="set-the-file-handle-limit" className="custom-header">Set the file handle limit</h3>}
-Add the line `fs.file-max=100000` to
-`sysctl.conf`. 
+{<h3 id="reload-and-restart" className="custom-header">Reload and restart</h3>}
+Run `sudo systemctl daemon-reload` and `sudo systemctl restart memgraph`.
 
-{<h3 className="custom-header">Apply the changes</h3>}
-Save your changes and exit the text editor. Run
-`sudo sysctl -p` to apply the changes immediately without rebooting.
+{<h3 id="verify-the-limit" className="custom-header">Verify the limit</h3>}
+Run the following command. Both the soft and the hard limit should show `1048576`:
 
-{<h3 className="custom-header">Verify the changes</h3>}
-Run `sysctl fs.file-max` to check that the new
-value has been applied. It should return `100000`.
+```bash
+grep 'open files' /proc/$(pidof memgraph)/limits
+```
 
 </Steps>
+
+### Docker
+
+Pass the limit to the container with `--ulimit`:
+
+```bash
+docker run --ulimit nofile=1048576:1048576 -p 7687:7687 memgraph/memgraph
+```
+
+With Docker Compose:
+
+```yaml
+services:
+  memgraph:
+    image: memgraph/memgraph
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+```
+
+### Kubernetes
+
+Starting with v3.14, Memgraph raises its soft limit to the container's hard limit
+at startup, so only the hard limit counts. If you see the warning in the Memgraph
+log, raise the hard open files limit that containers get on the node.
+
+### System-wide limit
+
+Modern kernels and systemd already set `fs.file-max` very high, so there is
+usually nothing to do. Do not lower it. Only if `cat /proc/sys/fs/file-max`
+returns a low value, raise it by adding `fs.file-max=<value>` to
+`/etc/sysctl.conf` and running `sudo sysctl -p`.
 
 ## Increasing memory map areas
 

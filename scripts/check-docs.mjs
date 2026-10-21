@@ -121,6 +121,11 @@ function sectionIds(file, seenFiles = new Set()) {
 const strip = (u) => u.split('#')[0].split('?')[0].replace(/\/+$/, '') || '/'
 // /page.md is the Markdown version of /page, written to public/ at build time.
 const mdPage = (u) => /\.md$/.test(u) && pages.has(u.replace(/\.md$/, '').replace(/\/index$/, '') || '/')
+// /llms.txt and <section>/llms.txt are also written at build time, one per section.
+const llmsTxt = (u) => {
+  const m = u.match(/^(.*)\/llms\.txt$/)
+  return Boolean(m) && (!m[1] || pages.has(m[1]) || folderExists(m[1]))
+}
 // A pattern such as /clustering/:path* stands for every page under its fixed part.
 const isPattern = (u) => u.includes('/:')
 const fixedPart = (u) => u.split('/:')[0] || '/'
@@ -189,7 +194,7 @@ for (const r of bySource.values()) {
   if (end.loop) at('redirect loop')
   else if (end.external) continue
   else if (end.steps > 1) at(`takes ${end.steps} steps; point it straight at ${end.route}`)
-  else if (!pages.has(end.route) && !isStatic(end.route) && !mdPage(end.route)) at(`${r.destination} is not a page`)
+  else if (!pages.has(end.route) && !isStatic(end.route) && !mdPage(end.route) && !llmsTxt(end.route)) at(`${r.destination} is not a page`)
   else if (r.destination.includes('#') && pages.has(end.route)) {
     const id = r.destination.split('#')[1]
     if (!sectionIds(pages.get(end.route)).has(id)) at(`${end.route} has no section #${id}`)
@@ -245,7 +250,7 @@ function checkTarget(url, at) {
     if (id && !sectionIds(pages.get(target)).has(id)) at(`${target} has no section #${id}`)
     return
   }
-  if (isStatic(target) || mdPage(target)) return
+  if (isStatic(target) || mdPage(target) || llmsTxt(target)) return
   const pattern = patterns.find((r) => target.startsWith(fixedPart(r.source) + '/'))
   if (pattern) return at(`goes through the redirect ${pattern.source}; link to the page it lands on instead`)
   if (bySource.has(target)) {
