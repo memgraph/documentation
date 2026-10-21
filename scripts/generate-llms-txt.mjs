@@ -32,6 +32,9 @@ const OPTIONAL_PREFIXES = [
 
 const PAGE_EXTS = ['.mdx', '.md']
 const MAX_DESC = 160
+// The root index carries two levels of every section, so its descriptions are
+// shorter to keep it under the 30K characters recommended for a navigation file.
+const ROOT_DESC = 100
 
 const CODE_OPEN = '\u0000CODE'
 const CODE_CLOSE = '\u0000'
@@ -366,21 +369,22 @@ function emitMarkdown(nodes) {
 
 // ------------------------------------------------------------ llms.txt output
 
-function truncate(text) {
+function truncate(text, max = MAX_DESC) {
   const clean = text.replace(/\s+/g, ' ').trim()
-  if (clean.length <= MAX_DESC) return clean
-  return `${clean.slice(0, MAX_DESC - 1).replace(/[\s,.;:-]+$/, '')}...`
+  if (clean.length <= max) return clean
+  return `${clean.slice(0, max - 1).replace(/[\s,.;:-]+$/, '')}...`
 }
 
-function renderNode(node, depth, lines) {
+function renderNode(node, depth, lines, maxDepth = Infinity, maxDesc = MAX_DESC) {
+  if (depth > maxDepth) return
   if (node.file) {
     const indent = '  '.repeat(depth)
     const url = `${SITE}${node.route}.md`
-    const desc = node.description ? `: ${truncate(node.description)}` : ''
+    const desc = node.description ? `: ${truncate(node.description, maxDesc)}` : ''
     lines.push(`${indent}- [${node.title}](${url})${desc}`)
   }
   for (const child of node.children) {
-    renderNode(child, node.file ? depth + 1 : depth, lines)
+    renderNode(child, node.file ? depth + 1 : depth, lines, maxDepth, maxDesc)
   }
 }
 
@@ -445,9 +449,13 @@ function build() {
     '  In Claude Code: `claude mcp add --transport http memgraph-docs https://mcp-docs.memgraph.com`.',
     `  Other clients: ${SITE}/ai-ecosystem/mcp.md.`,
     '- Install Memgraph Agent Skills for Cypher, data modeling, MAGE algorithms, query',
-    '  modules and GraphRAG with `npx skills add memgraph/skills`, or in Claude Code with',
-    `  \`/plugin marketplace add memgraph/skills\`. Skill list: ${SITE}/ai-ecosystem/skills.md.`,
+    '  modules and GraphRAG with `npx skills add memgraph/skills`. In Claude Code:',
+    '  `/plugin marketplace add memgraph/skills`, then `/plugin install memgraph@memgraph`.',
+    '  In Codex: `codex plugin marketplace add memgraph/skills`, then `codex plugin add memgraph@memgraph`.',
+    `  Skill list: ${SITE}/ai-ecosystem/skills.md.`,
     '- If what you know about Memgraph may be out of date, check what changed first.',
+    '  Some old commands still run but return different results: since 3.11, node and',
+    '  relationship counts come from `SHOW STORAGE INFO ON CURRENT DATABASE`.',
     `  Each version in the release notes has a "Breaking changes" section: ${SITE}/release-notes.md.`,
     `  Upgrade steps for specific versions: ${SITE}/database-management/upgrades/specific-versions.md.`,
     `  Deprecated and removed flags: ${SITE}/database-management/upgrades/deprecated-features.md.`
@@ -463,25 +471,43 @@ function build() {
     lines.push('')
   }
 
+  // The root index lists each section's top two levels; every section also gets
+  // its own llms.txt with all of its pages. One file with all ~375 pages runs
+  // past 80K characters, well over what an agent should load just to navigate.
   const deferred = []
   for (const section of sections) {
     const { keep, optional } = partition([section])
     deferred.push(...optional)
     if (!keep.length) continue
 
-    const body = []
-    for (const node of keep) renderNode(node, 0, body)
-    if (!body.length) continue
+    const full = []
+    for (const node of keep) renderNode(node, 0, full)
+    if (!full.length) continue
+
+    const top = []
+    for (const node of keep) renderNode(node, 0, top, 1, ROOT_DESC)
 
     lines.push(`## ${section.title}`)
     lines.push('')
-    lines.push(...body)
+    if (full.length > top.length) {
+      const index = writeIndex(section.route, section.title, full)
+      lines.push(`- [All ${section.title} pages](${index}): ${full.length} pages`)
+    }
+    lines.push(...top)
     lines.push('')
   }
 
   if (deferred.length) {
     const body = []
-    for (const node of deferred) flatten(node, body)
+    for (const node of deferred) {
+      flatten({ ...node, children: [] }, body)
+      const all = []
+      for (const child of node.children) flatten(child, all)
+      if (all.length) {
+        const index = writeIndex(node.route, node.title, all)
+        body.push(`- [All ${node.title} pages](${index}): ${all.length} pages`)
+      }
+    }
     if (body.length) {
       lines.push('## Optional')
       lines.push('')
@@ -499,7 +525,28 @@ function build() {
 
   const linkCount = lines.filter((l) => l.trimStart().startsWith('- [')).length
   console.log(`[llms.txt] public/llms.txt - ${linkCount} links`)
+  console.log(`[llms.txt] wrote ${indexes} section indexes into public/`)
   console.log(`[llms.txt] wrote ${written} Markdown pages into public/`)
+}
+
+let indexes = 0
+
+/** Writes public/<route>/llms.txt listing every page under a section. */
+function writeIndex(route, title, body) {
+  const lines = [
+    `# Memgraph documentation: ${title}`,
+    '',
+    `> Every page in the ${title} section of the Memgraph documentation, as plain Markdown.`,
+    '',
+    `The index of all sections is at ${SITE}/llms.txt.`,
+    '',
+    ...body,
+  ]
+  const target = path.join(PUBLIC, route.replace(/^\//, ''), 'llms.txt')
+  fs.mkdirSync(path.dirname(target), { recursive: true })
+  fs.writeFileSync(target, `${lines.join('\n')}\n`)
+  indexes++
+  return `${SITE}${route}/llms.txt`
 }
 
 build()

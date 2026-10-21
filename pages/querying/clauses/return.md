@@ -318,6 +318,32 @@ WITH n ORDER BY n.name DESC
 RETURN collect(n.name) AS names;
 ```
 
+`ORDER BY` can sort a column that holds values of different types, for
+example a property that is a number on some nodes and a string on others.
+`null` comes last, or first with `DESC`:
+
+```cypher
+UNWIND [1, 'text', true, null, [1]] AS value
+RETURN value ORDER BY value;
+```
+
+```plaintext copy=false
++--------+
+| value  |
++--------+
+| [1]    |
+| "text" |
+| true   |
+| 1      |
+| Null   |
++--------+
+```
+
+A column that holds two maps, two nodes, two relationships or two paths
+raises an error, such as `Comparison is not defined for values of type map.`
+Before Memgraph 3.14, a column that held values of different types raised an
+error too.
+
 ## Dataset queries
 
 We encourage you to try out the examples by yourself.
