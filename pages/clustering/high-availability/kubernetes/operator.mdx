@@ -117,9 +117,10 @@ kubectl create secret generic memgraph-secrets --namespace memgraph \
 ```
 
 Replace `YOUR_LICENSE_KEY` and `YOUR_ORGANIZATION_NAME` with your license and
-the organization name it was issued to. Without the Secret, the pods stay in
-`ContainerCreating`, and the `LicenseApplied` condition says
-`the Secret memgraph-secrets does not exist`.
+the organization name it was issued to. Without the Secret, the pods start
+but the cluster isn't registered: `Converged` reports `CoordinatorUnreachable`,
+and `LicenseApplied` says `the Secret memgraph-secrets does not exist`. Create
+the Secret, and the operator licenses the pods and registers the cluster.
 
 ### 2. Create the MemgraphDBCluster
 
@@ -442,8 +443,10 @@ with `SET DATABASE SETTING`, without a restart. `LicenseApplied` is `True` with
 the reason `LicenseMatchesSecret` once every ready pod runs it, and
 `LicenseRejected` with Memgraph's error if an instance refuses it.
 
-Pointing `secrets.name` at a different Secret changes the pod configuration
-and restarts the pods.
+The pods never read the Secret themselves: the operator delivers the license
+to each pod as a database setting. A new pod starts without a license and gets
+it once it's ready. Pointing `secrets.name` at a different Secret works the
+same way and restarts nothing.
 
 ## Rolling restarts
 
@@ -1070,15 +1073,15 @@ If a failover interrupts the import, run it again on the new MAIN.
 ## Set AWS credentials
 
 Data instances read from S3, for example with `LOAD PARQUET`, using the
-credentials in `awsCredentials`. The Secret must have all four keys, even when
-`AWS_ENDPOINT_URL` is empty:
+credentials in `awsCredentials`. The Secret holds up to four keys:
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` and
+`AWS_ENDPOINT_URL`. Each key is optional:
 
 ```bash
 kubectl create secret generic aws-s3-credentials --namespace memgraph \
   --from-literal=AWS_ACCESS_KEY_ID=YOUR_ACCESS_KEY \
   --from-literal=AWS_SECRET_ACCESS_KEY=YOUR_SECRET_KEY \
-  --from-literal=AWS_REGION=eu-west-1 \
-  --from-literal=AWS_ENDPOINT_URL=
+  --from-literal=AWS_REGION=eu-west-1
 ```
 
 ```yaml
@@ -1088,12 +1091,18 @@ spec:
       name: aws-s3-credentials
 ```
 
-Leave `AWS_ENDPOINT_URL` empty for AWS, or set it to an S3-compatible endpoint
-such as MinIO. When you update the Secret, the operator sets the new values on
-every ready data instance without a restart. Adding the block restarts the data
-instances. Removing it doesn't clear the values: Memgraph keeps them until you
-run `SET DATABASE SETTING "aws.access_key" TO "";` and the same for
-`aws.secret_key`, `aws.region` and `aws.endpoint_url`.
+Leave `AWS_ENDPOINT_URL` out for AWS, or set it to an S3-compatible endpoint
+such as MinIO.
+
+The operator sets each value the Secret holds on every ready data instance with
+`SET DATABASE SETTING`, and leaves the setting of a missing key as the instance
+has it. Nothing restarts: not when you add the block, point it at another
+Secret or update the Secret. Memgraph keeps the settings across restarts, and a
+new data instance gets them once it's ready and the cluster has converged.
+
+Removing the block, or a key from the Secret, doesn't clear the value. Memgraph
+keeps it until you run `SET DATABASE SETTING "aws.access_key" TO "";`, and the
+same for `aws.secret_key`, `aws.region` and `aws.endpoint_url`.
 
 ## Back up and restore
 
