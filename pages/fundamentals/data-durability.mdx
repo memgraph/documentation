@@ -84,12 +84,13 @@ By default, WAL files are located at `/var/lib/memgraph/wal`.
 
 <h4 id="wal-file-lifecycle" className="custom-header">WAL file lifecycle</h4>
 
-**Older WAL files are deleted automatically after a snapshot is created** since
-the snapshot contains the full database state up to that point. Only WAL files
-containing changes after the latest snapshot are retained.
+Memgraph deletes older WAL files when it deletes old snapshots, not after every
+snapshot. Once a new snapshot brings the number of snapshots to
+`--storage-snapshot-retention-count`, Memgraph deletes the WAL files older than
+the oldest snapshot it keeps, except the last WAL file written before that
+snapshot.
 
-To control WAL file cleanup indirectly, you can limit the number of snapshots
-via `--storage-snapshot-retention-count`.
+To keep WAL files for longer, raise `--storage-snapshot-retention-count`.
 
 **It is not possible to use WAL files exclusively** without snapshots. Memgraph
 enforces periodic snapshots when WAL is enabled and will fail to start if WAL is
@@ -265,9 +266,15 @@ new writes have been committed since the last snapshot. If the periodic snapshot
 is skipped it will be logged on INFO level.
 </Callout>
 
-<Callout type="warning">
-Snapshots and WAL files are presently not compatible between Memgraph versions.
-</Callout>
+### Compatibility between versions
+
+Memgraph recovers from snapshot and WAL files written by Memgraph 2.0 or any
+later version, so after an [upgrade](/database-management/upgrades) you can
+start the new version on your existing data directory.
+
+Files written by a newer version aren't guaranteed to load in an older one. To
+go back to an earlier version, [restore the backup you took before
+upgrading](/database-management/upgrades#roll-back-an-upgrade).
 
 ### Parallelized execution
 
@@ -453,6 +460,9 @@ moves all prior/corrupt snapshots and WAL files to the `.old` directory (or
 deletes them when [`--storage-backup-dir-enabled`](/database-management/configuration)
 is off), leaving a clean single-snapshot directory. As a result, the database **recovers cleanly on the
 next restart and does not re-enter the broken state**.
+
+The database then holds only the data in that snapshot. Changes made after the
+snapshot was taken, including those in a damaged WAL file, are lost.
 
 `RECOVER SNAPSHOT` is available in both Community and Enterprise editions, so
 single-tenant deployments can recover a corrupt default database.
