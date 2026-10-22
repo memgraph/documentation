@@ -1,6 +1,6 @@
 ---
 title: AI memory
-description: Store what an AI system knows, did and knows how to do as one graph in Memgraph, and set it up for your coding agents with one command.
+description: Give AI agents a long-term memory as a graph in Memgraph, with Context Graph for your coding agents or with a memory model you build yourself.
 ---
 
 import { Tabs } from 'nextra/components'
@@ -12,29 +12,36 @@ graph of entities and typed relationships, so recall follows the connections
 between what the system knows, what it did and what it knows how to do, not
 only what sounds similar to the question.
 
-## How Memgraph stores memory
+## Choose an approach
 
-Memgraph stores three types of long-term memory in one graph:
+There are two ways to add this memory to an AI system:
 
-| Memory type | What it holds | How it's stored |
-| --- | --- | --- |
-| **Semantic** | What the system knows, such as facts and preferences | `(:User)-[:HAS_MEMORY]->(:Memory)` |
-| **Episodic** | What the system did, such as past interactions | `(:Session)-[:HAS_ACTION]->(:Action)`, in order by `FOLLOWED_BY` |
-| **Procedural** | What the system knows how to do, such as workflows | `(:Session)-[:USED_SKILL]->(:Skill)` |
+- **[Use Context Graph](#use-context-graph)** to give your coding agents a
+  memory now. One command connects Claude Code, Codex and other coding agents
+  to Memgraph, and they record and recall their sessions with no code.
+- **[Build your own memory](#build-your-own-memory)** for your own agent or
+  application. You write the memory graph from your code and query it with
+  Cypher.
 
-The `User` and `Session` nodes are shared by all three types, so one traversal
-can recall facts, past actions and skills together.
+## Use Context Graph
 
-## Set up memory for your coding agents
+Context Graph gives your coding agents a memory that lasts across sessions and
+is shared between agents. It records each session of Claude Code, Codex, GitHub
+Copilot CLI, Cursor, OpenCode, Antigravity CLI or Grok Build in Memgraph: your
+prompts, the agent's replies, the tools it called, the skills it used and the
+memories it saved. In the next session, any of those agents can recall it.
 
-[Context Graph](/ai-ecosystem/ai-memory/context-graph), part of the Memgraph
-AI Toolkit, records the sessions of your coding agents in Memgraph as these
-three types of memory, so the agents can recall them in later sessions. It
-works with Claude Code, Codex, GitHub Copilot CLI, Cursor, OpenCode,
-Antigravity CLI and Grok Build.
+Context Graph is open source and part of the
+[Memgraph AI Toolkit](https://github.com/memgraph/ai-toolkit/tree/main/context-graph).
+It runs on your machine by default, with no account or cloud service, and
+[redacts secrets](/ai-ecosystem/ai-memory/configuration#keep-secrets-out-of-the-graph)
+before anything is stored.
+
+### Set up Context Graph
 
 You need [Docker](https://docs.docker.com/get-docker/), unless you already run
-Memgraph 3.6 or later, and a terminal. Start the setup:
+Memgraph 3.6 or later, and a terminal. Run the setup from the project
+directory you work in:
 
 <Tabs items={['Linux/macOS', 'Windows']}>
 <Tabs.Tab>
@@ -52,16 +59,93 @@ iwr https://install.memgraph.com/ai-memory/windows -useb | iex
 </Tabs>
 
 The setup shows its plan and changes nothing until you confirm. It finds or
-starts Memgraph, installs Context Graph and connects the agents it finds.
-After that, every session of a connected agent is recorded in the graph, and
-the next session can recall it.
+starts Memgraph, installs Context Graph and connects your agents. See
+[Get started](/ai-ecosystem/ai-memory/get-started) for what the setup does,
+how to check it and how to change your choices.
 
-See [Get started with Context Graph](/ai-ecosystem/ai-memory/context-graph/get-started)
-for what the setup does, how to check it and how to change your choices.
+### What your agents get
 
-## Query the memory graph
+After setup, every connected agent gets three things:
 
-Because the three types share the `User` and `Session` nodes, one query can
+- **Capture.** Hooks in the agent write each session to the graph as it
+  happens. You use the agent as before.
+- **Recall.** A `recall` tool, served over the Model Context Protocol (MCP),
+  finds what your past sessions hold about a question. A session also starts
+  with a short note on where you left off in the current project, whichever
+  agent you used last.
+- **Memory.** If you turn it on, a `memory` tool replaces the agent's own
+  memory. The memories the agent saves are stored in the graph and shared by
+  all your agents.
+
+See [Recall and memory](/ai-ecosystem/ai-memory/recall-and-memory) for how
+each one works.
+
+### How Context Graph organizes the graph
+
+Each session is a `Session` node, linked to its `User`. Everything recorded in
+the session hangs off that node:
+
+```plaintext copy=false
+(:User)-[:HAD_SESSION]->(:Session)
+                         ├─[:HAS_ACTION]->(:Action)          prompts, replies, tool calls and results
+                         ├─[:USED_SKILL]->(:Skill)           agent skills the session used
+                         └─[:PRODUCED_MEMORY]->(:Memory)     memories the agent saved
+(:User)-[:HAS_MEMORY]->(:Memory)
+```
+
+`Memory` nodes hold what the agent knows, `Action` nodes what it did, and
+`Skill` nodes what it knows how to do. Because they share the `User` and
+`Session` nodes, one traversal can recall all three together.
+
+Context Graph can also extract the people, projects, files and decisions your
+sessions mention into a [knowledge graph](/ai-ecosystem/ai-memory/knowledge-graph),
+linked back to the sessions that mention them. Recall uses it to find facts
+across sessions.
+
+### Components
+
+Context Graph is a set of Python packages. Setup installs the ones you need,
+so you only need this list to change what is recorded or to use a package in
+your own application.
+
+| Package | What it records or does |
+| --- | --- |
+| `memgraph-context-graph` | The `memgraph-context-graph` command: setup, the hooks, the MCP server and the configuration. |
+| `actions-graph` | Prompts, replies, tool calls and tool results, as `Action` nodes. |
+| `skills-graph` | The agent skills a session used, as `Skill` nodes. |
+| `sessions-graph` | Users, sessions and memories, the knowledge graph extracted from them, and recall. |
+| `context-graph-viewer` | A read-only terminal viewer of the graph, opened with `memgraph-context-graph ui`. |
+| `resources-graph` | GitHub issues, pull requests and repositories your agents read, so they can read them again from the graph. Off by default. |
+| `context-graph-spaces` | [Shared spaces](/ai-ecosystem/ai-memory/shared-spaces) for teams on Memgraph Enterprise. |
+
+### Context Graph guides
+
+- [Get started](/ai-ecosystem/ai-memory/get-started): Install Context Graph
+  and connect your agents with one command.
+- [Agents](/ai-ecosystem/ai-memory/agents): What setup changes for each
+  supported agent.
+- [Recall and memory](/ai-ecosystem/ai-memory/recall-and-memory): How agents
+  read their past sessions, and how to make Context Graph their memory.
+- [Configuration](/ai-ecosystem/ai-memory/configuration): The configuration
+  file, a remote Memgraph, privacy settings, forgetting sessions, updates and
+  uninstalling.
+- [Knowledge graph](/ai-ecosystem/ai-memory/knowledge-graph): Extract
+  entities and facts from your sessions.
+- [Explore the graph](/ai-ecosystem/ai-memory/explore-the-graph): Look at what
+  your agents recorded, in the terminal, in Memgraph Lab or with Cypher.
+- [Shared spaces](/ai-ecosystem/ai-memory/shared-spaces): Share memory between
+  the members of a team.
+
+## Build your own memory
+
+To give your own agent or application a memory, write it to Memgraph from
+your code and read it back with Cypher. You can use the same model as Context
+Graph, shown in
+[How Context Graph organizes the graph](#how-context-graph-organizes-the-graph).
+
+### Query the memory graph
+
+Because facts, actions and skills share the `User` and `Session` nodes, one query can
 answer a request such as "schedule a follow-up with the client like last
 time". This query returns what the system knows about a user, their most
 recent session in which a meeting was scheduled, and the skill used in it:
@@ -75,22 +159,24 @@ RETURN mem.content AS client_facts, s.session_id AS last_session,
        a.timestamp AS last_meeting_at, sk.name AS skill, sk.content AS how_to
 ```
 
-`USER_ID` is the user ID from the setup. To see all the labels, relationship
-types and properties the memory graph uses, run:
+`USER_ID` is the user whose memory you read. To see all the labels,
+relationship types and properties in the graph, run:
 
 ```cypher
 SHOW SCHEMA INFO;
 ```
 
-The Memgraph that the setup starts has schema info enabled. If you use your
-own instance, start it with `--schema-info-enabled=true`.
+This needs Memgraph started with `--schema-info-enabled=true`.
 
-## Use another memory framework
+To search memory by meaning as well as by connections, add a
+[vector index](/querying/vector-search) on the memory text, and a
+[text index](/querying/text-search) for search by words.
 
-If you already use an agent memory framework, you can keep it and store its
-memory in Memgraph:
+### Use Context Graph's packages
 
-- [Mem0](/ai-ecosystem/integrations/mem0): Use Memgraph as the backend for Mem0
-  graph memory, in Mem0 1.x.
-- [Cognee](/ai-ecosystem/integrations/cognee): Use Memgraph as the graph
-  database for Cognee's knowledge graph.
+The packages Context Graph is built from are Python libraries you can use in
+your own application. `actions-graph`, `skills-graph` and `sessions-graph`
+write and read memory with the model above, so your
+application and your coding agents can share one memory graph. See the
+[Context Graph repository](https://github.com/memgraph/ai-toolkit/tree/main/context-graph)
+for each package's API.
