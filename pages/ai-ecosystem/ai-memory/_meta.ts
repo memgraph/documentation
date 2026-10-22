@@ -6,5 +6,6 @@ export default {
     "configuration": "Configuration",
     "knowledge-graph": "Knowledge graph",
     "agents": "Agents",
+    "agent-sdk-apps": "Agent SDK apps",
     "shared-spaces": "Shared spaces"
 }
