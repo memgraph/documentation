@@ -30,14 +30,8 @@ The app reads the Memgraph connection, what is recorded and the
 the same as the hooks do. Run [setup](/ai-ecosystem/ai-memory/get-started)
 first, or write the file with `memgraph-context-graph config set`.
 
-The `memory` tool is offered only when Context Graph is the memory:
-
-```bash
-memgraph-context-graph config set memory.backend context-graph
-```
-
-Then install the package with the extra for your SDK, and the packages that
-record actions and sessions:
+Install the package with the extra for your SDK, and the packages that record
+actions and sessions:
 
 <Tabs items={['Claude Agent SDK', 'OpenAI Agents SDK']}>
 <Tabs.Tab>
@@ -67,18 +61,32 @@ Context Graph uses `identity.user_id` from the configuration file and the
 current directory. In an app with many users, pass each user's ID, so that
 each one recalls only their own sessions.
 
+The app gets the `memory` tool whatever `memory.backend` your coding agents
+use, because an app has no memory of its own to replace. To leave it out, pass
+`memory_tool=False`.
+
+Both SDKs are async. Each example below is a whole script.
+
 <Tabs items={['Claude Agent SDK', 'OpenAI Agents SDK']}>
 <Tabs.Tab>
 ```python
+import asyncio
+
 from claude_agent_sdk import ClaudeSDKClient
+from memgraph_context_graph.sdk import ContextGraphMemory
 from memgraph_context_graph.sdk.claude import ClaudeAgentMemory
 
-claude = ClaudeAgentMemory(memory)
-async with ClaudeSDKClient(claude.options(model="claude-sonnet-5-5")) as client:
-    await client.query("Which package manager does this project use?")
-    async for message in client.receive_response():
-        print(message)
-claude.end_session()
+
+async def main():
+    claude = ClaudeAgentMemory(ContextGraphMemory(user_id="alice"))
+    async with ClaudeSDKClient(claude.options(model="claude-sonnet-5-5")) as client:
+        await client.query("Which package manager does this project use?")
+        async for message in client.receive_response():
+            print(message)
+    await claude.aend_session()
+
+
+asyncio.run(main())
 ```
 
 `options()` takes the same arguments as `ClaudeAgentOptions`. It adds the
@@ -92,17 +100,26 @@ so its hooks don't record every event a second time.
 </Tabs.Tab>
 <Tabs.Tab>
 ```python
+import asyncio
+
 from agents import Agent, Runner
+from memgraph_context_graph.sdk import ContextGraphMemory
 from memgraph_context_graph.sdk.openai import OpenAIAgentsMemory
 
-wired = OpenAIAgentsMemory(memory, session_id="chat-42")
-agent = Agent(
-    name="Assistant",
-    instructions=wired.instructions("Be concise."),
-    tools=wired.tools(),
-)
-result = await Runner.run(agent, "Which package manager does this project use?", hooks=wired.hooks())
-wired.end_session()
+
+async def main():
+    wired = OpenAIAgentsMemory(ContextGraphMemory(user_id="alice"), session_id="chat-42")
+    agent = Agent(
+        name="Assistant",
+        instructions=wired.instructions("Be concise."),
+        tools=wired.tools(),
+    )
+    result = await Runner.run(agent, "Which package manager does this project use?", hooks=wired.hooks())
+    print(result.final_output)
+    await wired.aend_session()
+
+
+asyncio.run(main())
 ```
 
 Use one `session_id` per conversation. `instructions()` adds the memory
@@ -114,9 +131,14 @@ replies, tool calls and handoffs.
 
 ## End the session
 
-Neither SDK reports when a session ends, so call `end_session()` when a
-conversation is over. Context Graph then embeds the session's messages, so
-recall can find them. Use `aend_session()` from async code.
+Neither SDK reports when a session ends, so call `aend_session()`, or
+`end_session()` from code that isn't async, when a conversation is over.
+
+Recall can find each message as soon as its turn ends, because Context Graph
+embeds a session's messages at the end of every turn. Ending the session
+embeds anything left and marks the session for
+[reconciliation](/ai-ecosystem/ai-memory/knowledge-graph#build-the-knowledge-graph),
+which starts at once if `reconcile.auto_reconcile` is on.
 
 ## When Memgraph is down
 

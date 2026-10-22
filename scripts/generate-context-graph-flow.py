@@ -61,7 +61,7 @@ s = []
 a = s.append
 a(f'<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="{H}" viewBox="0 0 1000 {H}" font-family="\'Inter Tight\', Inter, Arial, sans-serif" role="img" aria-labelledby="title desc">\n')
 a('  <title id="title">How Context Graph records and recalls agent sessions</title>\n')
-a('  <desc id="desc">During a session, the memgraph-context-graph hooks in the agent, a coding agent or an Agent SDK app, drop private text and redact secrets, and the actions-graph, skills-graph and sessions-graph connectors write the session to Memgraph as a graph of users, sessions, actions, skills and memories. The optional resources-graph connector records GitHub resources, and context-graph-spaces adds shared spaces on Memgraph Enterprise. The MCP server reads Memgraph and serves the recall and memory tools to the agent. After a session, reconciliation filters the text through the HyGM ontology, extracts entities and facts with GLiNER2 and stores them in Memgraph with their embeddings. Only optional schema learning sends session text to an Anthropic or OpenAI API.</desc>\n')
+a('  <desc id="desc">During a session, the memgraph-context-graph hooks in the agent, a coding agent or an Agent SDK app, drop private text and redact secrets, and the actions-graph, skills-graph and sessions-graph connectors write the session to Memgraph as a graph of users, sessions, actions, skills and memories. The optional resources-graph connector records GitHub resources, and context-graph-spaces adds shared spaces on Memgraph Enterprise. The MCP server reads Memgraph and serves the recall and memory tools to the agent. After a session, reconciliation filters the text through the HyGM ontology, extracts entities and facts with GLiNER2 and stores them in Memgraph with their embeddings. Only optional ontology learning sends session text to an Anthropic or OpenAI API.</desc>\n')
 a('STYLE')
 a('''  <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
@@ -192,9 +192,9 @@ a(f'  <rect x="330" y="{sto_y}" width="340" height="{sto_h}" rx="4" fill="#FFFFF
 a(f'  <text x="500" y="{sto_y + 27}" font-size="14" fill="#646265" text-anchor="middle"><tspan font-weight="600" fill="#231F20">Store</tspan> them with their embeddings</text>\n')
 a(f'  <path id="p7" d="{P["p7"]}" fill="none" stroke="#FB6E00" stroke-width="1.5" marker-end="url(#arrow-accent)"/>\n\n')
 
-# schema learning + API
+# ontology learning + API
 a(f'  <rect x="760" y="{sl_y}" width="192" height="48" rx="4" fill="#FFFFFF" stroke="#857F87" stroke-dasharray="4 3"/>\n')
-a(f'  <text x="856" y="{sl_y + 30}" font-size="16" font-weight="600" fill="#646265" text-anchor="middle">Schema learning</text>\n')
+a(f'  <text x="856" y="{sl_y + 30}" font-size="16" font-weight="600" fill="#646265" text-anchor="middle">Ontology learning</text>\n')
 edge_x = 670 - 52 * 0.5
 a(f'  <path d="M760,{sl_y + 24} H{edge_x + 2:.0f}" fill="none" stroke="#857F87" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-muted)"/>\n')
 a(f'  <path d="M856,{sl_y + 48} V{api_y - 2}" fill="none" stroke="#857F87" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-muted)"/>\n')
