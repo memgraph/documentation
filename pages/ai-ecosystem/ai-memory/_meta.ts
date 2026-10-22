@@ -1,9 +1,10 @@
 export default {
     "get-started": "Get started",
-    "agents": "Agents",
     "recall-and-memory": "Recall and memory",
+    "explore-the-graph": "Explore the graph",
+    "privacy": "Privacy",
     "configuration": "Configuration",
     "knowledge-graph": "Knowledge graph",
-    "explore-the-graph": "Explore the graph",
+    "agents": "Agents",
     "shared-spaces": "Shared spaces"
 }
