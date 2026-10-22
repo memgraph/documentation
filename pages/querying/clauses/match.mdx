@@ -14,6 +14,10 @@ The `MATCH` clause is used to obtain data from the database by matching it to a 
     1.2. [Get all nodes with a label](#12-get-all-nodes-with-a-label) <br />
     1.3. [Get nodes with with all of multiple labels](#13-get-nodes-with-all-labels) <br />
     1.4. [Get nodes with any of multiple labels](#14-get-nodes-with-any-of-labels) <br />
+    1.5. [Get nodes without a label](#15-get-nodes-without-a-label) <br />
+    1.6. [Get nodes with any label](#16-get-nodes-with-any-label) <br />
+    1.7. [Combine label expressions](#17-combine-label-expressions) <br />
+    1.8. [Label expressions in expressions](#18-label-expressions-in-expressions) <br />
 2. [Matching relationships](#2-matching-relationships) <br />
     2.1. [Get all related nodes](#21-get-all-related-nodes) <br />
     2.2. [Get related nodes with a label](#22-get-related-nodes-with-a-label) <br />
@@ -30,6 +34,7 @@ The `MATCH` clause is used to obtain data from the database by matching it to a 
 4. [Using multiple MATCH clauses](#4-using-multiple-match-clauses) <br />
     4.1. [Cartesian product of nodes](#41-cartesian-product-of-nodes) <br />
     4.2. [Creating a list](#42-creating-a-list) <br />
+    4.3. [Matching a variable that is already bound](#43-matching-a-variable-that-is-already-bound) <br />
 
 <Callout>
 
@@ -105,6 +110,13 @@ MATCH (n:Person:Employee)
 RETURN n;
 ```
 
+The `&` (AND) operator gives the same result:
+
+```cypher
+MATCH (n:Person&Employee)
+RETURN n;
+```
+
 Output:
 ```nocopy
 +-----------------------------------+
@@ -142,7 +154,155 @@ This allows you to retrieve nodes of different types in a single query, making l
 
 <Callout type="info">
 
-Label OR expressions (`|`) can't be used in `MERGE` or `CREATE` clauses.
+`CREATE` and `MERGE` accept only a conjunction of labels, such as `(n:Person:Employee)` or
+`(n:Person&Employee)`. A label expression with `|`, `!` or `%` raises an error there, because it does
+not name the labels a new node gets.
+
+</Callout>
+
+### 1.5. Get nodes without a label
+
+Use the `!` (NOT) operator to match nodes that do **not** have a label:
+
+```cypher
+MATCH (n:!Person)
+RETURN n;
+```
+
+Output:
+```nocopy
++-----------------------------------------------------------------------------------------------------+
+| n                                                                                                   |
++-----------------------------------------------------------------------------------------------------+
+| (:Country {continent: "Europe", language: "German", name: "Germany", population: 83000000})         |
+| (:Country {continent: "Europe", language: "French", name: "France", population: 67000000})          |
+| (:Country {continent: "Europe", language: "English", name: "United Kingdom", population: 66000000}) |
+| (:City {name: "Berlin", population: 3600000})                                                       |
+| (:City {name: "Paris", population: 2140000})                                                        |
++-----------------------------------------------------------------------------------------------------+
+```
+
+### 1.6. Get nodes with any label
+
+The `%` (wildcard) matches a node that has at least one label. `!%` matches a node that has no labels.
+
+```cypher
+MATCH (n:%)
+RETURN count(n) AS labelled;
+```
+
+Output:
+```nocopy
++----------+
+| labelled |
++----------+
+| 8        |
++----------+
+```
+
+### 1.7. Combine label expressions
+
+The operators `&`, `|`, `!` and `%` combine into one label expression. `!` binds tightest, then `&`, then
+`|`. Use parentheses to change the order.
+
+```cypher
+MATCH (n:Person&!Employee)
+RETURN n;
+```
+
+Output:
+```nocopy
++---------------------------+
+| n                         |
++---------------------------+
+| (:Person {name: "Harry"}) |
+| (:Person {name: "Anna"})  |
++---------------------------+
+```
+
+`City|Person&Employee` reads as `City|(Person&Employee)`:
+
+```cypher
+MATCH (n:City|Person&Employee)
+RETURN n.name AS name ORDER BY name;
+```
+
+Output:
+```nocopy
++----------+
+| name     |
++----------+
+| "Berlin" |
+| "John"   |
+| "Paris"  |
++----------+
+```
+
+With parentheses, the same labels give a different result:
+
+```cypher
+MATCH (n:(City|Person)&Employee)
+RETURN n.name AS name ORDER BY name;
+```
+
+Output:
+```nocopy
++--------+
+| name   |
++--------+
+| "John" |
++--------+
+```
+
+The colon form `:A:B` can't be mixed with the operators in one expression: `(n:Person:Employee&!City)`
+raises a syntax error. Write `(n:Person&Employee&!City)` instead.
+
+### 1.8. Label expressions in expressions
+
+A label expression can test a node anywhere an expression is allowed, such as `WHERE`, `RETURN`, `WITH`
+and `CASE`. It returns `true` or `false`, and `null` for a `null` value.
+
+```cypher
+MATCH (n)
+WHERE n:City|Country
+RETURN n.name AS name ORDER BY name;
+```
+
+Output:
+```nocopy
++------------------+
+| name             |
++------------------+
+| "Berlin"         |
+| "France"         |
+| "Germany"        |
+| "Paris"          |
+| "United Kingdom" |
++------------------+
+```
+
+```cypher
+MATCH (p:Person)
+RETURN p.name AS name, p:Employee AS employee, p:!Employee AS not_employee ORDER BY name;
+```
+
+Output:
+```nocopy
++--------------+--------------+--------------+
+| name         | employee     | not_employee |
++--------------+--------------+--------------+
+| "Anna"       | false        | true         |
+| "Harry"      | false        | true         |
+| "John"       | true         | false        |
++--------------+--------------+--------------+
+```
+
+A label expression binds tighter than every other operator, so `n:A&B = true` tests `(n:A&B) = true`.
+
+<Callout type="info">
+
+In a list comprehension, the last `|` is the projection. `[x IN list WHERE x:A|B]` filters on `x:A` and
+projects `B`. Write `[x IN list WHERE x:(A|B)]` to filter on the disjunction.
 
 </Callout>
 
@@ -475,6 +635,79 @@ Output:
 ```
 
 The `OPTIONAL MATCH` clause bypasses the empty set and the query returns only non-empty sets. Therefore, the output of the query is a list containing only the results of the first `MATCH` clause.    
+
+### 4.3. Matching a variable that is already bound
+
+A pattern may hold nothing but a variable the query has already bound. Such a
+pattern does not scan the graph — it matches on the value bound to that name:
+
+```cypher
+MATCH (p:Person)
+MATCH (p)
+RETURN p.name AS name
+ORDER BY name;
+```
+
+Output:
+
+```nocopy
++---------+
+| name    |
++---------+
+| "Anna"  |
+| "Harry" |
+| "John"  |
++---------+
+```
+
+A node matches and the row is kept. A `null`, which an `OPTIONAL MATCH` leaves
+behind when nothing matched, matches nothing and the row is dropped:
+
+```cypher
+MATCH (p:Person)
+OPTIONAL MATCH (p)-[:LIVING_IN]->(c:Country {continent: 'Asia'})
+WITH p, c
+MATCH (c)
+RETURN p.name AS name, c.name AS country
+ORDER BY name;
+```
+
+Output:
+
+`Empty set`
+
+No person lives in an Asian country, so `c` is `null` on every row and `MATCH (c)`
+keeps none of them. Without the `MATCH (c)`, the query returns all three people
+with a `null` country.
+
+A value that is neither a node nor `null` raises an error:
+
+```cypher
+MATCH (p:Person)
+WITH p.name AS p
+MATCH (p)
+RETURN p;
+```
+
+Output:
+
+```nocopy
+Expected a node for 'p', but got string.
+```
+
+<Callout type="warning">
+
+This applies wherever a pattern appears — a top-level `MATCH`, a `CALL {}`
+subquery, and the body of a [subquery
+expression](/querying/subquery-expressions). Before Memgraph 3.14 a pattern
+holding only a bound variable was ignored, so the row passed through whatever the
+variable held. Queries that carried a `null` or a non-node value through such a
+pattern now return fewer rows or raise an error.
+
+A pattern that also states a label or a property, such as `MATCH (p:Person)`, is
+unaffected — it already raised on a non-node value.
+
+</Callout>
 
 ## Dataset queries
 

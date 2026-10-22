@@ -1,7 +1,8 @@
 /**
  * Checks the docs source for things that break for readers: links to pages or
  * sections that don't exist, links through a redirect, broken redirects, pages
- * missing from the sidebar, missing images and mismatched release-note versions.
+ * missing from the sidebar, missing images, mismatched release-note versions and
+ * repeated release-note sections.
  *
  * It reads only this checkout (no build, no network) and runs in a few seconds.
  * Any problem fails the check. The rules are the ones in AGENTS.md.
@@ -121,6 +122,11 @@ function sectionIds(file, seenFiles = new Set()) {
 const strip = (u) => u.split('#')[0].split('?')[0].replace(/\/+$/, '') || '/'
 // /page.md is the Markdown version of /page, written to public/ at build time.
 const mdPage = (u) => /\.md$/.test(u) && pages.has(u.replace(/\.md$/, '').replace(/\/index$/, '') || '/')
+// /llms.txt and <section>/llms.txt are also written at build time, one per section.
+const llmsTxt = (u) => {
+  const m = u.match(/^(.*)\/llms\.txt$/)
+  return Boolean(m) && (!m[1] || pages.has(m[1]) || folderExists(m[1]))
+}
 // A pattern such as /clustering/:path* stands for every page under its fixed part.
 const isPattern = (u) => u.includes('/:')
 const fixedPart = (u) => u.split('/:')[0] || '/'
@@ -189,7 +195,7 @@ for (const r of bySource.values()) {
   if (end.loop) at('redirect loop')
   else if (end.external) continue
   else if (end.steps > 1) at(`takes ${end.steps} steps; point it straight at ${end.route}`)
-  else if (!pages.has(end.route) && !isStatic(end.route) && !mdPage(end.route)) at(`${r.destination} is not a page`)
+  else if (!pages.has(end.route) && !isStatic(end.route) && !mdPage(end.route) && !llmsTxt(end.route)) at(`${r.destination} is not a page`)
   else if (r.destination.includes('#') && pages.has(end.route)) {
     const id = r.destination.split('#')[1]
     if (!sectionIds(pages.get(end.route)).has(id)) at(`${end.route} has no section #${id}`)
@@ -245,7 +251,7 @@ function checkTarget(url, at) {
     if (id && !sectionIds(pages.get(target)).has(id)) at(`${target} has no section #${id}`)
     return
   }
-  if (isStatic(target) || mdPage(target)) return
+  if (isStatic(target) || mdPage(target) || llmsTxt(target)) return
   const pattern = patterns.find((r) => target.startsWith(fixedPart(r.source) + '/'))
   if (pattern) return at(`goes through the redirect ${pattern.source}; link to the page it lands on instead`)
   if (bySource.has(target)) {
@@ -320,8 +326,14 @@ const NOTES = path.join(PAGES, 'release-notes.mdx')
 if (fs.existsSync(NOTES)) {
   const lines = text.get(NOTES).split('\n')
   const seen = new Map()
+  const sections = new Map()
   let current = null
   lines.forEach((line, i) => {
+    const s = line.match(/^##\s+(.+?)\s*$/)
+    if (s) {
+      if (sections.has(s[1])) report(NOTES, i + 1, `"## ${s[1]}" appears twice (also on line ${sections.get(s[1])})`)
+      else sections.set(s[1], i + 1)
+    }
     const h = line.match(/^#{2,4}\s+(.+?)\s+v(\d+\.\d+\.\d+)\b/)
     if (h) {
       current = { product: h[1].trim(), version: h[2], line: i + 1 }

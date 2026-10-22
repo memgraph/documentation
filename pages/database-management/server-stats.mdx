@@ -81,6 +81,7 @@ process (across all databases):
 | memory_res                     | The non-swapped physical RAM memory (RSS) used by the whole Memgraph process, as reported by the OS (in B, KiB, MiB, GiB or TiB).                                                                                                                                                                   |
 | peak_memory_res                | Peak RAM memory (RSS) usage of the Memgraph process during the whole run.                                                                                                                                                                                                                           |
 | disk_usage                     | The amount of disk space used by the data directory ([`--data-directory`](/database-management/configuration), in B, KiB, MiB, GiB or TiB).                                                                                                                                                          |
+| disk_available                 | The amount of disk space still available on the filesystem that holds the data directory ([`--data-directory`](/database-management/configuration), in B, KiB, MiB, GiB or TiB). Reads `"unknown"` if the filesystem cannot be queried.                                                              |
 | memory_tracked                 | The total amount of RAM allocated across the instance and tracked by Memgraph (in B, KiB, MiB, GiB or TiB).<br/>For more info, check out [memory control](/fundamentals/storage-memory-usage).                                                                                                       |
 | memory_limit                   | The active instance-level runtime memory limit, taken from the [`--memory-limit`](/database-management/configuration) flag (in B, KiB, MiB, GiB or TiB).                                                                                                                                             |
 | license_memory_limit           | The memory limit imposed by the active license, or `"unlimited"` if no license is active. With an `enterprise` license this gates total tracked memory; with an `ai_platform` license it gates only graph and query memory. See [License types](/database-management/enabling-memgraph-enterprise#license-types). |
@@ -118,7 +119,7 @@ only exist for a running database — `query_memory_tracked`,
 `tenant_memory_limit` reads `unlimited`.
 
 Process-wide fields such as `vm_max_map_count`, `memory_res`, `peak_memory_res`,
-`memory_tracked` and the license/runtime memory limits are **not** included —
+`disk_available`, `memory_tracked` and the license/runtime memory limits are **not** included —
 those are only available from the unscoped `SHOW STORAGE INFO`.
 
 | Field                         | Description                                                                                                                                                  |
@@ -366,7 +367,7 @@ SHOW BUILD INFO;
 
 ## Active users information
 
-Running this query will provide information about currently logged-in Memgraph users and their session details.
+Running this query lists one row per open session, including the session that runs it:
 
 ```cypher
 SHOW ACTIVE USERS INFO;
@@ -378,8 +379,23 @@ Identical information can be obtained by executing the following command:
 SHOW ACTIVE USERS;
 ```
 
+| Column                       | Description                                                                                         |
+|------------------------------|-----------------------------------------------------------------------------------------------------|
+| username                     | The session's logged-in user, also when the session impersonates another user; an empty string for a session that connected while authentication was disabled. |
+| session uuid                 | The session's unique ID.                                                                            |
+| login timestamp              | The time of the session's most recent login, as a string with microseconds. When another user logs in on the same connection, this time and the `username` change and the `session uuid` stays the same. |
+| database                     | The session's current database: the one selected with `USE DATABASE`, the one named when connecting, or otherwise the user's main database (`memgraph` by default). |
+| database marked for deletion | `true` if the session's database was dropped with [`FORCE`](/database-management/multi-tenancy#drop-database-with-force), otherwise `false`. Such sessions, including ones with an open transaction, are closed within about 10 seconds. |
+
+For example, after a second session runs `USE DATABASE analytics` and `analytics` is then dropped with `DROP DATABASE analytics FORCE`:
+
+```cypher
+SHOW ACTIVE USERS INFO;
+```
+
 ```copy=false
-| username | session uuid                           | login timestamp       |
-|----------|----------------------------------------|-----------------------|
-| test     | "550e8400-e29b-41d4-a716-446655440000" | "2024-08-03 18:53:00" |
+| username  | session uuid                           | login timestamp              | database    | database marked for deletion |
+|-----------|----------------------------------------|------------------------------|-------------|------------------------------|
+| "admin_u" | "f1082c78-82ff-4b87-a5c4-340060a04a02" | "2026-10-19 12:02:10.248993" | "analytics" | true                         |
+| "admin_u" | "bf7a6fbd-64cc-475c-a82c-5c293dd8108d" | "2026-10-19 12:02:10.065680" | "memgraph"  | false                        |
 ```
