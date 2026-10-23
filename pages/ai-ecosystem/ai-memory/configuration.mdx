@@ -1,0 +1,304 @@
+---
+title: Configure Context Graph
+description: Configure Context Graph's Memgraph connection, identity and what it records, and update or uninstall Context Graph.
+---
+
+import { Callout } from 'nextra/components'
+
+# Configure Context Graph
+
+Context Graph keeps its settings in one configuration file. Setup writes it,
+and the `config` command changes it. This page also covers how to
+[use your own Memgraph](#use-your-own-memgraph),
+[run setup again](#run-setup-again) to change your choices,
+[choose what is recorded](#choose-what-is-recorded), and
+[update](#update-context-graph) or [uninstall](#uninstall-context-graph)
+Context Graph.
+
+## Configuration file
+
+Setup writes the configuration to `~/.config/context-graph/config.toml`,
+readable only by you. Set the `CONTEXT_GRAPH_CONFIG` environment variable to
+use another path.
+
+The file lists every key under a comment that says what it does. A key you
+haven't set is commented out, with its default, so you can see all settings
+in one place. Setup and `config set` rewrite the file: they keep your values
+and `[redact]` patterns, but not comments you add.
+
+The hooks read their settings only from this file, not from environment
+variables, because agents run hooks without your shell's environment. Change
+settings with the `config` command:
+
+```bash
+memgraph-context-graph config show
+memgraph-context-graph config get memgraph.url
+memgraph-context-graph config set identity.user_id alice
+memgraph-context-graph config set recall.turns_k ""
+```
+
+An empty value, as in the last command, sets a key back to its default. The
+exception is `capture.connectors`, where an empty value records nothing.
+`config set` checks each value and refuses one that Context Graph can't use,
+so a typo doesn't break recording later. It takes these keys:
+
+| Key | Default | What it sets |
+| --- | --- | --- |
+| `identity.user_id` | Your git `user.name`, set by setup | Your user ID. Your sessions and memories are filed under it, and recall searches only its sessions. |
+| `memgraph.url` | `bolt://localhost:7687` | The Memgraph Bolt URL |
+| `memgraph.user` | None | The Memgraph user name |
+| `memgraph.password` | None | The Memgraph password. `config set memgraph.password` without a value prompts for it. |
+| `memgraph.database` | `memgraph` | The database, on a Memgraph with [multi-tenancy](/database-management/multi-tenancy) |
+| `capture.connectors` | `skills-graph, actions-graph, sessions-graph` | What the hooks record. See [Choose what is recorded](#choose-what-is-recorded). |
+| `capture.redact` | `true` | Whether secrets are redacted before they're stored. See [Redact secrets](/ai-ecosystem/ai-memory/privacy#redact-secrets). |
+| `capture.max_chars` | `100000` | The most characters kept from one text field, such as a tool's output. `0` keeps everything. See [Shorten long text](/ai-ecosystem/ai-memory/privacy#shorten-long-text). |
+| `capture.exclude_tools` | None | Tools whose calls and results aren't recorded, by name or glob. See [Exclude tools and projects](/ai-ecosystem/ai-memory/privacy#exclude-tools-and-projects). |
+| `capture.exclude_projects` | None | Directories in which nothing is recorded, by path or glob |
+| `memory.backend` | `native` | `context-graph` when Context Graph is the agents' [memory](/ai-ecosystem/ai-memory/recall-and-memory#memory), `native` when they keep their own. Set it with setup's `--memory-backend`, which also changes the agents' settings. |
+| `session_start.resume` | `true` | Whether a session starts with the [note on where you left off](/ai-ecosystem/ai-memory/recall-and-memory#recall) |
+| `recall.*` | See [Recall configuration](#recall-configuration) | The embedding model for recall, which searches run, and how many results each returns |
+| `reconcile.auto_reconcile` | `false` | Whether the [knowledge graph](/ai-ecosystem/ai-memory/graph#add-a-knowledge-graph) is built after each session |
+| `ontology.path` | The default ontology | An ontology file for the knowledge graph |
+| `ontology.derive` | `extend` | Whether Context Graph adds types to your ontology: `extend` or `off` |
+| `extraction.*` | See [Extraction configuration](#extraction-configuration) | How sessions are read into the knowledge graph |
+| `llm.anthropic_api_key` | None | An Anthropic API key, used only to learn your ontology. Used instead of an OpenAI key when both are set. |
+| `llm.openai_api_key` | None | An OpenAI API key, used only to learn your ontology |
+| `llm.derive_model` | `claude-sonnet-5-5` with Anthropic, `gpt-5` with OpenAI | The model that learns your ontology |
+| `edition` | `community` | `enterprise` to use [shared spaces](/ai-ecosystem/ai-memory/shared-spaces). Set it with `memgraph-context-graph join`. |
+| `github.token` | None | A GitHub token for `resources-graph`, used instead of your `gh` login. Prompts for the value. |
+
+Only `[redact]` patterns are edited in the file directly, because you name
+them yourself. See [Redact secrets](/ai-ecosystem/ai-memory/privacy#redact-secrets).
+
+<Callout type="warning">
+The file holds your Memgraph password and API keys in plain text. Setup
+creates it with permissions `0600`; keep it that way.
+</Callout>
+
+### Recall configuration
+
+The `recall.*` keys set which searches
+[recall](/ai-ecosystem/ai-memory/recall-and-memory#what-recall-returns) runs
+and how many results each returns:
+
+```bash
+memgraph-context-graph config set recall.turns_k 12
+memgraph-context-graph config set recall.lanes "memories, turns, text"
+```
+
+| Key | Default | What it sets |
+| --- | --- | --- |
+| `recall.embedding_model` | `BAAI/bge-small-en-v1.5` | The model Memgraph computes embeddings with |
+| `recall.lanes` | All six | The searches to run, as a comma-separated subset of `memories`, `turns`, `text`, `entities`, `facts` and `user_facts` |
+| `recall.memories_k` | `5` | Memory files returned |
+| `recall.turns_k` | `8` | Messages found by meaning |
+| `recall.text_k` | `8` | Messages found by words |
+| `recall.entities_k` | `15` | Entities matched |
+| `recall.edges_per_entity` | `6` | Facts read from each matched entity |
+| `recall.facts_k` | `15` | Facts matched |
+| `recall.fact_turns_k` | `8` | Messages added for the matched facts |
+| `recall.user_fact_types` | `2` | Fact types gathered in full, for questions that count or list things |
+| `recall.user_facts_k` | `30` | Facts returned for those types |
+| `recall.turn_chars` | `1500` | Characters shown per message |
+| `recall.query_instruction` | Depends on the model | Text added before the question when it's embedded. The English `bge` models get their retrieval instruction; other models get none |
+
+When you change `recall.embedding_model`, Context Graph computes the
+embeddings again with the new model, so embeddings from two models are never
+mixed. Memgraph downloads the model on first use.
+
+### Extraction configuration
+
+The `extraction.*` keys set how the
+[knowledge graph](/ai-ecosystem/ai-memory/graph#add-a-knowledge-graph) reads
+your sessions. Reconciliation and ontology learning use the same settings, so
+a session is always read the same way.
+
+```bash
+memgraph-context-graph config set extraction.entity_threshold 0.3
+```
+
+| Key | Default | What it sets |
+| --- | --- | --- |
+| `extraction.model` | `fastino/gliner2.5-base-v1` | The GLiNER2 model |
+| `extraction.entity_threshold` | GLiNER2's default | The lowest confidence, from 0 to 1, at which an entity is kept |
+| `extraction.relation_threshold` | GLiNER2's default | The lowest confidence, from 0 to 1, at which a fact is kept |
+| `extraction.chunk_size` | GLiNER2's default | Words per chunk |
+| `extraction.chunk_overlap` | GLiNER2's default | Words shared by neighboring chunks |
+
+## Use your own Memgraph
+
+By default, setup starts Memgraph in Docker on your machine. To use another
+Memgraph, such as a shared server or a
+[high availability cluster](/database-management/clustering/high-availability),
+pass its URL to setup. If the instance has authentication, set the user and
+password first, because setup connects with them:
+
+```bash
+memgraph-context-graph config set memgraph.user alice
+memgraph-context-graph config set memgraph.password
+memgraph-context-graph setup --memgraph-url bolt://memgraph.example.com:7687
+```
+
+For a high availability cluster, use the `neo4j://` scheme with a coordinator's
+address, so the client routes writes to the MAIN instance:
+
+```bash
+memgraph-context-graph config set memgraph.url neo4j://coordinator.example.com:7687
+```
+
+The instance needs the Memgraph version, MAGE and memory listed in the
+[prerequisites](/ai-ecosystem/ai-memory/get-started#prerequisites). To see all
+labels and properties with `SHOW SCHEMA INFO`, start it with
+`--schema-info-enabled=true`. The Memgraph that setup starts has it enabled.
+
+Each user on a shared Memgraph should have their own `identity.user_id`. On a
+shared Memgraph with Memgraph Enterprise, [shared spaces](/ai-ecosystem/ai-memory/shared-spaces)
+give each user a database of their own.
+
+## Run setup again
+
+Every choice in setup is also a flag of `memgraph-context-graph setup`. To
+change a choice, run setup again with its flag:
+
+```bash
+memgraph-context-graph setup codex --memgraph-url bolt://memgraph.example.com:7687
+```
+
+| Flag | What it sets |
+| --- | --- |
+| `RUNTIME ...` | The [runtime names](/ai-ecosystem/ai-memory/agents) of the agents to connect. The default is every agent on your `PATH`. |
+| `--project-dir DIR` | A project to connect the per-project agents in. Repeat it for more projects. The default is the current directory. |
+| `--memgraph-url URL` | The Memgraph to use, instead of setup's own container. |
+| `--user-id NAME` | Your user ID in the graph. The default is the configured one, then your git `user.name`. |
+| `--memory-backend BACKEND` | `context-graph` makes Context Graph the agents' memory; `native` gives memory back to the agent. |
+| `--memgraph-container NAME` | Setup's own container, which it finds or starts. The default is `context-graph-memgraph`. |
+| `--no-viewer` | Don't install the terminal viewer. |
+| `--plan` | Print what setup would do and change nothing. |
+| `--no-tui` | Print plain output, even on a terminal. |
+
+For example, to connect the per-project agents in more projects:
+
+```bash
+memgraph-context-graph setup cursor --project-dir ~/work/billing --project-dir ~/work/crawler
+```
+
+## Choose what is recorded
+
+`capture.connectors` lists the packages the hooks send events to. Each one
+records one part of a session:
+
+| Connector | Records |
+| --- | --- |
+| `actions-graph` | Prompts, replies, tool calls and tool results |
+| `skills-graph` | The agent skills a session used |
+| `sessions-graph` | The session, its user and project, and memories. Recall needs it. |
+| `resources-graph` | The GitHub resources a session read. Off by default. |
+
+For example, to also remember GitHub resources:
+
+```bash
+memgraph-context-graph config set capture.connectors "skills-graph, actions-graph, sessions-graph, resources-graph"
+memgraph-context-graph setup
+```
+
+Setup installs the connectors the setting names. An empty value records
+nothing, without disconnecting the agents.
+
+## Update Context Graph
+
+Context Graph doesn't update itself. Upgrading the packages changes the code
+the hooks run, but the plugins, hook files and Model Context Protocol (MCP)
+registrations that setup wrote stay as they were. The `update` command upgrades both in one step:
+
+```bash
+memgraph-context-graph update
+```
+
+It runs these steps in order:
+
+1. **Upgrades the packages:** `memgraph-context-graph` and its connectors.
+2. **Updates the Claude Code and Codex plugins** from the Context Graph plugin
+   marketplace, if they're installed.
+3. **Rewrites the hook files and MCP registrations** of the per-project agents,
+   in the current directory or the `--project-dir` directories.
+4. **Creates the indexes and constraints** in Memgraph that are missing.
+5. **Checks the setup,** the same way as `doctor`.
+
+Then restart running agent sessions, because a session keeps the hooks it
+started with.
+
+| Flag | What it does |
+| --- | --- |
+| `RUNTIME ...` | Update only these agents. The default is every connected agent. |
+| `--project-dir DIR` | A project whose per-project agents to update. Repeat it for more projects. The default is the current directory. |
+| `--no-upgrade` | Skip the package upgrade, and only refresh the plugins, hook files, registrations, indexes and constraints |
+
+`update` doesn't change your own hooks, the configuration file or the data in
+the graph, and running it twice changes nothing.
+
+### Update the plugins manually
+
+If you manage plugins yourself, update the Context Graph plugin with the
+agent's own commands. Claude Code updates the plugin in place:
+
+```bash
+claude plugin marketplace update context-graph-plugins
+claude plugin update context-graph@context-graph-plugins
+```
+
+Codex has no update command, so refresh the marketplace and add the plugin
+again:
+
+```bash
+codex plugin marketplace upgrade context-graph-plugins
+codex plugin add context-graph@context-graph-plugins
+```
+
+Updating only the plugin doesn't upgrade the packages its hooks run. Run
+`memgraph-context-graph update` as well, or upgrade the tool with
+`uv tool upgrade memgraph-context-graph`.
+
+## Uninstall Context Graph
+
+The `uninstall` command disconnects your agents: it removes the plugins, hook files and MCP
+registrations, and [gives the agents' memory back](/ai-ecosystem/ai-memory/recall-and-memory#switch-back).
+
+```bash
+memgraph-context-graph uninstall
+```
+
+On a terminal, it then asks about each of these, and keeps it unless you
+answer yes:
+
+- **The graph:** the Memgraph container that setup started and its data
+  volume, with every recorded session and memory.
+- **The configuration:** the configuration file and the log of failed
+  recordings.
+- **The tool:** the `memgraph-context-graph` command and its packages.
+
+To remove everything without questions, for example in a script:
+
+```bash
+memgraph-context-graph uninstall --all
+```
+
+| Flag | What it does |
+| --- | --- |
+| `RUNTIME ...` | Disconnect only these agents. The default is every connected agent. |
+| `--project-dir DIR` | A project to disconnect the per-project agents from. Repeat it for more projects. The default is the current directory. |
+| `--graph` | Also delete the graph: setup's Memgraph container and its volume |
+| `--config` | Also delete the configuration file and the log of failed recordings |
+| `--tool` | Also uninstall the `memgraph-context-graph` tool |
+| `--all` | `--graph`, `--config` and `--tool` together |
+| `--memgraph-container NAME` | The container setup started. The default is `context-graph-memgraph`. |
+| `--no-tui` | Don't ask; remove the agent connections and what the flags name |
+
+Without a terminal, `uninstall` removes only the agent connections and what the
+flags name. It deletes only the container setup started, by name, never a
+Memgraph you run yourself. On Windows, the running tool can't remove itself,
+so `uninstall` prints the `uv tool uninstall` command to run afterwards.
+
+<Callout type="warning">
+Deleting the graph deletes everything your agents recorded, including your
+memories, and can't be undone.
+</Callout>
