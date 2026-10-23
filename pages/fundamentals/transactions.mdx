@@ -44,6 +44,11 @@ of the final query.
 Commit successful transactions by executing the `COMMIT;` query. <br/>
 Roll back unsuccessful transactions by executing the `ROLLBACK;` query.
 
+Auth queries, such as `CREATE USER` and `GRANT`, can also run in an explicit
+transaction, but not in the same transaction as other queries. See [Run auth
+queries in a
+transaction](/database-management/authentication-and-authorization#run-auth-queries-in-a-transaction).
+
 The following query will find to nodes and adjust a certain relationship
 property in order to check the results of a
 [max_flow](/advanced-algorithms/available-algorithms/max_flow) algorithm, then
@@ -92,7 +97,7 @@ SHOW TRANSACTIONS;
 ```
 
 Each row in the result represents one transaction (or an in-progress snapshot
-creation or garbage collection) and contains seven columns:
+creation or garbage collection) and contains eight columns:
 
 | Column | Type | Description |
 |---|---|---|
@@ -103,15 +108,18 @@ creation or garbage collection) and contains seven columns:
 | `metadata` | `Map` | Metadata supplied by the client when the transaction was opened. For in-progress snapshots and garbage collection it contains progress details (see below). |
 | `start_time` | `ZonedDateTime` | UTC time at which the transaction started. |
 | `elapsed_ms` | `Integer` | How long the transaction has been running, in milliseconds. |
+| `database` | `String` | The database the listed transaction is running on, not the database of the session that runs `SHOW TRANSACTIONS`. In Memgraph Community it's always `memgraph`. |
 
-```copy=false
-memgraph> SHOW TRANSACTIONS;
-+----------+-----------------------+-----------------------------------------------+--------------+----------+-------------------------------+------------+
-| username | transaction_id        | query                                         | status       | metadata | start_time                    | elapsed_ms |
-+----------+-----------------------+-----------------------------------------------+--------------+----------+-------------------------------+------------+
-| ""       | "9223372036854794885" | ["UNWIND range(1,100) AS i CREATE(:L{p:i});"] | "committing" | {}       | 2026-05-12T14:32:18.412Z[UTC] | 47         |
-| ""       | "9223372036854794896" | ["SHOW TRANSACTIONS"]                         | "running"    | {}       | 2026-05-12T14:32:18.451Z[UTC] | 8          |
-+----------+-----------------------+-----------------------------------------------+--------------+----------+-------------------------------+------------+
+In the `query` column, a query that sets a password, such as `CREATE USER`
+with `IDENTIFIED BY` or `SET PASSWORD`, shows each password as `'****'`.
+
+```plaintext copy=false
++----------+-----------------------+------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
+| username | transaction_id        | query                                                | status    | metadata | start_time                             | elapsed_ms | database   |
++----------+-----------------------+------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
+| ""       | "9223372036854775816" | ["SHOW TRANSACTIONS"]                                | "running" | {}       | 2026-10-12 12:13:47.209533000[Etc/UTC] | 0          | "memgraph" |
+| ""       | "9223372036854775815" | ["UNWIND range(1, 100) AS i CREATE (:Item {id: i})"] | "running" | {}       | 2026-10-12 12:13:47.116640000[Etc/UTC] | 93         | "memgraph" |
++----------+-----------------------+------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
 ```
 
 #### Filter by status
@@ -139,21 +147,22 @@ rows contains:
 
 | Key | Description |
 |---|---|
-| `phase` | Current phase of snapshot creation: `EDGES`, `VERTICES`, `INDICES`, `CONSTRAINTS`, or `FINALIZING`. |
+| `phase` | Current phase of snapshot creation: `edges`, `vertices`, `indices`, `constraints`, or `finalizing`; `idle` until the first phase starts. |
 | `items_done` | Number of objects serialized in the current phase so far. |
 | `items_total` | Total number of objects expected in the current phase. |
-| `db_name` | Name of the database whose snapshot is being created. |
+| `db_name` | Name of the database whose snapshot is being created. The `database` column shows the same value. |
 
 The top-level `start_time` and `elapsed_ms` columns are populated for snapshot
 rows as well, reflecting when the snapshot started.
 
-```copy=false
-memgraph> SHOW TRANSACTIONS;
-+----------+----------------+---------------------+-----------+------------------------------------------------------------------+-------------------------------+------------+
-| username | transaction_id | query               | status    | metadata                                                         | start_time                    | elapsed_ms |
-+----------+----------------+---------------------+-----------+------------------------------------------------------------------+-------------------------------+------------+
-| ""       | "snapshot"     | ["CREATE SNAPSHOT"] | "running" | {phase: "VERTICES", items_done: 142000, items_total: 500000, ... | 2026-05-12T14:32:17.205Z[UTC] | 1247       |
-+----------+----------------+---------------------+-----------+------------------------------------------------------------------+-------------------------------+------------+
+```plaintext copy=false
++----------+-----------------------+-----------------------+-----------+-----------------------------------------------------------------------------------+----------------------------------------+------------+------------+
+| username | transaction_id        | query                 | status    | metadata                                                                          | start_time                             | elapsed_ms | database   |
++----------+-----------------------+-----------------------+-----------+-----------------------------------------------------------------------------------+----------------------------------------+------------+------------+
+| ""       | "9223372036854775818" | ["SHOW TRANSACTIONS"] | "running" | {}                                                                                | 2026-10-12 12:13:47.275859000[Etc/UTC] | 0          | "memgraph" |
+| ""       | "9223372036854775817" | ["CREATE SNAPSHOT"]   | "running" | {}                                                                                | 2026-10-12 12:13:47.221765000[Etc/UTC] | 54         | "memgraph" |
+| ""       | "snapshot"            | ["CREATE SNAPSHOT"]   | "running" | {db_name: "memgraph", items_done: 53824, items_total: 3000100, phase: "vertices"} | 2026-10-12 12:13:47.221848000[Etc/UTC] | 55         | "memgraph" |
++----------+-----------------------+-----------------------+-----------+-----------------------------------------------------------------------------------+----------------------------------------+------------+------------+
 ```
 
 <Callout type="info">
@@ -181,19 +190,31 @@ map for these rows contains:
 | `phase` | Current phase of the cycle: `unlink` (detach obsolete versions no active transaction can still see), `index_cleanup` (remove stale index and constraint entries — usually the most expensive phase), or `delete` (free the unlinked versions). |
 | `trigger` | `periodic` for the background cycle, or `forced` for a `FREE MEMORY` query or a storage-mode switch. |
 | `exclusive_lock` | `true` when the collection holds the storage lock exclusively and is therefore blocking all transactions. |
-| `db_name` | Name of the database whose garbage is being collected. |
+| `db_name` | Name of the database whose garbage is being collected. The `database` column shows the same value. |
 
 The top-level `start_time` and `elapsed_ms` columns reflect when the collection
 started; a large `elapsed_ms` is the clearest signal of a stuck collection. One
 `gc` row appears per database that currently has a collection running.
 
-```copy=false
-memgraph> SHOW TRANSACTIONS;
-+----------+----------------+------------------------+-----------+-------------------------------------------------------------------------------------------+-------------------------------+------------+
-| username | transaction_id | query                  | status    | metadata                                                                                  | start_time                    | elapsed_ms |
-+----------+----------------+------------------------+-----------+-------------------------------------------------------------------------------------------+-------------------------------+------------+
-| ""       | "gc"           | ["GARBAGE COLLECTION"] | "running" | {db_name: "memgraph", exclusive_lock: true, phase: "index_cleanup", trigger: "periodic"}  | 2026-05-12T14:32:17.881Z[UTC] | 395        |
-+----------+----------------+------------------------+-----------+-------------------------------------------------------------------------------------------+-------------------------------+------------+
+For example, a `FREE MEMORY` query on the `tenant1` database starts a forced
+collection. While that collection runs, run the following query from another
+session:
+
+```cypher
+SHOW TRANSACTIONS;
+```
+
+The result lists the `FREE MEMORY` transaction and its `gc` row, both on
+`tenant1`:
+
+```plaintext copy=false
++----------+-----------------------+------------------------+-----------+---------------------------------------------------------------------------------+----------------------------------------+------------+------------+
+| username | transaction_id        | query                  | status    | metadata                                                                        | start_time                             | elapsed_ms | database   |
++----------+-----------------------+------------------------+-----------+---------------------------------------------------------------------------------+----------------------------------------+------------+------------+
+| ""       | "9223372036854775814" | ["FREE MEMORY"]        | "running" | {}                                                                              | 2026-10-19 12:01:18.288170000[Etc/UTC] | 4          | "tenant1"  |
+| ""       | "9223372036854775815" | ["SHOW TRANSACTIONS"]  | "running" | {}                                                                              | 2026-10-19 12:01:18.292917000[Etc/UTC] | 0          | "memgraph" |
+| ""       | "gc"                  | ["GARBAGE COLLECTION"] | "running" | {db_name: "tenant1", exclusive_lock: false, phase: "unlink", trigger: "forced"} | 2026-10-19 12:01:18.288188000[Etc/UTC] | 5          | "tenant1"  |
++----------+-----------------------+------------------------+-----------+---------------------------------------------------------------------------------+----------------------------------------+------------+------------+
 ```
 
 <Callout type="info">
@@ -232,6 +253,12 @@ using the following query:
 ```cypher
 REVOKE TRANSACTION_MANAGEMENT FROM user;
 ```
+
+An [auth
+transaction](/database-management/authentication-and-authorization#run-auth-queries-in-a-transaction)
+belongs to its session's current database. A user with the
+`TRANSACTION_MANAGEMENT` privilege on that database can see its queries and
+terminate it without the `AUTH` privilege.
 
 <Callout type="info">
 When Memgraph is first started there is only one explicit
@@ -337,8 +364,8 @@ following the same rules as the id list form:
 The wildcard must be the only argument. Mixing it with ids, such as
 `TERMINATE TRANSACTIONS "*", "9223372036854794885"`, raises an error.
 
-A parameterized id is treated exactly like a literal one, so running
-`TERMINATE TRANSACTIONS $id` with `$id = "*"` also terminates everything.
+Transaction ids, including `"*"`, must be string literals. Query parameters
+such as `$id` aren't supported and cause a syntax error.
 
 <Callout type="info">
 System transactions (for example an in-flight `CREATE DATABASE` or `GRANT`) are
@@ -401,43 +428,183 @@ Managing transactions is done by establishing a new connection to the database.
 **Show and terminate transactions**
 
 The output of the `SHOW TRANSACTIONS` command shows that a query is
-currently being run as part of the transaction ID "9223372036854794885".
+being run on the `memgraph` database as part of the transaction ID
+"9223372036854775809".
 
 ```copy=false
 memgraph> SHOW TRANSACTIONS;
-+----------+-----------------------+-------------------------------------------+-----------+----------+-------------------------------+------------+
-| username | transaction_id        | query                                     | status    | metadata | start_time                    | elapsed_ms |
-+----------+-----------------------+-------------------------------------------+-----------+----------+-------------------------------+------------+
-| ""       | "9223372036854794885" | ["CALL infinite.get() YIELD * RETURN *;"] | "running" | {}       | 2026-05-12T14:32:00.000Z[UTC] | 18230      |
-| ""       | "9223372036854794896" | ["SHOW TRANSACTIONS"]                     | "running" | {}       | 2026-05-12T14:32:18.230Z[UTC] | 0          |
-+----------+-----------------------+-------------------------------------------+-----------+----------+-------------------------------+------------+
++----------+-----------------------+-------------------------------------------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
+| username | transaction_id        | query                                                                                     | status    | metadata | start_time                             | elapsed_ms | database   |
++----------+-----------------------+-------------------------------------------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
+| ""       | "9223372036854775810" | ["SHOW TRANSACTIONS"]                                                                     | "running" | {}       | 2026-10-19 12:11:16.345268000[Etc/UTC] | 0          | "memgraph" |
+| ""       | "9223372036854775809" | ["UNWIND range(1, 100000) AS a UNWIND range(1, 100000) AS b WITH a WHERE a < 0 RETURN a"] | "running" | {}       | 2026-10-19 12:11:14.342553000[Etc/UTC] | 2002       | "memgraph" |
++----------+-----------------------+-------------------------------------------------------------------------------------------+-----------+----------+----------------------------------------+------------+------------+
 ```
 
 To terminate the transaction, run the following query:
 
 ```cypher
-TERMINATE TRANSACTIONS "9223372036854794885";
+TERMINATE TRANSACTIONS "9223372036854775809";
 ```
 
 Upon the transaction termination, the following confirmation will appear:
 
 ```copy=false
-memgraph> TERMINATE TRANSACTIONS "9223372036854794885";
+memgraph> TERMINATE TRANSACTIONS "9223372036854775809";
 +-----------------------+-----------------------+
 | transaction_id        | killed                |
 +-----------------------+-----------------------+
-| "9223372036854794885" | true                  |
+| "9223372036854775809" | true                  |
 +-----------------------+-----------------------+
 1 row in set (round trip in 0.000 sec)
 ```
 
-The following message will appear in the session in which the infinite query was being run:
+The following message will appear in the session in which the long-running query was being run:
 
 ```copy=false
-memgraph> CALL infinite.get() YIELD * RETURN *; 
-Client received exception: Transactions was asked to abort either because it was executing longer than time
-specified or another user asked to abort it.
+memgraph> UNWIND range(1, 100000) AS a UNWIND range(1, 100000) AS b WITH a WHERE a < 0 RETURN a;
+Client received query exception: Transaction was asked to abort by another user.
 ```
+
+## Manage sessions
+
+A session is one client connection to Memgraph over Bolt. You can list the
+open sessions and close any of them from another connection, for example an
+idle (often pooled) connection that still has a database selected and makes a
+[`DROP DATABASE`](/database-management/multi-tenancy#drop-database-with-force)
+query without `FORCE` fail with the `Cannot delete <name>, it is currently
+being used.` error. With `FORCE`, Memgraph closes such sessions itself.
+Available since Memgraph 3.14.
+
+Session queries run on data instances (MAIN and REPLICA), and each instance
+lists and closes only the sessions connected to it. On a high availability
+coordinator they fail with the `Coordinator can run only coordinator queries!`
+error. Run them on their own, not inside an [explicit
+transaction](#explicit-transactions) (one you start with `BEGIN`), where they
+raise an error.
+
+### Show sessions
+
+To list the open sessions, run:
+
+```cypher
+SHOW SESSIONS;
+```
+
+Each row is one session that is currently logged in. A connection that hasn't
+logged in yet, or that has logged off, isn't listed. After it logs on again it
+reappears with the same `session_id`. If another user logs on, the row shows
+that user and the database of the new login:
+
+| Column | Type | Description |
+|---|---|---|
+| `session_id` | `String` | Unique id of the session. Use this value with the `TERMINATE SESSIONS` query to close the session. |
+| `username` | `String` | The user the session logged in as, or `""` for a session that logged in while authentication was disabled. With impersonation, this is still the login user. |
+| `database` | `String` | The database the session is using: the one selected with `USE DATABASE`, the one named when connecting, or otherwise the user's main database (`memgraph` by default). `""` if the session has no database, for example after its database was dropped. |
+| `login_timestamp` | `String` | UTC time of the session's most recent login, formatted as `YYYY-MM-DD HH:MM:SS.ffffff` (no time zone suffix). |
+
+The `SHOW SESSIONS` query shows your own sessions, and the sessions on every
+database where you have the `TRANSACTION_MANAGEMENT` privilege. A session that isn't using a
+database counts as using the default database, `memgraph`. When
+authentication is disabled, every connection counts as the same user, so you
+see all sessions. With [user
+impersonation](/database-management/authentication-and-authorization/impersonate-user),
+a connection counts as the impersonated user, and its queries are checked
+against that user's privileges.
+
+In the following example, `admin` has the `TRANSACTION_MANAGEMENT` privilege
+on every database, and `alice` has two idle connections open, one on the
+`analytics` database and one on the `memgraph` database. The session running
+the query is listed too:
+
+```plaintext copy=false
++----------------------------------------+----------+-------------+------------------------------+
+| session_id                             | username | database    | login_timestamp              |
++----------------------------------------+----------+-------------+------------------------------+
+| "eba078f8-2c56-4e22-bf47-4545ac9d4b1a" | "admin"  | "memgraph"  | "2026-10-07 10:30:33.022574" |
+| "e9e40294-db31-4122-9875-75affefc1130" | "alice"  | "memgraph"  | "2026-10-07 10:30:32.391885" |
+| "f9892d9b-ca91-4e16-b3df-1ead198cc846" | "alice"  | "analytics" | "2026-10-07 10:30:32.228485" |
++----------------------------------------+----------+-------------+------------------------------+
+```
+
+### Terminate sessions
+
+To close one or more sessions, run the following query from another
+connection:
+
+```plaintext
+TERMINATE SESSIONS 'SESSION_ID' [, 'SESSION_ID' ...];
+```
+
+`SESSION_ID` is a `session_id` from the `SHOW SESSIONS` output, written as a
+string literal. Query parameters such as `$id` aren't supported and cause a
+syntax error. Any other literal value raises the `Session id must be a
+string.` error.
+
+You can terminate your own other sessions without any privilege. To terminate
+another user's session, you need the `TRANSACTION_MANAGEMENT` privilege on
+the database that session is using (the default database, `memgraph`, if it
+isn't using one). The session that runs the `TERMINATE SESSIONS` query can't
+terminate itself.
+
+<Callout type="info">
+These privilege checks apply only in Memgraph Enterprise. In Memgraph
+Community, every user has all privileges, so any user can see and terminate
+any other user's session.
+</Callout>
+
+The result has two columns, `session_id` and `killed`, with one row per id in
+the query, in the same order. A row reports `killed: true` if the session was
+found and you were allowed to close it. This means the close was requested: a
+session that is busy with a query can still appear in `SHOW SESSIONS` until
+that query returns. An id that matches no session, an id you're not allowed to
+terminate, the id of the session running the query, and every repeat of an id
+already in the list all report `killed: false`.
+
+For example, to close alice's `analytics` session (the second id doesn't
+match any session):
+
+```cypher
+TERMINATE SESSIONS 'f9892d9b-ca91-4e16-b3df-1ead198cc846', '00000000-0000-0000-0000-000000000000';
+```
+
+```plaintext copy=false
++----------------------------------------+--------+
+| session_id                             | killed |
++----------------------------------------+--------+
+| "f9892d9b-ca91-4e16-b3df-1ead198cc846" | true   |
+| "00000000-0000-0000-0000-000000000000" | false  |
++----------------------------------------+--------+
+```
+
+What happens to a terminated session depends on what it's doing:
+
+- **Idle:** Memgraph closes the session immediately.
+- **Running a query:** Memgraph aborts the query's transaction and closes the
+  session as soon as the query returns. Most queries stop right away. A query
+  that doesn't check for termination, such as a long-running function call,
+  runs until it finishes, and its transaction isn't committed.
+- **In an open explicit transaction** (it ran `BEGIN` and hasn't committed):
+  Memgraph rolls the transaction back. Its uncommitted changes are discarded
+  and the writes it holds are released, so conflicting transactions can
+  continue.
+- **Committing:** the commit isn't interrupted; it completes.
+
+The client of a terminated session loses its connection:
+
+- **A query it's running** fails with the transient `Transaction was asked to
+  abort by another user.` error. A query that doesn't check for termination
+  fails when it finishes, with the transient `Aborting transaction commit
+  because the transaction was requested to stop from other session.` error.
+- **An idle client** gets a connection error on its next request, and the
+  driver opens a new connection for the request after that. Driver retry
+  helpers (for example, the Python driver's `execute_read`) retry on that
+  error, so their request succeeds.
+
+Because the error is transient, driver retry helpers (for example, the Python
+driver's `execute_write`) retry the transaction on a new connection, and the
+retry can commit. Terminating a session doesn't stop an application that
+uses retry helpers from running the same work again.
 
 ## Isolation levels
 
@@ -531,6 +698,10 @@ SET <scope> TRANSACTION ISOLATION LEVEL <isolation_level>
  - GLOBAL - apply the new isolation level globally
  - SESSION - apply the new isolation level only for the current session
  - NEXT - apply the new isolation level only for the next transaction in the current session
+
+A SESSION setting lasts for the client connection. A failed query or a rollback keeps it, including the Bolt `RESET` a driver sends after a failure.
+Switching to another user on the same connection (the driver re-authenticates, sending `LOGOFF` and `LOGON`) clears both a SESSION setting and a pending NEXT one.
+The new user's transactions then run at the database's current isolation level.
 
 `<isolation_level>` defines the isolation level:
  - SNAPSHOT ISOLATION

@@ -1,7 +1,8 @@
 /**
  * Checks the docs source for things that break for readers: links to pages or
  * sections that don't exist, links through a redirect, broken redirects, pages
- * missing from the sidebar, missing images and mismatched release-note versions.
+ * missing from the sidebar, missing images, mismatched release-note versions and
+ * repeated release-note sections.
  *
  * It reads only this checkout (no build, no network) and runs in a few seconds.
  * Any problem fails the check. The rules are the ones in AGENTS.md.
@@ -325,8 +326,14 @@ const NOTES = path.join(PAGES, 'release-notes.mdx')
 if (fs.existsSync(NOTES)) {
   const lines = text.get(NOTES).split('\n')
   const seen = new Map()
+  const sections = new Map()
   let current = null
   lines.forEach((line, i) => {
+    const s = line.match(/^##\s+(.+?)\s*$/)
+    if (s) {
+      if (sections.has(s[1])) report(NOTES, i + 1, `"## ${s[1]}" appears twice (also on line ${sections.get(s[1])})`)
+      else sections.set(s[1], i + 1)
+    }
     const h = line.match(/^#{2,4}\s+(.+?)\s+v(\d+\.\d+\.\d+)\b/)
     if (h) {
       current = { product: h[1].trim(), version: h[2], line: i + 1 }

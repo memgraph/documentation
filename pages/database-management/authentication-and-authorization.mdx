@@ -120,6 +120,114 @@ and
 [Replication](/database-management/clustering/replication)
 documentation.
 
+## Run auth queries in a transaction
+
+You can run auth queries, such as `CREATE USER`, `CREATE ROLE`, `GRANT`, and
+`SET ROLE`, in an [explicit
+transaction](/fundamentals/transactions#explicit-transactions). Other sessions
+and REPLICAs see none of the changes until `COMMIT`, and then all of them, so a
+user never exists without the privileges you meant to give it. Available since
+Memgraph 3.14.
+
+```cypher
+BEGIN;
+CREATE USER alice IDENTIFIED BY 'alice_password';
+CREATE ROLE analyst;
+GRANT MATCH TO analyst;
+SET ROLE FOR alice TO analyst;
+COMMIT;
+```
+
+This example uses roles, which need [Memgraph
+Enterprise](/database-management/enabling-memgraph-enterprise). The
+transaction itself works in Memgraph Community too.
+
+Auth transactions are serializable. Each query sees the changes made by the
+queries before it. Memgraph snapshots each user or role the first time the
+transaction reads the user or role, and later reads return that snapshot. If
+anything the transaction has read changes before `COMMIT`, the commit fails.
+`ROLLBACK` discards all of the transaction's changes. After this transaction,
+neither `bob` nor `dave` exists:
+
+```cypher
+BEGIN;
+CREATE USER bob;
+CREATE USER dave;
+ROLLBACK;
+```
+
+A single auth query outside a transaction works as before.
+
+### What an auth transaction can contain
+
+The first query inside a transaction decides the kind of transaction, either
+data or auth. After an auth query, the transaction accepts only auth queries,
+including the `SHOW` queries that read users, roles, and privileges. After any
+other query type, it refuses auth queries: auth and data queries can't be mixed
+within a single transaction.
+
+```cypher invalid
+BEGIN;
+CREATE USER carol;
+MATCH (n) RETURN count(n);
+```
+
+Either way, the refused query fails with this error:
+
+```plaintext copy=false
+A transaction that runs an auth query can contain only auth queries. Run other queries in a separate transaction.
+```
+
+The other queries refused in an auth transaction include `SHOW TRANSACTIONS`,
+replication queries, and [user profile](/database-management/authentication-and-authorization/user-profiles)
+queries.
+
+User and [tenant profile](/database-management/tenant-profiles) changes are
+refused in every explicit transaction. Run them as single queries.
+
+### Conflicts between transactions
+
+Memgraph doesn't lock users or roles while a transaction is open. At `COMMIT`,
+it checks whether another session has changed anything the transaction read or
+wrote. If it has, nothing is applied and the commit fails with this error:
+
+```plaintext copy=false
+Cannot resolve conflicting transactions. Retry this transaction when the conflicting transaction is finished.
+```
+
+The error is transient, so a driver's retry logic runs the transaction again
+(see [conflicting transactions](/help-center/errors/transactions#conflicting-transactions)).
+Two transactions that change different users or roles both commit.
+
+Some queries read more than their names suggest, so they conflict more often:
+
+- **Listing queries,** such as `SHOW USERS`: the transaction depends on the
+  whole list, so the commit fails if another session created or dropped a user
+  in the meantime.
+- **`DROP ROLE`:** checks every user's roles, so it conflicts with any role
+  assignment in another session, even of a different role.
+- **The first user:** on an instance with no users, two transactions that each
+  create a user conflict. With an Enterprise license, creating the first user
+  also creates the built-in roles, so it conflicts with a concurrent
+  `CREATE ROLE`.
+
+The commit also fails with this error if another session holds the system
+lock for more than 100 ms, for example while it runs a replication or
+multi-tenancy query.
+
+A transaction that grants, denies, or revokes a database, or sets a user's main
+database, fails at `COMMIT` if another session dropped that database in the
+meantime:
+
+```plaintext copy=false
+Tried to retrieve an unknown database "sales".
+```
+
+### Auth transactions and replication
+
+A REPLICA applies a committed auth transaction whole, so it never holds some of
+the transaction's changes without the rest.
+
 ## [Users](/database-management/authentication-and-authorization/users)
 
 Learn how to manage users in Memgraph.

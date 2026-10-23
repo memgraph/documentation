@@ -1,6 +1,6 @@
 ---
 title: Data durability
-description: Learn about data durability - an important aspect of making sure you keep your data secure, regardless of Memgraph's in-memory storage. 
+description: Configure snapshots and write-ahead logging (WAL), see how Memgraph recovers on startup, and handle recovery failures.
 ---
 
 import { Callout } from 'nextra/components'
@@ -84,12 +84,13 @@ By default, WAL files are located at `/var/lib/memgraph/wal`.
 
 <h4 id="wal-file-lifecycle" className="custom-header">WAL file lifecycle</h4>
 
-**Older WAL files are deleted automatically after a snapshot is created** since
-the snapshot contains the full database state up to that point. Only WAL files
-containing changes after the latest snapshot are retained.
+Memgraph deletes older WAL files when it deletes old snapshots, not after every
+snapshot. Once a new snapshot brings the number of snapshots to
+`--storage-snapshot-retention-count`, Memgraph deletes the WAL files older than
+the oldest snapshot it keeps, except the last WAL file written before that
+snapshot.
 
-To control WAL file cleanup indirectly, you can limit the number of snapshots
-via `--storage-snapshot-retention-count`.
+To keep more snapshots, raise `--storage-snapshot-retention-count`.
 
 **It is not possible to use WAL files exclusively** without snapshots. Memgraph
 enforces periodic snapshots when WAL is enabled and will fail to start if WAL is
@@ -194,7 +195,7 @@ snapshot creation behavior by [defining the relevant
 flags](/database-management/configuration#storage). Alternatively, you can make
 one directly by running the following query:
 
-```opencypher
+```cypher
 CREATE SNAPSHOT;
 ```
 
@@ -209,7 +210,7 @@ directory. The `CREATE SNAPSHOT` query will return the path of the newly created
 snapshot file.
 
 To query which snapshots currently exist in the data directory, execute:
-```opencypher
+```cypher
 SHOW SNAPSHOTS;
 ```
 
@@ -230,12 +231,24 @@ files store incremental changes and need to be replayed sequentially.
 
 `IN_MEMORY_TRANSACTIONAL` mode supports periodic snapshot creation. The interval
 can be set at startup via the `--storage-snapshot-interval` flag or at run-time
-via the database settings:
+via the database settings. To create a snapshot every 1200 seconds:
 
-```opencypher
+```cypher
 SET DATABASE SETTING "storage.snapshot.interval" TO "1200";
-SET DATABASE SETTING "storage.snapshot.interval" TO "* * 12 * * *";
+```
+
+To pause periodic snapshots, set the interval to an empty string:
+
+```cypher
 SET DATABASE SETTING "storage.snapshot.interval" TO "";
+```
+
+With [Memgraph Enterprise](/database-management/enabling-memgraph-enterprise),
+you can set the interval as a CRON expression instead. To create a snapshot
+every day at 12:00:00:
+
+```cypher
+SET DATABASE SETTING "storage.snapshot.interval" TO "0 0 12 * * *";
 ```
 
 <Callout type="info">
@@ -250,9 +263,7 @@ in seconds. Interval can also be defined as a 6-field CRON expression (seconds, 
 hour, day of month, month, day of week). Standard 5-field cron references (e.g.
 [crontab.guru](https://crontab.guru/)) describe the last five fields; Memgraph
 adds seconds as the first field. By setting the value to an empty string, the background process is
-paused and any currently active snapshot creation will finish. Please note that
-defining the interval via a CRON expression is an [Enterprise
-feature](/database-management/enabling-memgraph-enterprise).
+paused and any currently active snapshot creation will finish.
 
 If the database is started in or migrated into `IN_MEMORY_ANALYTICAL` mode, the
 background thread will pause and no snapshots will be created as long as that
@@ -265,9 +276,15 @@ new writes have been committed since the last snapshot. If the periodic snapshot
 is skipped it will be logged on INFO level.
 </Callout>
 
-<Callout type="warning">
-Snapshots and WAL files are presently not compatible between Memgraph versions.
-</Callout>
+### Compatibility between versions
+
+Memgraph recovers from snapshot and WAL files written by Memgraph 2.0 or any
+later version, so after an [upgrade](/database-management/upgrades) you can
+start the new version on your existing data directory.
+
+Files written by a newer version aren't guaranteed to load in an older one. To
+go back to an earlier version, [restore the backup you took before
+upgrading](/database-management/upgrades#roll-back-an-upgrade).
 
 ### Parallelized execution
 
@@ -420,6 +437,11 @@ Two operator-facing queries report each database's health as `ready` or
   +------------+-------+---------+
   ```
 
+  `Health` is `draining` while a database is still being
+  [dropped with `FORCE`](/database-management/multi-tenancy#drop-database-with-force).
+  On a replica, this also happens for a database dropped without `FORCE` on
+  the main instance.
+
 - [`SHOW STORAGE INFO ON CURRENT DATABASE`](/database-management/server-stats#per-database-storage-information)
   (and `ON DATABASE <name>`) includes a `health` row with the value `ready` or
   `broken`.
@@ -448,6 +470,9 @@ moves all prior/corrupt snapshots and WAL files to the `.old` directory (or
 deletes them when [`--storage-backup-dir-enabled`](/database-management/configuration)
 is off), leaving a clean single-snapshot directory. As a result, the database **recovers cleanly on the
 next restart and does not re-enter the broken state**.
+
+The database then holds only the data in that snapshot. Changes made after the
+snapshot was taken, including those in a damaged WAL file, are lost.
 
 `RECOVER SNAPSHOT` is available in both Community and Enterprise editions, so
 single-tenant deployments can recover a corrupt default database.
