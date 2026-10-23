@@ -120,18 +120,18 @@ tables = {
         pa.table({"id": [1], "name": ["Acme Corp"]}),
     ),
     "knows": (
-        pa.schema([("from_id", pa.int32()), ("to_id", pa.int32())]),
-        pa.table({"from_id": [1], "to_id": [2]}),
+        pa.schema([("id", pa.int32()), ("from_id", pa.int32()), ("to_id", pa.int32())]),
+        pa.table({"id": [1], "from_id": [1], "to_id": [2]}),
     ),
     "works_at": (
-        pa.schema([("person_id", pa.int32()), ("company_id", pa.int32())]),
-        pa.table({"person_id": [1], "company_id": [1]}),
+        pa.schema([("id", pa.int32()), ("person_id", pa.int32()), ("company_id", pa.int32())]),
+        pa.table({"id": [1], "person_id": [1], "company_id": [1]}),
     ),
 }
 
 for name, (schema, data) in tables.items():
     table = catalog.create_table_if_not_exists(f"default.{name}", schema=schema)
-    table.append(data)
+    table.append(data.cast(schema))
 ```
 
 ### 3. Start MemGQL
@@ -191,19 +191,40 @@ REST API. Trino performs joins, pruning, aggregation, and writes server-side.
 
 ### 1. Start Trino with Iceberg
 
+Trino reads Iceberg through a catalog. This one uses the MinIO storage and REST
+catalog from step 1 of the direct connector above, so start those first.
+
 ```bash
-docker network create memgql-net
+mkdir -p catalog
+cat > catalog/iceberg.properties << 'EOF'
+connector.name=iceberg
+iceberg.catalog.type=rest
+iceberg.rest-catalog.uri=http://iceberg-rest-dev:8181
+fs.native-s3.enabled=true
+s3.endpoint=http://minio-dev:9000
+s3.path-style-access=true
+s3.region=us-east-1
+s3.aws-access-key=admin
+s3.aws-secret-key=password
+EOF
 
 docker run -d --rm \
     --name trino-dev \
     --network memgql-net \
     -p 8080:8080 \
+    -v ./catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro \
     trinodb/trino:latest
 ```
 
 ### 2. Seed data
 
+Both connectors read the same tables, so skip this step if you already seeded
+them for the direct connector.
+
 ```bash
+# Wait until Trino accepts queries.
+until docker exec trino-dev trino --execute 'SELECT 1' >/dev/null 2>&1; do sleep 2; done
+
 docker exec -i trino-dev trino << 'SQL'
 CREATE SCHEMA IF NOT EXISTS iceberg.default;
 
@@ -217,18 +238,20 @@ CREATE TABLE IF NOT EXISTS iceberg.default.companies (
     name VARCHAR
 );
 CREATE TABLE IF NOT EXISTS iceberg.default.knows (
+    id INTEGER,
     from_id INTEGER,
     to_id INTEGER
 );
 CREATE TABLE IF NOT EXISTS iceberg.default.works_at (
+    id INTEGER,
     person_id INTEGER,
     company_id INTEGER
 );
 
 INSERT INTO iceberg.default.persons VALUES (1, 'Alice', 30), (2, 'Bob', 25);
 INSERT INTO iceberg.default.companies VALUES (1, 'Acme Corp');
-INSERT INTO iceberg.default.knows VALUES (1, 2);
-INSERT INTO iceberg.default.works_at VALUES (1, 1);
+INSERT INTO iceberg.default.knows VALUES (1, 1, 2);
+INSERT INTO iceberg.default.works_at VALUES (1, 1, 1);
 SQL
 ```
 
@@ -292,3 +315,6 @@ aggregation run **in-process** over Arrow batches.
 | Time-travel (snapshot)                        | ✓                | ✓               |
 | `INSERT (a {…})`                              | ❌ (read-only)   | ✓               |
 | `DELETE` (no alias; Trino requirement)        | ❌ (read-only)   | ✓               |
+
+On the Trino connector, map projections (`RETURN n {.a, .b}`) and `collect()`
+return an actionable error.

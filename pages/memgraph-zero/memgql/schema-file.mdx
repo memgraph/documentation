@@ -53,6 +53,9 @@ The file has two top-level sections:
 }
 ```
 
+An optional `_comment` string is allowed at the top level and on each graph for
+free-text notes; it is ignored at load.
+
 ## A minimal schema
 
 The smallest useful file is one connector and one vertex: a label mapped to a
@@ -143,11 +146,15 @@ Every `connection` field is optional; supply what a given backend needs:
 | `path`             | File-backed backends (DuckDB). |
 | `sslRootCert`      | PEM bundle of CA certificates to trust instead of the system roots (PostgreSQL). |
 | `trustServerCertificate` | Encrypt without verifying the server's certificate (PostgreSQL). Mutually exclusive with `sslRootCert`. |
+| `warehouse` / `role` | Snowflake session context. Each falls back to its `SNOWFLAKE_*` environment variable when omitted. |
+| `private_key_path` / `token` | Snowflake key-pair or token authentication instead of a password. Each falls back to its `SNOWFLAKE_*` environment variable when omitted. |
+| `tenant_id` / `client_id` / `client_secret` | Microsoft Fabric service-principal authentication. Each falls back to its `FABRIC_*` environment variable when omitted. |
 | `language`         | Default [query language](/memgraph-zero/memgql/reference#query-languages) (`gql` / `cypher`) for `USE <graph>` queries whose graph maps to this connector. |
+| `maxInListSize`    | Most join-key values sent to this backend in one [piped](/memgraph-zero/memgql/multiple-graphs#piping-fetching-only-what-joins) cross-backend join; the same as `ADD CONNECTOR … OPTIONS '{"max_in_list_size": N}'`. |
 
 **Supported `type` values:** `memgraph`, `neo4j`, `postgres` (`postgresql`),
 `mysql`, `sqlserver`, `oracle`, `duckdb`, `iceberg`, `iceberg-direct`,
-`clickhouse`, `pinot`, `snowflake`, `mongodb`, `fabric`, `hana`.
+`clickhouse`, `pinot`, `snowflake`, `mongodb`, `fabric`, `hana`, `redshift`.
 
 For PostgreSQL, the TLS **mode** stays in the URI (`sslmode=`), where libpq
 users expect it; `sslRootCert` / `trustServerCertificate` declare what a URI
@@ -192,6 +199,48 @@ runtime and persists it back to this file; `EXPORT SCHEMA` round-trips it.
 }
 ```
 
+### Discovered native schema
+
+A Memgraph or Neo4j connector already knows its own labels, relationship types
+and properties, so a graph does not have to repeat them. List the connector
+under `discover` and its schema is read at boot and on `REFRESH SCHEMA`:
+every node type becomes a vertex, with the label set spelled `A:B` and the
+introspected properties as attributes, and every relationship type becomes one
+edge per `(type, start labels, end labels)` pair.
+
+```json
+{
+  "name": "shop",
+  "accessMode": "readOnly",
+  "discover": ["mg"],
+  "vertices": [
+    {
+      "label": "Item",
+      "mappedTableSource": { "connector": "pg", "table": "item", "metaFields": { "id": "item_key" } },
+      "attributes": [{ "name": "sku" }]
+    }
+  ],
+  "edges": [
+    {
+      "label": "catalogEntry",
+      "from": "Item",
+      "to": "CAT:Product",
+      "mappedJoinSource": { "fromKey": "sku", "toKey": "sku" }
+    }
+  ]
+}
+```
+
+What the graph declares itself wins: a declared vertex (matched by its label
+set) keeps its attributes and renames, and a declared relationship type keeps
+exactly its declared pairs, so declaring an element is how you restrict or
+refine what discovery exposes. An edge may name a vertex that is discovered
+later, as above, as long as exactly one connector is discovered from. `EXPORT
+SCHEMA` and the persisted file write the `discover` entry back, not the
+discovered elements. Memgraph must run with `--schema-info-enabled`;
+`discover` is refused on a relational connector (declare the tables, or draft
+them with `GENERATE MAPPING FOR CONNECTOR`).
+
 ### Vertices
 
 A vertex maps a **label** to a backend source. Exactly one source kind is set:
@@ -199,7 +248,12 @@ A vertex maps a **label** to a backend source. Exactly one source kind is set:
 - **`mappedTableSource`**: a relational table (PostgreSQL, MySQL, Oracle,
   SQL Server, DuckDB, ClickHouse, Iceberg). Rows become nodes.
 - **`mappedGraphSource`**: a native graph backend (Memgraph / Neo4j). Queries
-  pass through as Cypher; only the connector is declared.
+  pass through as Cypher; only the connector is declared, plus `label` when
+  the backend stores the element under another name.
+
+A vertex may also add a **`mappedContentSource`** on top of either one, to read
+some of its properties from a table in another connector (see
+[Content in another connector](#content-in-another-connector)).
 
 ```json
 {
@@ -278,6 +332,15 @@ start from one table, so on a shared label both are refused with a pointer to
 the identifying label. A label no mapping carries together with the others
 matches nothing.
 
+A **native** node type that carries several labels is one vertex spelled with
+a colon, `"label": "CAT:Product"`, and written backticked in GQL
+(`` MATCH (p:`CAT:Product`) ``). Each member label routes as well:
+`MATCH (p:CAT)` reads every `CAT` node whatever its other labels,
+`` MATCH (p:CAT&`Product`) `` and Cypher's `MATCH (p:CAT:Product)` reach the
+same vertex, and a backticked `` :`CAT:Product` `` in a `CYPHER` passthrough is
+sent to the backend as the label conjunction `:CAT:Product`. This is also the
+spelling [schema discovery](#discovered-native-schema) produces.
+
 | Field | Source kind | Description |
 |-------|-------------|-------------|
 | `label` / `labels` | both | The node label, or a list of labels whose first entry identifies the mapping (unique per graph) and whose others may be shared with other mappings. |
@@ -287,6 +350,71 @@ matches nothing.
 | `mappedTableSource.table`     | relational | The backing table or view. |
 | `mappedTableSource.metaFields.id` | relational | Primary-key column, or a list of columns for a composite key (`["region", "order_no"]`); the node's identity and the join key for edges. Each column is also exposed as a property, so `RETURN n` includes it and `n.<id_column>` reads it by name. |
 | `mappedGraphSource.connector` | native      | Connector name (Memgraph / Neo4j); the query passes through as Cypher. |
+| `mappedGraphSource.label`     | native      | Optional backend label (on an edge, backend relationship type) exposed under this element's `label`. Queries use the exposed name, MemGQL rewrites it for the backend, and returned nodes and relationships carry the exposed name. Two elements cannot share a backend name. Not renamed: strings a query computes from names (`labels(n)`, `type(r)`), the extra labels of a multi-label vertex, and property keys. |
+| `mappedContentSource`         | either      | Optional second source for some of the vertex's properties; see [Content in another connector](#content-in-another-connector). |
+| `attributes`                  | either      | The properties the vertex exposes; see [Attributes](#attributes). |
+
+#### Content in another connector
+
+A vertex can keep its identity, edges and a few frequently read properties in
+one connector while its bulky properties (long text, documents, payloads) live
+in a table in **another** connector, keyed by the same value. Queries still see
+one vertex with every property.
+
+```json
+{
+  "label": "Ticket",
+  "mappedGraphSource": { "connector": "mg" },
+  "attributes": [
+    { "name": "ticketId" },
+    { "name": "priority" }
+  ],
+  "mappedContentSource": {
+    "connector": "pg",
+    "table": "ticket_content",
+    "key": "ticketId",
+    "keyColumn": "ticket_id",
+    "attributes": [
+      { "name": "subject" },
+      { "name": "description", "column": "body" }
+    ]
+  }
+}
+```
+
+```gql
+MATCH (t:Ticket)-[:ASSIGNED_TO]->(a:Agent)
+WHERE t.subject CONTAINS 'login'
+RETURN t.ticketId, t.description, a.name;
+```
+
+The content table is read only when a query filters on or returns one of its
+properties. MemGQL then joins it in by `key`, fetching the matching rows in one
+batch: a filter on a content property is evaluated in the content connector
+first, and a plain projection is read after the traversal for exactly the
+vertices it found. A query that touches no content property never reaches the
+content connector.
+
+| `mappedContentSource` key | Required | Description |
+|---------------------------|----------|-------------|
+| `connector`  | yes | A **relational** connector, different from the vertex's own. |
+| `schema`     | no  | Middle namespace of the content table. |
+| `table`      | yes | The content table. |
+| `key`        | yes | A **property** declared in the vertex's own `attributes`; its value finds the content row. |
+| `keyColumn`  | no  | The **column** in the content table that holds the `key` value. Defaults to `key`. |
+| `attributes` | yes | The properties read from the content table, declared like [Attributes](#attributes); `column` and `path` refer to the content table. |
+
+**Rules and limits** (each is refused with a message saying what to write
+instead):
+
+- Each property has exactly one home: a name may not appear both in the
+  vertex's `attributes` and in the content `attributes`, and the `key` is
+  declared only on the vertex.
+- The content connector must be relational and differ from the vertex's
+  connector. Content in the same connector is just more attributes.
+- A query that reads content properties must be a single `MATCH … RETURN`: no
+  `WITH`, `UNWIND`, `CALL`, `UNION` or `RETURN *`, and `OPTIONAL MATCH` may not
+  bind the vertex whose content is read.
 
 ### Edges
 
@@ -332,6 +460,28 @@ entry of a `labels` list).
   }
 }
 ```
+
+| Field | Description |
+|-------|-------------|
+| `label` | The relationship type. |
+| `from` / `to` | The identifying **labels** of the source and target vertex. |
+| `mappedTableSource` / `mappedGraphSource` / `mappedJoinSource` | Where the edge lives; exactly one is set. |
+| `attributes` | Edge properties; see [Attributes](#attributes). Not allowed on a `mappedJoinSource` edge. |
+
+A native relationship type is often used between several label pairs. Declare
+it once per pair; this is the one case where an edge label repeats within a
+graph (a table-backed edge label stays unique):
+
+```json
+{ "label": "inGroup", "from": "CAT:Product", "to": "CAT:Group", "mappedGraphSource": { "connector": "mg" } },
+{ "label": "inGroup", "from": "CAT:Product", "to": "CAT:Note",  "mappedGraphSource": { "connector": "mg" } }
+```
+
+The declared ends also constrain a pattern end you leave bare:
+`` MATCH (p:`CAT:Product`)-[:inGroup]->(g) `` reaches the backend as
+`(g:CAT:Group)` with one pair declared and as `WHERE g:CAT:Group OR g:CAT:Note`
+with two, never as an unconstrained `(g)` that would return nodes of labels
+the graph does not declare.
 
 A relational edge adds two more `metaFields` on top of `id`:
 
@@ -408,8 +558,7 @@ instead):
 - Across connectors: the edge must be traversed **in a direction** (`-[:R]->`
   or `<-[:R]-`, not `-[:R]-`); no variable-length traversal, no
   `OPTIONAL MATCH`, one `MATCH` with one path pattern per query; every node in
-  the pattern needs a label, so each side can be routed; aggregating *across*
-  the join (`count()` over both sides) is not supported yet.
+  the pattern needs a label, so each side can be routed.
 - Within one relational connector the edge is pushed down as a single `JOIN`
   on the two key columns, so those limits do not apply: aggregates work, and an
   undirected step is accepted when the two endpoint labels differ. A
@@ -659,3 +808,110 @@ the runtime DDL that builds the same catalog live.
   which graph defines each label. A query with no `USE` routes by the labels and
   declared properties it mentions; anything ambiguous returns an actionable
   error rather than a silent guess.
+
+## Glossary
+
+Every name a schema file can contain, grouped by where it appears.
+
+### Top level
+
+| Name | Meaning |
+|------|---------|
+| `connectors` | The backends to connect to, shared by all graphs. Alias: `catalogs`. |
+| `graphs` | Named graphs, each with its own `vertices` and `edges`. |
+| `vertices` / `edges` | At the top level instead of `graphs`: one implicit graph named `default`. |
+| `_comment` | Free-text note, allowed at the top level and on a graph. |
+
+### Connector (`connectors[]`)
+
+| Name | Meaning |
+|------|---------|
+| `name` | The id sources use to point at this connector. |
+| `type` | Backend kind, for example `postgres` or `memgraph`. |
+| `connection` | How to reach the backend. |
+| `connection.uri` / `path` | Connection string, or a file location for file-backed backends. |
+| `connection.user` / `password` | Credentials. |
+| `connection.database` / `schema` / `catalog` | The **physical** namespace the connection defaults to. |
+| `connection.warehouse` / `role` / `private_key_path` / `token` | Snowflake session context and authentication. |
+| `connection.tenant_id` / `client_id` / `client_secret` | Microsoft Fabric service-principal authentication. |
+| `connection.language` | Default query language (`gql` / `cypher`) for graphs on this connector. |
+| `connection.sslRootCert` / `trustServerCertificate` | TLS trust settings. |
+| `connection.maxInListSize` | Most join-key values sent in one cross-backend `IN` list. |
+
+### Graph (`graphs[]`)
+
+| Name | Meaning |
+|------|---------|
+| `name` | The graph name, as in `USE <name>`. |
+| `vertices` / `edges` | The graph's elements. |
+| `accessMode` | `readOnly` or `readWrite` (default). |
+| `discover` | Native connectors whose labels and relationship types are added automatically. |
+
+### Vertex
+
+| Name | Meaning |
+|------|---------|
+| `label` | The exposed node label; unique within a graph. |
+| `labels` | Several labels; the first identifies the mapping, the rest may be shared. |
+| `mappedTableSource` / `mappedGraphSource` | Where the vertex lives; exactly one is set. |
+| `mappedContentSource` | Optional table in another connector for some of its properties. |
+| `attributes` | The properties read from the vertex's own source. |
+
+### Edge
+
+| Name | Meaning |
+|------|---------|
+| `label` | The relationship type. |
+| `from` / `to` | The **labels** of the source and target vertex. |
+| `mappedTableSource` / `mappedGraphSource` / `mappedJoinSource` | Where the edge lives; exactly one is set. |
+| `attributes` | Edge properties; not allowed with `mappedJoinSource`. |
+
+### Sources
+
+| Name | Meaning |
+|------|---------|
+| `mappedTableSource` | A table in a relational connector. |
+| ↳ `connector` | Which connector. Alias: `catalog`. |
+| ↳ `schema` / `database` | Per-element override of the physical namespace. |
+| ↳ `table` | Table, view or collection. |
+| ↳ `metaFields.id` | **Column(s)** identifying a row; a list for a composite key. |
+| ↳ `metaFields.from` / `to` | Edges: **column(s)** holding the source and target vertex's `id`. |
+| `mappedGraphSource` | A label or relationship type in a native graph connector. |
+| ↳ `connector` | Which connector. Alias: `catalog`. |
+| ↳ `label` | The backend's own name, when it differs from the exposed one. |
+| `mappedContentSource` | Some of a vertex's properties, read from a table in another connector. |
+| ↳ `connector` / `schema` / `table` | Where the content table is. |
+| ↳ `key` | The vertex **property** the content row is found by. |
+| ↳ `keyColumn` | The content-table **column** holding the `key` value. |
+| ↳ `attributes` | Properties read from the content table. |
+| `mappedJoinSource` | An edge that exists where two property values are equal. |
+| ↳ `fromKey` / `toKey` | **Properties** on the `from` and `to` vertex. |
+
+### Attribute (`attributes[]`)
+
+| Name | Meaning |
+|------|---------|
+| `name` | The exposed property name. |
+| `type` | Declared type, default `String`; `Json` makes the column descendable. |
+| `column` | The source column; defaults to `name`. |
+| `path` | Location of the value inside a JSON `column`. |
+
+### Names with more than one meaning
+
+| Name | Where | Means |
+|------|-------|-------|
+| `catalog` | top level | alias for `connectors` |
+| | in a source block | alias for `connector` |
+| | in `connection` | the backend's physical catalog |
+| `from` / `to` | on an edge | vertex **labels** |
+| | in `metaFields` | **columns** |
+| `label` | on an element | the exposed name |
+| | in `mappedGraphSource` | the backend's name |
+| `schema` / `database` | in `connection` | the connection-wide default |
+| | in a source block | an override for that element |
+| `path` | in `connection` | a file location |
+| | on an attribute | a location inside a JSON column |
+
+Key fields name either a **column** or a **property**: `metaFields.*` and
+`keyColumn` take columns of the source table; `key`, `fromKey` and `toKey`
+take property names, which resolve through the element's `attributes`.

@@ -10,7 +10,7 @@ Memgraph and Neo4j (translation is largely passthrough); "SQL backends"
 means PostgreSQL, MySQL and DuckDB. **MongoDB** is neither — it translates to
 aggregation pipelines — so it gets its own column.
 
-SQL Server, SAP HANA, ClickHouse, Apache Iceberg, and Apache Pinot are also supported
+SQL Server, SAP HANA, Amazon Redshift, ClickHouse, Apache Iceberg, and Apache Pinot are also supported
 as connectors but with a narrower verified surface. See each connector's page for the exact list of features each one
 supports.
 
@@ -28,7 +28,7 @@ supports.
 | Multi-label pattern `(n:A&B)`; shared label over several mappings  | ✓               | ✓            | ✗       |
 | Untyped edge `()-[]->(b)` (union over types)                       | ✓               | ✗            | ✗       |
 | `UNION` / `UNION ALL` / `UNION DISTINCT`                           | ✓               | ✓            | ✗       |
-| `INTERSECT` / `EXCEPT`                                             | ✓               | ✓            | ✗       |
+| `INTERSECT` / `EXCEPT`                                             | ✓               | ✓            | ✓       |
 | Quantified path `(){m,n}` (bounded)                                | ✓               | ✓            | ✓       |
 | Quantified path `(){m,}` (unbounded)                               | ✓               | ✗            | ✓       |
 | Shortest-path (`ALL SHORTEST` / `ANY SHORTEST` / `SHORTEST k`)     | ✓               | ✗            | ✗       |
@@ -37,6 +37,10 @@ supports.
 | Connection-less `RETURN 1` / `RETURN 1 + 2` (liveness)             | ✓               | ✓            | ✓       |
 | `IN` list membership `WHERE x IN […]`                              | ✓               | ✓            | ✓       |
 | `STARTS WITH` / `ENDS WITH` / `CONTAINS`                           | ✓               | ✓            | ✓       |
+| Query parameters (`WHERE n.id = $id`, sent by the driver)          | ✓               | ✓            | ✓       |
+| String concatenation (`a \|\| b`, `'x' + a`)                        | ✓               | ✓            | ✓       |
+| `CAST(x AS STRING \| INT \| FLOAT \| BOOLEAN)`                      | ✓               | ✓            | ✗       |
+| `EXISTS { (n)-[:R]->() }` / `EXISTS { MATCH … }` in `WHERE`         | ✓               | ✗            | ✗       |
 | `FOR x IN […]` (UNWIND-style loop)                                 | ✓               | ✗            | ✓       |
 | `collect()` / `collect_list()` (aggregate)                         | ✓               | ✓            | ✓       |
 | `count`, `sum`, `avg`, `min`, `max`                                | ✓               | ✓            | ✓       |
@@ -44,7 +48,7 @@ supports.
 | Arithmetic `+ - * / %`                                             | ✓               | ✓            | ✓       |
 | `CASE WHEN … THEN … ELSE … END`                                    | ✓               | ✓            | ✓       |
 | `COALESCE`, `NULLIF`                                               | ✓               | ✓            | ✓       |
-| Scalar functions in `RETURN` (`upper(x)`, `abs(x)`, …)             | ✓               | ✓            | ✗       |
+| Scalar functions in `RETURN` (`upper(x)`, `abs(x)`, …)             | ✓               | ✓            | partial |
 | Temporals (`date`, `datetime`, `localTime`, …)                     | ✓               | ✗            | ✗       |
 | `INSERT (a {…})`                                                   | ✓               | ✓            | ✓       |
 | `INSERT (a {…}) RETURN a.x` (post-insert projection)               | ✓               | ✓            | ✗       |
@@ -64,12 +68,21 @@ supports.
   separate table (or collection), so an untyped hop would have to union across
   every registered edge mapping. The form is still accepted natively on Cypher
   backends.
+- **`collect()` on SQL backends** runs on PostgreSQL, MySQL, DuckDB,
+  ClickHouse, and Oracle (Oracle without `DISTINCT`). SQL Server, SAP HANA,
+  Amazon Redshift, Fabric, Iceberg (Trino), and Pinot return an actionable
+  error; see each connector's page.
 - **`FOR x IN [...]` (UNWIND-style) on SQL backends** returns an
   actionable error pointing users at running the query on a Cypher
   backend. The form is still accepted natively on Cypher backends.
-- **`DETACH DELETE` on SQL backends** currently executes as a plain `DELETE`;
-  relationship rows are not detached. It deletes a node that has no relationship
-  rows and otherwise surfaces the backend's constraint error; don't rely on it.
+- **`DETACH DELETE` on SQL backends** returns an actionable error: delete the
+  relationships first, or use a Cypher backend. `REMOVE` on SQL backends
+  returns an actionable error as well.
+- **Label-less `MATCH (n)` on SQL backends** returns an actionable error listing
+  the labels the mapping defines; a label is what picks the table.
+- **`EXISTS { … }` on SQL backends** returns an actionable error. Write the
+  check as a traversal (`MATCH (s)-[:R]->(t) … RETURN DISTINCT s`) or as
+  `OPTIONAL MATCH … WHERE t IS NOT NULL`; Cypher backends run it as written.
 - **Path variables on variable-length patterns**:
   `MATCH p = (a){1,3}(b) RETURN p` is not yet supported on SQL backends or
   MongoDB. Drop the `p =` binding (or query a Cypher backend) and `RETURN` the
@@ -84,8 +97,9 @@ supports.
 
 #### MongoDB-specific
 
-- **`UNION` / `UNION ALL` / `INTERSECT` / `EXCEPT`** return an actionable error.
-  Compose the arms client-side, or run the query on another backend.
+- **`UNION` / `UNION ALL`** return an actionable error. Compose the arms
+  client-side, or run the query on another backend. `INTERSECT` / `EXCEPT` work:
+  MemGQL runs each arm and combines the results itself.
 - **Quantified paths are reachability, not path enumeration.** MongoDB runs
   `(){m,n}` on `$graphLookup`, which never revisits an edge document. That
   matches trail semantics (no edge repeats) and terminates on cycles, but it
@@ -95,12 +109,12 @@ supports.
 - **Undirected variable-length** (`(-[:R]-()){m,n}`) returns an actionable error:
   `$graphLookup` follows a single connect-from/connect-to field pair. Give the
   pattern a direction.
-- **Scalar functions inside `RETURN`** (`upper(n.name)`, `abs(-7)`,
-  `char_length(s)`) return an actionable error. MemGQL passes such a call to
-  the other backends as raw query text, which happens to parse in their SQL or
-  Cypher dialect; an aggregation pipeline has no expression string to run one.
-  Aggregates (`count`, `sum`, `avg`, `min`, `max`, `collect`, and their
-  `DISTINCT` forms) are unaffected and run natively.
+- **Scalar functions inside `RETURN`** run where MongoDB has an aggregation
+  operator (`upper`, `lower`, `trim`, `abs`, `ceil`, `floor`, `sqrt`, `size`,
+  `char_length`, `round`, `coalesce`, `nullif`, `CAST`, `substring`); one
+  without an operator (`left`, `right`, `exp`, `power`, …) returns an
+  actionable error naming the supported set. Aggregates run natively. See
+  [MongoDB](/memgraph-zero/memgql/connect/mongodb).
 - **`INSERT … RETURN` drops the projection** and reports the affected count
   instead. Re-read the inserted node with a follow-up `MATCH`.
 - **Every collection in one graph must live in the same database.** MongoDB's
@@ -114,6 +128,38 @@ supports.
   inside the optional pattern is folded into the `$lookup` that binds the
   variable it constrains; one spanning two variables returns an actionable
   error rather than silently dropping rows.
+
+### Functions and reserved words in GQL mode
+
+GQL (the default language) has a fixed set of function names; Cypher's
+`camelCase` spellings are not among them. Use the GQL name, or the `CYPHER`
+prefix for the Cypher one.
+
+| Kind | GQL mode (every backend) | Cypher mode (Memgraph / Neo4j) |
+|------|--------------------------|--------------------------------|
+| Case and trimming | `UPPER`, `LOWER`, `TRIM`, `BTRIM`, `LTRIM`, `RTRIM`, `LEFT`, `RIGHT` | `toUpper`, `toLower`, `trim`, `lTrim`, `rTrim`, `left`, `right` |
+| Length | `CHAR_LENGTH`, `SIZE`, `CARDINALITY` | `size` |
+| Numeric | `ABS`, `MOD`, `FLOOR`, `CEIL`, `SQRT`, `EXP`, `LN`, `LOG10`, `LOG(base, x)`, `POWER`, `SIN`, `COS`, `TAN`, `ASIN`, `ACOS`, `ATAN` | the same, lower-case; `^` for `POWER` |
+| Conversion | `CAST(x AS STRING)`, `CAST(x AS INT)`, `CAST(x AS FLOAT)`, `CAST(x AS BOOLEAN)` | `toString`, `toInteger`, `toFloat`, `toBoolean` |
+| Null handling | `COALESCE`, `NULLIF`, `IS [NOT] NULL` | the same |
+| Strings | `\|\|` and `+` concatenate; `STARTS WITH`, `ENDS WITH`, `CONTAINS` | `+`; `STARTS WITH`, `ENDS WITH`, `CONTAINS`, `=~` |
+| Aggregates | `count`, `sum`, `avg`, `min`, `max`, `collect`, each with `DISTINCT` | the same |
+| Elements | — | `labels(n)`, `keys(n)`, `type(r)`, `id(n)`, `properties(n)` |
+
+On SQL backends `SIZE(x)` is the string length (`CHAR_LENGTH`), and a `+`
+concatenates only when one side is a string literal or a string function; a
+`+` between two columns stays numeric. A function GQL does not know fails to
+parse (`mismatched input '('`); `toUpper(p.sku)` becomes `UPPER(p.sku)`, or
+`CYPHER MATCH … RETURN toUpper(p.sku)`.
+
+Some words that are ordinary labels or properties elsewhere are **reserved in
+GQL** and must be backtick-quoted when used as a label, relationship type,
+property or alias: among the ones that come up in practice are `Product`,
+`Project`, `path`, `reference`, `size`, `unit`, `value` and `year`. A parse
+error on such a word says so and shows the quoted form
+(`` MATCH (p:`Product`) ``). A quoted name may contain a colon: `` :`CAT:Product` ``
+is the [multi-label native vertex](/memgraph-zero/memgql/schema-file#vertices)
+spelling.
 
 ## Query Languages
 
@@ -176,12 +222,17 @@ ADD CONNECTOR <name> TYPE <type>
     [WAREHOUSE '<wh>'] [ROLE '<role>']
     [PRIVATE_KEY_PATH '<path>'] [TOKEN '<token>']
     [TENANT_ID '<tid>'] [CLIENT_ID '<cid>'] [CLIENT_SECRET '<secret>']
-    [LANGUAGE '<gql|cypher>'];
+    [LANGUAGE '<gql|cypher>']
+    [OPTIONS '{"max_in_list_size": <n>}'];
 DROP CONNECTOR <name>;
 PING <connector>;
 
 -- Session
 SET SESSION LANGUAGE GQL|CYPHER [<version>];  -- language for bare queries on this session
+SESSION SET GRAPH <graph>;        -- soft default graph for this session
+SESSION RESET GRAPH;
+SESSION SET CONNECTION <name>;    -- fallback connection for queries nothing else routes
+SESSION RESET CONNECTION;
 
 -- Graphs (mappings over connectors)
 CREATE GRAPH <name> FROM '<json>';        -- inline { "vertices": …, "edges": … } body
@@ -202,7 +253,7 @@ apply depends on the type:
 | Option                                      | Read by                                                              |
 |---------------------------------------------|----------------------------------------------------------------------|
 | `GRAPH '<db>'`                              | Memgraph, Neo4j — selects the Cypher database (it is not a mapping)  |
-| `DATABASE '<db>'`                           | PostgreSQL, MySQL, SQL Server, Oracle (service name), ClickHouse, MongoDB, Snowflake, Fabric (warehouse/lakehouse item), SAP HANA (tenant database of an MDC system) |
+| `DATABASE '<db>'`                           | PostgreSQL, MySQL, SQL Server, Oracle (service name), ClickHouse, MongoDB, Snowflake, Fabric (warehouse/lakehouse item), SAP HANA (tenant database of an MDC system), Amazon Redshift |
 | `CATALOG '<catalog>'`                       | Iceberg (Trino catalog), Iceberg Direct (warehouse)                 |
 | `SCHEMA '<schema>'`                         | Iceberg, Snowflake, Fabric (default `dbo`), SAP HANA (defaults to the connection user's own schema); MongoDB accepts it as a fallback for `DATABASE` |
 | `WAREHOUSE` / `ROLE`                        | Snowflake session settings                                           |
@@ -210,10 +261,25 @@ apply depends on the type:
 | `TENANT_ID` / `CLIENT_ID` / `CLIENT_SECRET` | Fabric service-principal auth (Microsoft Entra ID)     |
 | `PATH '<path>'`                             | DuckDB (database file; `:memory:` by default)                        |
 | `LANGUAGE '<lang>'`                         | Any connector — default [query language](/memgraph-zero/memgql/reference#query-languages) (`gql` / `cypher`) for `USE <graph>` queries whose graph maps to it |
+| `OPTIONS '{"max_in_list_size": <n>}'`       | Any connector — most join-key values MemGQL sends it in one [piped](/memgraph-zero/memgql/multiple-graphs#piping-fetching-only-what-joins) cross-backend join (default 10 000; Oracle and Pinot 1 000, Snowflake 16 384, ClickHouse 50 000). Above it the join runs unpiped. Schema file key: `maxInListSize` |
 
 An option a connector doesn't read is ignored, and one that is omitted falls
-back to that connector's environment variable. Re-adding a connector replaces
-its config; `DROP CONNECTOR` is refused while a graph still references it.
+back to that connector's environment variable. `DROP CONNECTOR` is refused
+while a graph still references it.
+
+Running `ADD CONNECTOR` again for an existing name is safe: an identical
+declaration replies `Connector '<name>' already exists (unchanged)`, and a
+changed one replaces the config, reconnects, and replies
+`Connector '<name>' replaced (changed: uri, password)`, naming the changed
+options but never their values. A new name replies `Connector '<name>' added`.
+
+`SESSION SET GRAPH <graph>` gives the session a **soft default graph**. An
+explicit `USE` always wins and a query whose labels match exactly one graph
+still routes there; the default graph breaks ties when a label exists in
+several graphs, and runs queries with no label to route by.
+`SESSION SET CONNECTION <name>` names the connection such a query falls back
+to when no default graph is set (`SHOW CONNECTIONS` marks it with `*`). Both last until
+the matching `SESSION RESET` or the end of the Bolt session.
 
 `CREATE GRAPH … FROM` registers a graph from a `{ "vertices": …, "edges": … }`
 body and auto-connects the connectors it references. The mapping format is
@@ -251,7 +317,7 @@ SHOW MAPPINGS;                   -- per-graph mappings
 SHOW SCHEMA [FOR <graph>] [AS GRAPH];  -- unified routing index: labels, rel-types, properties;
                                  --   AS GRAPH returns it as Bolt nodes and relationships
 EXPORT SCHEMA [TO '<path>'];     -- merged catalog as canonical schema JSON (round-trippable)
-REFRESH SCHEMA;                  -- re-introspect live Cypher connections (Memgraph/Neo4j)
+REFRESH SCHEMA;                  -- re-introspect live Cypher connections (Memgraph/Neo4j) and re-run schema discovery
 
 -- Source onboarding (see below)
 DESCRIBE CONNECTOR <name>;       -- the source's physical catalog: tables, columns, types, keys
@@ -297,7 +363,7 @@ Writing a [mapping](/memgraph-zero/memgql/schema-file) shouldn't require
 out-of-band database access. `DESCRIBE CONNECTOR` reads a source's physical
 catalog **live through the connector** — tables, columns, types, nullability,
 primary keys, and single-column foreign keys as `→ table.column`
-(PostgreSQL and SAP HANA; a graph backend answers via `SHOW SCHEMA` /
+(PostgreSQL, SAP HANA and Amazon Redshift; a graph backend answers via `SHOW SCHEMA` /
 `REFRESH SCHEMA` instead and says so):
 
 ```
@@ -522,6 +588,7 @@ refused with a `Compute limit reached` error; the client can retry.
 | `pinot`          | GQL -> SQL                  | Apache Pinot                     |
 | `mongodb`        | GQL -> aggregation pipeline | MongoDB 5.0+                     |
 | `hana`           | GQL -> SQL                  | SAP HANA 2.0 SPS05+, HANA Cloud, HANA Express |
+| `redshift`       | GQL -> SQL                  | Amazon Redshift (provisioned and Serverless) |
 | `multi`          | Per-connector               | Multiple backends simultaneously |
 
 
@@ -652,6 +719,21 @@ JDBC, and no SAP HANA client installation is required at build or runtime.
 There is no `CATALOG` level for HANA: the tenant database is chosen at login,
 not spelled into a qualified table name, so a HANA table reference is at most
 `schema.table`. See the [SAP HANA connector page](/memgraph-zero/memgql/connect/hana).
+
+#### Amazon Redshift (`redshift`)
+
+| Variable            | Default                  | Description                                                    |
+|---------------------|--------------------------|----------------------------------------------------------------|
+| `REDSHIFT_URI`      | _(required)_             | `redshift://<user>:<password>@<endpoint>:5439/<db>` (password) or `redshift+iam://<endpoint>:5439/<db>` (IAM temporary credentials); `jdbc:redshift://` URLs are accepted |
+| `REDSHIFT_USER`     | _(from the URI)_         | Database user, when not written into the URI                   |
+| `REDSHIFT_PASSWORD` | _(from the URI)_         | Password, when not written into the URI (password auth only)   |
+| `REDSHIFT_DATABASE` | `dev`                    | Database, when not written into the URI                        |
+| `MAPPING_FILE`      | _(required)_             | Path to JSON mapping file (same format as Postgres)            |
+
+IAM auth uses the standard AWS credential chain, so the usual `AWS_*`
+variables (or an instance or task role) apply. TLS is required unless the URI
+says `?sslmode=disable`. See the
+[Amazon Redshift connector page](/memgraph-zero/memgql/connect/redshift).
 
 #### Iceberg (`iceberg`)
 
