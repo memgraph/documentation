@@ -68,34 +68,37 @@ additional best practices tailored for performance, stability, and scalability i
 
 ## Hardware sizing
 
-If your GraphRAG use case involves **vector embeddings**, it’s important to account for their **impact on memory usage**. Currently, 
-Memgraph stores embeddings in two places:
+If your GraphRAG use case involves **vector embeddings**, it’s important to account for their **impact on memory usage**.
+Memgraph stores each indexed vector **once**, in the vector index (USearch). The property store keeps only a
+reference to it, for both [node and edge vector indexes](/querying/vector-search). The vector is still readable as a
+regular property through Cypher.
 
-1. In its **proprietary in-memory property storage** using 8 bytes per float.
-2. In the **vector index (usearch)** using 4 bytes per float (float32).
-
-This results in a total **12-byte overhead per float value** when storing embeddings.
-
-To estimate the additional memory required for embeddings, use the following formula:
+To estimate the memory needed for the vectors themselves, use the following formula:
 
 ```
-number of nodes with embeddings × embedding dimension × 12B
+number of indexed nodes or edges × embedding dimension × bytes per component
 ```
 
-This will give you a more accurate view of your memory needs when planning hardware resources.
+The bytes per component depend on the [scalar kind](/querying/vector-search#scalar-kind) of the index: 4 bytes for
+the default `f32`, 2 bytes for `f16`. For example, one million 768-dimensional `f32` vectors take about 3.1 GB.
 
-### Upcoming optimizations
+On top of that, plan for:
 
-Memgraph is actively working on two short-term optimizations to reduce this memory overhead:
+- **Index structure**: the graph USearch uses for approximate nearest-neighbor search.
+- **Reserved capacity**: memory follows the index `capacity` and grows by the `resize_coefficient`. Deleting nodes or
+  removing vector properties does not free it, but new vectors reuse it. It is released only when the index is dropped.
+- **Overlapping indexes**: a node or edge that matches several vector indexes is stored in each of them.
+- **Dropping an index**: Memgraph moves the vectors back into the property store at the precision set by
+  `--storage-floating-point-resolution-bits` (64-bit by default), so the property store grows. See
+  [Drop vector index](/querying/vector-search#drop-vector-index).
 
-- **Reference-based indexing**: Embeddings will be stored only in the vector index, with the property storage holding just a reference. 
-  Since embeddings are used exclusively for vector search, this eliminates duplication.
-  
-- **Support for float16 in usearch**: Users will be able to store embeddings as 2-byte floats (`float16`), commonly used in neural networks. 
-  This reduces memory usage significantly while maintaining accuracy within a **\<1% margin**, making it a strong tradeoff for most applications.
+To see how much memory your vector indexes actually use, check `vector_index_memory_tracked` in
+`SHOW STORAGE INFO`. See [Monitor vector index memory](/querying/vector-search#monitor-vector-index-memory),
+which also explains how vector index memory counts against the `ai_platform` license limit.
 
 ### Best practices
 
+- **Use a smaller scalar kind**: `f16` halves the memory of `f32` vectors, usually with little loss in accuracy.
 - **Choose the right embedding dimension**:
   While models like OpenAI use 1536 or 3072 dimensions, **lower-dimensional vectors like 512 or 768** often result in only a 
   **5–6% drop in accuracy** and drastically reduce memory consumption.
