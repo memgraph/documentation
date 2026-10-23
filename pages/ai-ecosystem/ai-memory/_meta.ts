@@ -3,8 +3,8 @@ export default {
     "recall-and-memory": "Recall and memory",
     "graph": "The graph",
     "privacy": "Privacy",
-    "configuration": "Configuration",
     "agents": "Supported agents",
     "custom-agents": "Custom agents",
-    "shared-spaces": "Shared spaces"
+    "shared-spaces": "Shared spaces",
+    "configuration": "Configuration"
 }
