@@ -10,6 +10,7 @@ import { Callout } from 'nextra/components'
 Context Graph keeps its settings in one configuration file. Setup writes it,
 and the `config` command changes it. This page also covers how to
 [use your own Memgraph](#use-your-own-memgraph),
+[run setup again](#run-setup-again) to change your choices,
 [choose what is recorded](#choose-what-is-recorded), and
 [update](#update-context-graph) or [uninstall](#uninstall-context-graph)
 Context Graph.
@@ -53,13 +54,13 @@ so a typo doesn't break recording later. It takes these keys:
 | `capture.max_chars` | `100000` | The most characters kept from one text field, such as a tool's output. `0` keeps everything. See [Shorten long text](/ai-ecosystem/ai-memory/privacy#shorten-long-text). |
 | `capture.exclude_tools` | None | Tools whose calls and results aren't recorded, by name or glob. See [Exclude tools and projects](/ai-ecosystem/ai-memory/privacy#exclude-tools-and-projects). |
 | `capture.exclude_projects` | None | Directories in which nothing is recorded, by path or glob |
-| `memory.backend` | `native` | `context-graph` when Context Graph is the agents' [memory](/ai-ecosystem/ai-memory/recall-and-memory#use-context-graph-as-your-agents-memory), `native` when they keep their own. Set it with setup's `--memory-backend`, which also changes the agents' settings. |
-| `session_start.resume` | `true` | Whether a session starts with the [note on where you left off](/ai-ecosystem/ai-memory/recall-and-memory#where-you-left-off) |
-| `recall.*` | See [Tune recall](/ai-ecosystem/ai-memory/recall-and-memory#tune-recall) | The embedding model for recall, which searches run, and how many results each returns |
-| `reconcile.auto_reconcile` | `false` | Whether the [knowledge graph](/ai-ecosystem/ai-memory/knowledge-graph) is built after each session |
+| `memory.backend` | `native` | `context-graph` when Context Graph is the agents' [memory](/ai-ecosystem/ai-memory/recall-and-memory#memory), `native` when they keep their own. Set it with setup's `--memory-backend`, which also changes the agents' settings. |
+| `session_start.resume` | `true` | Whether a session starts with the [note on where you left off](/ai-ecosystem/ai-memory/recall-and-memory#recall) |
+| `recall.*` | See [Recall configuration](#recall-configuration) | The embedding model for recall, which searches run, and how many results each returns |
+| `reconcile.auto_reconcile` | `false` | Whether the [knowledge graph](/ai-ecosystem/ai-memory/graph#add-a-knowledge-graph) is built after each session |
 | `ontology.path` | The default ontology | An ontology file for the knowledge graph |
 | `ontology.derive` | `extend` | Whether Context Graph adds types to your ontology: `extend` or `off` |
-| `extraction.*` | See [Tune extraction](/ai-ecosystem/ai-memory/knowledge-graph#tune-extraction) | How sessions are read into the knowledge graph |
+| `extraction.*` | See [Extraction configuration](#extraction-configuration) | How sessions are read into the knowledge graph |
 | `llm.anthropic_api_key` | None | An Anthropic API key, used only to learn your ontology. Used instead of an OpenAI key when both are set. |
 | `llm.openai_api_key` | None | An OpenAI API key, used only to learn your ontology |
 | `llm.derive_model` | `claude-sonnet-5-5` with Anthropic, `gpt-5` with OpenAI | The model that learns your ontology |
@@ -73,6 +74,56 @@ them yourself. See [Redact secrets](/ai-ecosystem/ai-memory/privacy#redact-secre
 The file holds your Memgraph password and API keys in plain text. Setup
 creates it with permissions `0600`; keep it that way.
 </Callout>
+
+### Recall configuration
+
+The `recall.*` keys set which searches
+[recall](/ai-ecosystem/ai-memory/recall-and-memory#what-recall-returns) runs
+and how many results each returns:
+
+```bash
+memgraph-context-graph config set recall.turns_k 12
+memgraph-context-graph config set recall.lanes "memories, turns, text"
+```
+
+| Key | Default | What it sets |
+| --- | --- | --- |
+| `recall.embedding_model` | `BAAI/bge-small-en-v1.5` | The model Memgraph computes embeddings with |
+| `recall.lanes` | All six | The searches to run, as a comma-separated subset of `memories`, `turns`, `text`, `entities`, `facts` and `user_facts` |
+| `recall.memories_k` | `5` | Memory files returned |
+| `recall.turns_k` | `8` | Messages found by meaning |
+| `recall.text_k` | `8` | Messages found by words |
+| `recall.entities_k` | `15` | Entities matched |
+| `recall.edges_per_entity` | `6` | Facts read from each matched entity |
+| `recall.facts_k` | `15` | Facts matched |
+| `recall.fact_turns_k` | `8` | Messages added for the matched facts |
+| `recall.user_fact_types` | `2` | Fact types gathered in full, for questions that count or list things |
+| `recall.user_facts_k` | `30` | Facts returned for those types |
+| `recall.turn_chars` | `1500` | Characters shown per message |
+| `recall.query_instruction` | Depends on the model | Text added before the question when it's embedded. The English `bge` models get their retrieval instruction; other models get none |
+
+When you change `recall.embedding_model`, Context Graph computes the
+embeddings again with the new model, so embeddings from two models are never
+mixed. Memgraph downloads the model on first use.
+
+### Extraction configuration
+
+The `extraction.*` keys set how the
+[knowledge graph](/ai-ecosystem/ai-memory/graph#add-a-knowledge-graph) reads
+your sessions. Reconciliation and ontology learning use the same settings, so
+a session is always read the same way.
+
+```bash
+memgraph-context-graph config set extraction.entity_threshold 0.3
+```
+
+| Key | Default | What it sets |
+| --- | --- | --- |
+| `extraction.model` | `fastino/gliner2.5-base-v1` | The GLiNER2 model |
+| `extraction.entity_threshold` | GLiNER2's default | The lowest confidence, from 0 to 1, at which an entity is kept |
+| `extraction.relation_threshold` | GLiNER2's default | The lowest confidence, from 0 to 1, at which a fact is kept |
+| `extraction.chunk_size` | GLiNER2's default | Words per chunk |
+| `extraction.chunk_overlap` | GLiNER2's default | Words shared by neighboring chunks |
 
 ## Use your own Memgraph
 
@@ -103,6 +154,33 @@ labels and properties with `SHOW SCHEMA INFO`, start it with
 Each user on a shared Memgraph should have their own `identity.user_id`. On a
 shared Memgraph with Memgraph Enterprise, [shared spaces](/ai-ecosystem/ai-memory/shared-spaces)
 give each user a database of their own.
+
+## Run setup again
+
+Every choice in setup is also a flag of `memgraph-context-graph setup`. To
+change a choice, run setup again with its flag:
+
+```bash
+memgraph-context-graph setup codex --memgraph-url bolt://memgraph.example.com:7687
+```
+
+| Flag | What it sets |
+| --- | --- |
+| `RUNTIME ...` | The [runtime names](/ai-ecosystem/ai-memory/agents) of the agents to connect. The default is every agent on your `PATH`. |
+| `--project-dir DIR` | A project to connect the per-project agents in. Repeat it for more projects. The default is the current directory. |
+| `--memgraph-url URL` | The Memgraph to use, instead of setup's own container. |
+| `--user-id NAME` | Your user ID in the graph. The default is the configured one, then your git `user.name`. |
+| `--memory-backend BACKEND` | `context-graph` makes Context Graph the agents' memory; `native` gives memory back to the agent. |
+| `--memgraph-container NAME` | Setup's own container, which it finds or starts. The default is `context-graph-memgraph`. |
+| `--no-viewer` | Don't install the terminal viewer. |
+| `--plan` | Print what setup would do and change nothing. |
+| `--no-tui` | Print plain output, even on a terminal. |
+
+For example, to connect the per-project agents in more projects:
+
+```bash
+memgraph-context-graph setup cursor --project-dir ~/work/billing --project-dir ~/work/crawler
+```
 
 ## Choose what is recorded
 
