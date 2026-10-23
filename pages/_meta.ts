@@ -1,22 +1,25 @@
 export default {
   "index": "Home",
   "getting-started": "Getting started",
+  "ai-ecosystem": "AI applications",
   "client-libraries": "Client libraries",
-  "ai-ecosystem": "AI ecosystem",
-  "use-cases": "Use cases",
   "fundamentals": "Fundamentals",
   "data-modeling": "Data modeling",
   "data-migration": "Data migration",
   "querying": "Querying",
   "advanced-algorithms": "Advanced algorithms",
   "custom-query-modules": "Custom query modules",
-  "memgraph-lab": "Memgraph Lab",
   "database-management": "Database management",
   "deployment": "Deployment",
-  "clustering": "Clustering",
-  "data-streams": "Data streams",
-  "memgraph-zero": "Memgraph Zero",
+  "memgraph-lab": "Memgraph Lab",
   "help-center": "Help center",
   "release-notes": "Release notes",
-  "coming-soon": "What's coming soon to Memgraph?"
+  "--": {
+    type: "separator",
+  },
+  "memgraph-zero": "Memgraph Zero",
+  "---": {
+    type: "separator",
+  },
+  "coming-soon": "What's coming soon to Memgraph?",
 }

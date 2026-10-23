@@ -1,6 +1,6 @@
 // Setup for each AI client in the "Connect AI" dialog in the navbar.
 // When a client changes its config format, update its entry here and in
-// pages/ai-ecosystem/mcp.mdx (MCP server for docs).
+// pages/getting-started/coding-with-ai/docs-mcp.mdx.
 
 export const DOCS_MCP_URL = "https://mcp-docs.memgraph.com";
 const NAME = "memgraph-docs";

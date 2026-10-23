@@ -4,6 +4,7 @@ export default {
   "parquet": "PARQUET",
   "json": "JSON",
   "cypherl": "CYPHERL",
+  "data-streams": "Data streams",
   "migrate-from-neo4j": "Migrate from Neo4j",
   "migrate-from-rdbms": "Migrate from RDBMS using CSV files",
   "migrate-from-rdbms-directly": "Migrate from RDBMS using MAGE modules",

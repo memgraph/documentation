@@ -1,0 +1,138 @@
+---
+title: LightRAG
+description: Use Memgraph as the graph storage for LightRAG, a retrieval-augmented generation framework that combines a knowledge graph with LLMs.
+---
+
+import GitHub from '/components/icons/GitHub'
+import { SocialCards } from '/components/social-card/SocialCards'
+import { SocialCard } from '/components/social-card/SocialCard'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
+
+# LightRAG
+
+<SocialCards>
+  <SocialCard
+    icon={<GitHub />}
+    title="LightRAG integration"
+    href="https://github.com/HKUDS/LightRAG"
+    is_external={true}
+  />
+</SocialCards>
+
+LightRAG is a retrieval-augmented generation (RAG) framework that extracts
+entities and relationships from your documents into a knowledge graph and
+retrieves from it to answer questions. It supports [Memgraph as its graph
+storage](https://github.com/HKUDS/LightRAG/blob/main/lightrag/kg/memgraph_impl.py).
+[Unstructured2Graph](/ai-ecosystem/knowledge-graph-creation/unstructured2graph-agent)
+uses LightRAG to build knowledge graphs in Memgraph.
+
+## Installation
+
+Install LightRAG:
+
+```bash
+pip install lightrag-hku
+```
+
+## Environment setup
+
+Start Memgraph, for example in Docker:
+
+```bash
+docker run -p 7687:7687 memgraph/memgraph:latest
+```
+
+Set the connection details. These are the defaults for a local Memgraph
+without authentication:
+
+```bash
+export MEMGRAPH_URI="bolt://localhost:7687"
+export MEMGRAPH_USERNAME=""
+export MEMGRAPH_PASSWORD=""
+export MEMGRAPH_DATABASE="memgraph"
+```
+
+The example uses OpenAI, so also set `OPENAI_API_KEY`.
+
+## Basic usage
+
+This script inserts text, builds the graph in Memgraph and runs a hybrid
+query. `graph_storage="MemgraphStorage"` tells LightRAG to store the graph in
+Memgraph:
+
+```python
+import os
+import asyncio
+from lightrag import LightRAG, QueryParam
+from lightrag.llm.openai import gpt_4o_mini_complete, gpt_4o_complete, openai_embed
+from lightrag.kg.shared_storage import initialize_pipeline_status
+from lightrag.utils import setup_logger
+
+setup_logger("lightrag", level="INFO")
+
+WORKING_DIR = "./rag_storage"
+if not os.path.exists(WORKING_DIR):
+    os.mkdir(WORKING_DIR)
+
+async def initialize_rag():
+    rag = LightRAG(
+        working_dir=WORKING_DIR,
+        embedding_func=openai_embed,
+        llm_model_func=gpt_4o_mini_complete,
+        graph_storage="MemgraphStorage",  # store the graph in Memgraph
+    )
+    # Both initialization calls are required
+    await rag.initialize_storages()
+    await initialize_pipeline_status()
+    return rag
+
+async def main():
+    rag = None
+    try:
+        rag = await initialize_rag()
+        rag.insert("Your text")
+
+        print(
+          await rag.query(
+              "What are the top themes in this story?",
+              param=QueryParam(mode="hybrid")
+          )
+        )
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        if rag:
+            await rag.finalize_storages()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Configuration
+
+**Workspace isolation:** to keep the data of several LightRAG instances
+apart, set the `MEMGRAPH_WORKSPACE` environment variable:
+
+```bash
+export MEMGRAPH_WORKSPACE="project_a"
+```
+
+**Configuration file:** instead of environment variables, you can set the
+connection in a `config.ini` file:
+
+```ini
+[memgraph]
+uri = bolt://localhost:7687
+username =
+password =
+database = memgraph
+```
+
+For more, see the [LightRAG integration in the Memgraph AI
+Toolkit](https://github.com/memgraph/ai-toolkit/tree/main/integrations/lightrag-memgraph),
+the [Jupyter notebook
+example](https://github.com/memgraph/ai-demos/blob/main/integrations/lightrag/lightrag_memgraph_demo.ipynb)
+and the [LightRAG repository](https://github.com/HKUDS/LightRAG).
+
+<CommunityLinks/>

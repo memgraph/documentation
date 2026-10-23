@@ -1,0 +1,139 @@
+---
+title: Shared spaces
+description: Run Context Graph for a team on one Memgraph Enterprise instance, with a personal space for each user and shared spaces for team memory.
+---
+
+import { Callout } from 'nextra/components'
+
+# Shared spaces <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+Shared spaces let a team run Context Graph on one Memgraph. Each user gets a
+**personal space**, a database only they can read, and teams get **shared
+spaces**, databases whose members read and write the same memory files. An
+agent can save a decision to a shared space, and every member's agents recall
+it.
+
+Shared spaces need [Memgraph Enterprise](/database-management/enabling-memgraph-enterprise).
+Memgraph enforces the isolation between spaces with
+[multi-tenancy](/database-management/multi-tenancy),
+[role-based access control](/database-management/authentication-and-authorization/role-based-access-control)
+and [label-based access control](/database-management/authentication-and-authorization/role-based-access-control#label-based-access-control).
+Context Graph itself doesn't filter what a user can read.
+
+Without shared spaces, Context Graph runs as the **Community** edition: one
+user and one database. Nothing changes for Community users when the shared
+spaces package is installed.
+
+## How spaces work
+
+- **Identity** is your Memgraph login. It replaces `identity.user_id`.
+- **Your personal space** is the database `u_LOGIN`. It holds your sessions,
+  memories and knowledge graph, and only you can read it.
+- **A shared space** is the database `space_NAME`. Members can read
+  everything in it, and write only memory files.
+- **Shared memory files** appear to the agent under `/memories/spaces/NAME/`.
+  The agent writes there only when you want something shared. At the start of
+  a session, each shared space adds up to 20 files to the memory index.
+- **Recall** searches your personal space and every shared space you can read,
+  in parallel. If a space doesn't answer within 10 seconds, recall returns the
+  other results and names the space it's missing.
+
+Your own sessions stay in your personal space. A shared space holds only the
+memory files members put there, and the knowledge graph built from them.
+
+## Set up spaces as an admin
+
+Declare the members and spaces in a spec file, such as `spaces.toml`:
+
+```toml
+members = ["alice", "bob"]
+personal_memory_limit_mb = 2048
+
+[spaces.payments]
+members = ["alice", "bob"]
+memory_limit_mb = 4096
+```
+
+- **`members`** at the top lists every user who gets a personal space.
+- **`personal_memory_limit_mb`** caps each personal space's memory, with a
+  [tenant profile](/database-management/tenant-profiles).
+- **`[spaces.NAME]`** declares a shared space, its members and its memory cap.
+  `labels` and `edge_types` set what members may write; the default is memory
+  files only.
+
+Install the `context-graph-spaces` package and apply the spec as a Memgraph
+admin user:
+
+```bash
+pip install context-graph-spaces
+export MEMGRAPH_URL=bolt://memgraph.example.com:7687
+export MEMGRAPH_USER=ADMIN_USER
+export MEMGRAPH_PASSWORD=ADMIN_PASSWORD
+context-graph-spaces plan spaces.toml
+context-graph-spaces apply spaces.toml
+```
+
+`plan` prints what `apply` would change. `apply` creates what's missing and
+prints one-time setup lines for new users, including the password of the
+`cg_service` user. Running it again changes nothing.
+
+`apply` creates and maintains:
+
+| Object | Name | Access |
+| --- | --- | --- |
+| Personal database | `u_LOGIN` | Its owner only |
+| Shared database | `space_NAME` | Members read everything and write the spec's labels |
+| Roles | `cg_u_LOGIN_HASH`, `space_NAME_member_HASH`, `cg_worker_HASH` | Named after what they grant |
+| Service user | `cg_service` | Writes the knowledge graph in shared spaces |
+| Tenant profiles | `cg_MBmb` | The memory caps from the spec |
+
+Removing a user from the spec revokes their access, and removing a space
+revokes access to it. `apply` drops users and databases only with `--prune`,
+and only touches objects whose names start with `u_`, `space_` or `cg_`.
+
+### Run the shared space worker
+
+Members can only write memory files to a shared space. The `cg_service` user
+builds the knowledge graph there, and the embeddings recall uses. Run the
+worker next to `apply`, with the password `apply` printed:
+
+```bash
+export CG_SERVICE_PASSWORD=SERVICE_PASSWORD
+context-graph-spaces reconcile spaces.toml --watch
+```
+
+Every 30 seconds, for each shared space, the worker removes what deleted
+files left behind and extracts the changed memory files. It uses no LLM.
+Personal spaces are extracted on each user's machine, as in the Community
+edition.
+
+<Callout type="info">
+Without the worker, shared memory files are still stored and read, but recall
+can't find them by meaning or through the knowledge graph.
+</Callout>
+
+## Join as a user
+
+Each user runs the `join` command with the Memgraph URL and their login:
+
+```bash
+memgraph-context-graph join bolt://memgraph.example.com:7687 alice
+```
+
+`join` prompts for the password, installs the `context-graph-spaces` package
+if it's missing, and sets `edition = "enterprise"`, the URL, the login and the
+password in the [configuration file](/ai-ecosystem/ai-memory/configuration#configuration-file).
+It then checks the login and prints your personal space and the shared spaces
+you can read:
+
+```plaintext copy=false
+Wrote /home/alice/.config/context-graph/config.toml: edition = enterprise, login 'alice'.
+Personal space: u_alice. Shared spaces: payments.
+```
+
+If this machine isn't set up yet, run
+[setup](/ai-ecosystem/ai-memory/get-started) next to connect
+your agents.
+
+In the [terminal viewer](/ai-ecosystem/ai-memory/graph#browse-the-graph),
+press `w` to switch to the next space you can read.

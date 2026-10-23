@@ -1,0 +1,178 @@
+---
+title: Privacy
+description: See what Context Graph records from your agent sessions and where it goes, keep secrets and private text out of the graph, and delete sessions.
+---
+
+# Privacy
+
+Context Graph records your agent sessions in full. This page covers
+[where they are stored](#where-sessions-are-stored), how to
+[keep text out of the graph](#keep-text-out-of-the-graph) and how to
+[forget sessions](#forget-sessions).
+
+## Where sessions are stored
+
+Context Graph stores your agent sessions in the Memgraph in your
+[configuration](/ai-ecosystem/ai-memory/configuration#configuration-file). By
+default, that's the Memgraph setup started for you in Docker, in a container
+named `context-graph-memgraph`. It runs on your machine, and only your machine
+can connect to it.
+
+Recorded sessions are sent nowhere else, with one exception. With an
+Anthropic or OpenAI API key,
+[ontology learning](/ai-ecosystem/ai-memory/graph#learn-the-ontology-from-your-sessions)
+sends that provider the full text of up to 64 recent sessions per run,
+including the agent's replies and tool input and output. Without a key, it
+doesn't run.
+
+The hooks use only the keys in the configuration file. A `sessions-graph`
+command you run from a shell also uses `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY` from your environment.
+
+## Keep text out of the graph
+
+The hooks that setup installs in each agent record prompts, replies, and tool
+input and output in full, so a session can contain an API key from a `.env`
+file or text you don't want stored. Before anything reaches Memgraph, Context Graph removes what you mark
+as private, redacts secrets, and shortens long text. What it removes is never
+stored.
+
+These rules apply to everything the hooks record, for every agent. They don't
+apply to memory files the agent writes with the
+[`memory` tool](/ai-ecosystem/ai-memory/recall-and-memory#how-the-agent-uses-memory),
+which are stored as written.
+
+### Mark text as private
+
+Text between `<private>` and `</private>` is removed from prompts, replies and
+tool input and output:
+
+```plaintext
+Connect to the staging database. <private>The password is in the team vault under "staging-db".</private>
+```
+
+Context Graph stores only "Connect to the staging database.". The agent still
+gets the whole prompt. If a prompt has nothing outside its private block, it
+isn't stored at all. An unclosed `<private>` hides the rest of the text.
+
+### Redact secrets
+
+Context Graph replaces known kinds of secrets with `[REDACTED:NAME]`, where
+`NAME` says what was removed:
+
+| Name | What it matches |
+| --- | --- |
+| `private_key` | PEM private key blocks |
+| `aws_access_key` | AWS access key IDs |
+| `github_token` | GitHub tokens and fine-grained personal access tokens |
+| `anthropic_key` | Anthropic API keys |
+| `openai_key` | OpenAI API keys |
+| `slack_token` | Slack tokens |
+| `stripe_key` | Stripe secret and restricted keys |
+| `google_api_key` | Google API keys |
+| `jwt` | JSON Web Tokens |
+| `url_password` | Passwords in URLs, such as `postgres://user:PASSWORD@host` |
+| `config_secret` | The Memgraph password, API keys and GitHub token in the configuration file, if they're at least 6 characters long |
+
+To redact your own patterns, add a `[redact]` section to the configuration
+file. Each key is the name in the replacement, and each value is a
+[Python regular expression](https://docs.python.org/3/library/re.html#regular-expression-syntax)
+in single quotes:
+
+```toml
+[redact]
+ticket = 'ACME-[0-9]+'
+customer_email = '[A-Za-z0-9._%+-]+@acme\.com'
+```
+
+An invalid pattern is ignored and reported as a configuration warning, and
+recording continues.
+
+Redaction matches known shapes of secrets, so it doesn't catch every secret.
+Use `<private>` or `capture.exclude_projects` for anything it might miss.
+
+To turn redaction off, so that only `<private>` blocks are removed:
+
+```bash
+memgraph-context-graph config set capture.redact false
+```
+
+### Shorten long text
+
+Each text field, such as a tool's output, is cut after `capture.max_chars`
+characters, 100,000 by default, and ends with a note of how many characters
+were removed. To change the limit, or to keep everything with `0`:
+
+```bash
+memgraph-context-graph config set capture.max_chars 20000
+```
+
+### Exclude tools and projects
+
+To stop recording some tools' calls and results, list their names. A name can
+be a glob, such as `mcp__vault__*` for every tool of one Model Context
+Protocol (MCP) server:
+
+```bash
+memgraph-context-graph config set capture.exclude_tools "TodoWrite, mcp__vault__*"
+```
+
+To record nothing from some projects, list their directories. A session that
+starts in one of them, or in a directory inside one, isn't recorded. `~` stands
+for your home directory, and a path can be a glob:
+
+```bash
+memgraph-context-graph config set capture.exclude_projects "~/clients/*, ~/personal"
+```
+
+The agent works as usual in an excluded project, and recall still finds your
+other sessions there.
+
+Setting a list replaces the previous one. To clear it, set an empty value:
+
+```bash
+memgraph-context-graph config set capture.exclude_projects ""
+```
+
+## Forget sessions
+
+The `forget` command deletes sessions from your graph for good, with everything recorded in
+them and everything extracted from them. Delete sessions by ID:
+
+```bash
+memgraph-context-graph forget session SESSION_ID
+```
+
+`SESSION_ID` is the session's `session_id`, shown in the
+[terminal viewer](/ai-ecosystem/ai-memory/graph#browse-the-graph).
+Pass several IDs to delete several sessions.
+
+To delete every session that ran in a directory or inside it, pass the
+directory:
+
+```bash
+memgraph-context-graph forget project ~/work/client-repo
+```
+
+`forget` lists the matching sessions and asks before it deletes them. Add
+`--dry-run` to only list them, and `--yes` to skip the question. Without a
+terminal, `--yes` is required.
+
+For each session, `forget` deletes:
+
+- its prompts, replies, tool calls and results, its skill uses, and its
+  records of GitHub resources;
+- what reconciliation extracted from it, and every entity no other session or
+  memory file mentions;
+- its lines in the log of failed recordings.
+
+Entities that other sessions mention, skills, stored GitHub resources and your
+memory files stay, including files the session wrote. A forgotten session
+leaves only a `ForgottenSession` node with its ID, which stops a hook that is
+still running, or a resumed session, from recording it again.
+
+Only you can forget sessions, from the command line. The agents have no tool
+for it. With
+[shared spaces](/ai-ecosystem/ai-memory/shared-spaces), `forget`
+deletes from your personal space only.
+

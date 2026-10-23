@@ -1,0 +1,258 @@
+---
+title: The graph
+description: See what Context Graph stores in Memgraph, browse and query it, and add a knowledge graph of the entities and facts your sessions mention.
+---
+
+import { Tabs } from 'nextra/components'
+
+# The graph
+
+Everything Context Graph records is an ordinary graph in Memgraph. This page
+covers [what the graph holds](#what-the-graph-holds), how to
+[browse it](#browse-the-graph) and [query it](#query-the-graph), and how to
+[add a knowledge graph](#add-a-knowledge-graph) of the entities and facts your
+sessions mention.
+
+## What the graph holds
+
+Each session is a `Session` node, linked to its `User`. Everything recorded in
+the session hangs off that node. The knowledge graph links its entities to the
+messages and memory files they came from:
+
+```plaintext copy=false
+(:User)-[:HAD_SESSION]->(:Session)
+                         ├─[:HAS_ACTION]->(:Action)          prompts, replies, tool calls and results
+                         ├─[:USED_SKILL]->(:Skill)           agent skills the session used
+                         └─[:PRODUCED_MEMORY]->(:Memory)     memories the agent saved
+(:User)-[:HAS_MEMORY]->(:Memory)
+(:Action)-[:HAS_CHUNK]->(:Chunk)<-[:MENTIONED_IN]-(:Person)  an entity, labeled by its type
+(:Memory)-[:HAS_CHUNK]->(:Chunk)
+```
+
+| Node | What it is |
+| --- | --- |
+| `User` | You, by `user_id` |
+| `Session` | One agent session, by `session_id`, with its `project_key` and `started_at` |
+| `Action` | A prompt, reply, tool call or tool result |
+| `Skill` | An agent skill |
+| `Memory` | A memory file, by `path` |
+| `Project` | A project the memory files are about, by `key` |
+| `Chunk` | A piece of a message or memory file that entities were extracted from |
+| Entity labels | An extracted entity, with its name in `text`, its type in `entity_type` and a label for the type, such as `Person` |
+
+To see every label, relationship type and property, run:
+
+```cypher
+SHOW SCHEMA INFO;
+```
+
+This needs Memgraph started with `--schema-info-enabled=true`; the Memgraph
+setup starts has it.
+
+## Browse the graph
+
+The terminal viewer shows the graph without a query. It refreshes every few
+seconds and never writes to the graph:
+
+```bash
+memgraph-context-graph ui
+```
+
+With it, you can:
+
+- **Find a session.** The dashboard lists your sessions. Press `/` to filter
+  them, `p` to show one project, and `enter` to open a session's timeline,
+  with each action's input and the subagents under the call that started them.
+- **Spot failed recordings.** The dashboard counts failed recordings and the
+  extraction and embedding work still pending.
+- **Browse entities.** Press `k` on the dashboard, or `g` on a session, to list
+  entities. `enter` on an entity shows its relationships and the text each one
+  was read from; `enter` on a neighbor moves to it.
+
+`esc` goes back, `q` quits and `?` shows all keys. The viewer shows your own
+sessions. If the dashboard is empty, press `a`: sessions recorded while no
+user ID was set belong to no user.
+
+To see the graph drawn, connect [Memgraph Lab](/memgraph-lab) to the URL that
+`memgraph-context-graph config get memgraph.url` prints. In a Lab container,
+the Memgraph on your machine isn't at `localhost`:
+
+<Tabs items={['macOS and Windows', 'Linux']}>
+<Tabs.Tab>
+```bash
+docker run -d --name memgraph-lab -p 3000:3000 memgraph/lab:latest
+```
+
+Open `http://localhost:3000` and connect to host `host.docker.internal`.
+</Tabs.Tab>
+<Tabs.Tab>
+```bash
+docker run -d --name memgraph-lab --network host memgraph/lab:latest
+```
+
+Open `http://localhost:3000` and connect to host `localhost`.
+</Tabs.Tab>
+</Tabs>
+
+## Query the graph
+
+The queries below are templates. Replace `USER_ID` with your user ID from
+`memgraph-context-graph config get identity.user_id`.
+
+Which sessions did I run most recently, and how long were they?
+
+```cypher template
+MATCH (:User {user_id: "USER_ID"})-[:HAD_SESSION]->(s:Session)
+OPTIONAL MATCH (s)-[:HAS_ACTION]->(a:Action)
+RETURN s.session_id, s.project_key, s.started_at AS started_at, count(a) AS actions
+ORDER BY started_at DESC
+LIMIT 10;
+```
+
+Which skills do I use most?
+
+```cypher template
+MATCH (:User {user_id: "USER_ID"})-[:HAD_SESSION]->(:Session)-[:USED_SKILL]->(sk:Skill)
+RETURN sk.name, count(*) AS uses
+ORDER BY uses DESC;
+```
+
+Which memory files do my agents keep?
+
+```cypher template
+MATCH (:User {user_id: "USER_ID"})-[:HAS_MEMORY]->(m:Memory)
+RETURN m.path, m.updated_at
+ORDER BY m.path;
+```
+
+In which sessions was a tool called? Replace `TOOL_NAME` with the tool's name:
+
+```cypher template
+MATCH (:User {user_id: "USER_ID"})-[:HAD_SESSION]->(s:Session)-[:HAS_ACTION]->(a:Action {tool_name: "TOOL_NAME"})
+RETURN DISTINCT s.session_id;
+```
+
+What do my sessions mention most? This needs the
+[knowledge graph](#add-a-knowledge-graph):
+
+```cypher template
+MATCH (:User {user_id: "USER_ID"})-[:HAD_SESSION]->(:Session)-[:HAS_ACTION]->(:Action)
+      -[:HAS_CHUNK]->(c:Chunk)<-[:MENTIONED_IN]-(e)
+RETURN e.text, e.entity_type, count(DISTINCT c) AS mentions
+ORDER BY mentions DESC
+LIMIT 20;
+```
+
+## Add a knowledge graph
+
+Context Graph can extract the entities your sessions mention, such as people,
+organizations, projects and tools, and the facts that connect them. Recall uses
+them to find facts spread over many sessions. This process is called
+**reconciliation**. It runs on your machine with
+[GLiNER2](https://github.com/fastino-ai/GLiNER2), a local extraction model,
+and needs no LLM API key.
+
+### Install the extraction packages
+
+Setup leaves the extraction model out, because it's large. Add it to the
+`memgraph-context-graph` tool, together with the `sessions-graph` command:
+
+```bash
+uv tool install --force 'memgraph-context-graph[mcp]' \
+  --with 'skills-graph[memgraph-context-graph]' \
+  --with 'actions-graph[memgraph-context-graph]' \
+  --with 'sessions-graph[memgraph-context-graph,reconciliation]' \
+  --with context-graph-viewer \
+  --with-executables-from sessions-graph
+```
+
+This command replaces the packages installed with the tool. If you turned on
+`resources-graph`, add `--with 'resources-graph[memgraph-context-graph]'` and
+`--with-executables-from resources-graph`. The first extraction downloads the
+model.
+
+### Build the knowledge graph
+
+When a session ends, Context Graph marks it as pending reconciliation. To
+extract every pending session, or one session by its `session_id`:
+
+```bash
+sessions-graph reconcile --pending
+sessions-graph reconcile --session SESSION_ID
+```
+
+Extraction takes longer than an agent allows a hook to run, so it never runs
+inside a hook. Choose how it runs:
+
+- **After each session,** in a background process:
+
+  ```bash
+  memgraph-context-graph config set reconcile.auto_reconcile true
+  ```
+
+  If the background process stops, the session stays pending, and the next
+  `reconcile --pending` extracts it.
+- **On a schedule,** with `sessions-graph reconcile --pending --limit 50` in
+  cron or another scheduler. `--limit` caps how many sessions one run
+  extracts.
+
+Memory files are extracted too, each time they change.
+
+### What the knowledge graph adds
+
+Each entity gets a label for its type from the ontology, such as `Person` or
+`Organization`, and facts are relationships between entities, with the
+sentence they were read from.
+
+A person, organization, place or thing
+mentioned in several sessions is one node, so its relationships connect those
+sessions. Reconciliation also computes the embeddings recall uses for the new
+entities and facts.
+
+To change how sessions are read, such as the confidence an entity needs, see
+[Extraction configuration](/ai-ecosystem/ai-memory/configuration#extraction-configuration).
+
+### Ontology
+
+Entities are extracted under an **ontology**, the schema of the knowledge
+graph: the entity types and relationship types to look for. Every user starts
+with a default ontology. It has people, organizations, locations and events,
+value types such as dates and amounts, and two catch-all types, `Topic` and
+`Artifact`. To see the ontology in use:
+
+```bash
+sessions-graph ontology show
+```
+
+To extract the types that matter in your work, write an ontology file in the
+format of the manual strategy of
+[HyGM](https://github.com/memgraph/ai-toolkit/tree/main/hygm), the AI
+Toolkit's graph schema package, and set it in the configuration:
+
+```bash
+memgraph-context-graph config set ontology.path ~/schemas/coding.yaml
+```
+
+The next `sessions-graph reconcile` applies the file, and applies it again
+whenever it changes. If the file isn't valid, reconcile reports it and keeps
+the current ontology. `ontology.derive` sets what may happen to your ontology
+afterwards:
+
+- **`extend`** (the default): your types are kept as written, together with
+  the default core types, and Context Graph may add types next to them.
+- **`off`:** the ontology is used exactly as written, and no types are added.
+
+### Learn the ontology from your sessions
+
+With an Anthropic or OpenAI API key in the configuration, Context Graph adds
+new types to the ontology from your sessions. Learning runs on its own as
+your sessions accumulate. `config set` prompts for the key. To run it now:
+
+```bash
+memgraph-context-graph config set llm.anthropic_api_key
+sessions-graph derive --force
+```
+
+Learning sends session text to the provider; see
+[Privacy](/ai-ecosystem/ai-memory/privacy#where-sessions-are-stored). Without a
+key, the ontology doesn't change, and extraction still works.
