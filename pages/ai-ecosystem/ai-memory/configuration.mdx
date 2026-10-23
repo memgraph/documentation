@@ -8,7 +8,11 @@ import { Callout } from 'nextra/components'
 # Configure Context Graph
 
 Context Graph keeps its settings in one configuration file. Setup writes it,
-and the `config` command changes it.
+and the `config` command changes it. This page also covers how to
+[use your own Memgraph](#use-your-own-memgraph),
+[choose what is recorded](#choose-what-is-recorded), and
+[update](#update-context-graph) or [uninstall](#uninstall-context-graph)
+Context Graph.
 
 ## Configuration file
 
@@ -41,26 +45,26 @@ so a typo doesn't break recording later. It takes these keys:
 | --- | --- | --- |
 | `identity.user_id` | Your git `user.name`, set by setup | Your user ID. Your sessions and memories are filed under it, and recall searches only its sessions. |
 | `memgraph.url` | `bolt://localhost:7687` | The Memgraph Bolt URL |
-| `memgraph.user` | Empty | The Memgraph user name |
-| `memgraph.password` | Empty | The Memgraph password. `config set memgraph.password` without a value prompts for it. |
+| `memgraph.user` | None | The Memgraph user name |
+| `memgraph.password` | None | The Memgraph password. `config set memgraph.password` without a value prompts for it. |
 | `memgraph.database` | `memgraph` | The database, on a Memgraph with [multi-tenancy](/database-management/multi-tenancy) |
 | `capture.connectors` | `skills-graph, actions-graph, sessions-graph` | What the hooks record. See [Choose what is recorded](#choose-what-is-recorded). |
 | `capture.redact` | `true` | Whether secrets are redacted before they're stored. See [Redact secrets](/ai-ecosystem/ai-memory/privacy#redact-secrets). |
 | `capture.max_chars` | `100000` | The most characters kept from one text field, such as a tool's output. `0` keeps everything. See [Shorten long text](/ai-ecosystem/ai-memory/privacy#shorten-long-text). |
 | `capture.exclude_tools` | None | Tools whose calls and results aren't recorded, by name or glob. See [Exclude tools and projects](/ai-ecosystem/ai-memory/privacy#exclude-tools-and-projects). |
 | `capture.exclude_projects` | None | Directories in which nothing is recorded, by path or glob |
-| `memory.backend` | Unset | `context-graph` when Context Graph is the agents' [memory](/ai-ecosystem/ai-memory/recall-and-memory#use-context-graph-as-your-agents-memory). Set it with setup's `--memory-backend`, which also changes the agents' settings. |
+| `memory.backend` | `native` | `context-graph` when Context Graph is the agents' [memory](/ai-ecosystem/ai-memory/recall-and-memory#use-context-graph-as-your-agents-memory), `native` when they keep their own. Set it with setup's `--memory-backend`, which also changes the agents' settings. |
 | `session_start.resume` | `true` | Whether a session starts with the [note on where you left off](/ai-ecosystem/ai-memory/recall-and-memory#where-you-left-off) |
 | `recall.*` | See [Tune recall](/ai-ecosystem/ai-memory/recall-and-memory#tune-recall) | The embedding model for recall, which searches run, and how many results each returns |
 | `reconcile.auto_reconcile` | `false` | Whether the [knowledge graph](/ai-ecosystem/ai-memory/knowledge-graph) is built after each session |
-| `ontology.path` | Unset | A schema file for the knowledge graph |
-| `ontology.derive` | `extend` | Whether Context Graph adds types to your schema: `extend` or `off` |
+| `ontology.path` | The default ontology | An ontology file for the knowledge graph |
+| `ontology.derive` | `extend` | Whether Context Graph adds types to your ontology: `extend` or `off` |
 | `extraction.*` | See [Tune extraction](/ai-ecosystem/ai-memory/knowledge-graph#tune-extraction) | How sessions are read into the knowledge graph |
-| `llm.anthropic_api_key` | Empty | An Anthropic API key, used only to learn your schema |
-| `llm.openai_api_key` | Empty | An OpenAI API key, used only to learn your schema |
-| `llm.derive_model` | `claude-sonnet-5-5` with Anthropic, `gpt-5` with OpenAI | The model that learns your schema |
+| `llm.anthropic_api_key` | None | An Anthropic API key, used only to learn your ontology. Used instead of an OpenAI key when both are set. |
+| `llm.openai_api_key` | None | An OpenAI API key, used only to learn your ontology |
+| `llm.derive_model` | `claude-sonnet-5-5` with Anthropic, `gpt-5` with OpenAI | The model that learns your ontology |
 | `edition` | `community` | `enterprise` to use [shared spaces](/ai-ecosystem/ai-memory/shared-spaces). Set it with `memgraph-context-graph join`. |
-| `github.token` | Unset | A GitHub token for `resources-graph`, used instead of your `gh` login. Prompts for the value. |
+| `github.token` | None | A GitHub token for `resources-graph`, used instead of your `gh` login. Prompts for the value. |
 
 Only `[redact]` patterns are edited in the file directly, because you name
 them yourself. See [Redact secrets](/ai-ecosystem/ai-memory/privacy#redact-secrets).
@@ -91,12 +95,10 @@ address, so the client routes writes to the MAIN instance:
 memgraph-context-graph config set memgraph.url neo4j://coordinator.example.com:7687
 ```
 
-The instance must run Memgraph 3.6 or later, with
-[MAGE](/advanced-algorithms) for
-[recall by meaning](/ai-ecosystem/ai-memory/recall-and-memory#recall). To see
-all labels and properties with `SHOW SCHEMA INFO`, start it with
-`--schema-info-enabled=true`.
-The Memgraph that setup starts has it enabled.
+The instance needs the Memgraph version, MAGE and memory listed in the
+[prerequisites](/ai-ecosystem/ai-memory/get-started#prerequisites). To see all
+labels and properties with `SHOW SCHEMA INFO`, start it with
+`--schema-info-enabled=true`. The Memgraph that setup starts has it enabled.
 
 Each user on a shared Memgraph should have their own `identity.user_id`. On a
 shared Memgraph with Memgraph Enterprise, [shared spaces](/ai-ecosystem/ai-memory/shared-spaces)
@@ -127,8 +129,8 @@ nothing, without disconnecting the agents.
 ## Update Context Graph
 
 Context Graph doesn't update itself. Upgrading the packages changes the code
-the hooks run, but the plugins, hook files and MCP registrations that setup
-wrote stay as they were. The `update` command upgrades both in one step:
+the hooks run, but the plugins, hook files and Model Context Protocol (MCP)
+registrations that setup wrote stay as they were. The `update` command upgrades both in one step:
 
 ```bash
 memgraph-context-graph update
@@ -151,7 +153,7 @@ started with.
 | --- | --- |
 | `RUNTIME ...` | Update only these agents. The default is every connected agent. |
 | `--project-dir DIR` | A project whose per-project agents to update. Repeat it for more projects. The default is the current directory. |
-| `--no-upgrade` | Skip the package upgrade, and only refresh the plugins, hook files, registrations and schema |
+| `--no-upgrade` | Skip the package upgrade, and only refresh the plugins, hook files, registrations, indexes and constraints |
 
 `update` doesn't change your own hooks, the configuration file or the data in
 the graph, and running it twice changes nothing.
