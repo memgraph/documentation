@@ -1,0 +1,66 @@
+---
+title: Memgraph HA in Kubernetes
+description: Choose between the memgraph-high-availability Helm chart and the Memgraph Kubernetes operator to run a Memgraph high availability cluster on Kubernetes.
+---
+
+import { Callout } from 'nextra/components'
+
+# Memgraph HA in Kubernetes <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+You can run a Memgraph [high availability](/clustering/high-availability)
+cluster on Kubernetes in two ways: with the Memgraph Kubernetes operator, or
+with the `memgraph-high-availability` Helm chart. Both run the same Memgraph
+coordinators and data instances, and both need a [Memgraph Enterprise
+license](/database-management/enabling-memgraph-enterprise).
+
+- **[Memgraph Kubernetes
+  operator](/clustering/high-availability/kubernetes/operator)**: one
+  `MemgraphDBCluster` resource describes the cluster, and the operator creates
+  it, registers its members and keeps them registered. It also carries out
+  scaling, flag changes, storage growth and rolling restarts.
+- **[Memgraph high availability Helm
+  chart](/clustering/high-availability/kubernetes/helm-chart)**: you list
+  every coordinator and data instance in the chart values, and a Job registers
+  them on every `helm install` and `helm upgrade`.
+
+<Callout type="info">
+The operator is the successor to the `memgraph-high-availability` chart, and
+the recommended way to run a new cluster. Memgraph plans to deprecate the Helm
+chart, after which the chart receives only necessary and critical bug fixes.
+</Callout>
+
+## Choose between the chart and the operator
+
+| | Helm chart | Operator |
+|---|---|---|
+| How you describe the cluster | Helm values, one block per instance | One `MemgraphDBCluster` resource with a count per role |
+| Workloads | One StatefulSet per instance | One StatefulSet per role |
+| Registration | A Job, on every `helm install` and `helm upgrade` | The operator, continuously: a lost registration is restored without a `helm upgrade` |
+| Scaling | Add or remove instance entries, then `helm upgrade` | Change a count; the operator moves the MAIN off a retiring instance first |
+| Changing a flag | Flags are container arguments: every change restarts the pods | Edit `flags`. A flag Memgraph can change at run time is applied to every running instance with **no restart**; only startup-only flags restart pods |
+| Coordinator settings | Run `SET COORDINATOR SETTING` yourself | Set them in `flags.coordinators`; the operator writes them once, with no restart |
+| Renewing the license | Run `SET DATABASE SETTING` on every instance, then update the Secret | Update the Secret; the operator applies the new license to every instance, with no restart, and reports it in the `LicenseApplied` condition |
+| Restarting pods | The StatefulSet `updateStrategy`; ISSU by hand with `OnDelete` | The operator, one pod at a time in the ISSU order: data instances first, the MAIN last, then coordinators with the leader last |
+| Storage | Separate claims for data and logs, 1Gi by default | One claim per pod for data and logs (10Gi by default), or no log files at all (`logFile: None`); claims grow on a live cluster without a restart, and are kept on delete and scale-down by default |
+| Probes | Startup, readiness and liveness probes; the startup probe must outlast the longest recovery | One readiness probe with three timings, and no liveness or startup probe, so a long recovery is never killed |
+| Scheduling | Four affinity modes (`default`, `unique`, `parity`, `nodeSelection`) | One anti-affinity rule with `type`, `scope` and `topologyKey`, plus per-role node selectors, tolerations, topology spread constraints and priority classes |
+| Security context | `memgraphUserId` and `memgraphGroupId` | `securityContext`, defaulting to the Memgraph image's user; `{}` lets the platform assign it, as OpenShift requires |
+| External access | Five methods chosen per tier; addresses registered by the setup Job on `helm upgrade`, or with `UPDATE CONFIG` by hand | One `type` (`LoadBalancer` or `Gateway`); the operator finds each member's external address and keeps the routing table pointing at it as the address changes |
+| Bolt authentication | Supported; you create users with Cypher | Not supported yet |
+
+Start a new cluster with the operator, and check its
+[limitations](/clustering/high-availability/kubernetes/operator#limitations)
+for the chart features it doesn't have yet.
+
+## Move from the chart to the operator
+
+There is no migration path from the chart to the operator: no tool or hook
+converts a chart-deployed cluster, and the operator never takes over one. To
+move, create a new cluster with the operator and transfer the data to it, with a
+[backup and restore](/database-management/backup-and-restore) or a replication
+cutover.
+
+Where a setting exists in both, the operator uses the chart's name for it. The
+`secrets` block that names the license Secret, for example, is the same in
+both. The topology is where they differ: the chart's per-instance blocks become
+two counts, `coordinators` and `dataInstances`.

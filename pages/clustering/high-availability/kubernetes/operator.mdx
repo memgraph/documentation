@@ -1,0 +1,1198 @@
+---
+title: Memgraph Kubernetes operator
+description: Run a Memgraph high availability cluster on Kubernetes from one MemgraphDBCluster resource that the operator creates, registers, scales and keeps registered.
+---
+
+import { Callout } from 'nextra/components'
+
+# Memgraph Kubernetes operator <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+The Memgraph Kubernetes operator runs a Memgraph [high
+availability](/clustering/high-availability) cluster from one custom resource,
+`MemgraphDBCluster`. You declare how many coordinators and data instances the
+cluster has. The operator creates them, registers them with each other,
+promotes the first MAIN and registers again any instance that loses its
+registration. It also scales the cluster, applies Memgraph flags, grows storage
+and restarts pods in a safe order when their configuration changes.
+
+<Callout type="info">
+The operator is the successor to the [Memgraph high availability Helm
+chart](/clustering/high-availability/kubernetes/helm-chart), which Memgraph
+plans to deprecate. High availability needs a [Memgraph Enterprise
+license](/database-management/enabling-memgraph-enterprise).
+</Callout>
+
+The operator runs HA clusters only: one
+StatefulSet of coordinators and one of data instances. It doesn't run a
+standalone Memgraph instance; use the [Memgraph Helm
+chart](/getting-started/install-memgraph/kubernetes#memgraph-standalone-helm-chart)
+for that. Read [how high availability
+works](/clustering/high-availability/how-high-availability-works) first if
+coordinators, MAIN and REPLICAs are new to you.
+
+## Prerequisites
+
+- A Kubernetes cluster, version 1.29 or newer. The `MemgraphDBCluster`
+  validation rules need it.
+- `kubectl` and Helm 3.
+- A Memgraph Enterprise license and the organization name it was issued to.
+
+## Install the operator
+
+The `memgraph-operator` Helm chart installs the `MemgraphDBCluster` custom
+resource definition (CRD), the operator's RBAC rules and the operator
+Deployment. The operator watches every namespace, so you install it once per
+Kubernetes cluster.
+
+```bash
+helm repo add memgraph https://memgraph.github.io/helm-charts
+helm repo update
+helm install memgraph-operator memgraph/memgraph-operator \
+  --namespace memgraph-operator-system --create-namespace --wait
+```
+
+The chart has its own version, separate from the version of the operator it
+installs. `helm search repo memgraph/memgraph-operator --versions` lists both:
+`APP VERSION` is the operator version.
+
+The values you're most likely to change:
+
+| Value | Default | Description |
+|---|---|---|
+| `image.tag` | the chart's `appVersion` | Operator image tag. |
+| `crds.enabled` | `true` | Install and upgrade the `MemgraphDBCluster` CRD with the chart. Set it to `false` to manage the CRD yourself, for example from a GitOps tool; it must exist before the operator starts. |
+| `replicaCount` | `1` | Operator replicas. With leader election, a second replica stands by. |
+| `leaderElection.enabled` | `true` | Elect one active operator replica. |
+| `resources` | requests 10m CPU and 2Gi memory, limits 500m CPU and 2Gi memory | Operator container resources. Memory grows with the number of clusters. |
+| `metrics.enabled` | `true` | Serve the operator's own metrics on port `8443`. |
+| `metrics.secure` | `true` | Serve metrics over HTTPS and authorize every scrape. |
+| `podSecurityContext` | non-root, uid and gid `65532` | Operator pod identity. See [OpenShift](#run-on-openshift). |
+| `nodeSelector`, `tolerations`, `affinity`, `priorityClassName` | empty | Scheduling of the operator pod. |
+
+The [chart
+README](https://github.com/memgraph/kubernetes-operator/blob/main/charts/memgraph-operator/README.md)
+lists every value.
+
+### Upgrade the operator
+
+`helm upgrade` updates the operator and the `MemgraphDBCluster` CRD together:
+
+```bash
+helm repo update
+helm upgrade memgraph-operator memgraph/memgraph-operator --namespace memgraph-operator-system --wait
+```
+
+With `crds.enabled: false`, apply the new CRD yourself before you upgrade.
+
+### Uninstall the operator
+
+```bash
+helm uninstall memgraph-operator --namespace memgraph-operator-system
+```
+
+The chart keeps the CRD when you uninstall it, so your `MemgraphDBCluster`
+resources and their data survive. Delete the CRD only when no cluster needs it, because deleting it
+deletes every `MemgraphDBCluster`:
+
+```bash
+kubectl delete crd memgraphdbclusters.memgraph.com
+```
+
+## Create a cluster
+
+These steps create a cluster named `memgraph` with three coordinators and two
+data instances in the `memgraph` namespace.
+
+### 1. Create the license Secret
+
+The cluster reads the license from a Secret you create. The `MemgraphDBCluster`
+resource only names the Secret, so the resource carries no license and you can
+keep it in Git.
+
+```bash
+kubectl create namespace memgraph
+kubectl create secret generic memgraph-secrets --namespace memgraph \
+  --from-literal=MEMGRAPH_ENTERPRISE_LICENSE=YOUR_LICENSE_KEY \
+  --from-literal=MEMGRAPH_ORGANIZATION_NAME=YOUR_ORGANIZATION_NAME
+```
+
+Replace `YOUR_LICENSE_KEY` and `YOUR_ORGANIZATION_NAME` with your license and
+the organization name it was issued to. Without the Secret, the pods start
+but the cluster isn't registered: `Converged` reports `CoordinatorUnreachable`,
+and `LicenseApplied` says `the Secret memgraph-secrets does not exist`. Create
+the Secret, and the operator licenses the pods and registers the cluster.
+
+### 2. Create the MemgraphDBCluster
+
+Save the resource as `memgraph-cluster.yaml`:
+
+```yaml
+apiVersion: memgraph.com/v1alpha1
+kind: MemgraphDBCluster
+metadata:
+  name: memgraph
+  namespace: memgraph
+spec:
+  coordinators: 3
+  dataInstances: 2
+  image:
+    repository: docker.io/memgraph/memgraph
+    tag: "3.13.2"
+  secrets:
+    name: memgraph-secrets
+    licenseKey: MEMGRAPH_ENTERPRISE_LICENSE
+    organizationKey: MEMGRAPH_ORGANIZATION_NAME
+```
+
+Every other field takes its default. Pin `image.tag` to a Memgraph release;
+without `image`, the cluster runs `docker.io/memgraph/memgraph:3.13.0-relwithdebinfo`.
+If your Secret stores the license under other keys, change `licenseKey` and
+`organizationKey` to match.
+
+Apply it:
+
+```bash
+kubectl apply -f memgraph-cluster.yaml
+```
+
+### 3. Wait for the cluster
+
+The operator creates a StatefulSet and a headless Service for each role, waits
+for every pod to be ready, registers the coordinators and data instances, and
+promotes the first MAIN. If the nodes have to pull the Memgraph image, this
+takes a few minutes.
+
+```bash
+kubectl wait --namespace memgraph --for=condition=Ready memgraphdbcluster/memgraph --timeout=10m
+```
+
+`kubectl get mgdbc -n memgraph` shows the cluster (`mgdbc` is the short name of
+`MemgraphDBCluster`). When it's done, `MAIN` names a data instance, such as
+`instance_0`, and `READY` and `CONVERGED` are `True`. See [Check the
+cluster](#check-the-cluster) for what each column and condition means.
+
+### 4. Run a query
+
+To check that the cluster works, run a query directly on the MAIN, the data
+instance that accepts writes. This is for testing only; applications connect
+through the coordinators, as in [Connect your
+application](#5-connect-your-application).
+
+<Callout type="warning">
+Don't point an application at a data instance pod. The MAIN moves to another
+data instance on failover and during restarts and scale-downs, and a client
+pinned to one pod then writes to a REPLICA, which refuses writes. In
+production, connect with routing to any coordinator.
+</Callout>
+
+Find the MAIN:
+
+```bash
+kubectl get mgdbc memgraph -n memgraph -o jsonpath='{.status.main}'
+```
+
+The data instance `instance_N` runs in the pod `memgraph-data-N`. Every pod
+serves Bolt on port 7687, and the Memgraph image includes `mgconsole`. If the
+MAIN is `instance_0`, run a query on `memgraph-data-0`:
+
+```bash
+kubectl exec -i -n memgraph memgraph-data-0 -c memgraph -- mgconsole <<'EOF'
+CREATE (:Greeting {text: "hello from the operator"});
+MATCH (n:Greeting) RETURN n.text;
+EOF
+```
+
+To try [Memgraph Lab](/memgraph-lab) or another client from your machine,
+forward the port of the MAIN's pod:
+
+```bash
+kubectl port-forward -n memgraph pod/memgraph-data-0 7687:7687
+```
+
+### 5. Connect your application
+
+Applications connect with routing: the `neo4j://` scheme and the address of
+any coordinator. The driver gets the routing table from the coordinator, sends
+writes to the current MAIN and reads to the REPLICAs. After a failover, the
+coordinators route the driver to the new MAIN, so the application needs no
+change. See [querying the
+cluster](/clustering/high-availability/querying-the-cluster-in-high-availability).
+
+Inside Kubernetes, use a coordinator's DNS name in the `memgraph-coordinator`
+headless Service:
+
+```plaintext
+neo4j://memgraph-coordinator-0.memgraph-coordinator.memgraph.svc.cluster.local:7687
+```
+
+Any coordinator works, such as `memgraph-coordinator-1` or
+`memgraph-coordinator-2`. For applications outside Kubernetes, [expose the
+cluster](#expose-the-cluster-outside-kubernetes) and connect with routing to
+the coordinators' external address.
+
+## Check the cluster
+
+`kubectl get mgdbc` shows these columns:
+
+| Column | Meaning |
+|---|---|
+| `COORDINATORS`, `DATA` | The declared number of coordinators and data instances. |
+| `MAIN` | The data instance the coordinators elected as MAIN. It changes on failover. |
+| `READY` | The `Ready` condition. |
+| `CONVERGED` | The `Converged` condition. |
+
+`kubectl get mgdbc -o wide` adds `REGISTERED-COORDINATORS` and `REGISTERED-DATA`:
+how many of each role's declared members are registered in the cluster. Watch
+these during a scale.
+
+### Conditions
+
+The resource reports four conditions. `True` is the healthy state for each.
+
+| Condition | `True` when |
+|---|---|
+| `Converged` | Every declared coordinator and data instance is registered, at its external address if the cluster is exposed, both StatefulSets run the declared number of pods, every volume has the declared size, and every flag is applied. |
+| `Updated` | Every pod runs the pod configuration the spec describes. It's `False` while the operator [restarts pods](#rolling-restarts). |
+| `LicenseApplied` | Every ready pod runs the license in the license Secret. |
+| `Ready` | A MAIN is elected and the other three conditions are `True`. Otherwise its reason is the first thing that isn't done. |
+
+`Ready` turning `False` during a scale, a restart or a resize doesn't mean the
+cluster stopped serving: the MAIN keeps serving writes, and `status.main` names
+it. Tools that read `Ready` alone, such as `kubectl wait` and Flux, wait for the
+whole change to finish.
+
+When a condition is `False`, its reason and message say why.
+`kubectl describe mgdbc memgraph -n memgraph` shows them. The reasons you're most
+likely to see:
+
+| Reason | Condition | What it means |
+|---|---|---|
+| `WorkloadsNotReady` | `Ready`, `Converged`, `Updated` | Some pods aren't ready yet. The operator registers nothing until every pod is ready. |
+| `CoordinatorUnreachable` | `Ready`, `Converged` | No coordinator answered. |
+| `NoCoordinatorLeader` | `Ready`, `Converged` | Coordinators answer, but none is the Raft leader. |
+| `NoMainElected` | `Ready` | The cluster has no MAIN yet. |
+| `ApplyFailed` | `Ready`, `Converged` | The Kubernetes API server refused an object the operator applied. The message quotes the error. |
+| `RegistrationInProgress` | `Converged` | The operator is registering members. |
+| `RegistrationFailed` | `Converged` | The coordinator leader refused a registration command. The message quotes the command and the error. |
+| `RetirementInProgress` | `Converged` | A [scale-down](#scale-the-cluster) is removing members. |
+| `UnknownFlags`, `SettingsPending`, `SettingsRejected` | `Converged` | A [flag](#configure-memgraph-flags) is unknown, or not applied yet, or refused. |
+| `RollingRestartInProgress`, `WaitingForCatchUp` | `Updated` | A [rolling restart](#rolling-restarts) is in progress. |
+| `LicensePending`, `LicenseRejected` | `LicenseApplied` | The license isn't applied yet, or an instance refused it. |
+
+The operator also records a Kubernetes Event on the resource for every action
+it takes. See [Events](#events).
+
+If the cluster doesn't converge, read the operator log too:
+
+```bash
+kubectl logs -n memgraph-operator-system deploy/memgraph-operator-controller-manager
+```
+
+### Pods and member names
+
+The pods, the StatefulSets and the headless Services are named after the
+cluster and the role. The name each member has in `SHOW INSTANCES` follows the
+pod ordinal. For a cluster named `memgraph`:
+
+| Pod | Name in the cluster | Role |
+|---|---|---|
+| `memgraph-coordinator-0`, `-1`, `-2` | `coordinator_0`, `coordinator_1`, `coordinator_2` | Coordinators |
+| `memgraph-data-0`, `-1` | `instance_0`, `instance_1` | Data instances: one MAIN, the others REPLICAs |
+
+Run `SHOW INSTANCES` on a coordinator to see the cluster as the coordinators
+see it:
+
+```bash
+kubectl exec -n memgraph memgraph-coordinator-0 -c memgraph -- \
+  bash -c "echo 'SHOW INSTANCES;' | mgconsole"
+```
+
+Applications inside Kubernetes reach each pod at its DNS name in the role's
+headless Service, such as
+`memgraph-data-0.memgraph-data.memgraph.svc.cluster.local:7687`. Applications
+connect through the coordinators instead; see [Connect your
+application](#5-connect-your-application).
+
+## Scale the cluster
+
+Change `coordinators` or `dataInstances`, or both in one edit, by any step:
+
+```bash
+kubectl patch mgdbc memgraph -n memgraph --type=merge -p '{"spec":{"coordinators":5,"dataInstances":3}}'
+kubectl wait --namespace memgraph --for=condition=Converged memgraphdbcluster/memgraph --timeout=10m
+```
+
+`coordinators` must be odd and at least 3, so the Raft quorum can't split.
+`dataInstances` must be at least 1.
+
+- **Scale up:** the operator creates the new pods and registers them with
+  `ADD COORDINATOR` and `REGISTER INSTANCE`.
+- **Scale down:** the operator removes the members above the new count from the
+  cluster before it deletes their pods. A retiring data instance that is MAIN
+  hands the MAIN role to a REPLICA first, and is then unregistered. A retiring
+  coordinator is removed from the Raft cluster. `Converged` is `False` with the
+  reason `RetirementInProgress` until their pods are gone.
+
+A scale-down can wait:
+
+- **On a retiring pod that isn't ready.** The operator changes the cluster only
+  when every pod of both roles is ready. Fix the pod, or delete it if it can't
+  recover, and the scale-down continues.
+- **On a REPLICA that has caught up.** A retiring MAIN hands over only to a
+  REPLICA that is reachable and has every committed transaction, so no write is
+  lost. Until one has, `Converged` reports `NoCaughtUpSurvivor` and the MAIN
+  keeps serving.
+- **On a Raft election.** Raft doesn't remove its own leader, so a retiring
+  coordinator that is the leader is asked to `YIELD LEADERSHIP` first.
+  `Converged` reports `LeadershipTransferInProgress` until another coordinator
+  is the leader.
+
+The volumes of retired members follow `storage.retentionPolicy`. With the
+default, `Retain`, they're kept, and raising the count again reattaches them.
+
+## Configure Memgraph flags
+
+`flags` sets [Memgraph configuration flags](/database-management/configuration)
+per role. Keys are flag names without the leading dashes. Values are strings, so
+quote numbers and booleans:
+
+```yaml
+spec:
+  flags:
+    coordinators:
+      log-level: INFO
+    data:
+      log-level: INFO
+      query-execution-timeout-sec: "120"
+      storage-snapshot-on-exit: "false"
+```
+
+The operator writes each role's flags into a ConfigMap
+(`memgraph-coordinator-flags`, `memgraph-data-flags`) that Memgraph reads at
+startup. What a change does depends on the flag:
+
+- **A flag Memgraph can change at run time** (the ones `SHOW DATABASE SETTINGS`
+  lists, such as `log-level` and `query-execution-timeout-sec`): the operator
+  runs `SET DATABASE SETTING` on every ready pod of the role. Nothing restarts.
+- **Any other flag:** Memgraph reads it only at startup, so the operator
+  [restarts that role's pods](#rolling-restarts).
+- **A name Memgraph doesn't know:** nothing restarts, and `Converged` is
+  `False` with the reason `UnknownFlags`, naming the key, until you fix it.
+
+A value Memgraph refuses at run time sets `Converged` to `False` with the reason
+`SettingsRejected` and Memgraph's error. A value a startup-only flag refuses
+stops Memgraph from starting, and the pod restarts until you fix the flag.
+
+Rules for keys and values:
+
+- Both spellings work (`log-level` or `log_level`), but not both for one flag.
+- `log-level` must be one of `TRACE`, `DEBUG`, `INFO`, `WARNING`, `ERROR` or
+  `CRITICAL`.
+- A boolean is `"true"` or `"false"`. An empty string is a value:
+  `storage-snapshot-interval: ""` turns periodic snapshots off.
+- The operator sets these flags itself, and the API server rejects them in
+  `flags`: `bolt-port`, `management-port`, `coordinator-port`, `bolt-address`,
+  `monitoring-address`, `monitoring-port`, `metrics-port`, `metrics-format`,
+  `coordinator-id`, `coordinator-hostname`, `data-directory`, `log-file`, the
+  [TLS](#configure-tls) file flags, `license-key`, `organization-name` and the
+  four `aws-*` flags.
+
+Unless you set them, the operator starts Memgraph with `log-level=INFO`,
+`also-log-to-stderr=true` and `log-retention-days=35`.
+
+Removing a key runs no `SET`. A startup-only flag goes back to Memgraph's
+default with the next restart. A run-time flag keeps its current value on the
+running instances; to change it back, set the default value explicitly. The
+three flags above are the exception: removing your value puts the operator's
+default back.
+
+### Coordinator settings
+
+The cluster-wide [coordinator
+settings](/clustering/high-availability/ha-commands-reference#coordinator-runtime-settings) aren't flags,
+but you set them in `flags.coordinators` too: `enabled_reads_on_main`,
+`sync_failover_only`, `max_failover_replica_lag`, `max_replica_read_lag`,
+`instance_down_timeout_sec`, `instance_health_check_frequency_sec`,
+`global_read_only` and `deltas_batch_progress_size`.
+
+```yaml
+spec:
+  flags:
+    coordinators:
+      enabled-reads-on-main: "true"
+      instance-down-timeout-sec: "7"
+```
+
+The operator writes a changed setting once with `SET COORDINATOR SETTING`, and
+nothing restarts. The coordinators keep the setting in Raft, so removing the
+key leaves the value as it is.
+
+## Update the license
+
+To renew the license, update the license Secret in place:
+
+```bash
+kubectl create secret generic memgraph-secrets --namespace memgraph \
+  --from-literal=MEMGRAPH_ENTERPRISE_LICENSE=YOUR_NEW_LICENSE_KEY \
+  --from-literal=MEMGRAPH_ORGANIZATION_NAME=YOUR_ORGANIZATION_NAME \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+The operator notices the change and sets the new license on every ready pod
+with `SET DATABASE SETTING`, without a restart. `LicenseApplied` is `True` with
+the reason `LicenseMatchesSecret` once every ready pod runs it, and
+`LicenseRejected` with Memgraph's error if an instance refuses it.
+
+The pods never read the Secret themselves: the operator delivers the license
+to each pod as a database setting. A new pod starts without a license and gets
+it once it's ready. Pointing `secrets.name` at a different Secret works the
+same way and restarts nothing.
+
+## Rolling restarts
+
+Both StatefulSets use the `OnDelete` update strategy, so Kubernetes never
+restarts a pod by itself. When you change anything that ends up in the pod
+configuration, such as the image, a startup-only flag, resources, volumes,
+scheduling or TLS, the operator restarts the pods one at a time, in this order:
+
+1. The data instances that aren't MAIN.
+2. The MAIN.
+3. The coordinators that aren't the Raft leader.
+4. The Raft leader.
+
+Before it restarts the next data instance, the operator waits until every pod
+is ready and the data instances it already restarted are back in replication
+with no lag. It restarts the MAIN only when another data instance is reachable
+and has caught up, so the coordinators have a REPLICA to fail over to. With
+`dataInstances: 1` there is no REPLICA, and the cluster can't serve writes
+while the MAIN restarts. Before it restarts a coordinator, the operator waits
+until every pod is ready and the cluster has a Raft leader.
+
+`Updated` is `False` while the restart runs, with one of these reasons:
+
+- `RollingRestartInProgress`: names the pod being restarted.
+- `WorkloadsNotReady`: a restarted pod isn't ready or reachable yet.
+- `WaitingForCatchUp`: a restarted data instance is still catching up.
+- `NoCaughtUpSurvivor`: the MAIN is next, but no other data instance has caught
+  up.
+- `NoMainElected`, `NoCoordinatorLeader`: the cluster has no MAIN or no Raft
+  leader, so the restart waits.
+- `FlagsUnclassified`: the operator can't ask Memgraph yet whether a changed
+  flag needs a restart.
+
+To wait for a restart to finish:
+
+```bash
+kubectl wait --namespace memgraph --for=condition=Updated memgraphdbcluster/memgraph --timeout=30m
+```
+
+Give the operator a moment to see your edit first, or `Updated` may still be
+the `True` from before it.
+
+On managed Kubernetes services, each step can take about 30 seconds longer than
+Memgraph needs to start. That is the DNS cache of the cluster remembering, for
+its time-to-live, that the restarted pod's name didn't exist.
+
+### Upgrade Memgraph
+
+To upgrade Memgraph, change `image.tag`:
+
+```bash
+kubectl patch mgdbc memgraph -n memgraph --type=merge -p '{"spec":{"image":{"tag":"NEW_VERSION"}}}'
+```
+
+Replace `NEW_VERSION` with the Memgraph version to upgrade to.
+
+The operator restarts the pods onto the new image in the order above, which is
+the order of an [in-service software
+upgrade](/clustering/high-availability/kubernetes/helm-chart#in-service-software-upgrade-issu):
+REPLICAs, the MAIN, coordinator followers, then the coordinator leader. The
+operator doesn't back up the cluster or run extra steps that a release needs.
+Before you upgrade, [back up](#back-up-and-restore) the volumes and check the
+[upgrade guides](/database-management/upgrades) for the version you upgrade to.
+
+## Configure storage
+
+Every pod gets one PersistentVolumeClaim for Memgraph's data directory, named
+`lib-storage-<pod>`, such as `lib-storage-memgraph-data-0`. Set it per role
+under `storage.coordinators` and `storage.data`:
+
+| Field | Default | Description |
+|---|---|---|
+| `libPVCSize` | `10Gi` | Size of the claim. It can grow on a live cluster, never shrink. |
+| `libStorageClassName` | the cluster's default StorageClass | StorageClass of the claim. `""` binds a pre-created PersistentVolume. |
+| `libStorageAccessMode` | `ReadWriteOnce` | Access mode of the claim. |
+| `logFile` | `LibClaim` | `LibClaim` writes Memgraph's log files to `/var/lib/memgraph/logs` on the claim. `None` writes no log file; logs go to the container's stderr only. |
+
+`storage.retentionPolicy` decides what happens to the claims when you delete
+the cluster or lower a count:
+
+- **`Retain`** (default): the claims are kept. Raising the count or creating the
+  cluster again reattaches them.
+- **`Delete`**: the claims are deleted with the pods, and the data with them.
+
+```yaml
+spec:
+  storage:
+    retentionPolicy: Retain
+    data:
+      libPVCSize: 50Gi
+      libStorageClassName: premium-ssd
+```
+
+With `logFile: LibClaim`, the claim also holds `log-retention-days` of log
+files. Size it for snapshots, WAL files and logs, or lower `log-level` or
+`log-retention-days` in [`flags`](#configure-memgraph-flags).
+
+You can't change `libStorageClassName` or `libStorageAccessMode` on a live
+cluster: Kubernetes doesn't allow changing them on an existing claim. The API
+server rejects the edit. To change them, delete the `MemgraphDBCluster`, which
+keeps the claims under the default `Retain` policy, and create it again with the
+new value.
+
+### Grow a volume
+
+Raise `libPVCSize` and the operator grows every claim of the role under the
+running pods, without a restart:
+
+```bash
+kubectl patch mgdbc memgraph -n memgraph --type=merge -p '{"spec":{"storage":{"data":{"libPVCSize":"50Gi"}}}}'
+kubectl wait --namespace memgraph --for=condition=Converged memgraphdbcluster/memgraph --timeout=10m
+```
+
+The StorageClass must set `allowVolumeExpansion: true`, and its storage driver
+must be able to grow a volume that's in use, as the CSI drivers of the major
+clouds can. `Converged` is `False` until every claim has the new size, with one
+of these reasons:
+
+- `VolumeExpansionInProgress`: the volumes are growing. The message names the
+  claims, and the storage driver's first error if it reports one.
+- `VolumeExpansionRefused`: the API server refused the new size, usually
+  because the StorageClass doesn't allow expansion. Allow it, and the operator
+  tries again.
+- `VolumeExpansionFailed`: the storage provider gave up on the resize.
+
+A driver that can only grow a volume no pod uses keeps the resize waiting. To
+finish it, delete the `MemgraphDBCluster`, wait for the claims to report their
+new size, and create the cluster again.
+
+### Collect core dumps
+
+`coreDumps` gives each pod of a role a second claim for core dumps, which help
+debug a crash. Add it when you create the cluster: a role's `coreDumps` block
+can't be added or removed later.
+
+```yaml
+spec:
+  coreDumps:
+    data:
+      size: 20Gi
+```
+
+A dump is about as large as the crashing process's memory, so size the claim
+against the role's memory limit. By default (`corePattern: Operator`), a
+privileged init container points the node's `kernel.core_pattern` at the
+volume; set `corePattern: Node` where privileged containers aren't allowed and
+the node is configured already. `coreDumps.uploader` adds a sidecar that ships
+the dumps elsewhere, such as to S3.
+
+## Expose the cluster outside Kubernetes
+
+A client of an HA cluster connects to a coordinator, gets the routing table and
+then connects to the addresses in it. Those are the addresses each member is
+registered with. So exposing the cluster needs a way in and a routing table
+with addresses clients outside Kubernetes can reach. `externalAccess` does
+both: the operator creates the external objects and registers every member at
+the address they get.
+
+### LoadBalancer
+
+```yaml
+spec:
+  externalAccess:
+    type: LoadBalancer
+```
+
+The operator creates a Service of type `LoadBalancer` shared by the
+coordinators, and one for each data instance. Three coordinators and two data
+instances use three cloud load balancers.
+
+### Gateway
+
+```yaml
+spec:
+  externalAccess:
+    type: Gateway
+    gateway:
+      gatewayClassName: eg
+      dataPortBase: 9000
+```
+
+The operator creates one [Gateway API](https://gateway-api.sigs.k8s.io/)
+Gateway with a TCP listener on port 7687 for the coordinators and one per data
+instance on `dataPortBase` plus its ordinal: data instance 0 on 9000, data
+instance 1 on 9001. That is one address and one cloud load balancer for the
+whole cluster.
+
+- `gatewayClassName` is required: the GatewayClass whose controller programs
+  the Gateway.
+- `dataPortBase` defaults to `9000` and must be above 7687.
+
+The Gateway needs Gateway API **1.6 or newer**, where `TCPRoute` is served as
+`gateway.networking.k8s.io/v1`, and a running Gateway controller. Envoy Gateway
+1.9 is the first release that includes Gateway API 1.6. The operator checks for
+the Gateway API once, when it starts: if you install it later, restart the
+operator.
+
+```bash
+kubectl -n memgraph-operator-system rollout restart deploy/memgraph-operator-controller-manager
+```
+
+### Connect from outside
+
+Wait for `Converged`, then read the addresses from the status:
+
+```bash
+kubectl wait --namespace memgraph --for=condition=Converged memgraphdbcluster/memgraph --timeout=10m
+kubectl get mgdbc memgraph -n memgraph -o jsonpath='{.status.externalAccess}'
+```
+
+`status.externalAccess.coordinators` is the coordinators' address, and
+`status.externalAccess.data` lists each data instance's. Connect with the
+`neo4j://` scheme to the coordinators' address only; the driver gets the
+routing table from there. With [Bolt TLS](#bolt-tls), use `neo4j+s://` or
+`neo4j+ssc://`: the load balancers pass the TLS connection through.
+
+While a load balancer has no address yet, its members are registered at their
+pod addresses, and `Converged` is `False` with the reason
+`ExternalAddressPending`. If that persists, nothing is giving the Service or
+Gateway an address: no cloud load balancer controller, or no controller for the
+GatewayClass. If the cluster lacks something the exposure needs, such as the
+Gateway API, the reason is `ApplyFailed` and the message says what to install.
+
+### Use DNS names
+
+By default the operator registers each member at the IP address or hostname
+its load balancer reports. To register DNS names instead, set the
+[external-dns](https://github.com/kubernetes-sigs/external-dns) hostname
+annotation. The operator reads the annotation, so this works whether or not
+external-dns runs. In data instance annotations, `{ordinal}` is replaced with
+the pod ordinal:
+
+```yaml
+spec:
+  externalAccess:
+    type: LoadBalancer
+    coordinators:
+      annotations:
+        external-dns.alpha.kubernetes.io/hostname: memgraph.example.com
+    data:
+      annotations:
+        external-dns.alpha.kubernetes.io/hostname: data-{ordinal}.memgraph.example.com
+```
+
+This registers the coordinators at `memgraph.example.com:7687`, `instance_0`
+at `data-0.memgraph.example.com:7687` and `instance_1` at
+`data-1.memgraph.example.com:7687`. The data hostname must contain
+`{ordinal}`, and the coordinators' hostname must not.
+
+Removing `externalAccess` deletes the external objects and registers every
+member at its pod address again.
+
+## Configure TLS
+
+`tls` turns on TLS from certificates in Secrets you create. The two modes are
+independent:
+
+- `tls.bolt`: clients connect over Bolt with TLS.
+- `tls.intraCluster`: the members talk to each other over mutual TLS.
+
+The operator doesn't issue or rotate certificates. Use
+[cert-manager](https://cert-manager.io/) or your own tooling.
+
+### Bolt TLS
+
+```yaml
+spec:
+  tls:
+    bolt:
+      secretRef:
+        name: bolt-tls
+```
+
+`bolt-tls` is a `kubernetes.io/tls` Secret in the cluster's namespace, with
+`tls.crt` and `tls.key`:
+
+```bash
+kubectl create secret tls bolt-tls --cert=tls.crt --key=tls.key --namespace memgraph
+```
+
+Every pod of both roles serves Bolt on port 7687 with this certificate, and the
+metrics endpoint on port 9091 switches to HTTPS too. For clients that verify
+the certificate, it must name every address they connect to:
+
+- the external address, if you [expose the
+  cluster](#expose-the-cluster-outside-kubernetes);
+- `*.memgraph-coordinator.memgraph.svc.cluster.local` and
+  `*.memgraph-data.memgraph.svc.cluster.local` for clients inside Kubernetes
+  (`*.<cluster>-<role>.<namespace>.svc.<clusterDomain>`).
+
+Connect with `neo4j+s://` to verify the certificate, or `neo4j+ssc://` to
+encrypt without verifying it. With `mgconsole`, pass `--use-ssl=true`.
+
+You can add or remove `tls.bolt` on a live cluster; the operator [restarts the
+pods](#rolling-restarts).
+
+### Intra-cluster TLS
+
+```yaml
+spec:
+  tls:
+    intraCluster:
+      secretRef:
+        name: intra-cluster-tls
+```
+
+The Secret holds `tls.crt`, `tls.key` and `ca.crt`, the CA every member checks
+its peers' certificates against. Replication, the coordinators' management
+traffic and Raft all use [mutual
+TLS](/clustering/high-availability/how-high-availability-works#intra-cluster-tls).
+One Secret serves every pod of both roles. A cert-manager Certificate from a CA
+issuer writes all three keys:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: memgraph-intra-cluster
+  namespace: memgraph
+spec:
+  secretName: intra-cluster-tls
+  issuerRef:
+    name: memgraph-ca
+    kind: Issuer
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - "*.memgraph-coordinator.memgraph.svc.cluster.local"
+    - "*.memgraph-data.memgraph.svc.cluster.local"
+```
+
+Decide on intra-cluster TLS when you create the cluster. A member with it can't
+talk to a member without it, so the API server rejects adding or removing
+`tls.intraCluster` on a live cluster. To change it, delete the
+`MemgraphDBCluster`, which keeps its claims under the default `Retain` policy, and
+create it again.
+
+### Renew certificates
+
+Update the Secret in place. Within about a minute, Kubernetes updates the
+certificate files in every pod. Memgraph then loads them when you run
+[`RELOAD BOLT SERVER TLS`](/database-management/ssl-encryption#reload-ssl-certificates-at-runtime)
+or
+[`RELOAD INTRA_CLUSTER TLS`](/database-management/ssl-encryption#reload-intra-cluster-tls-certificates)
+on every coordinator and data instance. Nothing restarts.
+
+Pointing `secretRef` at a different Secret restarts the pods instead. For
+intra-cluster TLS, the old and the new certificates must trust each other
+during the restart: keep the same CA, or put both CAs in `ca.crt` of both
+Secrets.
+
+## Monitor the cluster
+
+Every coordinator and data instance serves metrics in the OpenMetrics format on
+port 9091, in a port named `metrics` on the pods and on both headless Services.
+A Prometheus you run can scrape them with a ServiceMonitor, PodMonitor or scrape
+configuration of your own. The [monitoring](/database-management/monitoring)
+page lists the metrics.
+
+`monitoring` creates the objects for common setups. Each block is optional, and
+removing a block deletes what it created.
+
+### ServiceMonitor
+
+For [Prometheus Operator](https://prometheus-operator.dev/), such as in
+kube-prometheus-stack:
+
+```yaml
+spec:
+  monitoring:
+    serviceMonitor:
+      labels:
+        release: kube-prometheus-stack
+      interval: 15s
+```
+
+The operator creates a ServiceMonitor named after the cluster, in the
+cluster's namespace. Set `labels` to what your Prometheus selects
+ServiceMonitors by. `interval` is optional. Your Prometheus must look for
+ServiceMonitors in the cluster's namespace
+(`serviceMonitorNamespaceSelector`).
+
+The `ServiceMonitor` CRD must exist when the operator starts. If it doesn't,
+`Converged` is `False` with the reason `ApplyFailed`. Install Prometheus
+Operator, then restart the operator.
+
+### Grafana dashboard
+
+```yaml
+spec:
+  monitoring:
+    grafanaDashboard: {}
+```
+
+The operator creates the ConfigMap `memgraph-grafana-dashboard` with the
+"Memgraph OpenMetrics" dashboard, labeled `grafana_dashboard: "1"` for the
+Grafana sidecar of kube-prometheus-stack. Setting `labels` replaces that
+default label. The sidecar must watch the cluster's namespace.
+
+### Remote metrics and logs
+
+`vmagentRemote` and `vectorRemote` push the cluster's metrics and logs out of
+it, so Memgraph can monitor the cluster without reaching into your network.
+They're the operator's form of the chart's [remote metrics and
+logs](/clustering/high-availability/kubernetes/helm-chart#remote-metrics-and-logs).
+Memgraph gives you the endpoints and credentials; any Prometheus remote-write
+endpoint and any Loki-compatible endpoint work too.
+
+```yaml
+spec:
+  monitoring:
+    vmagentRemote:
+      remoteWrite:
+        url: https://METRICS_ENDPOINT/api/v1/write
+        basicAuth:
+          secretRef:
+            name: monitoring-basic-auth
+      externalLabels:
+        cluster: production
+    vectorRemote:
+      logsEndpoint: https://LOGS_ENDPOINT/insert
+      auth:
+        secretRef:
+          name: monitoring-basic-auth
+      extraLabels:
+        cluster_id: production
+```
+
+- **`vmagentRemote`** runs a vmagent Deployment, `memgraph-vmagent`, that
+  scrapes every instance every `scrapeInterval` (default `15s`) and writes the
+  samples to `remoteWrite.url`.
+- **`vectorRemote`** adds a Vector sidecar to every pod that sends Memgraph's
+  log lines to `logsEndpoint`. Vector appends `/loki/api/v1/push` to it. Adding
+  or removing the block [restarts the pods](#rolling-restarts).
+
+The credentials Secret holds the keys `username` and `password`:
+
+```bash
+kubectl create secret generic monitoring-basic-auth --namespace memgraph \
+  --type=kubernetes.io/basic-auth --from-literal=username=USERNAME --from-literal=password=PASSWORD
+```
+
+Neither block writes anything to the resource's status. Check the vmagent's
+log (`kubectl logs -n memgraph deploy/memgraph-vmagent`) and the sidecar's
+(`kubectl logs -n memgraph memgraph-data-0 -c vector`) to see whether the
+endpoint accepts the data.
+
+## Schedule the pods
+
+`scheduling.podAntiAffinity` keeps the pods of a role on different nodes. Add it
+on any cluster with more than one node; without it, the scheduler can place all
+three coordinators on one node, and losing that node loses the Raft quorum.
+
+```yaml
+spec:
+  scheduling:
+    podAntiAffinity: {}
+```
+
+An empty block is a preferred rule that keeps coordinators apart from
+coordinators and data instances apart from data instances, on distinct nodes.
+Three fields tune it:
+
+| Field | Default | Other value |
+|---|---|---|
+| `type` | `preferred`: the scheduler may ignore the rule when nothing else fits. | `required`: a pod with no node of its own stays `Pending`. |
+| `scope` | `role`: pods of the same role are kept apart. | `cluster`: every pod of the cluster is kept apart from every other. |
+| `topologyKey` | `kubernetes.io/hostname`: distinct nodes. | Any node label, such as `topology.kubernetes.io/zone`. |
+
+The chart's [affinity modes](/clustering/high-availability/kubernetes/helm-chart#node-affinity)
+map to these: `parity` is `type: required` with `scope: role`, and `unique` is
+`type: required` with `scope: cluster`, which needs at least
+`coordinators + dataInstances` nodes.
+
+Under `scheduling.coordinators` and `scheduling.data`, you can also set
+`nodeSelector`, `tolerations`, `topologySpreadConstraints`, `podAntiAffinity`
+and `priorityClassName`, in the Kubernetes pod spec format, for that role's
+pods. The chart's `nodeSelection` mode is a `nodeSelector` per role:
+
+```yaml
+spec:
+  scheduling:
+    podAntiAffinity: {}
+    coordinators:
+      nodeSelector:
+        role: coordinator-node
+    data:
+      nodeSelector:
+        role: data-node
+```
+
+A role's own `podAntiAffinity` terms are added to the operator's rule. A
+topology spread constraint without a `labelSelector` selects the role's pods.
+
+Every scheduling change restarts the pods. If a `required` rule or a
+`nodeSelector` leaves a restarted pod with no node, it stays `Pending` and the
+rolling restart stops there while the other members keep serving. Revert the
+change and the pod is scheduled.
+
+## Configure the pods
+
+### Resources, probe and labels
+
+| Field | Default | Description |
+|---|---|---|
+| `resources.coordinators`, `resources.data` | none | CPU and memory requests and limits of the Memgraph container, per role. |
+| `readinessProbe.periodSeconds` | `5` | Seconds between readiness checks. |
+| `readinessProbe.timeoutSeconds` | `10` | Seconds before a check times out. |
+| `readinessProbe.failureThreshold` | `20` | Failed checks before a ready pod turns unready. |
+| `labels.coordinators`, `labels.data` | none | Extra `podLabels`, `statefulSetLabels` and `serviceLabels` per role. |
+| `clusterDomain` | `cluster.local` | The Kubernetes cluster domain in the members' registered addresses. |
+
+The readiness probe is a TCP check on the coordinator port for coordinators and
+on the Bolt port for data instances. The pods have no liveness or startup probe:
+Memgraph recovers its data before it opens any port, and a liveness probe could
+kill a long recovery and make it start over.
+
+### Security context and node settings
+
+| Field | Default | Description |
+|---|---|---|
+| `securityContext` | `runAsUser: 101`, `runAsGroup: 103`, `fsGroup: 103` | The identity every pod runs as: the `memgraph` user of the Memgraph image. An empty block, `{}`, sets none of them and lets the platform assign them. |
+| `sysctlInitContainer` | absent | Raises the node's `vm.max_map_count` to `maxMapCount` (default `524288`) from a privileged init container, like the chart's [sysctl options](/clustering/high-availability/kubernetes/helm-chart#sysctl-options). |
+| `fixOwnershipInitContainer` | absent | Changes the owner of the pod's volumes to the Memgraph user from a root init container, for storage drivers that ignore `fsGroup`, like the chart's [ownership fix](/clustering/high-availability/kubernetes/helm-chart#manual-ownership-fix). |
+
+Memgraph warns at startup when `vm.max_map_count` is too low and can crash
+under load; see [system configuration](/database-management/system-configuration).
+Add `sysctlInitContainer: {}` wherever privileged containers are allowed, or
+raise the value on the nodes yourself.
+
+### Run on OpenShift
+
+OpenShift's default `restricted-v2` security context constraint assigns each
+pod's user and `fsGroup` from the namespace's range and rejects pods that name
+other values. To run there:
+
+- Set `securityContext: {}` on the `MemgraphDBCluster`. Leave out
+  `fixOwnershipInitContainer`, which runs as root, and `sysctlInitContainer`,
+  which is privileged. If you collect core dumps, set
+  `coreDumps.corePattern: Node`.
+- Install the operator without its own user and group:
+  `--set podSecurityContext.runAsUser=null --set podSecurityContext.runAsGroup=null`.
+
+### Environment variables, volumes and containers
+
+These fields add to each role's pods, per role (`coordinators`, `data`):
+
+- `extraEnv`: environment variables of the Memgraph container, as `name` and
+  `value`.
+- `extraVolumes`: pod volumes, in the Kubernetes `Volume` format.
+- `extraVolumeMounts`: mounts of those volumes in the Memgraph container. They
+  can't mount over `/var/lib/memgraph`, `/var/core/memgraph` or `/tmp`.
+- `userContainers`: containers of your own next to Memgraph, the chart's
+  `userContainers`.
+- `initContainers`: init containers of your own that run before Memgraph, the
+  chart's `initContainers`.
+
+A container without a `securityContext` gets the same restricted one as the
+Memgraph container. The API server doesn't validate the content of
+`extraVolumes`, `userContainers` and `initContainers`: a mistake shows up as
+`ApplyFailed` on the resource. A container that keeps failing keeps its pod
+unready, so the pod is never registered. Every change to these fields restarts
+the role's pods.
+
+## Import CSV files
+
+[`LOAD CSV`](/querying/clauses/load-csv) reads a file on the instance that runs
+it, which is the MAIN, and the MAIN changes on failover and during restarts. Put
+the files on a shared volume that every data instance mounts, so whichever
+instance is MAIN finds them at the same path.
+
+1. Create a claim with the `ReadWriteMany` access mode, from a file share such
+   as Azure Files, Amazon EFS, Google Filestore or NFS, and copy the files onto
+   it:
+
+   ```yaml
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: csv-import
+     namespace: memgraph
+   spec:
+     accessModes:
+       - ReadWriteMany
+     storageClassName: azurefile-csi
+     resources:
+       requests:
+         storage: 100Gi
+   ```
+
+   The files must be readable by uid 101 or gid 103, unless `securityContext`
+   sets another identity.
+
+2. Mount it read-only into the data instances. This restarts them:
+
+   ```yaml
+   spec:
+     extraVolumes:
+       data:
+         - name: csv-import
+           persistentVolumeClaim:
+             claimName: csv-import
+             readOnly: true
+     extraVolumeMounts:
+       data:
+         - name: csv-import
+           mountPath: /import
+           readOnly: true
+   ```
+
+3. Run the import on the MAIN, with paths under the mount. If the MAIN is
+   `instance_0`, that's the pod `memgraph-data-0`:
+
+   ```bash
+   kubectl exec -i -n memgraph memgraph-data-0 -c memgraph -- mgconsole <<'EOF'
+   LOAD CSV FROM "/import/people.csv" WITH HEADER AS row
+   CREATE (:Person {id: row.id, name: row.name});
+   EOF
+   ```
+
+If a failover interrupts the import, run it again on the new MAIN.
+
+## Set AWS credentials
+
+Data instances read from S3, for example with `LOAD PARQUET`, using the
+credentials in `awsCredentials`. The Secret holds up to four keys:
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` and
+`AWS_ENDPOINT_URL`. Each key is optional:
+
+```bash
+kubectl create secret generic aws-s3-credentials --namespace memgraph \
+  --from-literal=AWS_ACCESS_KEY_ID=YOUR_ACCESS_KEY \
+  --from-literal=AWS_SECRET_ACCESS_KEY=YOUR_SECRET_KEY \
+  --from-literal=AWS_REGION=eu-west-1
+```
+
+```yaml
+spec:
+  awsCredentials:
+    secretRef:
+      name: aws-s3-credentials
+```
+
+Leave `AWS_ENDPOINT_URL` out for AWS, or set it to an S3-compatible endpoint
+such as MinIO.
+
+The operator sets each value the Secret holds on every ready data instance with
+`SET DATABASE SETTING`, and leaves the setting of a missing key as the instance
+has it. Nothing restarts: not when you add the block, point it at another
+Secret or update the Secret. Memgraph keeps the settings across restarts, and a
+new data instance gets them once it's ready and the cluster has converged.
+
+Removing the block, or a key from the Secret, doesn't clear the value. Memgraph
+keeps it until you run `SET DATABASE SETTING "aws.access_key" TO "";`, and the
+same for `aws.secret_key`, `aws.region` and `aws.endpoint_url`.
+
+## Back up and restore
+
+The operator has no backup feature of its own. Back up with volume snapshots of
+the `lib-storage` claims, using any CSI driver with snapshot support or a tool
+built on the `VolumeSnapshot` API, such as Velero, Kasten or PX-Backup.
+
+- Snapshot all `lib-storage` claims of the cluster together, at one point in
+  time, so the coordinators and data instances agree on the cluster's state.
+  The claims carry the label `app.kubernetes.io/instance=<cluster>`.
+- To shorten recovery, run [`CREATE SNAPSHOT;`](/database-management/backup-and-restore)
+  on the MAIN just before the volume snapshot.
+
+To restore a cluster in place:
+
+1. Delete the `MemgraphDBCluster` and keep its manifest. The pods go, and under
+   the default `retentionPolicy: Retain` the claims stay.
+2. Replace each claim with one restored from its snapshot, under the same name.
+   The snapshot of `lib-storage-memgraph-data-0` goes behind
+   `lib-storage-memgraph-data-0`, and each coordinator's behind its own
+   ordinal. The new claim must match the role's storage class, access mode and
+   at least its size, and carry the labels the operator puts on its claims:
+   `app.kubernetes.io/name: memgraph`, `app.kubernetes.io/instance: memgraph`
+   (the cluster's name) and `app.kubernetes.io/component: data` (or
+   `coordinator`). Without them, the operator can't grow the claim later.
+3. Create the `MemgraphDBCluster` again. The pods start on the restored data, and
+   the operator registers whatever is missing.
+
+You can restore into another Kubernetes cluster only into a namespace with the
+same name and the same cluster domain: the coordinators store every member's
+address, which includes both. Install the operator and create the Secrets the
+resource names there first.
+
+## Delete a cluster
+
+```bash
+kubectl delete mgdbc memgraph -n memgraph
+```
+
+Deleting the resource deletes its pods, StatefulSets, Services and other
+objects. Under the default `Retain` policy, the PersistentVolumeClaims and the
+data stay. Delete them when you no longer need the data:
+
+```bash
+kubectl delete pvc -n memgraph -l app.kubernetes.io/instance=memgraph
+```
+
+## Events
+
+The operator records a Kubernetes Event on the `MemgraphDBCluster` for every
+action it takes, including every command it sends to Memgraph. See them with
+`kubectl describe mgdbc memgraph -n memgraph`, or as a list:
+
+```bash
+kubectl events -n memgraph --for mgdbc/memgraph
+```
+
+| Reason | Type | When |
+|---|---|---|
+| `CoordinatorAdded` | Normal | `ADD COORDINATOR` succeeded. |
+| `InstanceRegistered` | Normal | `REGISTER INSTANCE` succeeded. |
+| `MainPromoted` | Normal | A data instance was promoted to MAIN. |
+| `MainPromotionRefused` | Warning | The coordinators refused to promote one candidate; the operator tries the next. |
+| `MainDemoted` | Normal | A retiring MAIN was demoted. |
+| `InstanceUnregistered` | Normal | A retiring data instance was unregistered. |
+| `CoordinatorRemoved` | Normal | A retiring coordinator was removed. |
+| `LeadershipYielded` | Normal | Raft leadership moved off a retiring coordinator. |
+| `BoltServerUpdated` | Normal | A member's registered Bolt address changed. |
+| `CoordinatorAdditionRefused`, `InstanceRegistrationRefused`, `MainDemotionRefused`, `InstanceUnregistrationRefused`, `CoordinatorRemovalRefused`, `LeadershipYieldRefused`, `BoltServerUpdateRefused` | Warning | The coordinator leader refused that command. The note quotes Memgraph's error. |
+| `SettingApplied` | Normal | `SET DATABASE SETTING` succeeded on a pod. |
+| `SettingRejected` | Warning | A pod or the coordinators refused a setting. |
+| `CoordinatorSettingApplied` | Normal | `SET COORDINATOR SETTING` succeeded. |
+| `PodRestarted` | Normal | The operator deleted a pod to restart it. |
+| `StatefulSetShrunk` | Normal | A scale-down removed the retired members' pods. |
+| `VolumeExpansionRequested` | Normal | A claim was resized. |
+| `StatefulSetOrphaned` | Normal | A StatefulSet was recreated around its pods to grow its claims. |
+
+Each action is its own Event, and an Event that concerns one member names
+that member's pod as its related object. The same action on the same object
+within about six minutes is counted on the earlier Event instead of listed
+again.
+
+Events never contain the license or other Secret values. Kubernetes keeps Events
+for about an hour by default; to keep them longer, export them with your log
+pipeline.
+
+## Limitations
+
+- **No Bolt authentication.** The operator connects to the instances without
+  credentials, so don't enable authentication on a cluster it manages.
+
+For help, ask on [Discord](https://discord.gg/memgraph) or open an issue on
+[GitHub](https://github.com/memgraph/kubernetes-operator/issues).
