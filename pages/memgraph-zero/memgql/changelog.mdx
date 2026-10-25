@@ -5,7 +5,39 @@ description: MemGQL release notes
 
 # MemGQL Changelog
 
+> **Note:** behavior and breaking changes are tagged by how likely they are to
+> affect existing queries and clients: `BIG` breaks common usage, `MEDIUM`
+> affects some setups, and `LOW` rarely needs any action.
+
 ## MemGQL v0.14.0 - unreleased
+
+### ⚠️ Behavior and breaking changes
+
+- `MEDIUM` **Unsupported writes and projections fail instead of doing something
+  else.** On SQL backends `DETACH DELETE`, `REMOVE` and `DELETE r` on a
+  relationship return an actionable error; `DETACH DELETE` used to run as a
+  plain `DELETE` and `DELETE r` deleted every row of the relationship table.
+  Map projections (`RETURN n {.a, .b}`) on SQL Server, SAP HANA and Redshift
+  return an actionable error instead of `null`.
+- `MEDIUM` **A routed query no longer changes the session's connection.** A
+  query that routed to a graph by its labels used to become the session's
+  default for the next query with nothing to route by. Use `SESSION SET GRAPH`
+  or `SESSION SET CONNECTION` to set a default on purpose.
+- `MEDIUM` **`USE CONNECTION` / `USE CONNECTOR` are refused.** They now
+  return an error pointing to `USE <graph>`.
+- `LOW` **Result columns follow the `RETURN` order** on Memgraph and Neo4j,
+  also for statements forwarded verbatim and for empty results, which used to
+  report a single `result` column. A write without `RETURN` reports no
+  columns.
+- `LOW` **Bolt connections close after 30 minutes of inactivity.** They used
+  to close 300 seconds after they were opened, however busy they were.
+- `LOW` **A label-less `MATCH (n)` on a SQL backend** returns an error listing
+  the labels the mapping defines, instead of a raw backend error.
+- `LOW` **Apache Pinot queries use SQL null semantics.** MemGQL turns on
+  Pinot's null handling unless the connector already sets it, so a missing
+  value is `null` instead of `0`.
+- `LOW` **A plain `INSERT` reports the affected count** on DuckDB and Iceberg
+  (Trino), which used to return the inserted row or a `rows` column.
 
 ### 🍃 New features & Improvements
 
@@ -46,8 +78,8 @@ description: MemGQL release notes
   every SQL dialect (`CAST(x AS TEXT)`, `CONCAT`, `||`). On MongoDB the
   functions with an aggregation operator (`upper`, `lower`, `trim`, `abs`,
   `char_length`, `CAST`, …) now run as well, where every scalar function used
-  to be refused. `EXISTS { … }` runs natively on Memgraph and Neo4j and is
-  refused with a rewrite hint on SQL backends. See
+  to be refused. `EXISTS { … }` runs natively on Memgraph and Neo4j and as a
+  correlated subquery on SQL backends. See
   [Functions and reserved words](/memgraph-zero/memgql/reference#functions-and-reserved-words-in-gql-mode).
 - **Richer cross-backend queries.** A query joining `USE` blocks on different
   backends can return whole nodes and relationships (`RETURN p, co`), and can
@@ -96,23 +128,36 @@ description: MemGQL release notes
   signals `has_more`, so a result of any size reaches the client page by page.
 - **Concurrent queries.** Queries to the same backend no longer wait for each
   other; each connection keeps its own pool of handlers.
-
-### ⚠️ Behavior changes
-
-- **A routed query no longer changes the session's connection.** A query that
-  routed to a graph by its labels used to become the session's default for the
-  next query with nothing to route by. Use `SESSION SET GRAPH` or
-  `SESSION SET CONNECTION` to set a default on purpose.
-- **Unsupported writes and projections fail instead of doing something
-  else.** On SQL backends `DETACH DELETE`, `REMOVE` and `DELETE r` on a
-  relationship return an actionable error; `DETACH DELETE` used to run as a
-  plain `DELETE` and `DELETE r` deleted every row of the relationship table.
-  Map projections (`RETURN n {.a, .b}`) on SQL Server, SAP HANA and Redshift
-  return an actionable error instead of `null`.
-- **A label-less `MATCH (n)` on a SQL backend** returns an error listing the
-  labels the mapping defines, instead of a raw backend error.
-- **`USE CONNECTION` / `USE CONNECTOR`** return an error pointing to
-  `USE <graph>`.
+- **More of Cypher on every backend.** `UNION [ALL]`, `CALL { … }`
+  subqueries, `CALL proc(…) YIELD …`, `EXISTS { … }` and pattern predicates
+  (`WHERE (p)-[:KNOWS]->()`, `WHERE NOT (p)-->()`) parse in Cypher mode and run
+  on SQL backends, where they used to be parse errors. Keywords
+  work as names without backticks (`MATCH (o:Order)`, `n.end`, `SKIP $skip`).
+  On SQL backends `toUpper`, `toLower`, `toString`, `toInteger`, `toFloat`,
+  `toBoolean` (and their `OrNull` forms), `substring`, `split`, `rand`,
+  `timestamp`, `id`, `labels`, `keys`, `properties` and `type` are translated
+  instead of being sent as unknown functions.
+- **`CALL { … }` subqueries on SQL backends.** `MATCH (p:Person) CALL (p) {
+  MATCH (p)-[:KNOWS]->(f) RETURN count(f) AS deg } RETURN p.name, deg` runs on
+  PostgreSQL, MySQL, DuckDB, Trino, SQL Server, Fabric and Oracle; other
+  backends refuse it by name. In GQL the subquery used to be dropped silently.
+- **More queries on `iceberg-direct`.** Inline property maps
+  (`MATCH (p:Person {id: 1})`), aggregates with or without grouping keys,
+  `OPTIONAL MATCH`, `WITH`, `UNWIND`, and a `MATCH` that continues from a bound
+  node now run in-process.
+- **Faster `iceberg-direct` queries.** `IN` lists, `AND` / `OR`, `IS NULL`,
+  `STARTS WITH`, the keys of a content join and the ids an expansion reaches are
+  pushed into the Iceberg scan, so fewer rows are read. The in-process
+  interpreter matches `IN` lists and edge lookups by hash instead of scanning,
+  and computes sort keys once per row. A filter on a thousand ids answers in
+  under 100 ms instead of about 8 s.
+- **Lower latency per query on one connection.** Each Bolt reply is now sent
+  without waiting for the client's delayed acknowledgement, and a page of
+  records is written in one go. Back-to-back queries on one connection no
+  longer take about 40 ms each.
+- **Configurable idle timeout.** `MEMGQL_SESSION_INACTIVITY_TIMEOUT` (seconds,
+  default `1800`, `0` for never) sets how long a Bolt connection may stay idle.
+  See [Configuration Reference](/memgraph-zero/memgql/reference#general).
 
 ### 🐞 Bug fixes
 
@@ -169,6 +214,58 @@ description: MemGQL release notes
   introspected schema; each connection is now introspected at boot.
 - **Single-connector Cypher mode** ran only the first arm of `INTERSECT`,
   `EXCEPT` and `OTHERWISE`.
+- **Large rows and parameters over Bolt.** A row over 64 KB hung the client,
+  and a parameter over about 16 KB was lost (`Parameter $p not provided`).
+- **Cross-store expressions on a split vertex.** An `OR` or arithmetic whose
+  operands come from different stores (`p.email = $e OR p.age = 99`,
+  `pr.price * 1000.0 / pr.weight_g`) failed with "not found in federation
+  schema".
+- **`count(*)` on SQL backends** was sent as `COUNT()`.
+- **`substring()` on SQL backends** used Cypher's 0-based offset as SQL's
+  1-based one, returning the wrong slice (or an error on ClickHouse).
+- **Zero-length paths.** `*0..n` dropped the start node on SQL backends and
+  MongoDB, and `*0..0` failed.
+- **`OPTIONAL MATCH` with a `WHERE` on the far node** returned a `null` row per
+  non-matching neighbour on SQL backends and MongoDB.
+- **JSON values below a `Json` attribute on PostgreSQL and MySQL** came back as
+  text (`"true"`, `"3"`), sorted as text, and failed in arithmetic.
+- **A node carried through `WITH`** failed in `WHERE f IS NULL` and in
+  `WITH p, count(f)` followed by `p.<key>` on SQL backends.
+- **Oracle errors** show the `ORA-` code instead of "Oracle closed the
+  connection without providing error details".
+- **MongoDB** `size()` of a string failed, nested keys of a `Json` property
+  (`p.prefs.theme`) were refused, `UNWIND $ids AS i MATCH (p {id: i})` failed,
+  and `count(f)` after `OPTIONAL MATCH` counted unmatched rows.
+- **`iceberg-direct`** returned columns under each other's names when the
+  table's column order was not alphabetical, and a second `MATCH` on a bound
+  node returned every edge of the table.
+- **Edge `INSERT` after `MATCH` on SQL backends** dropped the `WHERE` and the
+  edge's properties: `MATCH (a), (b) WHERE … INSERT (a)-[:R {…}]->(b)` failed
+  on a `NOT NULL` key, or wrote an edge for every pair of nodes on ClickHouse
+  and Iceberg (Trino). A `MATCH` followed by a new node, and a path `INSERT`
+  without `MATCH`, now write every element.
+- **`INSERT … RETURN`** returned the affected-row count (the whole row on
+  DuckDB) instead of the `RETURN` items on PostgreSQL, MySQL, DuckDB, Oracle,
+  ClickHouse, Iceberg (Trino) and MongoDB.
+- **`WITH n` on SQL backends** failed with an ambiguous column when the key
+  column is also listed in `attributes`.
+- **Scalar functions per dialect.** On Oracle `%`, `char_length`, `left`,
+  `right`, `log10` and `CAST(… AS BOOLEAN)` failed, and `CAST(… AS FLOAT)`
+  returned unreadable bytes. On Iceberg (Trino) `char_length`, `left` and
+  `right` failed, and on SQL Server `round(x)` failed. `log(x)` is the natural
+  logarithm on every backend.
+- **Value types.** A `DATE`, `TIME` or `TIMESTAMP` column crashed the
+  PostgreSQL connector, read as `null` on MySQL and as a day count on DuckDB;
+  these and `date('…')` now return temporal values on PostgreSQL, MySQL,
+  DuckDB, ClickHouse, Iceberg (Trino) and `iceberg-direct`. `sum()` over
+  integers returned a decimal or text on PostgreSQL and MySQL, `CAST(… AS
+  BOOLEAN)` returned `0` on MySQL, and `CAST(… AS STRING)` kept the number on
+  DuckDB.
+- **Apache Pinot** returned `0` instead of `null` for `NULLIF` and for
+  unmatched `OPTIONAL MATCH` values.
+- **`iceberg-direct`** refused scalar functions, `NULLIF`, `CAST` and the
+  Cypher conversion functions; they now run in-process, and integer division
+  truncates.
 
 ### 🚧 Known limitations
 
@@ -178,6 +275,9 @@ description: MemGQL release notes
   result before the first page.
 - On ClickHouse, integer division needs the attribute typed as an integer
   (`"type": "Int"`) in the mapping; otherwise it divides as floating point.
+- An `INSERT` that writes several nodes and relationships on a SQL backend runs
+  one statement per element and is not atomic; Oracle rolls back the earlier
+  statements when a later one fails.
 
 ## MemGQL v0.13.0 - October 7th, 2026
 

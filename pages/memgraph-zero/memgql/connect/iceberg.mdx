@@ -13,7 +13,7 @@ Iceberg tables, and both fully qualify table references as
 
 | Connector        | `CONNECTOR_TYPE` | Execution                                                                 | Writes |
 |------------------|------------------|---------------------------------------------------------------------------|--------|
-| Direct (native)  | `iceberg-direct` | Native, in-process; reads Iceberg as Arrow directly from object storage   | ❌ read-only |
+| Direct (native)  | `iceberg-direct` | Native, in-process; reads Iceberg as Arrow directly from object storage   | `INSERT` only (append) |
 | Trino            | `iceberg`        | GQL → Trino-dialect SQL, executed by a Trino engine                       | ✓ |
 
 **Which one should you use?**
@@ -23,7 +23,8 @@ Iceberg tables, and both fully qualify table references as
   pushing column projection and predicate filters into the scan
   (manifest/partition/row-group pruning). There is no SQL engine in the path, so
   base latency is lower. Joins, sort, limit, distinct, and aggregation run
-  **in-process** over Arrow batches. It is **read-only**.
+  **in-process** over Arrow batches. It is **append-only**: `INSERT` works,
+  rewrites do not.
 - Use the **Trino** connector when your workload is **join/aggregation heavy and
   fully contained in one Iceberg catalog**, or when you need writes. Trino
   executes joins, pruning, and aggregation server-side.
@@ -43,7 +44,8 @@ crates to talk to the Iceberg REST Catalog and read table data as Apache Arrow
 record batches directly from object storage. There is **no Trino** and no SQL
 string; MemGQL owns the entire execution loop.
 
-It is **read-only**: `INSERT`, `DELETE`, `SET`, and `REMOVE` return an explicit
+It is **append-only**: `INSERT` appends Parquet data files (creating the table
+when it is missing), while `DELETE`, `SET`, and `REMOVE` return an explicit
 "unsupported" error.
 
 ### 1. Start the Iceberg stack (MinIO + REST Catalog, no Trino)
@@ -83,8 +85,8 @@ docker run -d --rm \
 
 ### 2. Seed data
 
-The direct connector is read-only, and the REST catalog only manages metadata,
-so seeding is done with an external Iceberg writer. The example below uses
+The REST catalog only manages metadata, so this example seeds with an external
+Iceberg writer. The example below uses
 [PyIceberg](https://py.iceberg.apache.org/), which talks to the same REST
 catalog + MinIO that the connector reads from.
 
@@ -303,18 +305,47 @@ and scans run natively against the Iceberg scan (pushed into
 manifest/row-group pruning), while joins, sort, limit, distinct, and
 aggregation run **in-process** over Arrow batches.
 
-| Feature                                       | Iceberg (Direct) | Iceberg (Trino) |
-|-----------------------------------------------|------------------|-----------------|
-| `MATCH (n:Label) RETURN n.prop`               | ✓                | ✓               |
-| Whole-node `RETURN n` / whole-rel `RETURN r`  | ✓                | ✓               |
-| Pattern-level `WHERE` (`MATCH (n WHERE …)`)   | ✓                | ✓               |
-| Typed edge `(a)-[r:R]->(b)`                   | ✓ (local join)   | ✓               |
-| `ORDER BY` / `LIMIT`                          | ✓ (local)        | ✓               |
-| `DISTINCT`                                    | ✓ (local)        | ✓               |
-| Aggregation                                   | ✓ (local)        | ✓               |
-| Time-travel (snapshot)                        | ✓                | ✓               |
-| `INSERT (a {…})`                              | ❌ (read-only)   | ✓               |
-| `DELETE` (no alias; Trino requirement)        | ❌ (read-only)   | ✓               |
+| Feature                                                   | Iceberg (Direct) | Iceberg (Trino) |
+|-----------------------------------------------------------|------------------|-----------------|
+| `MATCH` / `WHERE` / `RETURN`                              | ✓                | ✓               |
+| Pattern-level `WHERE` (`MATCH (n WHERE …)`)               | ✓                | ✓               |
+| Multiple `MATCH` clauses in one query                     | ✓                | ✓               |
+| `OPTIONAL MATCH`                                          | ✓ (local)        | ✓               |
+| `WITH` clause (chain query steps)                         | ✓                | ✓               |
+| `WITH DISTINCT` / `WITH … ORDER BY … LIMIT N`             | ✓                | ✓               |
+| Multiple chained `WITH` steps                             | ✓                | ✓               |
+| Pass a whole node through `WITH n`                        | ✓                | ✓               |
+| Typed edge `(a)-[r:R]->(b)`                               | ✓ (local join)   | ✓               |
+| Untyped edge `()-[]->(b)`                                 | ✗                | ✗               |
+| `UNION` / `UNION ALL` / `UNION DISTINCT`                  | ✗                | ✓               |
+| `INTERSECT` / `EXCEPT`                                    | ✓                | ✓               |
+| `EXISTS { … }` / pattern predicates                       | ✗                | ✓               |
+| `CALL { … }` subquery                                     | ✗                | ✓               |
+| Quantified path `(){m,n}` / `*m..n` (bounded)             | ✗                | ✗               |
+| Whole-node `RETURN n` / whole-rel `RETURN r`              | ✓                | ✓               |
+| Map projections `RETURN n {.a, .b}`                       | ✓                | ✗               |
+| `IN` list membership `WHERE x IN [...]`                   | ✓                | ✓               |
+| `STARTS WITH` / `ENDS WITH` / `CONTAINS`                  | ✓                | ✓               |
+| `collect()` aggregate                                     | ✓                | ✗               |
+| `count`, `sum`, `avg`, `min`, `max`                       | ✓ (local)        | ✓               |
+| `COUNT(DISTINCT …)`                                       | ✓                | ✓               |
+| Arithmetic `+ - * / %`                                    | ✓                | ✓               |
+| `CASE WHEN … THEN … ELSE … END`                           | ✓                | ✓               |
+| `COALESCE`, `NULLIF`                                      | ✓                | ✓               |
+| `CAST(x AS STRING \| INT \| FLOAT \| BOOLEAN)`            | ✓                | ✓               |
+| Scalar functions (`upper`, `abs`, `char_length`, …)       | ✓                | ✓               |
+| Cypher functions (`toUpper`, `substring`, `toInteger`, …) | ✓                | ✓               |
+| Query parameters (`$x`)                                   | ✓                | ✓               |
+| `date('YYYY-MM-DD')` returns a Date                       | ✓                | ✓               |
+| `FOR x IN [...]` / `UNWIND`                               | ✓ (local)        | ✗               |
+| `INSERT (a {…})`, incl. an edge between matched nodes     | ✓ (append-only)  | ✓               |
+| `INSERT (a {…}) RETURN a.x`                               | ✗                | ✓               |
+| `DELETE`                                                  | ✗                | ✓               |
+| `SET` / `REMOVE` (property update / delete)               | ✗                | ✗               |
+| `DETACH DELETE`                                           | ✗                | ✗               |
+| Quantified path `(){m,}` (unbounded)                      | ✗                | ✗               |
+| Shortest-path (`ALL SHORTEST` / `SHORTEST k`)             | ✗                | ✗               |
+| Time-travel (snapshot)                                    | ✓                | ✓               |
 
 On the Trino connector, map projections (`RETURN n {.a, .b}`) and `collect()`
 return an actionable error.
