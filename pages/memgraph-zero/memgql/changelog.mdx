@@ -46,8 +46,8 @@ description: MemGQL release notes
   every SQL dialect (`CAST(x AS TEXT)`, `CONCAT`, `||`). On MongoDB the
   functions with an aggregation operator (`upper`, `lower`, `trim`, `abs`,
   `char_length`, `CAST`, …) now run as well, where every scalar function used
-  to be refused. `EXISTS { … }` runs natively on Memgraph and Neo4j and is
-  refused with a rewrite hint on SQL backends. See
+  to be refused. `EXISTS { … }` runs natively on Memgraph and Neo4j and as a
+  correlated subquery on SQL backends. See
   [Functions and reserved words](/memgraph-zero/memgql/reference#functions-and-reserved-words-in-gql-mode).
 - **Richer cross-backend queries.** A query joining `USE` blocks on different
   backends can return whole nodes and relationships (`RETURN p, co`), and can
@@ -96,6 +96,28 @@ description: MemGQL release notes
   signals `has_more`, so a result of any size reaches the client page by page.
 - **Concurrent queries.** Queries to the same backend no longer wait for each
   other; each connection keeps its own pool of handlers.
+- **More of Cypher on every backend.** `UNION [ALL]`, `CALL { … }`
+  subqueries, `CALL proc(…) YIELD …`, `EXISTS { … }` and pattern predicates
+  (`WHERE (p)-[:KNOWS]->()`, `WHERE NOT (p)-->()`) parse in Cypher mode and run
+  on SQL backends, where they used to be parse errors. Keywords
+  work as names without backticks (`MATCH (o:Order)`, `n.end`, `SKIP $skip`).
+  On SQL backends `toUpper`, `toLower`, `toString`, `toInteger`, `toFloat`,
+  `toBoolean` (and their `OrNull` forms), `substring`, `split`, `rand`,
+  `timestamp`, `id`, `labels`, `keys`, `properties` and `type` are translated
+  instead of being sent as unknown functions.
+- **`CALL { … }` subqueries on SQL backends.** `MATCH (p:Person) CALL (p) {
+  MATCH (p)-[:KNOWS]->(f) RETURN count(f) AS deg } RETURN p.name, deg` runs on
+  PostgreSQL, MySQL, DuckDB, Trino, SQL Server, Fabric and Oracle; other
+  backends refuse it by name. In GQL the subquery used to be dropped silently.
+- **More queries on `iceberg-direct`.** Inline property maps
+  (`MATCH (p:Person {id: 1})`), aggregates with or without grouping keys,
+  `OPTIONAL MATCH`, `WITH`, `UNWIND`, and a `MATCH` that continues from a bound
+  node now run in-process. `IN` lists, `AND` / `OR`, `IS NULL` and
+  `STARTS WITH` are pushed into the Iceberg scan, and an `IN` over a thousand
+  ids answers in milliseconds instead of seconds.
+- **Configurable idle timeout.** `MEMGQL_SESSION_INACTIVITY_TIMEOUT` (seconds,
+  default `1800`, `0` for never) sets how long a Bolt connection may stay idle.
+  See [Configuration Reference](/memgraph-zero/memgql/reference#general).
 
 ### ⚠️ Behavior changes
 
@@ -113,6 +135,11 @@ description: MemGQL release notes
   labels the mapping defines, instead of a raw backend error.
 - **`USE CONNECTION` / `USE CONNECTOR`** return an error pointing to
   `USE <graph>`.
+- **Bolt connections close after 30 minutes idle** instead of 300 seconds
+  after they were opened, however busy.
+- **Result columns follow the `RETURN` order** on Memgraph and Neo4j, also for
+  statements forwarded verbatim and for empty results, which used to report a
+  single `result` column. A write without `RETURN` reports no columns.
 
 ### 🐞 Bug fixes
 
@@ -169,6 +196,33 @@ description: MemGQL release notes
   introspected schema; each connection is now introspected at boot.
 - **Single-connector Cypher mode** ran only the first arm of `INTERSECT`,
   `EXCEPT` and `OTHERWISE`.
+- **Large rows and parameters over Bolt.** A row over 64 KB hung the client,
+  and a parameter over about 16 KB was lost (`Parameter $p not provided`).
+- **Back-to-back queries on one connection** waited about 40 ms each for the
+  client's delayed acknowledgement.
+- **Cross-store expressions on a split vertex.** An `OR` or arithmetic whose
+  operands come from different stores (`p.email = $e OR p.age = 99`,
+  `pr.price * 1000.0 / pr.weight_g`) failed with "not found in federation
+  schema".
+- **`count(*)` on SQL backends** was sent as `COUNT()`.
+- **`substring()` on SQL backends** used Cypher's 0-based offset as SQL's
+  1-based one, returning the wrong slice (or an error on ClickHouse).
+- **Zero-length paths.** `*0..n` dropped the start node on SQL backends and
+  MongoDB, and `*0..0` failed.
+- **`OPTIONAL MATCH` with a `WHERE` on the far node** returned a `null` row per
+  non-matching neighbour on SQL backends and MongoDB.
+- **JSON values below a `Json` attribute on PostgreSQL and MySQL** came back as
+  text (`"true"`, `"3"`), sorted as text, and failed in arithmetic.
+- **A node carried through `WITH`** failed in `WHERE f IS NULL` and in
+  `WITH p, count(f)` followed by `p.<key>` on SQL backends.
+- **Oracle errors** show the `ORA-` code instead of "Oracle closed the
+  connection without providing error details".
+- **MongoDB** `size()` of a string failed, nested keys of a `Json` property
+  (`p.prefs.theme`) were refused, `UNWIND $ids AS i MATCH (p {id: i})` failed,
+  and `count(f)` after `OPTIONAL MATCH` counted unmatched rows.
+- **`iceberg-direct`** returned columns under each other's names when the
+  table's column order was not alphabetical, and a second `MATCH` on a bound
+  node returned every edge of the table.
 
 ### 🚧 Known limitations
 

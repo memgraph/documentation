@@ -40,7 +40,8 @@ supports.
 | Query parameters (`WHERE n.id = $id`, sent by the driver)          | ✓               | ✓            | ✓       |
 | String concatenation (`a \|\| b`, `'x' + a`)                        | ✓               | ✓            | ✓       |
 | `CAST(x AS STRING \| INT \| FLOAT \| BOOLEAN)`                      | ✓               | ✓            | ✗       |
-| `EXISTS { (n)-[:R]->() }` / `EXISTS { MATCH … }` in `WHERE`         | ✓               | ✗            | ✗       |
+| `EXISTS { (n)-[:R]->() }` / `EXISTS { MATCH … }` in `WHERE`         | ✓               | ✓            | ✗       |
+| `CALL { … }` / `CALL (n) { … }` subquery                           | ✓               | ✓            | ✗       |
 | `FOR x IN […]` (UNWIND-style loop)                                 | ✓               | ✗            | ✓       |
 | `collect()` / `collect_list()` (aggregate)                         | ✓               | ✓            | ✓       |
 | `count`, `sum`, `avg`, `min`, `max`                                | ✓               | ✓            | ✓       |
@@ -80,9 +81,10 @@ supports.
   returns an actionable error as well.
 - **Label-less `MATCH (n)` on SQL backends** returns an actionable error listing
   the labels the mapping defines; a label is what picks the table.
-- **`EXISTS { … }` on SQL backends** returns an actionable error. Write the
-  check as a traversal (`MATCH (s)-[:R]->(t) … RETURN DISTINCT s`) or as
-  `OPTIONAL MATCH … WHERE t IS NOT NULL`; Cypher backends run it as written.
+- **`CALL { … }` subqueries** run on SQL backends as a correlated `LATERAL`
+  (or `APPLY`) join. ClickHouse, Snowflake, Amazon Redshift, SAP HANA, Apache
+  Pinot and MongoDB return an actionable error; write the subquery as a
+  traversal (`OPTIONAL MATCH (p)-[:R]->(f) … count(f)`) there.
 - **Path variables on variable-length patterns**:
   `MATCH p = (a){1,3}(b) RETURN p` is not yet supported on SQL backends or
   MongoDB. Drop the `p =` binding (or query a Cypher backend) and `RETURN` the
@@ -150,7 +152,10 @@ On SQL backends `SIZE(x)` is the string length (`CHAR_LENGTH`), and a `+`
 concatenates only when one side is a string literal or a string function; a
 `+` between two columns stays numeric. A function GQL does not know fails to
 parse (`mismatched input '('`); `toUpper(p.sku)` becomes `UPPER(p.sku)`, or
-`CYPHER MATCH … RETURN toUpper(p.sku)`.
+`CYPHER MATCH … RETURN toUpper(p.sku)`. In Cypher mode the Cypher names are
+translated on every backend, not only on Memgraph and Neo4j: on SQL backends
+`toUpper` becomes `UPPER`, `toInteger` a cast, `substring` keeps its 0-based
+offset, and `id(n)` reads the node's key column.
 
 Some words that are ordinary labels or properties elsewhere are **reserved in
 GQL** and must be backtick-quoted when used as a label, relationship type,
@@ -190,26 +195,27 @@ How a Cypher statement executes depends on the backend it routes to:
 
 - **Memgraph / Neo4j:** the text executes **verbatim** — no
   parse → plan → re-generate round trip — so whatever the backend supports
-  works. That includes Cypher constructs beyond MemGQL's own parser (`CALL`
-  subqueries, pattern predicates, list comprehensions, `reduce`, `UNION`, map
-  literals, writes): those forward as-is whenever the statement's target is
+  works. That includes Cypher constructs beyond MemGQL's own parser (list
+  comprehensions, `reduce`, map literals, writes): those forward as-is whenever the statement's target is
   unambiguously one Cypher backend (an explicit `USE <graph>`, or a single
   live connection). A graph set to `READ ONLY` still refuses write-looking
   statements before they reach the backend.
 - **Every other backend** (Iceberg, PostgreSQL, Snowflake, …): the Cypher
   parses into the same internal representation as GQL and runs through the
   regular planning / translation path. The parsed surface covers `MATCH` /
-  `OPTIONAL MATCH`, `WHERE`, `WITH`, `UNWIND`, `RETURN`, variable-length
+  `OPTIONAL MATCH`, `WHERE`, `WITH`, `UNWIND`, `RETURN`, `UNION [ALL]`,
+  `CALL { … }` subqueries, `CALL proc(…) YIELD …`, `EXISTS { … }` and pattern
+  predicates (`WHERE (p)-[:KNOWS]->()`), variable-length
   relationships (`[:R*0..]`, `[:R*1..3]`), relationship-type alternation
   (`[:A|B]`), `ORDER BY` / `SKIP` / `LIMIT`, and the expression core
   (comparisons, boolean logic, arithmetic, `IN`, `STARTS WITH` /
   `ENDS WITH` / `CONTAINS`, `IS [NOT] NULL`, `CASE`, lists, parameters,
   aggregates with `DISTINCT`).
 
-One note on result columns for verbatim execution: when the statement parses
-in MemGQL's Cypher grammar, columns come back in the query's `RETURN` order;
-a statement that runs only via the verbatim forward reports its columns in
-alphabetical order.
+Result columns come back in the query's `RETURN` order, also for a statement
+forwarded verbatim and for an empty result. Keywords such as `Order`, `end`,
+`skip` or `limit` can be used as labels, property keys and parameter names
+without backticks.
 
 ## Graph Management Query Syntax
 
@@ -483,6 +489,7 @@ for property-level introspection. See
 | `CONNECTION_TYPE`         | _(none)_         | Alias for `CONNECTOR_TYPE`                                        |
 | `BOLT_LISTEN_ADDR`        | `0.0.0.0:7688`   | `<ip>:<port>` the Bolt listener binds — every interface by default, as in Memgraph. Use `127.0.0.1:7688` to accept only connections from the same host. An IP, not a hostname; IPv6 in brackets (`[::]:7688`). `--bolt-address` / `--bolt-port` override it. |
 | `MEMGQL_DEFAULT_LANGUAGE` | `gql`            | [Query language](/memgraph-zero/memgql/reference#query-languages) for bare (unprefixed) queries |
+| `MEMGQL_SESSION_INACTIVITY_TIMEOUT` | `1800` | Seconds a Bolt connection may stay idle before MemGQL closes it; a running query does not count as idle. `0` never closes it. |
 
 ### Logging
 
