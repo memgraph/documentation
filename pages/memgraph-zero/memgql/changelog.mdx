@@ -7,6 +7,33 @@ description: MemGQL release notes
 
 ## MemGQL v0.14.0 - unreleased
 
+### ⚠️ Behavior and breaking changes
+
+Each change is tagged by how likely it is to affect existing queries and
+clients: `BIG` breaks common usage, `MEDIUM` affects some setups, and `LOW`
+rarely needs any action.
+
+- `BIG` **Unsupported writes and projections fail instead of doing something
+  else.** On SQL backends `DETACH DELETE`, `REMOVE` and `DELETE r` on a
+  relationship return an actionable error; `DETACH DELETE` used to run as a
+  plain `DELETE` and `DELETE r` deleted every row of the relationship table.
+  Map projections (`RETURN n {.a, .b}`) on SQL Server, SAP HANA and Redshift
+  return an actionable error instead of `null`.
+- `MEDIUM` **A routed query no longer changes the session's connection.** A
+  query that routed to a graph by its labels used to become the session's
+  default for the next query with nothing to route by. Use `SESSION SET GRAPH`
+  or `SESSION SET CONNECTION` to set a default on purpose.
+- `MEDIUM` **`USE CONNECTION` / `USE CONNECTOR` are refused.** They now
+  return an error pointing to `USE <graph>`.
+- `LOW` **Result columns follow the `RETURN` order** on Memgraph and Neo4j,
+  also for statements forwarded verbatim and for empty results, which used to
+  report a single `result` column. A write without `RETURN` reports no
+  columns.
+- `LOW` **Bolt connections close after 30 minutes of inactivity.** They used
+  to close 300 seconds after they were opened, however busy they were.
+- `LOW` **A label-less `MATCH (n)` on a SQL backend** returns an error listing
+  the labels the mapping defines, instead of a raw backend error.
+
 ### 🍃 New features & Improvements
 
 - **Amazon Redshift connector.** `ADD CONNECTOR … TYPE redshift` maps
@@ -112,34 +139,20 @@ description: MemGQL release notes
 - **More queries on `iceberg-direct`.** Inline property maps
   (`MATCH (p:Person {id: 1})`), aggregates with or without grouping keys,
   `OPTIONAL MATCH`, `WITH`, `UNWIND`, and a `MATCH` that continues from a bound
-  node now run in-process. `IN` lists, `AND` / `OR`, `IS NULL` and
-  `STARTS WITH` are pushed into the Iceberg scan, and an `IN` over a thousand
-  ids answers in milliseconds instead of seconds.
+  node now run in-process.
+- **Faster `iceberg-direct` queries.** `IN` lists, `AND` / `OR`, `IS NULL`,
+  `STARTS WITH`, the keys of a content join and the ids an expansion reaches are
+  pushed into the Iceberg scan, so fewer rows are read. The in-process
+  interpreter matches `IN` lists and edge lookups by hash instead of scanning,
+  and computes sort keys once per row. A filter on a thousand ids answers in
+  under 100 ms instead of about 8 s.
+- **Lower latency per query on one connection.** Each Bolt reply is now sent
+  without waiting for the client's delayed acknowledgement, and a page of
+  records is written in one go. Back-to-back queries on one connection no
+  longer take about 40 ms each.
 - **Configurable idle timeout.** `MEMGQL_SESSION_INACTIVITY_TIMEOUT` (seconds,
   default `1800`, `0` for never) sets how long a Bolt connection may stay idle.
   See [Configuration Reference](/memgraph-zero/memgql/reference#general).
-
-### ⚠️ Behavior changes
-
-- **A routed query no longer changes the session's connection.** A query that
-  routed to a graph by its labels used to become the session's default for the
-  next query with nothing to route by. Use `SESSION SET GRAPH` or
-  `SESSION SET CONNECTION` to set a default on purpose.
-- **Unsupported writes and projections fail instead of doing something
-  else.** On SQL backends `DETACH DELETE`, `REMOVE` and `DELETE r` on a
-  relationship return an actionable error; `DETACH DELETE` used to run as a
-  plain `DELETE` and `DELETE r` deleted every row of the relationship table.
-  Map projections (`RETURN n {.a, .b}`) on SQL Server, SAP HANA and Redshift
-  return an actionable error instead of `null`.
-- **A label-less `MATCH (n)` on a SQL backend** returns an error listing the
-  labels the mapping defines, instead of a raw backend error.
-- **`USE CONNECTION` / `USE CONNECTOR`** return an error pointing to
-  `USE <graph>`.
-- **Bolt connections close after 30 minutes idle** instead of 300 seconds
-  after they were opened, however busy.
-- **Result columns follow the `RETURN` order** on Memgraph and Neo4j, also for
-  statements forwarded verbatim and for empty results, which used to report a
-  single `result` column. A write without `RETURN` reports no columns.
 
 ### 🐞 Bug fixes
 
@@ -198,8 +211,6 @@ description: MemGQL release notes
   `EXCEPT` and `OTHERWISE`.
 - **Large rows and parameters over Bolt.** A row over 64 KB hung the client,
   and a parameter over about 16 KB was lost (`Parameter $p not provided`).
-- **Back-to-back queries on one connection** waited about 40 ms each for the
-  client's delayed acknowledgement.
 - **Cross-store expressions on a split vertex.** An `OR` or arithmetic whose
   operands come from different stores (`p.email = $e OR p.age = 99`,
   `pr.price * 1000.0 / pr.weight_g`) failed with "not found in federation
