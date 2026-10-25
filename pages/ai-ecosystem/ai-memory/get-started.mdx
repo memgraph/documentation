@@ -1,0 +1,176 @@
+---
+title: Get started with Context Graph
+description: Install Context Graph with one command, connect your coding agents to Memgraph, and check that their sessions are recorded and recalled.
+---
+
+import { Tabs } from 'nextra/components'
+
+# Get started with Context Graph
+
+One command installs Context Graph, finds or starts Memgraph, and connects
+the coding agents you choose. Setup shows its plan and changes nothing until
+you confirm.
+
+From then on, Context Graph records your prompts, the agent's replies, and
+every tool call with its input and output.
+
+## Prerequisites
+
+- **Docker, or the latest Memgraph.** By default, setup starts Memgraph with
+  [Docker](https://docs.docker.com/get-docker/). To use your own Memgraph
+  instead, pass its URL with `--memgraph-url`. It needs
+  [MAGE](/advanced-algorithms), as in the `memgraph/memgraph-mage` image, and
+  at least 2 GiB of memory, so that
+  [recall](/ai-ecosystem/ai-memory/recall-and-memory#recall) can search by
+  meaning.
+- **At least one [supported agent](/ai-ecosystem/ai-memory/agents)**
+  on your `PATH`.
+
+You don't need Python. Setup installs [uv](https://docs.astral.sh/uv/) if it's
+missing, and uv installs the rest.
+
+## 1. Run setup
+
+Run setup in a terminal, from the project directory you work in. Claude Code
+and Codex are connected for your user, in every directory. The other agents
+are connected one project at a time, starting with the current directory.
+
+<Tabs items={['Linux/macOS', 'Windows']}>
+<Tabs.Tab>
+```bash
+curl -sSL https://install.memgraph.com/ai-memory | bash
+```
+
+The command needs a terminal to ask its questions on. Without one, such as in
+CI, it prints the install script's command instead of running it.
+</Tabs.Tab>
+<Tabs.Tab>
+In PowerShell 5.1 or 7:
+
+```powershell
+iwr https://install.memgraph.com/ai-memory/windows -useb | iex
+```
+
+If Windows blocks the script, allow scripts for the current session first:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+</Tabs.Tab>
+</Tabs>
+
+Setup lists what it found and what it will do:
+
+- **Agents:** the agents on your `PATH`. On a first run, Claude Code and
+  Codex are ticked, and the per-project agents aren't; tick the ones you want
+  connected in this project. On a later run, the agents already connected are
+  ticked. If no agent is ticked, setup fails instead of installing nothing.
+- **Memgraph:** the one it will use or start.
+- **Name:** your user ID in the graph. Your memories are filed under it. It
+  defaults to your git `user.name`, or your system user name.
+- **Memory:** whether your agents use Context Graph as their memory instead of
+  their own. Recall works either way. See
+  [Memory](/ai-ecosystem/ai-memory/recall-and-memory#memory).
+
+The plan updates as you change your choices. Nothing changes until you press
+**Install**. To change your choices later,
+[run setup again](/ai-ecosystem/ai-memory/configuration#run-setup-again) with
+flags.
+
+### What setup does
+
+After you press **Install**, setup runs these steps in order. Each step checks
+first, so running setup again only does what's missing.
+
+1. **Finds or starts Memgraph.** Setup uses the first of these:
+   - the URL you pass with `--memgraph-url`;
+   - the URL in its configuration file, unless that's the default
+     `bolt://localhost:7687`;
+   - its own container, `context-graph-memgraph`, which it starts if it's
+     stopped. Without that container, setup starts the
+     `memgraph/memgraph-mage` image under that name, with a data volume,
+     listening on `127.0.0.1` only, on port 7687 or a free port if 7687 is
+     taken.
+
+   Setup never writes to another Memgraph that happens to run on
+   `localhost:7687`. To use one, pass `--memgraph-url bolt://localhost:7687`.
+2. **Saves the configuration:** the Memgraph URL and your user ID, in
+   `~/.config/context-graph/config.toml`.
+3. **Installs the packages:** the `memgraph-context-graph` command, the
+   packages that record actions, skills and sessions, and the terminal viewer.
+4. **Connects your agents.** See [Supported agents](/ai-ecosystem/ai-memory/agents)
+   for what changes for each one.
+5. **Checks the setup,** the same way as
+   [`memgraph-context-graph doctor`](#2-check-that-your-agents-are-connected).
+
+The report ends with the command to rerun for any step that failed.
+
+## 2. Check that your agents are connected
+
+To make your agents use the new hooks, restart any sessions that were running
+during setup; a running session keeps the hooks it started with. Codex and
+Grok Build record nothing until you trust the new hooks: in Codex, run
+`/hooks` once and accept them; in Grok Build, run `/hooks-trust` once in each
+connected project. Then check the setup:
+
+```bash
+memgraph-context-graph doctor --runtime claude-code
+```
+
+Replace `claude-code` with the
+[runtime name](/ai-ecosystem/ai-memory/agents) of the agent
+you want to check. Every check starts with `OK` when the setup works:
+
+```plaintext copy=false
+OK memgraph-context-graph executable: ...
+OK memgraph-context-graph: ...
+OK config: identity.user_id set
+OK memgraph: reachable
+OK connector:skills-graph: installed=...; memgraph=reachable
+OK connector:actions-graph: installed=...; memgraph=reachable
+OK connector:sessions-graph: installed=...; memgraph=reachable
+OK embeddings: BAAI/bge-small-en-v1.5 (384 dimensions) inside Memgraph
+OK mcp: serves recall
+OK runtime:claude-code: connectors accept its probe event
+OK memory: claude-code's built-in memory (memory.backend native)
+OK plugin:claude-code: context-graph@context-graph-plugins installed and enabled
+INFO capture-failures: none in the last 24h (...)
+```
+
+The last line counts the recordings that failed in the last day.
+
+The `runtime:` check sends a test event to the connectors. For Claude Code and
+Codex, the `plugin:` check confirms the agent will call the hooks: it fails if
+the agent isn't on your `PATH`, or the plugin isn't installed or is disabled.
+
+A line that starts with `FAIL` says what failed. On a Memgraph without MAGE,
+the `embeddings` check is expected to fail; see
+[Recall](/ai-ecosystem/ai-memory/recall-and-memory#recall).
+
+## 3. Ask about earlier work
+
+In a new session, ask the agent about earlier work, for example "what did we
+decide about the deploy window?". The agent calls the `recall` tool and
+answers from your past sessions. You can run the same search yourself:
+
+```bash
+memgraph-context-graph recall "what did we decide about the deploy window?"
+```
+
+To watch your sessions being recorded, open the
+[terminal viewer](/ai-ecosystem/ai-memory/graph#browse-the-graph).
+
+## Next steps
+
+- [Recall and memory](/ai-ecosystem/ai-memory/recall-and-memory):
+  How your agents read their past sessions.
+- [The graph](/ai-ecosystem/ai-memory/graph): Look at what your agents
+  recorded, and add a knowledge graph.
+- [Privacy](/ai-ecosystem/ai-memory/privacy): Keep text out of the graph and
+  delete sessions.
+- [Configuration](/ai-ecosystem/ai-memory/configuration): Change your setup
+  choices, use a remote Memgraph, update Context Graph, or uninstall it.
+
+If setup fails in a way the report doesn't explain, ask on
+[Discord](https://discord.gg/memgraph) or open an issue on
+[GitHub](https://github.com/memgraph/ai-toolkit/issues).

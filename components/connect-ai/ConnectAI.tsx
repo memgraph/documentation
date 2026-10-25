@@ -117,7 +117,7 @@ export default function ConnectAI() {
           <p className="mt-4 text-sm opacity-80">
             Endpoint: <code>{DOCS_MCP_URL}</code>.{" "}
             <Link
-              href="/ai-ecosystem/mcp#mcp-server-for-docs"
+              href="/getting-started/coding-with-ai/docs-mcp"
               onClick={() => dialog.current?.close()}
               className="text-[#8C0081] underline dark:text-[#e27ad6]"
             >

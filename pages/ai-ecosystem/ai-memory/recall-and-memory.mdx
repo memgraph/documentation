@@ -1,0 +1,202 @@
+---
+title: Recall and memory
+description: Let coding agents recall their past sessions from Memgraph, and make Context Graph their long-term memory shared across agents.
+---
+
+# Recall and memory
+
+Context Graph gives your agents two ways to use what earlier sessions left
+behind. **Recall** searches everything your sessions recorded and returns what
+matches a question. **Memory** is the set of notes the agent chooses to keep,
+such as your preferences and project decisions, loaded at the start of every
+session.
+
+Recall works as soon as setup finishes. Memory is opt-in, because it replaces
+the agent's own memory.
+
+## Recall
+
+When you ask about earlier work, for example "which database did we pick for
+the cache?", the agent calls the `recall` tool with the question. You can run
+the same search from the terminal, and add `--json` to get the results as
+JSON:
+
+```bash
+memgraph-context-graph recall "which database did we pick for the cache?"
+```
+
+At the start of each session, the agent also gets a short note about the
+current project, so it can continue where you left off:
+
+- that the `recall` tool exists;
+- your last session in this project: its date, the agent, your first and last
+  request, and the agent's last reply;
+- your first request in each of the two sessions before it.
+
+Sessions from every agent count, so a session in Grok Build can continue where
+one in Codex stopped. A project is identified by its git `origin` remote, so
+all clones of a repository count as one project; without a remote, the
+directory name is used. To turn the note off:
+
+```bash
+memgraph-context-graph config set session_start.resume false
+```
+
+### What recall returns
+
+Recall returns raw data, not an answer: the dated messages and extracted
+facts that match the question, as text. The agent passes them to its model
+like any other tool result, and the model answers from them.
+
+The results
+start with a short header that tells the model how to read them, for example
+that a later message about the same thing replaces an earlier one.
+
+Recall combines several searches over your own sessions:
+
+| Search | What it finds |
+| --- | --- |
+| Memories | [Memory files](#memory) that match by meaning or by words, shown first |
+| Messages by meaning | Messages closest to the question, by vector search |
+| Messages by words | Messages that match the question's words, by text search |
+| Entities | People, projects and other entities that match, with their facts |
+| Facts | Extracted facts that match, with the messages they came from |
+| Facts about you | All facts of the types that match, for questions that count or list things |
+
+Entities and facts come from the
+[knowledge graph](/ai-ecosystem/ai-memory/graph#add-a-knowledge-graph). Before
+it's built, recall finds messages and memories only.
+
+The searches by meaning need [MAGE](/advanced-algorithms), which computes the
+embeddings inside Memgraph. On Memgraph without MAGE, recall uses text search
+only and says so in its results.
+
+To change how many results each search returns, or to drop a search, see
+[Recall configuration](/ai-ecosystem/ai-memory/configuration#recall-configuration).
+
+## Memory
+
+
+Agents such as Claude Code and Codex keep their own memory: notes they save
+and read at the start of a session. You can make Context Graph that memory
+instead. Your memories are then stored in Memgraph, shared by all your agents
+and searched by recall.
+
+Turn it on for an agent with setup:
+
+```bash
+memgraph-context-graph setup claude-code --memory-backend context-graph
+```
+
+The interactive setup offers the same switch as a checkbox. When you turn it
+on, setup does three things for each agent:
+
+1. It imports the agent's existing memory, once. Claude Code's user and
+   feedback memories go to `/memories/user/` and `/memories/feedback/`, and
+   project memories go to that project's folder. Codex's memory summary
+   becomes `/memories/user/codex-memory-summary.md`. A file already in the
+   graph is never overwritten.
+2. It turns off the agent's own memory, as listed in
+   [Supported agents](/ai-ecosystem/ai-memory/agents#built-in-memory). Setup
+   backs up each file it edits.
+3. It saves the choice as `backend = "context-graph"` in the `[memory]`
+   section of the configuration file.
+
+If the import can't run, for example because Memgraph isn't reachable, setup
+doesn't turn off the agent's memory. The change shows from the next session,
+because agents list their tools when a session starts.
+
+### How the agent uses memory
+
+With the switch on, Context Graph's Model Context Protocol (MCP) server also
+serves a `memory` tool. It has the
+commands of the
+[Claude memory tool](https://docs.claude.com/en/docs/agents-and-tools/tool-use/memory-tool):
+`view`, `create`, `str_replace`, `insert`, `delete` and `rename`, on files
+under `/memories`. The agent keeps two kinds of files:
+
+- **`/memories/`** for what applies everywhere, such as your preferences.
+- **`/memories/projects/PROJECT/`** for one codebase, where `PROJECT` is the
+  project's key, such as `github.com_memgraph_ai-toolkit`.
+
+Each file is a `Memory` node in your graph. At the start of a session, the
+agent gets:
+
+- an index of the files in `/memories/` and in the current project's folder,
+  one line per file, up to 200 lines;
+- the full text of every file whose frontmatter has `pin: true`;
+- the name of the current project's folder.
+
+The index is built from the graph each time, so it's never out of date.
+
+### Rules for memory files
+
+- A file can't be empty or larger than 100 KB.
+- An edit applies only if the file still holds the text the edit was made
+  from. If another session changed the file in between, the edit fails
+  instead of overwriting that change.
+- Context Graph keeps the last 20 versions of each file. Overwriting, editing
+  or deleting a file saves its previous text first, as a `MemoryVersion` node.
+
+### Switch back
+
+To give memory back to the agent:
+
+```bash
+memgraph-context-graph setup claude-code --memory-backend native
+```
+
+For Claude Code, setup first copies the graph's memories back into Claude
+Code's auto memory, so it continues from what the graph learned:
+
+- A project's files go to each Claude Code project folder for that project,
+  and `/memories/user/` and `/memories/feedback/` files go to every folder.
+- The graph's copy replaces an older copy there, and each folder's
+  `MEMORY.md` index is rebuilt.
+- Files that Claude Code has no folder for stay in the graph only, such as a
+  project it never opened, another agent's files, or files directly in
+  `/memories/`. Setup lists them.
+
+Then it turns the agent's own memory on again. The memories in the graph stay
+where they are, and recall still finds them. If Memgraph isn't reachable,
+setup changes nothing.
+
+Codex, GitHub Copilot CLI and Grok Build get nothing copied back, because
+their memory is generated or hosted by the agent itself.
+
+`memgraph-context-graph uninstall` also gives memory back the same way. If
+Memgraph isn't reachable, it turns the agent's memory back on with what it
+held before the switch, and warns you.
+
+### Check for a second memory
+
+A project's `.claude/settings.json` or `.claude/settings.local.json` overrides
+your user settings. If one of them sets `autoMemoryEnabled: true`, Claude Code
+keeps its own memory in that project next to Context Graph's.
+`memgraph-context-graph doctor` fails in that case. Run it from the project:
+
+```bash
+memgraph-context-graph doctor --runtime claude-code
+```
+
+## Remember external resources
+
+The optional `resources-graph` package remembers the external resources your
+agents read, so they can read them from the graph instead of fetching them
+again. It supports public GitHub issues, pull requests and repositories. Turn
+it on in
+[Configuration](/ai-ecosystem/ai-memory/configuration#choose-what-is-recorded).
+
+When it's on:
+
+1. The hooks record which GitHub addresses a session fetched or mentioned.
+   They never call GitHub.
+2. `resources-graph sweep` fetches those addresses and stores them in the
+   graph. Run it after a session or on a schedule. It uses your `gh` login, or
+   a token set with `memgraph-context-graph config set github.token`.
+3. The agent reads a stored issue or pull request with the `resource` tool,
+   which returns it with the time it was fetched. The agent decides whether
+   that's recent enough.
+
+Claude Code and Codex also get a note right before they fetch something that's
+already in the graph. The fetch still runs.

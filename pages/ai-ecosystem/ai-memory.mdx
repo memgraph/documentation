@@ -1,0 +1,138 @@
+---
+title: AI memory
+description: Give coding agents and custom agents a long-term memory in Memgraph with Context Graph, which records their sessions and serves them back later.
+---
+
+import { Tabs } from 'nextra/components'
+
+# AI memory
+
+AI memory lets an AI agent use what happened in earlier sessions: what you
+decided, what it did and what it learned about your work.
+
+Context Graph is Memgraph's AI memory. It records the sessions of your coding
+agents, such as Claude Code and Codex, as a graph in Memgraph, and serves them
+back to every connected agent in later sessions.
+
+It connects to the
+[supported agents](/ai-ecosystem/ai-memory/agents) with no code to write.
+[Custom agents](/ai-ecosystem/ai-memory/custom-agents), built on the Claude
+Agent SDK or the OpenAI Agents SDK, can use the same memory.
+
+Every connected agent gets:
+
+- **Recording.** Hooks in the agent write each session to the graph as it
+  happens. You use the agent as before.
+- **Recall.** A `recall` tool, served over the Model Context Protocol (MCP),
+  returns what your past sessions hold about a question. Each session also
+  starts with a short note on where you left off in the current project.
+- **Memory**, if you turn it on. A `memory` tool replaces the agent's own
+  memory, so the notes the agent saves are stored in the graph and shared by
+  all your agents.
+
+Context Graph is open source, part of the
+[Memgraph AI Toolkit](https://github.com/memgraph/ai-toolkit/tree/main/context-graph).
+
+## Get started
+
+One command installs Context Graph, finds or starts Memgraph and connects the
+agents you choose. It shows its plan and changes nothing until you confirm.
+
+<Tabs items={['Linux/macOS', 'Windows']}>
+<Tabs.Tab>
+```bash
+curl -sSL https://install.memgraph.com/ai-memory | bash
+```
+</Tabs.Tab>
+<Tabs.Tab>
+```powershell
+iwr https://install.memgraph.com/ai-memory/windows -useb | iex
+```
+</Tabs.Tab>
+</Tabs>
+
+See [Get started](/ai-ecosystem/ai-memory/get-started) for the prerequisites,
+the choices setup offers and how to check that sessions are recorded.
+
+## How it works
+
+Context Graph works in three phases, shown in the diagram: during a session,
+it records each event and serves recall from Memgraph; after the session,
+reconciliation builds a knowledge graph from what was recorded.
+
+<div className="light-only">
+
+![Context Graph data flow in three phases: during a session, hooks in the agent send each event through the connectors to Memgraph, and the MCP server serves recall and memory from Memgraph back to the agent; after the session, reconciliation extracts a knowledge graph on your machine](/pages/ai-ecosystem/ai-memory/context-graph-flow.svg)
+
+</div>
+<div className="dark-only">
+
+![Context Graph data flow in three phases: during a session, hooks in the agent send each event through the connectors to Memgraph, and the MCP server serves recall and memory from Memgraph back to the agent; after the session, reconciliation extracts a knowledge graph on your machine](/pages/ai-ecosystem/ai-memory/context-graph-flow-dark.svg)
+
+</div>
+
+### During a session
+
+- **Hooks.** The `memgraph-context-graph` hooks run in the agent, whether a
+  coding agent or a custom agent, on each event: a prompt, a reply, a tool
+  call or its result. They drop text marked as private and redact secrets
+  before anything is stored.
+- **Connectors.** The hooks pass each event to the connectors, which write it
+  to Memgraph. Each one records one part of a session:
+  - `actions-graph`: prompts, replies, tool calls and their results;
+  - `skills-graph`: the agent skills a session used;
+  - `sessions-graph`: the session, its user and project, and the memories the
+    agent saved;
+  - `resources-graph`, optional: the GitHub resources a session read.
+
+  On Memgraph Enterprise, `context-graph-spaces` adds
+  [shared spaces](/ai-ecosystem/ai-memory/shared-spaces) for a team.
+- **Memgraph.** Users, sessions, actions, skills and memories form one graph,
+  and the knowledge graph links to them. See
+  [The graph](/ai-ecosystem/ai-memory/graph).
+- **MCP server.** The MCP server reads Memgraph and serves the `recall` and
+  `memory` tools to the agent. See
+  [Recall and memory](/ai-ecosystem/ai-memory/recall-and-memory).
+
+### After a session
+
+When a session ends, [reconciliation](/ai-ecosystem/ai-memory/graph#add-a-knowledge-graph)
+extracts the people, organizations, projects and other entities it mentions,
+and the facts that connect them, into a knowledge graph. It runs on your
+machine:
+
+1. **Ontology.** The ontology is the schema of the knowledge graph: the entity
+   types and fact types to look for, such as a person who works for an
+   organization. It's a model in HyGM, the AI Toolkit's graph schema package.
+   Every user starts with a default ontology, and you can write your own.
+2. **Extract.** GLiNER2, a local extraction model, finds the entities and
+   facts of those types in the session's text. It needs no LLM API key.
+3. **Store.** The entities and facts are stored in Memgraph with their
+   embeddings, linked to the messages they came from. Recall uses them to find
+   facts spread over many sessions.
+
+**Ontology learning** is optional. With an Anthropic or OpenAI API key in the
+configuration, Context Graph learns new entity and fact types from your
+sessions. It's the only part of Context Graph that sends session text off
+your machine.
+
+## In this section
+
+- [Get started](/ai-ecosystem/ai-memory/get-started): Install Context Graph,
+  connect your agents and check that sessions are recorded.
+- [Recall and memory](/ai-ecosystem/ai-memory/recall-and-memory): How agents
+  read their past sessions, and how to make Context Graph their memory.
+- [The graph](/ai-ecosystem/ai-memory/graph): What your agents recorded, how
+  to browse and query it, and how to add a knowledge graph of entities and
+  facts.
+- [Privacy](/ai-ecosystem/ai-memory/privacy): What is recorded, how to keep
+  text out of the graph, and how to delete sessions.
+- [Supported agents](/ai-ecosystem/ai-memory/agents): The files setup changes
+  for each agent, and how the agents differ.
+- [Custom agents](/ai-ecosystem/ai-memory/custom-agents): Use the same memory
+  in an app built on the Claude Agent SDK or the OpenAI Agents SDK.
+- [Shared spaces](/ai-ecosystem/ai-memory/shared-spaces): Share memory between
+  the members of a team, on Memgraph Enterprise.
+- [Configuration](/ai-ecosystem/ai-memory/configuration): The configuration
+  file, recall and extraction settings, your own Memgraph, updating and
+  uninstalling.
