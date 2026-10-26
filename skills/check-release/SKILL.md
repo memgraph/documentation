@@ -1,6 +1,6 @@
 ---
 name: check-release
-description: Find what a Memgraph documentation release still needs, keep the overview in the release PR up to date, and on release day finish the release. Reports how much of the Memgraph milestone is merged, checks the docs labels on every merged PR in it, release notes for every PR that needs one, a docs PR for every "Docs needed" PR (and no docs for product PRs outside the milestone), the docs milestone and `pnpm check`, and fixes the problems docs PRs noticed in one PR per release; on release day also sets the release dates, updates the direct download links, gets the release PR's examples check passing, and after the merge creates the GitHub release and closes the docs milestone. Use while a release is in progress, before merging a release branch into main, or when asked to "check the release", "check before release", run "pre-release" steps or audit docs labels on a milestone.
+description: Find what a Memgraph documentation release still needs, keep the overview in the release PR up to date, and on release day finish the release. Reports how far the Memgraph milestone and its docs have come, checks the docs labels on every merged PR in it, release notes for every PR that needs one, a docs PR for every "Docs needed" PR (and no docs for product PRs outside the milestone), the docs milestone and `pnpm check`, and fixes the problems docs PRs noticed in one PR per release; on release day also sets the release dates, updates the direct download links, gets the release PR's examples check passing, and after the merge creates the GitHub release and closes the docs milestone. Use while a release is in progress, before merging a release branch into main, or when asked to "check the release", "check before release", run "pre-release" steps or audit docs labels on a milestone.
 ---
 
 # Check release
@@ -64,13 +64,19 @@ gh api --paginate "repos/memgraph/memgraph/issues?milestone=<id>&state=all&per_p
 Steps 2–5 use the merged PRs only. Open and draft PRs count only toward
 progress; PRs closed without merging are left out entirely.
 
-**Progress:** how much of the Memgraph milestone is merged, which tells how
-much docs work can be done now and how much has to wait:
+**Progress:** how far the Memgraph release and its docs have come, and how
+much docs work can be done now. Count it from the open, draft and merged
+PRs; finish the docs numbers after steps 3 and 4:
 
-- **All PRs:** merged out of merged + open + draft, as a percentage.
-- **Docs work:** the same for PRs labeled `Docs needed` or
-  `Docs - changelog only`, split by label: merged ones can be documented
-  now, open and draft ones can't yet.
+- **Memgraph:** merged PRs out of merged + open + draft.
+- **Release notes:** PRs labeled `Docs needed` or `Docs - changelog only`.
+  Total, how many are merged, how many have their entry in the release
+  notes (step 3), and to do now: merged ones without an entry.
+- **Docs pages:** PRs labeled `Docs needed`. Total, how many are merged, how
+  many have all their docs PRs merged (step 4), and to do now: merged ones
+  whose docs aren't merged.
+- **Waiting:** open docs PRs whose product PR isn't merged yet, and how many
+  `Docs needed` PRs have no docs PR at all.
 
 ### 2. Docs labels
 
@@ -198,13 +204,19 @@ overwritten. To change what is listed, fix the product PR's docs label.
 
 #### Progress
 
-Memgraph milestone: 166 of 217 PRs merged (76%); 29 open, 22 draft.
+```
+Memgraph    ▓▓▓▓▓▓▓▓░░  166 of 217 PRs merged (76%)
+Notes       ▓▓▓▓▓▓░░░░   62 of 104 written (60%)
+Docs pages  ▓▓▓▓░░░░░░   12 of 27 merged (44%)
+```
 
-| Docs work | Merged (can be done now) | Open or draft (waiting) |
-| --- | --- | --- |
-| Docs needed | 17 | 10 |
-| Docs - changelog only | 53 | 24 |
-| **Total** | **70 of 104 (67%)** | **34** |
+| Docs work | Total | Product merged | Docs done | To do now |
+| --- | --- | --- | --- | --- |
+| Release notes | 104 | 70 | 62 | 8 |
+| Docs pages | 27 | 17 | 12 | 5 |
+
+Docs PRs open, waiting on their product PR: #MMMM (memgraph/memgraph#NNNN).
+3 `Docs needed` PRs have no docs PR yet.
 
 #### Breaking changes PRs
 
@@ -233,7 +245,9 @@ Memgraph milestone: 166 of 217 PRs merged (76%); 29 open, 22 draft.
 What goes in each section, in ascending PR number order (the numbers in
 Progress are an example):
 
-- **Progress:** from step 1, counted fresh on every run.
+- **Progress:** from step 1, counted fresh on every run. Each bar has ten
+  cells, one `▓` per 10% rounded to the nearest cell, the rest `░`; keep the
+  bars in a code block so they line up.
 
 - **Breaking changes PRs:** merged PRs labeled `breaking`. Ticked when the
   entry is under the Breaking changes heading in the release notes.
