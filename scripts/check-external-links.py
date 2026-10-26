@@ -29,7 +29,8 @@ a = ap.parse_args()
 
 ROOT = Path(__file__).resolve().parent.parent
 UA = 'Mozilla/5.0 (compatible) memgraph-docs-checks'
-LINK = re.compile(r'\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)|\bhref=\{?["\'`]([^"\'`]+)["\'`]\}?')
+# A Markdown link may contain balanced parentheses, as in Wikipedia's Bridge_(graph_theory).
+LINK = re.compile(r'\]\(\s*<?((?:[^()\s>]|\([^()\s]*\))+)>?(?:\s+"[^"]*")?\s*\)|\bhref=\{?["\'`]([^"\'`]+)["\'`]\}?')
 DOCS_URL = re.compile(r'^https?://(www\.)?memgraph\.com/docs(/|$|#)')
 SKIP_HOSTS = {'localhost', '127.0.0.1', '0.0.0.0', 'example.com', 'www.example.com'}
 
