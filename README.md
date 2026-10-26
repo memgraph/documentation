@@ -49,6 +49,11 @@ python3 scripts/check-examples.py --base origin/main
   Memgraph in Docker, and checks the procedure, function and flag names they
   use. It needs Docker.
 
+After a deploy, `python3 scripts/check-agent-access.py` checks that AI agents
+can reach and read the published docs: `llms.txt`, `robots.txt`, markdown
+versions of pages and the docs MCP server. It isn't a pull request check;
+run it locally or from the Actions tab.
+
 ## Contribute
 
 To fix or improve a page, open a pull request to `main`. To report a problem
