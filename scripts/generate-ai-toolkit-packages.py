@@ -10,7 +10,7 @@ MONO = "'Ubuntu Mono', Consolas, monospace"
 PACKAGES = [
     ('Context Graph', False, 'AI memory for coding agents'),
     ('unstructured2graph', True, 'Documents to a graph'),
-    ('SQL2Graph', False, 'SQL databases to a graph'),
+    ('structured2graph', True, 'SQL databases to a graph'),
     ('hygm', True, 'Graph schema and validation'),
     ('mcp-memgraph', True, 'MCP server for Memgraph'),
     ('langchain-memgraph', True, 'LangChain integration'),
