@@ -160,6 +160,16 @@ export default withNextra({
         permanent: true
       },
       {
+        source: '/getting-started/first-steps-with-docker',
+        destination: '/deployment/environments/docker',
+        permanent: true
+      },
+      {
+        source: '/getting-started/first-steps-with-docker.md',
+        destination: '/deployment/environments/docker.md',
+        permanent: true
+      },
+      {
         source: '/use-cases',
         destination: '/ai-ecosystem',
         permanent: true
@@ -2424,7 +2434,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/how-to-guides-overview/work-with-docker',
-        destination: '/getting-started/first-steps-with-docker',
+        destination: '/deployment/environments/docker',
         permanent: true
       },
       {
@@ -2434,7 +2444,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/how-to-work-with-docker',
-        destination: '/getting-started/first-steps-with-docker',
+        destination: '/deployment/environments/docker',
         permanent: true
       },
       {
