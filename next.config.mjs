@@ -156,7 +156,12 @@ export default withNextra({
       },
       {
         source: '/ai-ecosystem/agents/sql2graph-agent',
-        destination: '/ai-ecosystem/knowledge-graph-creation/sql2graph-agent',
+        destination: '/ai-ecosystem/knowledge-graph-creation/structured2graph',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/knowledge-graph-creation/sql2graph-agent',
+        destination: '/ai-ecosystem/knowledge-graph-creation/structured2graph',
         permanent: true
       },
       {
@@ -181,7 +186,12 @@ export default withNextra({
       },
       {
         source: '/ai-ecosystem/agents/sql2graph-agent.md',
-        destination: '/ai-ecosystem/knowledge-graph-creation/sql2graph-agent.md',
+        destination: '/ai-ecosystem/knowledge-graph-creation/structured2graph.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/knowledge-graph-creation/sql2graph-agent.md',
+        destination: '/ai-ecosystem/knowledge-graph-creation/structured2graph.md',
         permanent: true
       },
       {
