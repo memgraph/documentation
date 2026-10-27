@@ -1,6 +1,6 @@
 ---
 name: check-release
-description: Find what a Memgraph documentation release still needs, keep the overview in the release PR up to date, and on release day finish the release. Reports how far the Memgraph milestone and its docs have come, checks the docs labels on every merged PR in it, release notes for every PR that needs one, a docs PR for every "Docs needed" PR (and no docs for product PRs outside the milestone), the docs milestone and `pnpm check`, and fixes the problems docs PRs noticed in one PR per release; on release day also sets the release dates, updates the direct download links, gets the release PR's examples check passing, and after the merge creates the GitHub release and closes the docs milestone. Use while a release is in progress, before merging a release branch into main, or when asked to "check the release", "check before release", run "pre-release" steps or audit docs labels on a milestone.
+description: Find what a Memgraph documentation release still needs, keep the overview in the release PR up to date, and on release day finish the release. Reports how far the Memgraph milestone and its docs have come, checks the docs labels on every merged PR in it, release notes for every PR that needs one, a docs PR for every "Docs needed" PR (and no docs for product PRs outside the milestone), the docs milestone and `pnpm check`, and fixes the problems docs PRs noticed in one PR per release; on release day also sets the release dates, updates the download links and pinned install versions, gets the release PR's examples check passing, and after the merge creates the GitHub release and closes the docs milestone. Use while a release is in progress, before merging a release branch into main, or when asked to "check the release", "check before release", run "pre-release" steps or audit docs labels on a milestone.
 ---
 
 # Check release
@@ -314,7 +314,7 @@ In `pages/release-notes.mdx`, set the date on the release's
 <date>` heading, if Lab ships with it) to today, in the same format (e.g.
 `May 6th, 2026` → `May 13th, 2026`).
 
-### 11. Update the direct download links
+### 11. Update the download links and pinned versions
 
 In `pages/getting-started/install-memgraph/direct-download-links.mdx`,
 replace **every** occurrence of the previous version with the new one.
@@ -325,6 +325,18 @@ replace **every** occurrence of the previous version with the new one.
 - A global find-and-replace of the bare old version string (e.g. `3.8.1` →
   `3.9.0`) covers both patterns in one pass.
 - Verify every URL in the file references only the new version.
+
+Do the same in the pages that pin the version in their install steps:
+
+- `debian`, `ubuntu`, `centos`, `fedora`, `rocky`, `redhat` and `wsl` under
+  `pages/getting-started/install-memgraph/`: the download URL, the package
+  file name and the sample `You are running Memgraph v<version>` output.
+- `pages/getting-started/install-memgraph/docker.mdx`: the
+  `memgraph/memgraph:<version>` and `memgraph/memgraph:<version>-fips` tags.
+
+Leave history notes alone ("As of Memgraph 3.13", "new in 3.14.0", "from
+version 3.12.0"). Then search `pages/getting-started/install-memgraph/` for
+the previous version and check that only history notes remain.
 
 Run `pnpm check` again, then commit and push to the release branch.
 
