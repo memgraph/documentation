@@ -24,10 +24,10 @@ and outlined the [benefits of graph
 databases](https://memgraph.com/blog/the-benefits-of-using-a-graph-database-instead-of-sql).
 
 
-<Callout type="info" title="SQL2Graph Agent"> 
-If you have a SQL data model and
-want to migrate to Memgraph, you can try out our [Agent](/ai-ecosystem/knowledge-graph-creation)
-that leverages the LLM to automate the process of modeling and migration.
+<Callout type="info" title="Structured2Graph">
+If your data is in MySQL or PostgreSQL,
+[Structured2Graph](/ai-ecosystem/knowledge-graph-creation/structured2graph) can
+design the graph model, by rules or with an LLM, and migrate the data.
 </Callout>
 
 ## Prerequisites
