@@ -1,14 +1,11 @@
 export default {
   "docker": "Docker",
-  "debian": "Debian",
-  "ubuntu": "Ubuntu",
-  "centos": "CentOS",
-  "fedora": "Fedora",
-  "rocky": "Rocky",
-  "redhat": "Red Hat",
-  "memgraph-cloud": "Memgraph Cloud",
   "docker-compose": "Docker Compose",
+  "memgraph-cloud": "Memgraph Cloud",
   "kubernetes": "Kubernetes",
+  "linux": "Linux",
   "wsl": "WSL",
-  "direct-download-links": "Direct download links"
+  "direct-download-links": "Direct download links",
+  "build-from-source": "Source build",
+  "packaging": "Packaging"
 }

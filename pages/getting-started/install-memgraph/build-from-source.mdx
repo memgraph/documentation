@@ -1,40 +1,27 @@
 ---
 title: Build Memgraph from source
-description: This is a comprehensive guide for compiling Memgraph from source. It includes setting up the necessary toolchain, compiling the code, and running Memgraph.
+description: Compile Memgraph from source with Memgraph's toolchain, using the build.sh script, conan and cmake, or a Docker build container.
 ---
 
 import { Callout } from 'nextra/components'
-import { Steps } from 'nextra/components'
-
 
 # Build Memgraph from source
 
-Follow this guide if you want to compile Memgraph from source. There are three
-self-contained ways to build — pick one:
+Compile Memgraph from source with Memgraph's own toolchain. There are three
+self-contained ways to build; pick one:
 
 1. [Using the `build.sh` script](#build-with-buildsh) (recommended)
 2. [Manually with `conan` and `cmake`](#build-with-conan-and-cmake) (advanced)
-3. [Using Docker](#build-with-docker) (ideal for unsupported systems)
+3. [Using Docker](#build-with-docker) (for systems the other two methods don't support)
 
-<Callout>
-
-Memgraph uses `git` for source version control. You will need to install `git`
-on your machine before you can download the source code.
-
-</Callout>
-
-<Callout>
-
-If you are using Mac M1 or above, please check our [MacOS Lima Compilation
-Guide](https://www.notion.so/MacOS-Lima-Compilation-Guide-eae1e9dcef5740579c5a41075b8f499b?pvs=21)
+On a Mac with Apple silicon, follow the [macOS Lima compilation
+guide](https://www.notion.so/MacOS-Lima-Compilation-Guide-eae1e9dcef5740579c5a41075b8f499b)
 first.
 
-</Callout>
+To build a `.deb` or `.rpm` package after the build, see [Package
+Memgraph](/getting-started/install-memgraph/packaging).
 
-Please see the [Packaging Memgraph](/getting-started/packaging-memgraph) guide for 
-information on how to build a Memgraph package for a Linux distribution.
-
-In every case, start by cloning the source code:
+In every case, install `git` and clone the source code:
 
 ```bash
 git clone git@github.com:memgraph/memgraph.git
@@ -43,8 +30,8 @@ cd memgraph
 
 ## About the toolchain
 
-Memgraph is compiled with its own toolchain (currently **v8**: GCC 16.2, LLVM
-22.1.8, CMake 4.4.1 and supporting tools). As of v8, the toolchain bundles its
+Memgraph is compiled with its own toolchain (**v8**: GCC 16.2, LLVM
+22.1.8, CMake 4.4.1 and supporting tools). Since v8, the toolchain bundles its
 own sysroot and is **distro-agnostic** — a single archive per architecture that
 works on any Linux with glibc 2.31 or newer:
 
@@ -57,7 +44,7 @@ for how the toolchain itself is built.
 
 ## Build with `build.sh`
 
-The easiest way to build Memgraph directly on a compatible host system.
+Build Memgraph directly on a compatible Linux host.
 
 ```bash
 # Install system packages: toolchain runtime deps + Memgraph build deps
@@ -92,13 +79,13 @@ Useful variations:
 ./build.sh --target memgraph -DMG_ENABLE_TESTING=OFF
 ```
 
-The resulting binary will be in the `build/` directory.
+The build writes the binary to the `build/` directory.
 
-<Callout>
+<Callout type="info">
 
-- `build.sh` requires Python 3.10 or newer. On distros whose default `python3`
-  is older (e.g. CentOS 9), install a newer one (e.g. `python3.12`) — the script
-  finds it automatically, or set `MG_PYTHON` to point at it.
+- `build.sh` requires Python 3.10 or newer. On distributions whose default
+  `python3` is older (such as CentOS 9), install a newer one (such as
+  `python3.12`). The script finds it, or you can set `MG_PYTHON` to its path.
 - If the toolchain lives somewhere other than `/opt/toolchain-v8`, set the
   `MG_TOOLCHAIN_ROOT` environment variable to its location.
 
@@ -106,7 +93,7 @@ The resulting binary will be in the `build/` directory.
 
 ## Build with `conan` and `cmake`
 
-The same operations `build.sh` performs, but with direct control over each
+This runs the same steps as `build.sh`, with direct control over each
 step. Complete the system-package and toolchain steps first:
 
 ```bash
@@ -148,8 +135,7 @@ cmake --build --preset conan-release --target memgraph -j$(nproc)
 
 ## Build with Docker
 
-Builds inside Memgraph's own `mgbuild` images — nothing but Docker is needed on
-the host, so this works on any system.
+Build inside Memgraph's own `mgbuild` images. The host needs only Docker.
 
 ```bash
 export OS="ubuntu-24.04"
@@ -175,19 +161,21 @@ docker exec -i mgbuild_v8_$OS bash -c "cd /home/mg/memgraph && ./build/memgraph"
 
 ## Run Memgraph
 
-After the compilation, verify that Memgraph works:
+After the build, check that Memgraph runs:
 
 ```bash
 ./build/memgraph --version
 ```
 
-The unit tests can be run using:
+Run the unit tests:
 
 ```bash
 ctest -R unit -j$(nproc)
 ```
 
-Or in Docker:
+To run them in Docker, pass your Enterprise license and organization name
+from the `MEMGRAPH_ENTERPRISE_LICENSE` and `MEMGRAPH_ORGANIZATION_NAME`
+environment variables:
 
 ```bash
 ./release/package/mgbuild.sh \
@@ -201,23 +189,15 @@ Or in Docker:
 
 ## Troubleshoot
 
-When build errors occur, there are some common issues that can be resolved by the following steps:
+If the build fails, try these steps in order:
 
 1. Remove the `build` directory and run the build again.
-
-2. Re-run `conan install`: libraries used in the build may have been changed in
-`conanfile.py`. Unexpected linking errors can be caused by this.
-
-3. Reinstall `conan_config`. As the list of supported Linux distributions and
-architectures evolves, and the libraries used in the build may change, the
-configuration may need to be updated to account for specific build issues on
-some platforms.
-
-4. Reinstall host dependencies, as these may sometimes change.
-
-5. Renaming or removing the conan cache directory (usually `~/.conan2`) in order
-to rebuild the libraries and build tools from scratch can help to resolve build
-issues.
-
-6. Open an issue on our [GitHub
-repository](https://github.com/memgraph/memgraph/issues) with the error message.
+2. Run `conan install` again. The libraries in `conanfile.py` may have changed,
+   which causes unexpected linking errors.
+3. Reinstall `conan_config`. The build configuration changes as supported
+   distributions, architectures and libraries change.
+4. Reinstall the host dependencies, which also change over time.
+5. Rename or remove the conan cache directory (usually `~/.conan2`) to rebuild
+   the libraries and build tools from scratch.
+6. Open an issue on [GitHub](https://github.com/memgraph/memgraph/issues) with
+   the error message.
