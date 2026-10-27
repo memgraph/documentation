@@ -42,13 +42,14 @@ Avoid:
 Lead with the benefit. Write the item as one Markdown bullet starting with
 `-`: keep code ticks and links, and use no bold or italic.
 
-Link the docs page for the change in the item whenever there is one: the page
-from the docs PR for a **Docs needed** PR, or the existing page that covers the
-changed flag, command or behavior. Link the section when there is one, with a
-root-relative link: `[text search](/querying/text-search#create-text-index)`.
-Readers and agents look at the release notes first to learn what changed; the
-link takes them to how it works now. A bug fix with no page to point to needs
-no link.
+Link the docs page for a new feature, improvement or breaking change in the
+item whenever there is one: the page from the docs PR for a **Docs needed**
+PR, or the existing page that covers the changed flag, command or behavior.
+Link the section when there is one, with a root-relative link:
+`[text search](/querying/text-search#create-text-index)`. Readers and agents
+look at the release notes first to learn what changed; the link takes them to
+how it works now. A bug fix carries only its PR link, even when a page
+covers it.
 
 Start from the release note in the product PR's comments, if there is one,
 and improve it by the rules above. The PR description and that note describe
