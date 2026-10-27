@@ -12,12 +12,24 @@ Unstructured2Graph turns documents, such as reports, PDFs, research papers or
 meeting notes, into a knowledge graph in Memgraph that an LLM can query. It's
 part of the [Memgraph AI Toolkit](https://github.com/memgraph/ai-toolkit).
 
-It combines two libraries:
+It combines two parts:
 
 - **Unstructured IO** extracts, cleans and chunks documents in formats such as
   PDF, DOCX and TXT.
-- **LightRAG** extracts entities and relationships from the chunks with an LLM
-  and writes them to Memgraph.
+- **An extraction backend** finds entities and relationships in the chunks and
+  writes them to Memgraph.
+
+You choose the extraction backend:
+
+- [GLiNER2](https://github.com/fastino-ai/GLiNER2) (default): A local model,
+  with no LLM calls and no API key. It extracts the types listed in its
+  ontology, a file of entity and relationship types. The default ontology lists
+  entity types such as people, organizations and locations, and no relationship
+  types, so GLiNER2 extracts relationships only with an
+  [ontology of your own](https://github.com/memgraph/ai-toolkit/tree/main/unstructured2graph).
+- [LightRAG](/ai-ecosystem/integrations/lightrag): An LLM extracts entities and
+  any relationships it finds, and merges mentions of the same entity across
+  chunks. Each chunk costs at least one LLM call.
 
 The result is a graph of entities, relationships and embeddings, ready for
 [GraphRAG](/ai-ecosystem/graph-rag).
@@ -42,69 +54,57 @@ instance.
 
 You are now ready to start building your graph.
 
-### Clone the Memgraph AI Toolkit
+### Install Unstructured2Graph
 
-Next, clone the [AI Toolkit
-repository](https://github.com/memgraph/ai-toolkit/tree/main), which contains
-the Unstructured2Graph module:
-
-```bash
-git clone https://github.com/memgraph/ai-toolkit.git
-cd ai-toolkit/unstructured2graph
-```
-
-### Install dependencies
-
-Install `uv`, the package manager used in the AI Toolkit:
+Install Unstructured2Graph from PyPI. It needs Python 3.10 or later, and it
+installs PyTorch for the GLiNER2 model, which downloads on first use:
 
 ```bash
-# Install dependencies using uv
-uv pip install -e .
+pip install unstructured2graph
 ```
 
-Detailed steps are available in the [uv
-documentation](https://docs.astral.sh/uv/). Once installed, you can use it to
-run the AI Toolkit packages.
+To parse PDF, DOCX and other document formats, install it with the `all-docs`
+extra instead. The example below reads a PDF, so it needs the extra:
+
+```bash
+pip install "unstructured2graph[all-docs]"
+```
 
 ### Configure environment variables
 
-Create a `.env` file to configure your OpenAI API key for LLM-based entity
-extraction:
+GLiNER2 needs no API key. The LightRAG backend and the GraphRAG query below
+call OpenAI, so for those, set your OpenAI API key:
 
 ```bash
-# Required for LLM-based entity extraction
-OPENAI_API_KEY=your_api_key_here
+export OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 ```
+
+Replace `YOUR_OPENAI_API_KEY` with your key from the OpenAI platform.
 
 ### Ingest documents
 
-Start by selecting the documents you want to process. In the code example below,
-you can see how to load a document from either a local file or a
-URL.Unstructured2Graph supports multiple file types through Unstructured.io,
-including PDF, DOCX, TXT, and HTML. It extracts readable text, removes unwanted
-elements such as headers or page numbers, and divides the content into
-structured chunks based on document layout. Each chunk is then ready for
-LightRAG to perform entity and relationship extraction.
+Unstructured2Graph reads local files and URLs in formats such as PDF, DOCX,
+TXT and HTML. It extracts the readable text, removes elements such as headers
+and page numbers, and splits the text into chunks by document layout. The
+extraction backend then reads each chunk.
 
-Here is a complete example of how to ingest documents and create a knowledge
-graph:
+This example ingests a local file and a web page with GLiNER2 and creates
+embeddings for search:
 
 ```python
 import asyncio
 import logging
 from memgraph_toolbox.api.memgraph import Memgraph
-from lightrag_memgraph import MemgraphLightRAGWrapper
-from unstructured2graph import from_unstructured, create_index, compute_embeddings, create_vector_search_index
+from unstructured2graph import from_unstructured, compute_embeddings, create_vector_search_index
+from unstructured2graph.gliner2_backend import GLiNER2Backend
 
 async def ingest_documents():
     # Connect to Memgraph and clear existing data
     memgraph = Memgraph()
     memgraph.query("MATCH (n) DETACH DELETE n;")
-    create_index(memgraph, "Chunk", "hash")
 
-    # Initialize LightRAG for entity extraction
-    lrag = MemgraphLightRAGWrapper()
-    await lrag.initialize()
+    # Extract entities with a local GLiNER2 model, downloaded on first use
+    backend = GLiNER2Backend()
 
     # Define your document sources
     sources = [
@@ -112,18 +112,16 @@ async def ingest_documents():
         "https://example.com/page.html"  # remote URL
     ]
 
-    # Process documents and extract entities
+    # Chunk the documents, extract entities and write them to Memgraph
     await from_unstructured(
         sources=sources,
         memgraph=memgraph,
-        lightrag_wrapper=lrag,
-        only_chunks=False,  # create chunks and extract entities
-        link_chunks=True    # link chunks sequentially with NEXT edges
+        extraction_backend=backend,
+        link_chunks=True,       # link chunks in order with NEXT relationships
+        enforce_ontology=True,  # add each entity's type as a label, such as :Person
     )
 
-    await lrag.afinalize()
-
-    # Create embeddings and vector index for semantic search
+    # Create embeddings and a vector index for semantic search
     compute_embeddings(memgraph, "Chunk")
     create_vector_search_index(memgraph, "Chunk", "embedding")
 
@@ -132,16 +130,40 @@ if __name__ == "__main__":
     asyncio.run(ingest_documents())
 ```
 
+To extract with LightRAG instead, wrap a LightRAG instance in
+`LightRAGBackend` and pass it as the backend. Replace the `backend` and
+`from_unstructured()` lines in the example with:
+
+```python
+from lightrag_memgraph import MemgraphLightRAGWrapper
+from unstructured2graph import LightRAGBackend
+
+lightrag = MemgraphLightRAGWrapper()
+await lightrag.initialize(working_dir="./lightrag_storage")
+
+await from_unstructured(
+    sources=sources,
+    memgraph=memgraph,
+    extraction_backend=LightRAGBackend(lightrag),
+    link_chunks=True,
+)
+await lightrag.afinalize()
+```
+
 Here's what happens step by step:
 
-1. Text is extracted, cleaned, and chunked by Unstructured IO.
-2. Each chunk becomes a `Chunk` node in Memgraph with properties like `hash` and
-   `text`.
-3. LightRAG performs entity recognition and relationship extraction, creating
-   `base` nodes.
-4. Entities are linked to chunks with `MENTIONED_IN` edges.
-5. Chunks are connected sequentially with `NEXT` edges for traversal.
-6. Embeddings are generated and a vector index is created for semantic search.
+1. Unstructured IO extracts, cleans and chunks the text.
+2. Each chunk becomes a `Chunk` node with properties such as `hash` and
+   `text`. Unstructured2Graph creates a uniqueness constraint and an index on
+   `Chunk.hash`.
+3. The backend extracts entities. GLiNER2 writes them as `gliner2` nodes with
+   an `entity_type` property, and with `enforce_ontology=True` adds the type as
+   a label, such as `Person`. LightRAG writes `base` nodes.
+4. Entities are linked to the chunks that mention them with `MENTIONED_IN`
+   relationships.
+5. Chunks are linked in order with `NEXT` relationships.
+6. `compute_embeddings()` stores an embedding on each chunk, and
+   `create_vector_search_index()` creates the `vs_name` vector index on it.
 
 After processing, your Memgraph instance will hold a complete, queryable
 knowledge graph ready for GraphRAG.
@@ -163,13 +185,16 @@ def graphrag_query(prompt: str):
     # Retrieve relevant chunks using vector search + graph traversal
     retrieved_chunks = []
     for row in memgraph.query(
-        f"""
-        CALL embeddings.text(['{prompt}']) YIELD embeddings, success
-        CALL vector_search.search('vs_name', 5, embeddings[0]) YIELD distance, node, similarity
-        MATCH (node)-[r*bfs]-(dst:Chunk)
-        WITH DISTINCT dst, degree(dst) AS degree ORDER BY degree DESC
-        RETURN dst LIMIT 5;
         """
+        CALL embeddings.text([$prompt]) YIELD embeddings, success
+        CALL vector_search.search('vs_name', 5, embeddings[0]) YIELD distance, node, similarity
+        OPTIONAL MATCH (node)-[r*bfs]-(dst:Chunk)
+        WITH collect(DISTINCT node) + collect(DISTINCT dst) AS chunks
+        UNWIND chunks AS chunk
+        WITH DISTINCT chunk, degree(chunk) AS degree ORDER BY degree DESC
+        RETURN chunk AS dst LIMIT 5;
+        """,
+        params={"prompt": prompt},
     ):
         if "text" in row["dst"]:
             retrieved_chunks.append(row["dst"]["text"])
@@ -201,9 +226,11 @@ if __name__ == "__main__":
 
 Here's what the GraphRAG query does:
 
-1. Converts the input prompt into an embedding.
+1. Converts the input prompt, passed as the `$prompt` parameter, into an
+   embedding.
 2. Searches for the most semantically relevant chunks using vector search.
-3. Expands context through connected nodes in the graph using BFS traversal.
+3. Adds the chunks connected to them in the graph, found with BFS traversal,
+   and keeps the five with the most relationships.
 4. Sends the retrieved text to an LLM for summarization or question answering.
 
 ### Visualize the graph in Memgraph Lab
@@ -218,9 +245,10 @@ MATCH (n)-[r]->(m) RETURN n, r, m;
 You'll see:
 
 - `Chunk` nodes for text sections
-- `base` nodes for extracted entities
-- `MENTIONED_IN` edges linking entities to their source chunks
-- `NEXT` edges connecting sequential chunks
+- `gliner2` nodes for extracted entities, labeled with their type, such as
+  `Person` (`base` nodes with LightRAG)
+- `MENTIONED_IN` relationships linking entities to their source chunks
+- `NEXT` relationships connecting sequential chunks
 
 Explore this graph visually to understand how your content has been transformed
 into a connected network of knowledge. From here, you can keep

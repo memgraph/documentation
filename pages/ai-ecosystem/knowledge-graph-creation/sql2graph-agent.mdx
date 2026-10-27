@@ -54,29 +54,22 @@ read the graph schema to validate the migration.
 
 ## Installation
 
-In order to use you first need to clone the repository and install the
-dependencies:
-
+Install SQL2Graph from PyPI, where it's published as `structured2graph`. It
+needs Python 3.10 or later:
 
 ```bash
-# Clone the repository
-git clone https://github.com/memgraph/ai-toolkit
-
-# Navigate to the sql2graph directory
-cd agents/sql2graph
-
-# Install dependencies using uv
-uv pip install -e .
+pip install structured2graph
 ```
+
+This installs the `structured2graph` command, which runs SQL2Graph.
 
 ## Configuration
 
-The configuration enables you to control the agent flow via environment
-variables. The key information needed are the source database connection
-details, target Memgraph connection details, and LLM API keys and agent
-configuration. 
+SQL2Graph reads its settings from environment variables: the source database
+and Memgraph connections, and the API key for your LLM provider.
 
-Create a `.env` and fill the following variables:
+Create a `.env` file in the folder you run `structured2graph` from, with the
+following variables:
 
 ```bash
 # Source Database
@@ -110,18 +103,19 @@ OPENAI_API_KEY=sk-...          # For GPT models
 # GOOGLE_API_KEY=AI...          # For Gemini models
 
 # Optional: Specify LLM model (defaults shown)
-# LLM_MODEL=gpt-4o-mini         # OpenAI default
-# LLM_MODEL=claude-3-5-sonnet-20241022  # Anthropic default
-# LLM_MODEL=gemini-2.0-flash-exp        # Google default
-
-# Migration Defaults (can be overridden via CLI flags)
-SQL2MG_MODE=automatic # Options: automatic, incremental
-SQL2MG_STRATEGY=deterministic # Options: deterministic, llm
-SQL2MG_META_POLICY=auto # Options: auto, reset, skip
-SQL2MG_LOG_LEVEL=INFO
-
+# LLM_MODEL=gpt-4o                # OpenAI default
+# LLM_MODEL=claude-sonnet-5       # Anthropic default
+# LLM_MODEL=gemini-2.0-flash-exp  # Google default
 ```
-To start, copy `.env.example` in `agents/sql2graph` to `.env`.
+
+[`.env.example`](https://github.com/memgraph/ai-toolkit/blob/main/agents/sql2graph/.env.example)
+in the AI Toolkit repository lists every variable, and you can copy it as a
+starting point.
+
+The migration defaults `SQL2MG_MODE`, `SQL2MG_STRATEGY`, `SQL2MG_META_POLICY`
+and `SQL2MG_LOG_LEVEL` have no effect in `.env`, because `structured2graph`
+reads them before it loads the file. Set them in your shell, or pass the
+matching [command-line options](#command-line-options).
 
 
 ## Run a migration
@@ -130,11 +124,13 @@ You can run SQL2Graph in four ways, from fully automatic to fully reviewed.
 
 ### Automatic migration
 
-Run with default settings (automatic mode, deterministic strategy):
+Run in automatic mode with the deterministic strategy:
 
 ```bash
-uv run main.py
+structured2graph --mode automatic --strategy deterministic
 ```
+
+Without `--mode` and `--strategy`, `structured2graph` asks for both.
 
 The agent will:
 1. Validate your environment and database connections
@@ -143,11 +139,9 @@ The agent will:
 4. Execute the migration
 5. Validate the results
 
-In **automatic mode**, no user interaction is required, and the entire process
-is automated. This means the `SQL2MG_MODE` is set to `automatic`, and the
-SQL2MG_STRATEGY is set to `deterministic`. `SQL2MG_MODE` refers **modeling
-mode**  and represents how much user interaction is involved, while
-`SQL2MG_STRATEGY` refers to how the graph model is generated.
+In automatic mode, SQL2Graph asks you nothing. The mode (`--mode` or
+`SQL2MG_MODE`) sets how much you review, and the strategy (`--strategy` or
+`SQL2MG_STRATEGY`) sets how the graph model is designed.
 
 
 ### Refinement with incremental mode
@@ -156,8 +150,11 @@ For more control, run in incremental mode to review and refine the model
 step-by-step:
 
 ```bash
-uv run main.py --mode incremental
+structured2graph --mode incremental
 ```
+
+Incremental mode needs an LLM API key even with the deterministic strategy,
+because it uses the LLM to apply the changes you describe.
 
 The agent will:
 1. Analyze the source database schema
@@ -181,7 +178,7 @@ accept them as-is, skip the table entirely, or modify the mapping details.
 Use LLM-powered modeling for AI driven design:
 
 ```bash
-uv run main.py --strategy llm
+structured2graph --mode automatic --strategy llm
 ```
 
 The agent auto-detects which LLM provider to use based on available API keys. In
@@ -199,7 +196,7 @@ driven.
 Control each step of the transformation:
 
 ```bash
-uv run main.py --mode incremental --strategy llm
+structured2graph --mode incremental --strategy llm
 ```
 
 In incremental mode:
@@ -218,29 +215,36 @@ validation errors to improve the model iteratively.
 
 ### Command-line options
 
-| Flag | Environment Variable | Description | Default |
+| Flag | Environment variable | Description | Default |
 |------|---------------------|-------------|---------|
 | `--mode` | `SQL2MG_MODE` | `automatic` or `incremental` | interactive prompt |
 | `--strategy` | `SQL2MG_STRATEGY` | `deterministic` or `llm` | interactive prompt |
-| `--provider` | _(none)_ | `openai`, `anthropic`, or `gemini` | auto-detect from API keys |
+| `--provider` | `LLM_PROVIDER` | `openai`, `anthropic`, or `gemini` | auto-detect from API keys |
 | `--model` | `LLM_MODEL` | Specific model name | provider default |
 | `--meta-graph` | `SQL2MG_META_POLICY` | `auto`, `skip`, or `reset` | `auto` |
-| `--log-level` | `SQL2MG_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
+| `--log-level` | `SQL2MG_LOG_LEVEL` | `CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG` or `NOTSET` | `INFO` |
+| `--mapping PATH` | _(none)_ | Write a mapping JSON file at `PATH` instead of migrating, then open it for editing. An existing file opens directly. | none |
+| `--connector NAME` | _(none)_ | Memgraph Zero connector name to set on every element of the mapping | the only registered connector |
+| `--editor CMD` | `EDITOR` or `VISUAL` | Editor that opens the mapping file, such as `nano`, `vim` or `'code --wait'` | `EDITOR`, then `VISUAL`, then `vi` |
+
+The mapping file is a Memgraph Zero graph definition over the SQL tables, which
+you load with
+[`CREATE GRAPH <name> FROM FILE '<path>'`](/memgraph-zero/memgql/reference#graph-management-query-syntax).
 
 ### Usage examples
 
 ```bash
 # Use specific Gemini model
-uv run main.py --strategy llm --provider gemini --model gemini-2.0-flash-exp
+structured2graph --strategy llm --provider gemini --model gemini-2.0-flash-exp
 
 # Skip meta-graph comparison (treat as fresh migration)
-uv run main.py --meta-graph skip
+structured2graph --meta-graph skip
 
 # Enable debug logging
-uv run main.py --log-level DEBUG
+structured2graph --log-level DEBUG
 
 # Fully configured non-interactive run
-uv run main.py \
+structured2graph \
   --mode automatic \
   --strategy deterministic \
   --meta-graph reset \
@@ -250,70 +254,41 @@ uv run main.py \
 
 ## LLM provider support
 
-| Provider | Models |
-|----------|--------|
-| **OpenAI** | GPT-4o, GPT-4o-mini |
-| **Anthropic** | Claude 3.5 Sonnet |
-| **Google** | Gemini 2.0 Flash |
+| Provider | API key | Default model |
+|----------|---------|---------------|
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-5` |
+| Google | `GOOGLE_API_KEY` | `gemini-2.0-flash-exp` |
 
 ### Provider selection
 
-The agent automatically selects a provider based on available API keys:
-1. Checks for `OPENAI_API_KEY`
-2. Falls back to `ANTHROPIC_API_KEY`
-3. Falls back to `GOOGLE_API_KEY`
+The agent selects the provider in this order:
+
+1. The `--provider` option.
+2. The `LLM_PROVIDER` environment variable.
+3. The first API key it finds: `OPENAI_API_KEY`, then `ANTHROPIC_API_KEY`, then
+   `GOOGLE_API_KEY`.
 
 Override with `--provider` flag:
 
 ```bash
 # Force Anthropic even if OpenAI key exists
-uv run main.py --strategy llm --provider anthropic
+structured2graph --strategy llm --provider anthropic
 ```
 
 ### Model selection
 
-Each provider has sensible defaults:
-- **OpenAI**: `gpt-4o-mini` 
-- **Anthropic**: `claude-3-5-sonnet-20241022`
-- **Google**: `gemini-2.0-flash-exp` 
-
-Override with `--model` or `LLM_MODEL` env variable:
+Each provider uses the default model in the table above. Override it with
+`--model` or the `LLM_MODEL` environment variable:
 
 ```bash
-# Use more powerful OpenAI model
-uv run main.py --strategy llm --model gpt-4o
+# Use a smaller OpenAI model
+structured2graph --mode automatic --strategy llm --model gpt-4o-mini
 
-# Or via environment variable
-export LLM_MODEL=claude-3-opus-20240229
-uv run main.py --strategy llm --provider anthropic
+# Or via the environment variable
+export LLM_MODEL=claude-opus-5-5
+structured2graph --mode automatic --strategy llm --provider anthropic
 ```
 
-
-## Architecture overview
-
-If you like the implementation details, here is a high-level overview of the
-project structure:
-
-```plaintext
-sql2graph/
-├── main.py                    # CLI entry point
-├── core/
-│   ├── migration_agent.py     # Main orchestration
-│   └── hygm/                  # Graph modeling engine
-│       ├── hygm.py            # HyGM core
-│       ├── models/            # Data models
-│       ├── strategies/        # Modeling strategies
-│       └── validation/        # Validation system
-├── database/
-│   ├── analyzer.py            # Schema analysis
-│   ├── factory.py             # Database adapter factory
-│   └── adapters/              # DB-specific adapters
-├── query_generation/
-│   ├── cypher_generator.py    # Cypher query builder
-│   └── schema_utilities.py   # Schema helpers
-└── utils/
-    ├── environment.py         # Env validation
-    └── config.py              # Configuration
-```
 
 <CommunityLinks/>
