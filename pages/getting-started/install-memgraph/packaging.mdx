@@ -1,0 +1,187 @@
+---
+title: Package Memgraph
+description: Build Memgraph .deb and .rpm packages from source with the mgbuild.sh script, the package.sh script or CPack.
+---
+
+import { Callout } from 'nextra/components'
+
+# Package Memgraph
+
+Build a `.deb` or `.rpm` package of Memgraph from source. There are three ways
+to do it:
+
+- [With `mgbuild.sh`](#package-with-mgbuildsh), which builds and packages
+  Memgraph in a Docker container (recommended).
+- [With `package.sh`](#package-with-packagesh), which packages a local build
+  directory.
+- [With CPack](#package-with-cpack), which you run by hand.
+
+<Callout type="info">
+Since Memgraph 3.13, the packages are **distro-agnostic**: one `.deb` (all
+Debian-family distributions) and one `.rpm` (all RHEL-family distributions) per
+architecture, running on any Linux with glibc 2.31 or newer.
+</Callout>
+
+## Package with `mgbuild.sh`
+
+The `mgbuild.sh` script builds Memgraph in a Docker container. Before you
+package Memgraph, [build it with
+Docker](/getting-started/install-memgraph/build-from-source#build-with-docker).
+
+The `OS` variable only selects the Docker build environment, not the target
+distribution. The build environments are `centos-9`, `centos-10`, `debian-12`,
+`debian-13`, `fedora-42`, `fedora-43`, `rocky-10`, `ubuntu-22.04`,
+`ubuntu-24.04` and `ubuntu-26.04`.
+
+With the same environment variables you exported for the build, build the
+package:
+
+```bash
+./release/package/mgbuild.sh \
+    --toolchain $TOOLCHAIN \
+    --os "$OS" \
+    --arch $ARCH \
+    --build-type $BUILD_TYPE \
+    package-memgraph
+```
+
+Copy the package out of the container:
+
+```bash
+./release/package/mgbuild.sh \
+    --toolchain $TOOLCHAIN \
+    --os "$OS" \
+    --arch $ARCH \
+    copy \
+    --package \
+    --dest-dir output
+```
+
+Stop the container:
+
+```bash
+./release/package/mgbuild.sh \
+    --toolchain $TOOLCHAIN \
+    --os "$OS" \
+    --arch $ARCH \
+    stop --remove
+```
+
+The package is in the `output` directory. Install it with `apt` or `dnf`,
+depending on the distribution. For example, on Ubuntu 24.04:
+
+```bash
+sudo apt install ./output/PACKAGE_FILE.deb
+```
+
+`PACKAGE_FILE` is the name of the `.deb` file in the `output` directory,
+named `memgraph_VERSION_ARCH.deb`.
+
+### Build a Docker image from the package
+
+On Ubuntu 24.04, you can also turn the package into a Docker image. First,
+build a custom OpenSSL package:
+
+```bash
+./release/package/mgbuild.sh \
+    --toolchain $TOOLCHAIN \
+    --os "$OS" \
+    --arch $ARCH \
+    build-ssl \
+    --version "3.5.4"
+```
+
+Then create an Ubuntu-based Docker image:
+
+```bash
+./release/package/mgbuild.sh \
+    --toolchain $TOOLCHAIN \
+    --os "$OS" \
+    --arch $ARCH \
+    --build-type $BUILD_TYPE \
+    package-docker \
+    --src-dir output \
+    --dest-dir docker-output
+```
+
+The command writes a Docker image archive to the `docker-output` directory.
+Load it into Docker:
+
+```bash
+docker load -i docker-output/IMAGE_ARCHIVE.tar.gz
+```
+
+`IMAGE_ARCHIVE` is the name of the archive in `docker-output`. `docker load`
+prints the name and tag of the loaded image. Run it:
+
+```bash
+docker run -p 7687:7687 -p 7444:7444 --name memgraph memgraph/memgraph:IMAGE_TAG
+```
+
+`IMAGE_TAG` is the tag that `docker load` printed.
+
+## Package with `package.sh`
+
+After you build Memgraph with
+[`build.sh`](/getting-started/install-memgraph/build-from-source#build-with-buildsh)
+or with [`conan` and
+`cmake`](/getting-started/install-memgraph/build-from-source#build-with-conan-and-cmake),
+the `package.sh` script in the repository root packages the build directory on
+the host. It takes a target and a package format:
+
+```bash
+source /opt/toolchain-v8/activate
+./package.sh memgraph deb
+```
+
+- The target is `memgraph` (the `memgraph` and `memgraph-debuginfo` packages),
+  `mage` (the `memgraph-mage` package, plus `memgraph-mage-debuginfo` when the
+  build used `--split-debug`) or `all` (everything the build was configured
+  for).
+- The format is `deb` or `rpm`.
+
+For example, to package the MAGE query modules as an RPM from a
+`./build.sh --mage only` build:
+
+```bash
+./package.sh mage rpm
+```
+
+The script checks that the build directory is configured for the requested
+target (packaging `mage` requires a build with `--mage on` or `--mage only`),
+selects the right CPack components and checks that it produced the expected
+number of packages. It writes the packages to `build/output/`. To package from
+another build directory, pass `--build-dir DIR`, where `DIR` is the path to
+that directory.
+
+## Package with CPack
+
+`package.sh` is a wrapper around CPack. For full control, run CPack yourself.
+
+Create the output directory:
+
+```bash
+mkdir -p build/output && cd build/output
+```
+
+Activate the toolchain:
+
+```bash
+source /opt/toolchain-v8/activate
+```
+
+Build the package for your distribution family:
+
+- RPM-based distributions:
+
+  ```bash
+  cpack -G RPM --config ../CPackConfig.cmake
+  ```
+
+- DEB-based distributions:
+
+  ```bash
+  cpack -G DEB --config ../CPackConfig.cmake
+  ```
+
+Install the package with `apt` or `dnf`.
