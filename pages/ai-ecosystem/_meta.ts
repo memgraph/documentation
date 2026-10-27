@@ -4,5 +4,5 @@ export default {
     "ai-memory": "AI memory",
     "agentic-ai": "Agentic AI",
     "machine-learning": "Graph machine learning",
-    "integrations": "Tools and integrations"
+    "integrations": "AI Toolkit and integrations"
 }
