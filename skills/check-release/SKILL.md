@@ -174,6 +174,9 @@ release branch so the fixes don't conflict with the release's own changes.
   rules, keeping each fix to the item: no reformatting of the rest of the
   page. Re-run any Cypher example you change on a build with the release's
   changes, such as the newest daily build.
+- **Show the user before every push**, the first one and each later one that
+  adds items: each item next to its fix in the diff, and the items you skipped
+  or couldn't fix. Push only when they say so.
 - **Open** the PR as a draft into `release/<version>`, in the docs milestone,
   with no label, titled "Fix problems noticed while writing the <version>
   docs". Fill the body from `.github/pull_request_template.md` with "none"
