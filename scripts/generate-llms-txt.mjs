@@ -258,6 +258,8 @@ function mdxToMarkdown(raw, { title }) {
     .replace(/^[ \t]*import\s+['"][^'"]+['"];?[ \t]*$/gm, '')
     .replace(/^[ \t]*export\s+(?:default|const|let|var|function)\b.*$/gm, '')
     .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    // Custom heading ids (`## Title [#id]`) are for the website only.
+    .replace(/^(#{1,6}[ \t].*?)[ \t]*\[#[^\]\n]+\][ \t]*$/gm, '$1')
 
   out = convertJsxHeadings(out)
   out = unwrapCodeSnippets(out)
