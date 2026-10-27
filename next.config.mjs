@@ -20,6 +20,66 @@ export default withNextra({
   async redirects() {
     return [
       {
+        source: '/getting-started/install-memgraph/debian',
+        destination: '/getting-started/install-memgraph/linux',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/debian.md',
+        destination: '/getting-started/install-memgraph/linux.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/ubuntu',
+        destination: '/getting-started/install-memgraph/linux',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/ubuntu.md',
+        destination: '/getting-started/install-memgraph/linux.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/centos',
+        destination: '/getting-started/install-memgraph/linux',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/centos.md',
+        destination: '/getting-started/install-memgraph/linux.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/fedora',
+        destination: '/getting-started/install-memgraph/linux',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/fedora.md',
+        destination: '/getting-started/install-memgraph/linux.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/rocky',
+        destination: '/getting-started/install-memgraph/linux',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/rocky.md',
+        destination: '/getting-started/install-memgraph/linux.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/redhat',
+        destination: '/getting-started/install-memgraph/linux',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/redhat.md',
+        destination: '/getting-started/install-memgraph/linux.md',
+        permanent: true
+      },
+      {
         source: '/ai-ecosystem/mcp',
         destination: '/ai-ecosystem/integrations/mcp',
         permanent: true
@@ -96,7 +156,12 @@ export default withNextra({
       },
       {
         source: '/ai-ecosystem/agents/sql2graph-agent',
-        destination: '/ai-ecosystem/knowledge-graph-creation/sql2graph-agent',
+        destination: '/ai-ecosystem/knowledge-graph-creation/structured2graph',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/knowledge-graph-creation/sql2graph-agent',
+        destination: '/ai-ecosystem/knowledge-graph-creation/structured2graph',
         permanent: true
       },
       {
@@ -121,7 +186,12 @@ export default withNextra({
       },
       {
         source: '/ai-ecosystem/agents/sql2graph-agent.md',
-        destination: '/ai-ecosystem/knowledge-graph-creation/sql2graph-agent.md',
+        destination: '/ai-ecosystem/knowledge-graph-creation/structured2graph.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/knowledge-graph-creation/sql2graph-agent.md',
+        destination: '/ai-ecosystem/knowledge-graph-creation/structured2graph.md',
         permanent: true
       },
       {
@@ -1256,7 +1326,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/install-memgraph-on-debian',
-        destination: '/getting-started/install-memgraph/debian',
+        destination: '/getting-started/install-memgraph/linux',
         permanent: true
       },
       {
@@ -1306,7 +1376,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/linux-installation-troubleshooting',
-        destination: '/getting-started/install-memgraph/ubuntu',
+        destination: '/getting-started/install-memgraph/linux#troubleshooting',
         permanent: true
       },
       {
@@ -1356,7 +1426,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/install-memgraph-on-ubuntu',
-        destination: '/getting-started/install-memgraph/ubuntu',
+        destination: '/getting-started/install-memgraph/linux',
         permanent: true
       },
       {
@@ -2429,7 +2499,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/getting-started/installation/debian-installation',
-        destination: '/getting-started/install-memgraph/debian',
+        destination: '/getting-started/install-memgraph/linux',
         permanent: true
       },
       {

@@ -319,18 +319,18 @@ In `pages/release-notes.mdx`, set the date on the release's
 In `pages/getting-started/install-memgraph/direct-download-links.mdx`,
 replace **every** occurrence of the previous version with the new one.
 
-- The file has download URLs for Docker, CentOS, Debian, Fedora, Rocky, Red
-  Hat and Ubuntu packages, with the version both in path segments (`v3.8.1`)
-  and file names (`3.8.1`).
+- The file has download URLs for the Docker images and the DEB and RPM
+  packages, with the version both in path segments (`v3.8.1`) and file names
+  (`3.8.1`).
 - A global find-and-replace of the bare old version string (e.g. `3.8.1` →
   `3.9.0`) covers both patterns in one pass.
 - Verify every URL in the file references only the new version.
 
 Do the same in the pages that pin the version in their install steps:
 
-- `debian`, `ubuntu`, `centos`, `fedora`, `rocky`, `redhat` and `wsl` under
-  `pages/getting-started/install-memgraph/`: the download URL, the package
-  file name and the sample `You are running Memgraph v<version>` output.
+- `linux.mdx` and `wsl.mdx` under `pages/getting-started/install-memgraph/`:
+  the download URLs, the package file names and the sample `You are running
+  Memgraph v<version>` output.
 - `pages/getting-started/install-memgraph/docker.mdx`: the
   `memgraph/memgraph:<version>` and `memgraph/memgraph:<version>-fips` tags.
 
