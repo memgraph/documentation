@@ -140,6 +140,26 @@ export default withNextra({
         permanent: true
       },
       {
+        source: '/getting-started/build-memgraph-from-source',
+        destination: '/getting-started/install-memgraph/build-from-source',
+        permanent: true
+      },
+      {
+        source: '/getting-started/build-memgraph-from-source.md',
+        destination: '/getting-started/install-memgraph/build-from-source.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/packaging-memgraph',
+        destination: '/getting-started/install-memgraph/packaging',
+        permanent: true
+      },
+      {
+        source: '/getting-started/packaging-memgraph.md',
+        destination: '/getting-started/install-memgraph/packaging.md',
+        permanent: true
+      },
+      {
         source: '/use-cases',
         destination: '/ai-ecosystem',
         permanent: true
