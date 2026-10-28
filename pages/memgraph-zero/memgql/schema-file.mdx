@@ -253,7 +253,9 @@ A vertex maps a **label** to a backend source. Exactly one source kind is set:
 
 A vertex may also add a **`mappedContentSource`** on top of either one, to read
 some of its properties from a table in another connector (see
-[Content in another connector](#content-in-another-connector)).
+[Content in another connector](#content-in-another-connector)), or a
+**`linkKey`**, to declare the same entity in several connectors (see
+[One vertex in several connectors](#one-vertex-in-several-connectors)).
 
 ```json
 {
@@ -343,7 +345,7 @@ spelling [schema discovery](#discovered-native-schema) produces.
 
 | Field | Source kind | Description |
 |-------|-------------|-------------|
-| `label` / `labels` | both | The node label, or a list of labels whose first entry identifies the mapping (unique per graph) and whose others may be shared with other mappings. |
+| `label` / `labels` | both | The node label, or a list of labels whose first entry identifies the mapping (unique per graph, unless every declaration names a `linkKey`) and whose others may be shared with other mappings. |
 | `mappedTableSource.connector` | relational | Connector name (alias `catalog`). |
 | `mappedTableSource.schema`    | relational | Optional middle namespace (PostgreSQL schema, etc.). |
 | `mappedTableSource.database`  | relational | Optional outer namespace for backends with three-part names; on SQL Server it renders `database.schema.table`, so one connection can reach views in other databases. |
@@ -352,6 +354,7 @@ spelling [schema discovery](#discovered-native-schema) produces.
 | `mappedGraphSource.connector` | native      | Connector name (Memgraph / Neo4j); the query passes through as Cypher. |
 | `mappedGraphSource.label`     | native      | Optional backend label (on an edge, backend relationship type) exposed under this element's `label`. Queries use the exposed name, MemGQL rewrites it for the backend, and returned nodes and relationships carry the exposed name. Two elements cannot share a backend name. Not renamed: strings a query computes from names (`labels(n)`, `type(r)`), the extra labels of a multi-label vertex, and property keys. |
 | `mappedContentSource`         | either      | Optional second source for some of the vertex's properties; see [Content in another connector](#content-in-another-connector). |
+| `linkKey`                     | either      | Optional property identifying the same entity in every connector that declares this label; see [One vertex in several connectors](#one-vertex-in-several-connectors). |
 | `attributes`                  | either      | The properties the vertex exposes; see [Attributes](#attributes). |
 
 #### Content in another connector
@@ -415,6 +418,89 @@ instead):
 - A query that reads content properties must be a single `MATCH … RETURN`: no
   `WITH`, `UNWIND`, `CALL`, `UNION` or `RETURN *`, and `OPTIONAL MATCH` may not
   bind the vertex whose content is read.
+
+#### One vertex in several connectors
+
+The same entity often lives in more than one database: a book is in the
+catalog graph, in the reviews graph, and in the sales warehouse, each time
+with its own properties and relationships. Declare the label **once per
+connector**, and give every declaration the same **`linkKey`**: the property
+whose value says "this is the same book everywhere".
+
+```
+  Memgraph "catalog"           Memgraph "reviews"           Redshift "warehouse"
+ ┌────────────────────────┐   ┌────────────────────────┐   ┌────────────────────────┐
+ │ (:Book                 │   │ (:Book                 │   │ books                  │
+ │   isbn:  "978-0441…"   │   │   isbn: "978-0441…"    │   │   isbn:  '978-0441…'   │
+ │   title: "Dune")       │   │   avgRating: 4.6)      │   │   units_sold: 120000   │
+ └───────────┬────────────┘   └───────────┬────────────┘   └───────────┬────────────┘
+             └──────────── "linkKey": "isbn"  ⇒  one Book ─────────────┘
+```
+
+```json
+{ "label": "Book", "mappedGraphSource": { "connector": "catalog" }, "linkKey": "isbn" },
+{ "label": "Book", "mappedGraphSource": { "connector": "reviews" }, "linkKey": "isbn" },
+{ "label": "Book",
+  "mappedTableSource": { "connector": "warehouse", "table": "books", "metaFields": { "id": "isbn" } },
+  "attributes": [ { "name": "isbn" }, { "name": "unitsSold", "column": "units_sold" } ],
+  "linkKey": "isbn" }
+```
+
+Each declaration is an ordinary vertex of its connector. An edge that names
+`Book` reads the declaration in its own connector: `WRITTEN_BY` in `catalog`,
+`REVIEWED` in `reviews`. A path can therefore cross from one database into
+another **at a book**, and the query never says where anything lives:
+
+```gql
+MATCH (a:Author)<-[:WRITTEN_BY]-(b:Book)<-[:REVIEWED]-(r:Reader)
+WHERE a.name = 'Frank Herbert'
+RETURN a, b, r;
+```
+
+`WRITTEN_BY` lives in `catalog` and `REVIEWED` in `reviews`, so MemGQL reads
+the author's books in `catalog`, sends their `isbn` values to `reviews` as one
+`IN` list, and joins the two halves on `isbn`:
+
+```
+  catalog                                      reviews
+ (a Frank Herbert)──[:WRITTEN_BY]──(b ?)      (b' ?)──[:REVIEWED]──(r Reader)
+                                     └── b.isbn = b'.isbn ──┘
+```
+
+`RETURN b` comes back as **one** node carrying the properties of both
+halves (`title` from `catalog`, `avgRating` from `reviews`), and the
+`WRITTEN_BY` and `REVIEWED` relationships both point at it, so a graph client
+draws one connected path. An equality filter on either side runs first in its
+own database and narrows what the other side is asked for; a `LIMIT` applies to
+the joined result.
+
+**Same label, different names in the backends.** Linking groups declarations
+by their exposed `label`, but the backends may name things differently. A
+table's name never matters, and a native label can be renamed with
+`mappedGraphSource.label`
+(`{ "label": "Book", "mappedGraphSource": { "connector": "reviews", "label": "Title" }, "linkKey": "isbn" }`).
+The key is one property name on every declaration: a table can map it from any
+column (`{ "name": "isbn", "column": "isbn13" }`), while on Memgraph and Neo4j
+the stored property must itself be called `isbn`. Two different entities, such
+as `Book` and `Author`, are not linked: connect them with a
+[cross-connector edge](#cross-connector-edges).
+
+**Rules and limits** (each is refused with a message saying what to write
+instead):
+
+- Every declaration names the same `linkKey`, at most one declaration per
+  connector, and a label declared twice without `linkKey` is a duplicate.
+- On a table declaration, `linkKey` must be one of its declared attributes, as
+  a plain column (not a JSON `path`).
+- `linkKey` does not combine with `mappedContentSource`, and a
+  `mappedJoinSource` edge between two declarations of the same linked label is
+  refused: the key already joins them.
+- A `Book` with no relationship to place it
+  (`MATCH (b:Book {isbn: '…'}) RETURN b`) is refused, naming the connectors to
+  choose from. Add a relationship that only one of them stores.
+- A path crosses connectors in a single `MATCH`, without `OPTIONAL MATCH`,
+  path variables, shortest-path search or variable-length hops across the
+  crossing.
 
 ### Edges
 
@@ -854,10 +940,11 @@ Every name a schema file can contain, grouped by where it appears.
 
 | Name | Meaning |
 |------|---------|
-| `label` | The exposed node label; unique within a graph. |
+| `label` | The exposed node label; unique within a graph, except that a linked label is declared once per connector. |
 | `labels` | Several labels; the first identifies the mapping, the rest may be shared. |
 | `mappedTableSource` / `mappedGraphSource` | Where the vertex lives; exactly one is set. |
 | `mappedContentSource` | Optional table in another connector for some of its properties. |
+| `linkKey` | The **property** identifying the same entity in every connector that declares the label. |
 | `attributes` | The properties read from the vertex's own source. |
 
 ### Edge
