@@ -20,6 +20,66 @@ export default withNextra({
   async redirects() {
     return [
       {
+        source: '/getting-started/install-memgraph/debian',
+        destination: '/getting-started/install-memgraph/linux',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/debian.md',
+        destination: '/getting-started/install-memgraph/linux.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/ubuntu',
+        destination: '/getting-started/install-memgraph/linux',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/ubuntu.md',
+        destination: '/getting-started/install-memgraph/linux.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/centos',
+        destination: '/getting-started/install-memgraph/linux',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/centos.md',
+        destination: '/getting-started/install-memgraph/linux.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/fedora',
+        destination: '/getting-started/install-memgraph/linux',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/fedora.md',
+        destination: '/getting-started/install-memgraph/linux.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/rocky',
+        destination: '/getting-started/install-memgraph/linux',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/rocky.md',
+        destination: '/getting-started/install-memgraph/linux.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/redhat',
+        destination: '/getting-started/install-memgraph/linux',
+        permanent: true
+      },
+      {
+        source: '/getting-started/install-memgraph/redhat.md',
+        destination: '/getting-started/install-memgraph/linux.md',
+        permanent: true
+      },
+      {
         source: '/ai-ecosystem/mcp',
         destination: '/ai-ecosystem/integrations/mcp',
         permanent: true
@@ -96,7 +156,12 @@ export default withNextra({
       },
       {
         source: '/ai-ecosystem/agents/sql2graph-agent',
-        destination: '/ai-ecosystem/knowledge-graph-creation/sql2graph-agent',
+        destination: '/ai-ecosystem/knowledge-graph-creation/structured2graph',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/knowledge-graph-creation/sql2graph-agent',
+        destination: '/ai-ecosystem/knowledge-graph-creation/structured2graph',
         permanent: true
       },
       {
@@ -121,7 +186,12 @@ export default withNextra({
       },
       {
         source: '/ai-ecosystem/agents/sql2graph-agent.md',
-        destination: '/ai-ecosystem/knowledge-graph-creation/sql2graph-agent.md',
+        destination: '/ai-ecosystem/knowledge-graph-creation/structured2graph.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/knowledge-graph-creation/sql2graph-agent.md',
+        destination: '/ai-ecosystem/knowledge-graph-creation/structured2graph.md',
         permanent: true
       },
       {
@@ -137,6 +207,36 @@ export default withNextra({
       {
         source: '/ai-ecosystem/skills.md',
         destination: '/getting-started/coding-with-ai/skills.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/build-memgraph-from-source',
+        destination: '/getting-started/install-memgraph/build-from-source',
+        permanent: true
+      },
+      {
+        source: '/getting-started/build-memgraph-from-source.md',
+        destination: '/getting-started/install-memgraph/build-from-source.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/packaging-memgraph',
+        destination: '/getting-started/install-memgraph/packaging',
+        permanent: true
+      },
+      {
+        source: '/getting-started/packaging-memgraph.md',
+        destination: '/getting-started/install-memgraph/packaging.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/first-steps-with-docker',
+        destination: '/deployment/environments/docker',
+        permanent: true
+      },
+      {
+        source: '/getting-started/first-steps-with-docker.md',
+        destination: '/deployment/environments/docker.md',
         permanent: true
       },
       {
@@ -1226,7 +1326,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/install-memgraph-on-debian',
-        destination: '/getting-started/install-memgraph/debian',
+        destination: '/getting-started/install-memgraph/linux',
         permanent: true
       },
       {
@@ -1276,7 +1376,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/linux-installation-troubleshooting',
-        destination: '/getting-started/install-memgraph/ubuntu',
+        destination: '/getting-started/install-memgraph/linux#troubleshooting',
         permanent: true
       },
       {
@@ -1326,7 +1426,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/install-memgraph-on-ubuntu',
-        destination: '/getting-started/install-memgraph/ubuntu',
+        destination: '/getting-started/install-memgraph/linux',
         permanent: true
       },
       {
@@ -2399,12 +2499,12 @@ export default withNextra({
       },
       {
         source: '/memgraph/getting-started/installation/debian-installation',
-        destination: '/getting-started/install-memgraph/debian',
+        destination: '/getting-started/install-memgraph/linux',
         permanent: true
       },
       {
         source: '/memgraph/how-to-guides-overview/work-with-docker',
-        destination: '/getting-started/first-steps-with-docker',
+        destination: '/deployment/environments/docker',
         permanent: true
       },
       {
@@ -2414,7 +2514,7 @@ export default withNextra({
       },
       {
         source: '/memgraph/how-to-work-with-docker',
-        destination: '/getting-started/first-steps-with-docker',
+        destination: '/deployment/environments/docker',
         permanent: true
       },
       {
