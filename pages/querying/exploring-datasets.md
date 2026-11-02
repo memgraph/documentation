@@ -22,6 +22,9 @@ have it up and running, open Memgraph Lab web application within the browser on
 sidebar. From there, choose the dataset that seems interesting to you and
 continue with the tutorial. 
 
+All datasets, with their sizes and download links, are listed on [Sample
+datasets](/querying/sample-datasets).
+
 You can also run an instance in [Memgraph
 Cloud](/getting-started/install-memgraph/memgraph-cloud). Once you [sign
 up](https://cloud.memgraph.com/), create a new project. From the project you can
