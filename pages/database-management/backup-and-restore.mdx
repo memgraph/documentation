@@ -1,6 +1,6 @@
 ---
 title: Backup and restore
-description: Learn how to create a backup to secure your data and restore Memgraph database from a backup. 
+description: Back up Memgraph snapshots and WAL files, and restore a whole instance or a single database from a snapshot.
 ---
 
 import { Callout } from 'nextra/components'
@@ -51,9 +51,12 @@ Follow these steps to create database backup:
   To copy the snapshot files from the Docker container first check the container
   ID by running `docker ps` then run the following command:
 
-   ```plaintext
-    docker cp  <CONTAINER ID>:/var/lib/memgraph/snapshots/<snapshot_file> <snapshot_file>
-   ```
+  ```bash
+  docker cp CONTAINER_ID:/var/lib/memgraph/snapshots/SNAPSHOT_FILE SNAPSHOT_FILE
+  ```
+
+  `CONTAINER_ID` is the ID from `docker ps`, and `SNAPSHOT_FILE` is the
+  snapshot's file name.
 
 {<h3 id="unlock-the-data-directory" className="custom-header">Unlock the data directory</h3>}
 
@@ -73,7 +76,7 @@ Follow these steps to create database backup:
 
 Restore a snapshot to a running Memgraph instance using the RECOVER SNAPSHOT command:
 
-```
+```cypher template
 RECOVER SNAPSHOT path=literal ( WITH CONFIG configsMap=configMap ) ? ( FORCE )? ;
 ```
 
@@ -89,7 +92,7 @@ Snapshots can be recovered from:
 
 ### Local filesystem
 
-```
+```cypher template
 RECOVER SNAPSHOT "/path/to/snapshot";
 ```
 
@@ -98,7 +101,7 @@ Memgraph copies the snapshot to its local snapshot directory, so ensure the file
 
 If not, you might encounter the following error:
 
-```output
+```plaintext copy=false
 Failed to copy snapshot over to local snapshots directory.
 ```
 
@@ -121,7 +124,7 @@ RECOVER SNAPSHOT "s3://my-bucket/snapshots/backup.snapshot" WITH CONFIG {'aws_re
 
 If the instance is not freshly started, add the `FORCE` flag to your command:
 
-```
+```cypher template
 RECOVER SNAPSHOT "/path/to/snapshot" FORCE;
 ```
 
@@ -144,7 +147,7 @@ for the full set of restoration paths.
 In order to query the snapshots currently present in the local data directory,
 execute the query:
 
-```
+```cypher
 SHOW SNAPSHOTS;
 ```
 
@@ -153,7 +156,7 @@ timestamp and the file size.
 
 As of Memgraph v3.5, the `SHOW SNAPSHOTS` query does not return information regarding the next scheduled snapshot.
 A special query has been added:
-```
+```cypher
 SHOW NEXT SNAPSHOT;
 ```
 If the periodic snapshot background job is active, the result will return the path and the time at which the snapshots will be created.
@@ -173,7 +176,7 @@ If you are using Memgraph pre v2.22, follow these steps to restore data from a b
 
      1. Find the container ID using a `docker ps` command, then enter the container using:
 
-      ```
+      ```bash
       docker exec -it CONTAINER_ID bash
       ```
      2. Position yourself in the `/var/lib/memgraph/wal` directory and `rm *`
@@ -182,7 +185,7 @@ If you are using Memgraph pre v2.22, follow these steps to restore data from a b
 
   Run the following command
   
-  ```
+  ```bash
   docker stop CONTAINER_ID
   ```
 
@@ -197,7 +200,7 @@ If you are using Memgraph pre v2.22, follow these steps to restore data from a b
   where the `~/snapshots` represents a path to the location of the directory
   with the back-up snapshot, for example: 
 
-  ```
+  ```bash
   docker run -p 7687:7687 -p 7444:7444 -v ~/snapshots:/var/lib/memgraph/snapshots memgraph/memgraph
   ```
 
@@ -207,7 +210,7 @@ If you are using Memgraph pre v2.22, follow these steps to restore data from a b
   to the location of the backed-up snapshot directory, and `~/wal` represents a
   path to the location of the backed-up wal directory for example: 
 
-  ```
+  ```bash
   docker run -p 7687:7687 -p 7444:7444 -v ~/snapshots:/var/lib/memgraph/snapshots -v ~/wal:/var/lib/memgraph/wal memgraph/memgraph
   ```
 
@@ -217,8 +220,8 @@ If you are using Memgraph pre v2.22, follow these steps to restore data from a b
   directory after creating the container and start the database. So the commands
   should look like this: 
 
-  ```
-  docker create -p 7687:7687 -p 7444:7444 -v `snapshots`:/var/lib/memgraph/snapshots --name memgraphDB memgraph/memgraph
+  ```bash
+  docker create -p 7687:7687 -p 7444:7444 -v snapshots:/var/lib/memgraph/snapshots --name memgraphDB memgraph/memgraph
   tar -cf - sample_snapshot_file | docker cp -a - memgraphDB:/var/lib/memgraph/snapshots
   ```
   The `sample_snapshot_file` is the snapshot file you want to use to restore the
@@ -227,13 +230,13 @@ If you are using Memgraph pre v2.22, follow these steps to restore data from a b
   change the ownership of the file to the `memgraph` user inside the container.
 
   After that, start the database with:
-  ```
+  ```bash
   docker start -a memgraphDB
   ```
   The `-a` flag is used to attach to the container's output so you can see the logs.
 
   Once memgraph is started, change the snapshot directory ownership to the `memgraph` user by running the following command:
-  ```
+  ```bash
   docker exec -it -u 0 memgraphDB bash -c "chown memgraph:memgraph /var/lib/memgraph/snapshots"
   ```
   Otherwise, Memgraph will not be able to write the future snapshot files and will fail.
@@ -278,7 +281,7 @@ it was at the time of the dump.
 
 To dump the Memgraph DB, run the following query:
 
-```opencypher
+```cypher
 DUMP DATABASE;
 ```
 
@@ -568,8 +571,8 @@ By default, Memgraph backs up durability files to `snapshots/.old` and `wal/.old
 
 When backup occurs:
 
-1. `RECOVER SNAPSHOT` query - Before loading an external snapshot, Memgraph moves existing files from `snapshots/` to `snapshots/.old` and from `wal/` to `wal/.old`. T
-his protects your data if the newly loaded snapshot turns out to be corrupted.
+1. `RECOVER SNAPSHOT` query - Before loading an external snapshot, Memgraph moves existing files from `snapshots/` to `snapshots/.old` and from `wal/` to `wal/.old`. This
+protects your data if the newly loaded snapshot turns out to be corrupted.
 2. High Availability force sync - During replica's force syncing. See [this page](/database-management/clustering/high-availability/how-high-availability-works#replication-scenarios) for details.
 
 Configuration:
