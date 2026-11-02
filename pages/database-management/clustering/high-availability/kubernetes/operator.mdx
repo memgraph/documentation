@@ -84,6 +84,9 @@ helm upgrade memgraph-operator memgraph/memgraph-operator --namespace memgraph-o
 
 With `crds.enabled: false`, apply the new CRD yourself before you upgrade.
 
+When the new operator version changes the pods' configuration, it [restarts
+every pod](#rolling-restarts) of every cluster, one at a time.
+
 ### Uninstall the operator
 
 ```bash
@@ -394,8 +397,9 @@ Rules for keys and values:
   `flags`: `bolt-port`, `management-port`, `coordinator-port`, `bolt-address`,
   `monitoring-address`, `monitoring-port`, `metrics-port`, `metrics-format`,
   `coordinator-id`, `coordinator-hostname`, `data-directory`, `log-file`, the
-  [TLS](#configure-tls) file flags, `license-key`, `organization-name` and the
-  four `aws-*` flags.
+  [TLS](#configure-tls) file flags, `license-key`, `organization-name`, the
+  four `aws-*` flags, `system-user-internal-hash-file` and `fips-mode` (set
+  with [`fips`](#run-in-fips-mode) instead).
 
 Unless you set them, the operator starts Memgraph with `log-level=INFO`,
 `also-log-to-stderr=true` and `log-retention-days=35`.
@@ -447,6 +451,36 @@ The pods never read the Secret themselves: the operator delivers the license
 to each pod as a database setting. A new pod starts without a license and gets
 it once it's ready. Pointing `secrets.name` at a different Secret works the
 same way and restarts nothing.
+
+## Users and authentication
+
+On Memgraph 3.15 and later, the operator logs in to every instance as
+`memgraph_internal`, a system user built into Memgraph. Memgraph accepts it
+whatever [users and roles](/database-management/authentication-and-authorization)
+or [coordinator SSO](/clustering/high-availability/coordinator-authentication)
+you configure, and no query can create, change or drop it. So you can enable
+authentication on a cluster the operator manages.
+
+The operator creates two Secrets for it per cluster, and deletes them with the
+cluster. For a cluster named `memgraph`:
+
+| Secret | Key | Contents |
+|---|---|---|
+| `memgraph-system-user` | `password` | A password the operator generates once. Only the operator reads it. |
+| `memgraph-system-user-hash` | `hash` | The password's hash: bcrypt, or pbkdf2-sha256 in [FIPS mode](#run-in-fips-mode). Every pod mounts it read-only at `/etc/memgraph/system-user`. |
+
+The password never reaches a Memgraph pod. These are the only Secrets the
+operator writes; it never writes a Secret you create.
+
+Leave both Secrets alone. Memgraph reads the hash only when an instance starts,
+and the operator doesn't restart pods when the Secrets change. If you edit or
+delete one, the operator re-hashes or regenerates the password, and each pod
+accepts the new one only after its next restart. Until then the operator
+connects without credentials, which an instance with users or a coordinator
+with SSO refuses.
+
+On Memgraph 3.13 and 3.14, the instances ignore the hash, and the operator
+connects without credentials. Don't enable authentication on such a cluster.
 
 ## Rolling restarts
 
@@ -798,6 +832,47 @@ Pointing `secretRef` at a different Secret restarts the pods instead. For
 intra-cluster TLS, the old and the new certificates must trust each other
 during the restart: keep the same CA, or put both CAs in `ca.crt` of both
 Secrets.
+
+## Run in FIPS mode
+
+`fips` runs every coordinator and data instance in FIPS 140-3 approved mode.
+It needs Memgraph 3.15 or later, from the [FIPS
+image](/getting-started/install-memgraph/docker#fips-140-3-compliant-image):
+set `image.tag` to the release's `-fips` tag. The operator doesn't check the
+image.
+
+```yaml
+spec:
+  image:
+    repository: docker.io/memgraph/memgraph
+    tag: "3.15.0-fips"
+  fips: {}
+```
+
+The block has no fields: present, FIPS mode is on; absent, it's off. Both roles
+start with `--fips-mode=true`, so `fips-mode` isn't allowed in `flags`. A new
+instance in FIPS mode starts without a license and accepts only the license
+settings, which the operator sets [as on any other pod](#update-the-license).
+
+You can add or remove the block on a live cluster. The operator [restarts the
+pods](#rolling-restarts) one at a time, so some instances run in FIPS mode and
+some don't until the restart finishes. The operator's own [system
+user](#users-and-authentication) switches to a pbkdf2-sha256 hash by itself.
+
+<Callout type="warning">
+Users whose passwords are hashed with bcrypt (Memgraph's default) or sha256
+can't log in to an instance in FIPS mode, and their hashes can't be converted.
+Before you add `fips`, set `password-encryption-algorithm: pbkdf2-sha256` in
+`flags.data` and `flags.coordinators`, wait for the restart, and reset every
+user's password, as described in [upgrading an existing
+database](/getting-started/install-memgraph/docker#upgrading-an-existing-database).
+</Callout>
+
+The API server rejects `fips` together with `init-file` or `init-data-file` in
+`flags`, or `MEMGRAPH_HA_CLUSTER_INIT_QUERIES` in `extraEnv`: Memgraph doesn't
+start an unlicensed FIPS instance with init queries. So the Docker page's
+recovery with `--init-file` doesn't work on a cluster with `fips`; reset the
+passwords before you add the block.
 
 ## Monitor the cluster
 
@@ -1179,6 +1254,9 @@ kubectl events -n memgraph --for mgdbc/memgraph
 | `StatefulSetShrunk` | Normal | A scale-down removed the retired members' pods. |
 | `VolumeExpansionRequested` | Normal | A claim was resized. |
 | `StatefulSetOrphaned` | Normal | A StatefulSet was recreated around its pods to grow its claims. |
+| `SystemUserCreated` | Normal | The operator generated the [system user](#users-and-authentication)'s password Secret. |
+| `SystemUserHashCreated` | Normal | The operator wrote the hash Secret: when the cluster is created, or after the Secret was deleted. |
+| `SystemUserHashUpdated` | Normal | The operator rewrote the hash: the password changed, or [FIPS mode](#run-in-fips-mode) was turned on or off. |
 
 Each action is its own Event, and an Event that concerns one member names
 that member's pod as its related object. The same action on the same object
@@ -1191,8 +1269,12 @@ pipeline.
 
 ## Limitations
 
-- **No Bolt authentication.** The operator connects to the instances without
-  credentials, so don't enable authentication on a cluster it manages.
+- **No authentication before Memgraph 3.15.** On older Memgraph, the operator
+  connects to the instances without credentials, so don't enable
+  authentication on such a cluster. See [users and
+  authentication](#users-and-authentication).
+- **No password rotation for the system user.** The operator generates the
+  password once, and nothing changes it.
 
 For help, ask on [Discord](https://discord.gg/memgraph) or open an issue on
 [GitHub](https://github.com/memgraph/kubernetes-operator/issues).
