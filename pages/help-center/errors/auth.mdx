@@ -21,6 +21,8 @@ import {CommunityLinks} from '/components/social-card/CommunityLinks'
    memgr.ph/auth.](#error-1)
 7. [You are not authorized to execute this query on database "memgraph"!](#error-3)
 8. [In a multi-tenant environment, SHOW PRIVILEGES query requires database specification. Use ON MAIN, ON CURRENT or ON DATABASE db_name.](#error-4)
+9. [Error on line 1 position 7 with the COORDINATOR token. The underlying parsing error is no viable alternative at input 'GRANTCOORDINATOR'.](#error-5)
+10. [COORDINATOR_READ and COORDINATOR_WRITE are coordinator-only privileges and cannot be granted, denied, or revoked on a data instance.](#error-6)
 
 
 ## Couldn't authenticate user [#error-1]
@@ -93,5 +95,47 @@ This error typically occurs when:
 
 - For roles: Use `SHOW PRIVILEGES FOR role_name` without database specification
 - For users: Always specify the database context when working in multi-tenant environments to ensure you're viewing the correct privileges for the intended database
+
+## COORDINATOR privilege rejected [#error-5]
+
+Memgraph 3.13 removed the `COORDINATOR` privilege. It never gated any
+operation, so statements that name it fail with a syntax error:
+
+```cypher invalid
+GRANT COORDINATOR TO backup;
+```
+
+```plaintext copy=false
+Error on line 1 position 7 with the COORDINATOR token. The underlying parsing error is no viable alternative at input 'GRANTCOORDINATOR'. Take a look at clauses around and try to fix the query.
+```
+
+`DENY COORDINATOR` and `REVOKE COORDINATOR` fail the same way, with
+`DENYCOORDINATOR` or `REVOKECOORDINATOR` in the message.
+
+{<h3 className="custom-header">Solution</h3>}
+
+Remove these statements from provisioning scripts. A `COORDINATOR` grant made
+before 3.13 is never checked, so removing it changes no access. Grant the role
+the privileges its queries need instead; see [query
+privileges](/database-management/authentication-and-authorization/query-privileges).
+
+## Coordinator privilege on a data instance [#error-6]
+
+`COORDINATOR_READ` and `COORDINATOR_WRITE` control access to high availability
+coordinators, and only coordinators accept them. Granting, denying or revoking
+them on a data instance fails:
+
+```cypher invalid
+GRANT COORDINATOR_READ TO backup;
+```
+
+```plaintext copy=false
+COORDINATOR_READ and COORDINATOR_WRITE are coordinator-only privileges and cannot be granted, denied, or revoked on a data instance.
+```
+
+{<h3 className="custom-header">Solution</h3>}
+
+Run the statement on a coordinator, against a role that exists there. See
+[coordinator authentication](/database-management/clustering/high-availability/coordinator-authentication).
 
 <CommunityLinks/>
