@@ -310,9 +310,18 @@ storage.
 
 With [multi-tenancy](/database-management/multi-tenancy), each database keeps
 its own snapshots and WAL files, so you back up and restore each database
-separately. This section covers where each database's files are and how to
-back them up. To restore one database, see [Restore a single database on
+separately. This section covers the [data directory
+layout](#data-directory-layout), how to [back up a
+database](#back-up-a-database) and how long [snapshots are
+kept](#keep-snapshots-long-enough-to-restore). To restore one database, see
+[Restore a single database on
 Kubernetes](#restore-a-single-database-on-kubernetes-enterprise).
+
+The examples use a database named `customers`:
+
+```cypher
+CREATE DATABASE customers;
+```
 
 ### Data directory layout
 
@@ -379,11 +388,12 @@ To include changes made since the last periodic snapshot, run
 
 Memgraph keeps only the newest snapshots of each database: 3 by default,
 set with `--storage-snapshot-retention-count`. The count applies to every
-database separately. Older ones are deleted, with
-the WAL files they cover. The local restore window is roughly the retention
-count times the snapshot interval (`--storage-snapshot-interval`): with a
-snapshot every 5 minutes and a retention count of 3, the oldest local
-snapshot is about 15 minutes old.
+database separately. Older snapshots are deleted, with the WAL files they
+cover.
+
+The local restore window is roughly the retention count times the snapshot
+interval (`--storage-snapshot-interval`). With a snapshot every 5 minutes and
+a retention count of 3, the oldest local snapshot is about 15 minutes old.
 
 Snapshots on the instance's own volume are not a backup: they're lost with
 the volume, and they age out quickly. Copy them off the instance on a
@@ -459,29 +469,59 @@ next step:
   kubectl cp -n NAMESPACE -c CONTAINER ./SNAPSHOT_FILE POD:/var/lib/memgraph/restore/SNAPSHOT_FILE
   ```
 
-  `kubectl cp` writes the file as the container's user, so Memgraph can read
-  it. Use `/var/lib/memgraph/restore/SNAPSHOT_FILE` as the path.
+  `NAMESPACE` is the Kubernetes namespace, `POD` and `CONTAINER` are the
+  names from the table above, and `SNAPSHOT_FILE` is the snapshot's file
+  name. `kubectl cp` writes the file as the container's user, so Memgraph
+  can read it. Use `/var/lib/memgraph/restore/SNAPSHOT_FILE` as the path.
 
 ### 3. Restore the snapshot
 
 You can restore over the existing database, or into a new database and
 switch to it once you've checked the data.
 
-**Restore in place.** Switch to the database and recover the snapshot with
-`FORCE`, which deletes the database's current data first:
+In the examples, `SNAPSHOT_PATH` is the path or URL from the previous step.
 
-```cypher
-USE DATABASE customers;
-RECOVER SNAPSHOT "/var/lib/memgraph/restore/customers.snapshot" FORCE;
+Either way, Memgraph copies the snapshot into the database's
+`snapshots/` directory and moves the files that were there to `.old`
+directories (see [Usage of .old directory](#usage-of-old-directory)). Other
+databases on the instance aren't affected.
+
+In a high availability cluster, run `RECOVER SNAPSHOT` on MAIN. MAIN then
+sends the restored database to every REPLICA. On a REPLICA, the query fails
+with:
+
+```plaintext copy=false
+Failed to recover a snapshot. Replica instances are not allowed to create them.
 ```
 
-**Restore into a new database.** A new database is empty, so it doesn't need
-`FORCE`, and the original stays untouched:
+#### Restore in place
+
+Switch to the database and recover the snapshot with `FORCE`, which deletes
+the database's current data first:
+
+```cypher template
+USE DATABASE customers;
+RECOVER SNAPSHOT "SNAPSHOT_PATH" FORCE;
+```
+
+<Callout type="warning">
+Memgraph keeps the database's previous snapshots and WAL files in `.old`
+directories only until the next `RECOVER SNAPSHOT` on that database, which
+deletes them. Copy them elsewhere first if you might need them.
+</Callout>
+
+#### Restore into a new database
+
+A new database is empty, so it doesn't need `FORCE`, and the original stays
+untouched:
 
 ```cypher
 CREATE DATABASE customers_restored;
+```
+
+```cypher template
 USE DATABASE customers_restored;
-RECOVER SNAPSHOT "/var/lib/memgraph/restore/customers.snapshot";
+RECOVER SNAPSHOT "SNAPSHOT_PATH";
 ```
 
 When the data is right, swap the two with
@@ -496,25 +536,13 @@ RENAME DATABASE customers TO customers_old;
 RENAME DATABASE customers_restored TO customers;
 ```
 
-In both cases, Memgraph copies the snapshot into the database's
-`snapshots/` directory and moves the files that were there to `.old`
-directories (see [Usage of .old directory](#usage-of-old-directory)). Other
-databases on the instance aren't affected.
-
-In a high availability cluster, run `RECOVER SNAPSHOT` on MAIN. MAIN then
-sends the restored database to every REPLICA. On a REPLICA, the query fails
-with:
-
-```plaintext copy=false
-Failed to recover a snapshot. Replica instances are not allowed to create them.
-```
-
 ### 4. Check the result
 
 Switch to the restored database and check its contents, for example the
-node and relationship counts:
+node and relationship counts in `vertex_count` and `edge_count`:
 
 ```cypher
+USE DATABASE customers;
 SHOW STORAGE INFO ON CURRENT DATABASE;
 ```
 
@@ -524,7 +552,7 @@ Once you no longer need the copied file, delete it:
 kubectl exec -n NAMESPACE POD -c CONTAINER -- rm /var/lib/memgraph/restore/SNAPSHOT_FILE
 ```
 
-### If Memgraph doesn't start
+### Restore when Memgraph doesn't start
 
 If a database's files are damaged, Memgraph stops at startup and the pod
 restarts in a loop. Add `--storage-allow-recovery-failure=true` to the
