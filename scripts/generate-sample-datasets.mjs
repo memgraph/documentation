@@ -7,7 +7,7 @@
  *   node scripts/generate-sample-datasets.mjs --from FILE  read a saved copy
  *
  * Replaces everything between the start and end markers on the page. The
- * "Update sample datasets" workflow runs it daily and opens a PR when the table
+ * "Update sample datasets" workflow runs it monthly and opens a PR when the table
  * changed. It isn't part of the build, so a build never depends on
  * download.memgraph.com.
  */
