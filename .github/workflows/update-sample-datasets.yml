@@ -1,0 +1,42 @@
+name: Update sample datasets
+
+# Regenerates the dataset table on pages/querying/sample-datasets.mdx from the
+# catalog that memgraph/datasets publishes to download.memgraph.com, and opens a
+# PR when it changed.
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node scripts/generate-sample-datasets.mjs
+
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then
+            echo "The dataset table is up to date."
+            exit 0
+          fi
+          branch=update-sample-datasets
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "Update the sample datasets table"
+          git push --force origin "$branch"
+          if [ -z "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base main --head "$branch" --title "Update the sample datasets table" \
+              --body "The dataset catalog at download.memgraph.com changed. This PR regenerates the table on the Sample datasets page with \`scripts/generate-sample-datasets.mjs\`."
+          fi
