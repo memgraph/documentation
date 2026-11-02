@@ -308,42 +308,231 @@ storage.
 
 ## Backup in multi-tenancy <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
 
-When running Memgraph with multi-tenancy, every database other than the default database
-(named `memgraph`) will have its own associated database UUID. Database UUID can be inspected
-by running the `SHOW STORAGE INFO ON CURRENT DATABASE` command (after selecting the database) and reading the value under the `database_uuid` key.
-The default data directory location for a specific database is `/var/lib/memgraph/<database_uuid>/`. 
-The default database `memgraph` does not follow this directory structure and the data files are directly located under `/var/lib/memgraph`.
+With [multi-tenancy](/database-management/multi-tenancy), each database keeps
+its own snapshots and WAL files, so you back up and restore each database
+separately. This section covers where each database's files are and how to
+back them up. To restore one database, see [Restore a single database on
+Kubernetes](#restore-a-single-database-on-kubernetes-enterprise).
 
-Manual snapshot backup flow should look like this:
+### Data directory layout
 
-<Steps>
+The default `memgraph` database keeps its files directly in the data
+directory. Every other database has a directory under `databases/`, named
+after the database's UUID, not its name:
 
-{<h3 id="create-snapshots-inside-memgraph" className="custom-header">Create snapshots inside Memgraph</h3>}
+```plaintext copy=false
+DATA_DIRECTORY/
+├── snapshots/            # default memgraph database
+├── wal/
+└── databases/
+    ├── .durability/      # maps database names to UUIDs
+    ├── memgraph/         # links back to DATA_DIRECTORY
+    └── DATABASE_UUID/
+        ├── snapshots/
+        └── wal/
+```
 
-Create snapshot for every database (or let it create automatically with periodic snapshot execution inside Memgraph)
+`DATA_DIRECTORY` is the value of the `--data-directory` flag:
+`/var/lib/memgraph` by default, and `/var/lib/memgraph/mg_data` in the
+[Memgraph Helm charts](/getting-started/install-memgraph/kubernetes).
 
-{<h3 id="perform-backup" className="custom-header">Perform backup</h3>}
+To find the directory of a database, read the `database_uuid` field of
+`SHOW STORAGE INFO ON DATABASE`:
 
-Backup the snapshot for every database into a 3rd party location. Currently, you're encouraged to perform the backup mechanisms by 
-yourself with tools such as [rclone](https://rclone.org/).
+```cypher
+SHOW STORAGE INFO ON DATABASE customers;
+```
 
-{<h3 id="when-performing-recovery-copy-the-snapshot-to-memgraph" className="custom-header">When performing recovery, copy the snapshot to Memgraph</h3>}
+The query also works on a [suspended](/database-management/multi-tenancy#suspending-and-resuming-databases-enterprise)
+database. The name-to-UUID mapping is kept only in `databases/.durability`,
+which Memgraph reads at startup, so look up the UUID while the instance is
+running.
 
-When recovering a specific database, copy the snapshot to any data location
-  - if the data directory the snapshot is being copied to is a location that's outside the database directory, ensure the snapshot
-    has the permissions to be copied to the database data directory
-  - if the data directory the snapshot is being copied to is a location that's inside the database directory, there should be no issues
-    with permissions as there is no copying being performed from source to target directory location
+### Back up a database
 
-{<h3 id="position-to-specific-database" className="custom-header">Position to specific database</h3>}
+Snapshots are the files to back up: each one holds a full copy of one
+database. To back up a database:
 
-Position the database driver interacting with Memgraph into the database using `USE DATABASE <database_name>` 
+1. Switch to the database and lock its data directory, so Memgraph doesn't
+   delete snapshots while you copy them. `LOCK DATA DIRECTORY` locks only
+   the current database.
 
-{<h3 id="recover-the-snapshot" className="custom-header">Recover the snapshot</h3>}
+   ```cypher
+   USE DATABASE customers;
+   LOCK DATA DIRECTORY;
+   ```
 
-Execute `RECOVER SNAPSHOT <path_to_snapshot> FORCE`
+2. Copy the files from `DATA_DIRECTORY/databases/DATABASE_UUID/snapshots/`
+   to storage outside the instance, for example with
+   [rclone](https://rclone.org/). Store them under the database name, because
+   the UUID alone doesn't tell you later which database a snapshot belongs to.
+3. Unlock the data directory:
 
-</Steps>
+   ```cypher
+   UNLOCK DATA DIRECTORY;
+   ```
+
+To include changes made since the last periodic snapshot, run
+`CREATE SNAPSHOT;` in the database before you lock it.
+
+### Keep snapshots long enough to restore
+
+Memgraph keeps only the newest snapshots of each database: 3 by default,
+set with `--storage-snapshot-retention-count`. The count applies to every
+database separately. Older ones are deleted, with
+the WAL files they cover. The local restore window is roughly the retention
+count times the snapshot interval (`--storage-snapshot-interval`): with a
+snapshot every 5 minutes and a retention count of 3, the oldest local
+snapshot is about 15 minutes old.
+
+Snapshots on the instance's own volume are not a backup: they're lost with
+the volume, and they age out quickly. Copy them off the instance on a
+schedule that covers the point in time you might need to restore to.
+
+## Restore a single database on Kubernetes <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+You can replace the data of one database with a snapshot while the other
+databases on the instance keep serving queries. The steps work with the
+standalone and the [high availability](/database-management/clustering/high-availability/setup-ha-cluster-k8s)
+Memgraph Helm charts.
+
+Before you start, you need:
+
+- `kubectl` access to the namespace Memgraph runs in.
+- A Memgraph user with the `DURABILITY` [privilege](/database-management/authentication-and-authorization/role-based-access-control)
+  and access to the database you restore. Restoring into a new database
+  also needs the `MULTI_DATABASE_EDIT` privilege and access to the
+  `memgraph` database.
+- In a high availability cluster, a connection to the MAIN instance. Run
+  `SHOW INSTANCES;` on a coordinator to find it.
+
+The charts name the pods and containers as follows, and both mount the data
+volume at `/var/lib/memgraph`:
+
+| Helm chart | Pod | Container | Data directory |
+|---|---|---|---|
+| Standalone (`memgraph`) | `RELEASE_NAME-0` | `memgraph` | `/var/lib/memgraph/mg_data` |
+| High availability (`memgraph-high-availability`) | `memgraph-data-ID-0` | `memgraph-data` | `/var/lib/memgraph/mg_data` |
+
+`RELEASE_NAME` is the Helm release name; if it doesn't contain `memgraph`,
+the chart appends `-memgraph` to it. `ID` is the data instance's `id` from
+the chart values. Check the exact names with `kubectl get pods`.
+
+### 1. Find the database's snapshot directory
+
+Get the database's UUID:
+
+```cypher
+SHOW STORAGE INFO ON DATABASE customers;
+```
+
+Its snapshots are in
+`/var/lib/memgraph/mg_data/databases/DATABASE_UUID/snapshots/`. If the
+database is suspended, resume it first; `USE DATABASE` on a suspended
+database fails.
+
+```cypher
+RESUME DATABASE customers;
+```
+
+### 2. Choose the snapshot
+
+Where the snapshot is decides the path you pass to `RECOVER SNAPSHOT` in the
+next step:
+
+- **On the database's own volume:** switch to the database and list its
+  snapshots. Use the `path` column as is.
+
+  ```cypher
+  USE DATABASE customers;
+  SHOW SNAPSHOTS;
+  ```
+
+- **In S3-compatible storage:** use the `s3://` URL. See
+  [S3-compatible storage](#s3-compatible-storage) for credentials.
+- **On a server reachable over HTTP or FTP:** use the `http://`, `https://`
+  or `ftp://` URL.
+- **On your machine:** copy it onto the pod's data volume:
+
+  ```bash
+  kubectl exec -n NAMESPACE POD -c CONTAINER -- mkdir -p /var/lib/memgraph/restore
+  kubectl cp -n NAMESPACE -c CONTAINER ./SNAPSHOT_FILE POD:/var/lib/memgraph/restore/SNAPSHOT_FILE
+  ```
+
+  `kubectl cp` writes the file as the container's user, so Memgraph can read
+  it. Use `/var/lib/memgraph/restore/SNAPSHOT_FILE` as the path.
+
+### 3. Restore the snapshot
+
+You can restore over the existing database, or into a new database and
+switch to it once you've checked the data.
+
+**Restore in place.** Switch to the database and recover the snapshot with
+`FORCE`, which deletes the database's current data first:
+
+```cypher
+USE DATABASE customers;
+RECOVER SNAPSHOT "/var/lib/memgraph/restore/customers.snapshot" FORCE;
+```
+
+**Restore into a new database.** A new database is empty, so it doesn't need
+`FORCE`, and the original stays untouched:
+
+```cypher
+CREATE DATABASE customers_restored;
+USE DATABASE customers_restored;
+RECOVER SNAPSHOT "/var/lib/memgraph/restore/customers.snapshot";
+```
+
+When the data is right, swap the two with
+[`RENAME DATABASE`](/database-management/multi-tenancy#rename-database).
+`RENAME DATABASE` doesn't move user and role access, so grant access to the
+restored database again. The restored database keeps its own UUID, so after
+the swap its files are in a different `databases/DATABASE_UUID/` directory
+than before; point your backup job at the new one.
+
+```cypher
+RENAME DATABASE customers TO customers_old;
+RENAME DATABASE customers_restored TO customers;
+```
+
+In both cases, Memgraph copies the snapshot into the database's
+`snapshots/` directory and moves the files that were there to `.old`
+directories (see [Usage of .old directory](#usage-of-old-directory)). Other
+databases on the instance aren't affected.
+
+In a high availability cluster, run `RECOVER SNAPSHOT` on MAIN. MAIN then
+sends the restored database to every REPLICA. On a REPLICA, the query fails
+with:
+
+```plaintext copy=false
+Failed to recover a snapshot. Replica instances are not allowed to create them.
+```
+
+### 4. Check the result
+
+Switch to the restored database and check its contents, for example the
+node and relationship counts:
+
+```cypher
+SHOW STORAGE INFO ON CURRENT DATABASE;
+```
+
+Once you no longer need the copied file, delete it:
+
+```bash
+kubectl exec -n NAMESPACE POD -c CONTAINER -- rm /var/lib/memgraph/restore/SNAPSHOT_FILE
+```
+
+### If Memgraph doesn't start
+
+If a database's files are damaged, Memgraph stops at startup and the pod
+restarts in a loop. Add `--storage-allow-recovery-failure=true` to the
+instance's flags (`memgraphConfig` in the standalone chart, the data
+instance's `args` in the high availability chart) and upgrade the release.
+The damaged database comes up empty in a broken state, the others start
+normally, and you can restore it with the steps above. See
+[recovery failure handling](/fundamentals/data-durability#recovery-failure-handling).
 
 ## Usage of .old directory
 
