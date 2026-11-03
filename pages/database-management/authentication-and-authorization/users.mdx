@@ -89,8 +89,44 @@ Supported algorithms:
 1. "bcrypt"
 1. "sha256"
 1. "sha256-multiple"
+1. "pbkdf2-sha256"
 
 Hash is the alphanumerical string of 64 characters for sha256 and 60 characters for bcrypt;
+
+A pbkdf2-sha256 hash also names its iteration count and salt:
+`pbkdf2-sha256:600000:<salt>:<key>`, where the salt is 16 bytes and the
+derived key 32 bytes, both in lowercase hex. Memgraph accepts only its own
+600000 iterations. Both `CREATE USER ... IDENTIFIED BY` and `SET PASSWORD`
+accept pre-hashed passwords. Pre-hashed pbkdf2-sha256 passwords are available
+since Memgraph 3.15.
+
+This Python command prompts for a password and prints its pbkdf2-sha256 hash
+in that form:
+
+```bash
+python3 -c 'import getpass, hashlib, os; salt = os.urandom(16); key = hashlib.pbkdf2_hmac("sha256", getpass.getpass().encode(), salt, 600000, 32); print(f"pbkdf2-sha256:600000:{salt.hex()}:{key.hex()}")'
+```
+
+Example where "alice" is identified by "alice-pass":
+
+```cypher
+CREATE USER alice IDENTIFIED BY 'pbkdf2-sha256:600000:101112131415161718191a1b1c1d1e1f:df34d3ed941c484a51e2e89df8f10b23f452c5fa38ff4f5a049689c1b1dae2f6';
+```
+
+A password that starts with an algorithm name and a colon (`bcrypt:`,
+`sha256:`, `sha256-multiple:` or `pbkdf2-sha256:`, in any letter case) but isn't a
+valid hash is refused:
+
+```cypher invalid
+CREATE USER bob IDENTIFIED BY 'sha256:abc';
+```
+
+```plaintext copy=false
+The password starts like a pre-hashed sha256 password but isn't a valid one. It must be "sha256:" followed by the 64-character hash.
+```
+
+Before Memgraph 3.15, such a password was stored as a plaintext password equal
+to the whole string. Passwords stored that way keep working.
 
 To delete a user, run the following command:
 
@@ -223,6 +259,96 @@ Example:
    
 </Tabs.Tab>
 </Tabs>
+
+## Internal system user
+
+The internal system user, `memgraph_internal`, is a login for cluster
+automation such as a Kubernetes operator. It works on data instances and
+coordinators whether or not other users, roles or
+[SSO](/database-management/authentication-and-authorization/auth-system-integrations#single-sign-on)
+exist, and logging in doesn't require an Enterprise license. Available since
+Memgraph 3.15.
+
+### Enable the internal system user
+
+1. Write the user's password hash to a file, as a single bcrypt
+   (`bcrypt:$2a$...`) or pbkdf2-sha256
+   (`pbkdf2-sha256:600000:<salt>:<key>`) hash of a non-empty password, the
+   same forms as a [pre-hashed password](#administer-users). This command
+   prompts for the password and writes its pbkdf2-sha256 hash to
+   `internal.hash`:
+
+   ```bash
+   python3 -c 'import getpass, hashlib, os; salt = os.urandom(16); key = hashlib.pbkdf2_hmac("sha256", getpass.getpass().encode(), salt, 600000, 32); print(f"pbkdf2-sha256:600000:{salt.hex()}:{key.hex()}")' > internal.hash
+   ```
+
+2. Start Memgraph with `--system-user-internal-hash-file` set to that file:
+
+   ```bash
+   docker run -p 7687:7687 \
+     -v "$(pwd)/internal.hash:/etc/memgraph/internal.hash:ro" \
+     memgraph/memgraph --system-user-internal-hash-file=/etc/memgraph/internal.hash
+   ```
+
+3. Log in with the username `memgraph_internal` and the password.
+
+Memgraph reads the file once, at startup. It refuses to start if the file
+can't be read or holds anything else, and under `--fips-mode` if it holds a
+bcrypt hash: FIPS mode only accepts pbkdf2-sha256. If the flag is empty (the
+default), the internal system user doesn't exist.
+
+### What the internal system user can do
+
+- **Data instances:** the session has every privilege, and
+  [fine-grained access
+  control](/database-management/authentication-and-authorization/role-based-access-control#fine-grained-access-control)
+  doesn't apply to it.
+- **Coordinators:** the session has `COORDINATOR_READ` and `COORDINATOR_WRITE`,
+  whatever coordinator roles exist (see [coordinator
+  privileges](/database-management/clustering/high-availability/coordinator-authentication#coordinator-privileges)).
+- **Wrong password:** the login is refused, also on a coordinator that admits
+  other users through [authentication
+  passthrough](/database-management/clustering/high-availability/coordinator-authentication#authentication-passthrough).
+
+`SHOW CURRENT USER`, `SHOW SESSIONS` and the query logs name the session
+`memgraph_internal`. The user isn't stored, so `SHOW USERS` doesn't list it,
+and no query can create, change, grant to or drop it.
+
+The internal system user can't own a `SECURITY DEFINER`
+[trigger](/fundamentals/triggers), which is the default for `CREATE TRIGGER`,
+or a [stream](/data-migration/data-streams), because both run as an owner
+stored by name. Create triggers with `SECURITY INVOKER`, or create triggers and
+streams as a named user:
+
+```plaintext copy=false
+The internal system user can't own a SECURITY DEFINER trigger. Create it with SECURITY INVOKER, or as a named user.
+```
+
+### Reserved name
+
+The name `memgraph_internal` is reserved, in any letter case, even when
+`--system-user-internal-hash-file` is empty:
+
+- `CREATE USER` and `CREATE ROLE` refuse it, also with `IF NOT EXISTS`, on data
+  instances and coordinators.
+- An auth module (LDAP, SSO) that returns it as the username or as one of the
+  roles has its login refused.
+
+```cypher invalid
+CREATE USER IF NOT EXISTS memgraph_internal;
+```
+
+```plaintext copy=false
+The name 'memgraph_internal' is reserved for the internal system user.
+```
+
+<Callout type="warning">
+**Breaking change in Memgraph 3.15**: a user or role named `memgraph_internal`
+created before Memgraph 3.15 stops Memgraph from starting with
+`--system-user-internal-hash-file` set. Rename it before upgrading, as
+described in the [3.15 upgrade
+guide](/database-management/upgrades/specific-versions#v315---reserved-memgraph_internal-name).
+</Callout>
 
 ## Owners
 
