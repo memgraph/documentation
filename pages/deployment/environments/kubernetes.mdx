@@ -7,8 +7,9 @@ import { Callout } from 'nextra/components'
 
 # Kubernetes
 
-Memgraph runs on Kubernetes from Helm charts and the Memgraph Kubernetes
-operator, all installed from the Memgraph Helm repository
+Run Memgraph, a high availability cluster, Memgraph Lab or the MCP server on
+Kubernetes with the Memgraph Helm charts and the Memgraph Kubernetes operator.
+All of them install from the Memgraph Helm repository
 (`https://memgraph.github.io/helm-charts`). The charts are listed on [Artifact
 Hub](https://artifacthub.io/packages/search?org=memgraph&sort=relevance&page=1),
 and their source is in the [Memgraph Helm charts
@@ -41,43 +42,42 @@ same coordinators and data instances whichever way you deploy it:
   registers them on every `helm install` and `helm upgrade`.
 
 <Callout type="info">
-The operator is the successor to the `memgraph-high-availability` chart, and
-the recommended way to run a new cluster. Memgraph plans to deprecate the Helm
-chart, after which the chart receives only necessary and critical bug fixes.
+The operator is the successor to the `memgraph-high-availability` chart and
+the recommended way to run a new cluster.
 </Callout>
 
 ## Choose between the operator and the HA Helm chart <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
 
-| | Helm chart | Operator |
+| | HA Helm chart | Operator |
 |---|---|---|
 | How you describe the cluster | Helm values, one block per instance | One `MemgraphDBCluster` resource with a count per role |
 | Workloads | One StatefulSet per instance | One StatefulSet per role |
-| Registration | A Job, on every `helm install` and `helm upgrade` | The operator, continuously: a lost registration is restored without a `helm upgrade` |
-| Scaling | Add or remove instance entries, then `helm upgrade` | Change a count; the operator moves the MAIN off a retiring instance first |
-| Changing a flag | Flags are container arguments: every change restarts the pods | Edit `flags`. A flag Memgraph can change at run time is applied to every running instance with **no restart**; only startup-only flags restart pods |
-| Coordinator settings | Run `SET COORDINATOR SETTING` yourself | Set them in `flags.coordinators`; the operator writes them once, with no restart |
-| Renewing the license | Run `SET DATABASE SETTING` on every instance, then update the Secret | Update the Secret; the operator applies the new license to every instance, with no restart, and reports it in the `LicenseApplied` condition |
-| Restarting pods | The StatefulSet `updateStrategy`; ISSU by hand with `OnDelete` | The operator, one pod at a time in the ISSU order: data instances first, the MAIN last, then coordinators with the leader last |
-| Storage | Separate claims for data and logs, 1Gi by default | One claim per pod for data and logs (10Gi by default), or no log files at all (`logFile: None`); claims grow on a live cluster without a restart, and are kept on delete and scale-down by default |
-| Probes | Startup, readiness and liveness probes; the startup probe must outlast the longest recovery | One readiness probe with three timings, and no liveness or startup probe, so a long recovery is never killed |
-| Scheduling | Four affinity modes (`default`, `unique`, `parity`, `nodeSelection`) | One anti-affinity rule with `type`, `scope` and `topologyKey`, plus per-role node selectors, tolerations, topology spread constraints and priority classes |
-| Security context | `memgraphUserId` and `memgraphGroupId` | `securityContext`, defaulting to the Memgraph image's user; `{}` lets the platform assign it, as OpenShift requires |
-| External access | Five methods chosen per tier; addresses registered by the setup Job on `helm upgrade`, or with `UPDATE CONFIG` by hand | One `type` (`LoadBalancer` or `Gateway`); the operator finds each member's external address and keeps the routing table pointing at it as the address changes |
-| Bolt authentication | Supported; you create users with Cypher | Supported on Memgraph 3.15 and later, where the operator logs in as the built-in `memgraph_internal` system user; you create users with Cypher |
+| Registration | A Job, on every `helm install` and `helm upgrade` | The operator, continuously, restoring a lost registration |
+| Scaling | Edit instance entries, then `helm upgrade` | Change a count; the MAIN moves off a retiring instance first |
+| Changing a flag | Every change restarts the pods | Run-time flags apply without a restart; startup-only flags restart pods |
+| Coordinator settings | `SET COORDINATOR SETTING` by hand | `flags.coordinators`, applied without a restart |
+| Renewing the license | `SET DATABASE SETTING` on every instance, then update the Secret | Update the Secret; applied without a restart and reported in [`LicenseApplied`](/deployment/environments/kubernetes/operator#conditions) |
+| Restarting pods | The StatefulSet `updateStrategy`; [in-service software upgrade (ISSU)](/deployment/environments/kubernetes/ha-helm-chart#in-service-software-upgrade-issu) by hand with `OnDelete` | The operator, one pod at a time in the ISSU order |
+| Storage | Separate data and log claims (1Gi by default); the log claim can be dropped with `createLogStorageClaim: false` | One claim per pod (10Gi by default), or no log files (`logFile: None`); claims grow without a restart |
+| Probes | Startup, readiness and liveness; the startup probe must outlast the longest recovery | Readiness probe only, so a long recovery is never killed |
+| Scheduling | Four affinity modes (`default`, `unique`, `parity`, `nodeSelection`) | One anti-affinity rule plus per-role node selectors, tolerations, spread constraints and priority classes |
+| Security context | `memgraphUserId` and `memgraphGroupId` | `securityContext`; `{}` lets the platform assign it, as OpenShift requires |
+| External access | Five methods per tier; addresses registered by the Job or `UPDATE CONFIG` | `LoadBalancer` or `Gateway`; addresses tracked automatically |
+| Bolt authentication | Supported; create users with Cypher | Supported on Memgraph 3.15 and later; create users with Cypher |
 
 Start a new cluster with the operator, and check its
 [limitations](/deployment/environments/kubernetes/operator#limitations)
-for the chart features it doesn't have yet.
+for the chart features it doesn't have.
 
 ## Move from the chart to the operator
 
 There is no migration path from the chart to the operator: no tool or hook
 converts a chart-deployed cluster, and the operator never takes over one. To
 move, create a new cluster with the operator and transfer the data to it, with a
-[backup and restore](/database-management/backup-and-restore) or a replication
-cutover.
+[backup and restore](/database-management/backup-and-restore), or by
+[replicating](/database-management/clustering/replication) it to the new
+cluster and then moving clients over.
 
-Where a setting exists in both, the operator uses the chart's name for it. The
-`secrets` block that names the license Secret, for example, is the same in
-both. The topology is where they differ: the chart's per-instance blocks become
-two counts, `coordinators` and `dataInstances`.
+Some settings keep the chart's name, such as the `secrets` block that names
+the license Secret. The topology is where they differ: the chart's
+per-instance blocks become two counts, `coordinators` and `dataInstances`.

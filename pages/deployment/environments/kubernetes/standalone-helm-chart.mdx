@@ -19,11 +19,21 @@ identity across restarts. It stores [the data
 directory](/fundamentals/data-durability) (`/var/lib/memgraph`) on a
 `PersistentVolumeClaim`, so the data survives a pod restart or deletion.
 
+This page covers how to [install the chart](#install-the-chart), [access
+Memgraph](#access-memgraph), and configure [storage](#storage-configuration),
+[secrets](#secrets), [probes](#probes) and the [system
+configuration](#system-configuration). It also covers [deploying on Red Hat
+OpenShift](#deploying-on-red-hat-openshift), [monitoring](#monitoring), [node
+affinity](#node-affinity), [external access with a
+LoadBalancer](#external-access-with-loadbalancer) and the chart's
+[configuration options](#configuration-options).
+
 ## Install the chart
 
-The steps work on any Kubernetes cluster. On a local
-[minikube](https://minikube.sigs.k8s.io/docs/) cluster, set up storage first,
-as in [Install with minikube](#install-with-minikube).
+On a local [minikube](https://minikube.sigs.k8s.io/docs/) cluster, add the
+repository and then follow [Install with minikube](#install-with-minikube)
+instead of [Install Memgraph](#install-memgraph). The steps work on any other
+Kubernetes cluster.
 
 ### Add the repository
 
@@ -45,18 +55,25 @@ helm install RELEASE_NAME memgraph/memgraph
 Replace `RELEASE_NAME` with a name for the release.
 
 <Callout type="info">
-Pin the Memgraph image to an exact version with `image.tag`. With the `latest`
-tag, a pod restart can pull a newer image and change the Memgraph version
-without notice.
+By default, `image.tag` is empty and the chart uses its app version. If you set
+`image.tag` to `latest`, a pod restart can pull a newer image and change the
+Memgraph version without notice. Pin an exact version instead:
+
+```bash
+helm install RELEASE_NAME memgraph/memgraph --set image.tag=VERSION
+```
+
+Replace `VERSION` with the Memgraph version to run, such as `3.14.0`.
 </Callout>
 
 ### Install with minikube
 
-On `minikube`, enable the `csi-hostpath-driver` add-on and use its storage
+On minikube, enable the `csi-hostpath-driver` add-on and use its storage
 class. With the default storage provisioner, pods can fail to attach their
 `PersistentVolumeClaims`.
 
-1. Enable the `csi-hostpath-driver` add-on:
+1. Replace minikube's default storage provisioner with the `csi-hostpath-driver`
+   add-on:
 
    ```bash
    minikube addons disable storage-provisioner
@@ -84,11 +101,12 @@ class. With the default storage provisioner, pods can fail to attach their
    kubectl apply -f sc.yaml
    ```
 
-4. Install the chart with that storage class:
+4. Install the chart with that storage class for the data and log PVCs:
 
    ```bash
    helm install RELEASE_NAME memgraph/memgraph \
-     --set persistentVolumeClaim.storageClassName=csi-hostpath-delayed
+     --set persistentVolumeClaim.storageClassName=csi-hostpath-delayed \
+     --set persistentVolumeClaim.logStorageClassName=csi-hostpath-delayed
    ```
 
 ## Access Memgraph
@@ -147,8 +165,8 @@ storageClass:
 ```
 
 Default template for a storage class is part of the Helm chart and can be found 
-in the repository. If you don't want to create a new storage class, set
-`storageClass.create` to `false`.
+in the repository. To have the chart create a storage class, set
+`storageClass.create` to `true`.
 
 More details on the configuration options can be found in the [configuration
 section](#configuration-options).
@@ -686,13 +704,13 @@ The following table lists the configurable parameters of the Memgraph standalone
 | `service.loadBalancer.ipFamilies`                            | `ipFamilies` for the additional service.                                                                                                     | `null`                                   |
 | `service.loadBalancer.loadBalancerSourceRanges`              | Restrict traffic to the specified client IP ranges (only applies if the cloud provider supports it).                                         | `null`                                   |
 | `persistentVolumeClaim.createStorageClaim`                   | Create a PVC for data storage. If `false`, use `existingClaim` or `storageVolumeName`.                                                       | `true`                                   |
-| `persistentVolumeClaim.storageClassName`                     | Storage class for the data PVC. Use a `Retain` reclaim policy to preserve data when the release is deleted.                                  | `local-path`                             |
+| `persistentVolumeClaim.storageClassName`                     | Storage class for the data PVC. Use a `Retain` reclaim policy to preserve data when the release is deleted.                                  | `""` (cluster default storage class)     |
 | `persistentVolumeClaim.storageSize`                          | Size of the data PVC. Must be at least 4x the maximum dataset size to accommodate snapshots and WAL files.                                   | `10Gi`                                   |
 | `persistentVolumeClaim.libStorageAccessMode`                 | Access mode for the data PVC.                                                                                                                | `ReadWriteOnce`                          |
 | `persistentVolumeClaim.existingClaim`                        | Name of an existing PVC to use when `createStorageClaim` is `false`.                                                                         | `memgraph-0`                             |
 | `persistentVolumeClaim.storageVolumeName`                    | Existing volume to back the PVC.                                                                                                             | `""`                                     |
 | `persistentVolumeClaim.createLogStorage`                     | Create a PVC for logs. If `false`, logs are only written to stdout/stderr.                                                                   | `true`                                   |
-| `persistentVolumeClaim.logStorageClassName`                  | Storage class for the log PVC.                                                                                                               | `local-path`                             |
+| `persistentVolumeClaim.logStorageClassName`                  | Storage class for the log PVC.                                                                                                               | `""` (cluster default storage class)     |
 | `persistentVolumeClaim.logStorageSize`                       | Size of the log PVC.                                                                                                                         | `1Gi`                                    |
 | `persistentVolumeClaim.createUserClaim`                      | Create a dynamic PVC for user files (configs, certificates, etc.).                                                                           | `false`                                  |
 | `persistentVolumeClaim.userStorageClassName`                 | Storage class for the user PVC.                                                                                                              | `""`                                     |
