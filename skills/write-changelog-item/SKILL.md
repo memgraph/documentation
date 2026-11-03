@@ -69,10 +69,19 @@ way.
 
 If the product PR has no release note, write one by the same rules.
 
-If the PR introduces a breaking change, put it **only** under the Breaking
-section — do not also list it under New features, Improvements, or Bug fixes.
-The Breaking item should be in the format: "What happened? What the end-user
+If the PR is labeled `breaking`, put it **only** under the Breaking section —
+do not also list it under New features, Improvements, or Bug fixes. The
+Breaking item should be in the format: "What happened? What the end-user
 should do about it?".
+
+A change is breaking when something a user set up the documented way, for a
+sensible reason, stops working or gives a different result after upgrading,
+so they must change a query, config, script or client: errors, different
+results or permissions (silent ones matter most), a failed start, removed
+syntax or flags, or a new output shape. A fix for a setting nobody would use
+on purpose, a value that now reflects new behavior, and a deprecation that
+still works are not breaking. If the label and this definition disagree,
+place the item by its label and tell the reviewer why.
 
 ## Release notes only, or also the rest of the docs?
 
