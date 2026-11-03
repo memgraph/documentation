@@ -59,6 +59,30 @@ guide.
   removes named properties; revoke them by name.
   [Property-based access control](/database-management/authentication-and-authorization/role-based-access-control#property-based-access-control)
   [#5160](https://github.com/memgraph/memgraph/pull/5160)
+- The name `memgraph_internal` is reserved for a new system user, even when
+  `--system-user-internal-hash-file` isn't set. After upgrading, an LDAP or
+  SSO login that returns that name as a user or group is refused, and
+  `CREATE USER IF NOT EXISTS memgraph_internal` and
+  `CREATE ROLE IF NOT EXISTS memgraph_internal` fail. `CREATE USER` and
+  `SET PASSWORD` also refuse a password that starts with a hash prefix but
+  isn't a valid hash, which used to be stored as plaintext; stored passwords
+  are unaffected. Before upgrading, rename a user or role named
+  `memgraph_internal` on MAIN and let the change replicate, rename such LDAP
+  or SSO users and groups in the identity provider, and change scripts that
+  create the name. The system user lets automation such as the Kubernetes
+  operator log in on data instances and coordinators, whether or not other
+  users, roles or SSO are configured: set `--system-user-internal-hash-file`
+  to a file holding a bcrypt or pbkdf2-sha256 hash of its password. Its
+  session has every privilege on data instances and the coordinator
+  privileges on coordinators, and logging in doesn't require an enterprise
+  license. `CREATE USER` and `SET PASSWORD` accept pre-hashed pbkdf2-sha256
+  passwords (`pbkdf2-sha256:600000:<salt>:<key>`). With `--fips-mode`, an
+  instance without a valid license starts and accepts only
+  `SHOW LICENSE INFO`, `SHOW DATABASE SETTINGS` and the settings that set the
+  license, so the license can be delivered over Bolt; it refuses to start if
+  init queries are configured.
+  [Users](/database-management/authentication-and-authorization/users)
+  [#5170](https://github.com/memgraph/memgraph/pull/5170)
 
 {<h4 className="custom-header">✨ New features</h4>}
 
@@ -77,24 +101,6 @@ guide.
   upgrade is clamped into it on load, with a warning.
   [ASYNC replication mode](/database-management/clustering/replication/how-replication-works#async-replication-mode)
   [#4694](https://github.com/memgraph/memgraph/pull/4694)
-- The `memgraph_internal` system user lets automation such as the Kubernetes
-  operator log in on data instances and coordinators, whether or not other
-  users, roles or SSO are configured. Set `--system-user-internal-hash-file` to
-  a file holding a bcrypt or pbkdf2-sha256 hash of its password. Its session
-  has every privilege, and logging in doesn't require an enterprise license.
-  `CREATE USER` and `SET PASSWORD` accept pre-hashed pbkdf2-sha256 passwords
-  (`pbkdf2-sha256:600000:<salt>:<key>`) and refuse a password that starts with
-  a hash prefix but isn't a valid hash. With `--fips-mode`, an instance without
-  a valid license starts and accepts only `SHOW LICENSE INFO`,
-  `SHOW DATABASE SETTINGS` and the settings that set the license, so the
-  license can be delivered over Bolt; it refuses to start if init queries are
-  configured. The name `memgraph_internal` is reserved even without the flag:
-  before upgrading, rename a user or role with that name on MAIN, and an LDAP
-  or SSO user or group with that name in the identity provider.
-  `CREATE USER IF NOT EXISTS memgraph_internal` and
-  `CREATE ROLE IF NOT EXISTS memgraph_internal` fail.
-  [Users](/database-management/authentication-and-authorization/users)
-  [#5170](https://github.com/memgraph/memgraph/pull/5170)
 - `DENY DATABASE <name> TO <user_or_role>` matches the other `DENY`
   statements. `DENY DATABASE ... FROM` still works, but is deprecated and
   returns a `DeprecatedQuery` warning; it stops working in a release no
