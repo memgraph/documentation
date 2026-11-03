@@ -2,8 +2,6 @@ export default {
     "how-high-availability-works": "Under the hood",
     "querying-the-cluster-in-high-availability": "Querying the cluster in HA",
     "coordinator-authentication": "Coordinator authentication",
-    "setup-ha-cluster-docker": "Set up HA cluster with Docker",
-    "setup-ha-cluster-docker-compose": "Set up HA cluster with Docker Compose",
     "best-practices": "Best practices",
     "analytical-import": "Bulk import in analytical mode",
     "ha-commands-reference": "Reference commands",
