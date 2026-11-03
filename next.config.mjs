@@ -3320,7 +3320,12 @@ export default withNextra({
       },
       {
         source: '/clustering/high-availability/setup-ha-cluster-k8s',
-        destination: '/clustering/high-availability/kubernetes/helm-chart',
+        destination: '/database-management/clustering/high-availability/kubernetes/helm-chart',
+        permanent: true
+      },
+      {
+        source: '/database-management/clustering/high-availability/setup-ha-cluster-k8s',
+        destination: '/database-management/clustering/high-availability/kubernetes/helm-chart',
         permanent: true
       },
       {
