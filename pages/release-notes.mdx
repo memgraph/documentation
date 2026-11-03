@@ -48,6 +48,63 @@ guide.
 
 ### Memgraph v3.15.0 - December 2nd, 2026
 
+{<h4 className="custom-header">⚠️ Breaking changes</h4>}
+
+- `GRANT`, `DENY` and `REVOKE` on `{*}` in a label or edge-type property rule
+  change only the `{*}` entry, as they already did for
+  `ON NODES CONTAINING LABELS *` and `ON EDGES OF TYPE *`. After upgrading,
+  `GRANT {*}` and `DENY {*}` no longer remove a role's named property grants or
+  denies on the same rule, so `SHOW PRIVILEGES` can list both, and the result
+  no longer depends on the order the statements ran in. `REVOKE {*}` no longer
+  removes named properties; revoke them by name.
+  [Property-based access control](/database-management/authentication-and-authorization/role-based-access-control#property-based-access-control)
+  [#5160](https://github.com/memgraph/memgraph/pull/5160)
+
+{<h4 className="custom-header">✨ New features</h4>}
+
+- ASYNC replicas are caught up from durability files by the periodic replica
+  check instead of receiving each transaction as it commits. Data reaches an
+  ASYNC replica in rounds spaced by the new
+  `--replication-async-recovery-interval-sec` flag (default 10 seconds, range
+  0–3600) plus one replica check, so the data-loss window when failing over to
+  an ASYNC replica is at least that interval; lower the flag to shrink it.
+  Under steady writes, `SHOW REPLICAS` reports an ASYNC replica as `invalid`
+  most of the time. `--replication-replica-check-frequency-sec` must be between
+  1 and 86400: `0`, which used to turn the check off, and values above a day
+  fail startup. A replica registered with a value outside that range before the
+  upgrade is clamped into it on load, with a warning.
+  [ASYNC replication mode](/database-management/clustering/replication/how-replication-works#async-replication-mode)
+  [#4694](https://github.com/memgraph/memgraph/pull/4694)
+- The `memgraph_internal` system user lets automation such as the Kubernetes
+  operator log in on data instances and coordinators, whether or not other
+  users, roles or SSO are configured. Set `--system-user-internal-hash-file` to
+  a file holding a bcrypt or pbkdf2-sha256 hash of its password. Its session
+  has every privilege, and logging in doesn't require an enterprise license.
+  `CREATE USER` and `SET PASSWORD` accept pre-hashed pbkdf2-sha256 passwords
+  (`pbkdf2-sha256:600000:<salt>:<key>`) and refuse a password that starts with
+  a hash prefix but isn't a valid hash. With `--fips-mode`, an instance without
+  a valid license starts and accepts only `SHOW LICENSE INFO`,
+  `SHOW DATABASE SETTINGS` and the settings that set the license, so the
+  license can be delivered over Bolt; it refuses to start if init queries are
+  configured. The name `memgraph_internal` is reserved even without the flag:
+  before upgrading, rename a user or role with that name on MAIN, and an LDAP
+  or SSO user or group with that name in the identity provider.
+  `CREATE USER IF NOT EXISTS memgraph_internal` and
+  `CREATE ROLE IF NOT EXISTS memgraph_internal` fail.
+  [Users](/database-management/authentication-and-authorization/users)
+  [#5170](https://github.com/memgraph/memgraph/pull/5170)
+- `DENY DATABASE <name> TO <user_or_role>` matches the other `DENY`
+  statements. `DENY DATABASE ... FROM` still works, but is deprecated and
+  returns a `DeprecatedQuery` warning; it stops working in a release no
+  earlier than 3.16. Use `TO` instead.
+  [Cypher queries for multi-tenancy](/database-management/multi-tenancy#cypher-queries-for-multi-tenancy)
+  [#5178](https://github.com/memgraph/memgraph/pull/5178)
+- `cross_database.s3()` takes an optional `bucket_owner` key in its `config`
+  map, a 12-digit AWS account ID. When it's set, the read fails if the bucket
+  belongs to another account.
+  [`s3()`](/advanced-algorithms/available-algorithms/cross_database#s3)
+  [#5293](https://github.com/memgraph/memgraph/pull/5293)
+
 {<h4 className="custom-header">🐞 Bug fixes</h4>}
 
 - A write that hits a memory limit while changing nodes covered by a point
@@ -74,6 +131,15 @@ guide.
   map literals in `WHERE`, in `ORDER BY`, and in the filter and weight lambdas
   of variable-length, BFS and weighted shortest path expansions.
   [#5181](https://github.com/memgraph/memgraph/pull/5181)
+- `llm.complete()` without a configured model (`config.model` or
+  `LITELLM_MODEL`) uses `openai/gpt-5.6-terra` instead of `gpt-5-mini`, which
+  OpenAI removes from its API on December 11, 2026.
+  [#5219](https://github.com/memgraph/memgraph/pull/5219)
+- A filter on a nested property such as `n.a.year` returns the same rows
+  whether or not an index on that path exists, including when `a` holds a
+  date or a datetime. An index on a nested property no longer matches a
+  record by a top-level property that shares the nested key's name.
+  [#5222](https://github.com/memgraph/memgraph/pull/5222)
 
 {<h4 className="custom-header">🛠️ Improvements</h4>}
 
@@ -87,6 +153,13 @@ guide.
   longer slows down sharply as the list grows. An expression that would fail
   only on a row that `SKIP` or `LIMIT` discards no longer raises an error.
   [#5161](https://github.com/memgraph/memgraph/pull/5161)
+- A breadth-first expansion from a single source (`*BFS`) runs faster, the
+  more so the higher the degree of the nodes it walks through. Results are
+  unchanged, including the order relationships come back in.
+  [#5214](https://github.com/memgraph/memgraph/pull/5214)
+- HTTPS requests that Memgraph sends for telemetry and license reporting
+  require TLS 1.2 or newer, as file downloads already did.
+  [#5241](https://github.com/memgraph/memgraph/pull/5241)
 
 ### Lab v3.15.0 - December 2nd, 2026
 
