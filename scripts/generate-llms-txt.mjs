@@ -157,10 +157,19 @@ function protectCode(text) {
 }
 
 function restoreCode(text, blocks) {
-  return text.replace(
-    /\u0000CODE(\d+)\u0000/g,
-    (_, i) => blocks[Number(i)]
-  )
+  return text
+    // A placeholder inside a blockquote (a <Callout> unwrapped to "> " lines) stands for a
+    // multi-line block, so every restored line needs the same "> " prefix. Otherwise only
+    // the opening fence is quoted, and the quote ends at the first code line.
+    .replace(
+      /^((?:[ \t]*>)+[ \t]?)\u0000CODE(\d+)\u0000/gm,
+      (_, prefix, i) =>
+        blocks[Number(i)]
+          .split('\n')
+          .map((line) => `${prefix}${line}`.trimEnd())
+          .join('\n')
+    )
+    .replace(/\u0000CODE(\d+)\u0000/g, (_, i) => blocks[Number(i)])
 }
 
 function unwrapTabs(text) {
