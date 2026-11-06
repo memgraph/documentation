@@ -9,8 +9,6 @@ This article is a part of a series intended to show users how to use Memgraph on
 real-world data and, by doing so, retrieve some interesting and useful
 information.
 
-## Introduction
-
 Backpacking is a form of low-cost independent travel. It includes the use of
 public transportation, inexpensive hostels and is often longer in duration than
 conventional vacations. This article explores the European Backpackers Index
@@ -38,18 +36,10 @@ Every city node is connected to its parent country node via the `:Inside` edge.
 
 ## Exploring the dataset
 
-You have two options for exploring this dataset. If you just want to take a look
-at the dataset and try out a few queries, open [Memgraph
-Playground](https://playground.memgraph.com/sandbox/europe-backpacking) and
-continue with the tutorial there. Note that you will not be able to execute
-`write` operations.
-
-On the other hand, if you would like to add changes to the dataset, download the
-[Memgraph Platform](https://memgraph.com/download). Once you
-have it up and running, open Memgraph Lab web application within the browser on
-[`localhost:3000`](http://localhost:3000) and navigate to `Datasets` in the
-sidebar. From there, choose the dataset `Backpacking through Europe` and
-continue with the tutorial.
+To follow this tutorial, start Memgraph and Memgraph Lab with Docker, as in
+[step 1 of the quickstart](/getting-started#install-memgraph-platform). Open
+Memgraph Lab at `http://localhost:3000`, open **Datasets** in the sidebar and
+load the **Backpacking through Europe** dataset.
 
 ## Example queries
 

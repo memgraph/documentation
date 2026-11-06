@@ -8,8 +8,6 @@ description: Visualize and optimize Marvel Universe data with Memgraph's graph a
 This article is a part of a series intended to show how to use Memgraph on
 real-world data to retrieve some interesting and useful information.
 
-## Introduction
-
 Spandex. Muscles. Big egos. Bad hair. No, we're not talking about your high
 school thrash metal band. We're talking about one of the largest fictional
 social networks that is the Marvel Comic Universe! Here we'll teach you how to
@@ -63,18 +61,10 @@ A visual scheme of our graph database is given below.
 
 ## Exploring the dataset
 
-You have two options for exploring this dataset. If you just want to take a look
-at the dataset and try out a few queries, open [Memgraph
-Playground](https://playground.memgraph.com/sandbox/marvel-comics) and continue
-with the tutorial there. Note that you will not be able to execute `write`
-operations.
-
-On the other hand, if you would like to add changes to the dataset, download the
-[Memgraph Platform](https://memgraph.com/download). Once you
-have it up and running, open Memgraph Lab web application within the browser on
-[`localhost:3000`](http://localhost:3000) and navigate to `Datasets` in the
-sidebar. From there, choose the dataset `Marvel Comic Universe social network`
-and continue with the tutorial.
+To follow this tutorial, start Memgraph and Memgraph Lab with Docker, as in
+[step 1 of the quickstart](/getting-started#install-memgraph-platform). Open
+Memgraph Lab at `http://localhost:3000`, open **Datasets** in the sidebar and
+load the **Marvel Comic Universe social network** dataset.
 
 ## Example queries using Cypher
 
