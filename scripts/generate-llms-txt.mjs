@@ -459,6 +459,8 @@ function build() {
     '- Search these docs over MCP at `https://mcp-docs.memgraph.com`, with no API key.',
     '  In Claude Code: `claude mcp add --transport http memgraph-docs https://mcp-docs.memgraph.com`.',
     `  Other clients: ${SITE}/getting-started/coding-with-ai/docs-mcp.md.`,
+    '- Without the MCP, read any page as Markdown: add `.md` to a `https://memgraph.com/docs/` URL,',
+    '  or pick a page from the list below.',
     '- Install Memgraph Agent Skills for Cypher, data modeling, MAGE algorithms, query',
     '  modules and GraphRAG with `npx skills add memgraph/skills`. In Claude Code:',
     '  `/plugin marketplace add memgraph/skills`, then `/plugin install memgraph@memgraph`.',
