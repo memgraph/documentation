@@ -13,7 +13,8 @@ export default {
   "time-to-live": "Time to live",
   "query-plan": "Query plan",
   "parallel-execution": "Parallel execution",
-  "exploring-datasets": "Exploring datasets"
+  "exploring-datasets": "Exploring datasets",
+  "sample-datasets": "Sample datasets"
 }
 
 
