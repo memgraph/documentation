@@ -176,17 +176,17 @@ export default withNextra({
       },
       {
         source: '/getting-started/coding-with-ai/skills',
-        destination: '/getting-started/coding-with-ai/plugin',
+        destination: '/getting-started/coding-with-ai/plugins',
         permanent: true
       },
       {
         source: '/getting-started/coding-with-ai/skills.md',
-        destination: '/getting-started/coding-with-ai/plugin.md',
+        destination: '/getting-started/coding-with-ai/plugins.md',
         permanent: true
       },
       {
         source: '/ai-ecosystem/skills',
-        destination: '/getting-started/coding-with-ai/plugin',
+        destination: '/getting-started/coding-with-ai/plugins',
         permanent: true
       },
       {
@@ -216,7 +216,7 @@ export default withNextra({
       },
       {
         source: '/ai-ecosystem/skills.md',
-        destination: '/getting-started/coding-with-ai/plugin.md',
+        destination: '/getting-started/coding-with-ai/plugins.md',
         permanent: true
       },
       {

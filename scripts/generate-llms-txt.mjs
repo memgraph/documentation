@@ -465,7 +465,7 @@ function build() {
     '  modules and GraphRAG with `npx skills add memgraph/skills`. In Claude Code:',
     '  `/plugin marketplace add memgraph/marketplace`, then `/plugin install memgraph@memgraph`.',
     '  In Codex: `codex plugin marketplace add memgraph/marketplace`, then `codex plugin add memgraph@memgraph`.',
-    `  Skill list: ${SITE}/getting-started/coding-with-ai/plugin.md.`,
+    `  Skill list: ${SITE}/getting-started/coding-with-ai/plugins.md.`,
     '- If what you know about Memgraph may be out of date, check what changed first.',
     '  Some old commands still run but return different results: since 3.11, node and',
     '  relationship counts come from `SHOW STORAGE INFO ON CURRENT DATABASE`.',
