@@ -9,8 +9,6 @@ This article is a part of a series intended to show users how to use Memgraph on
 real-world data and, by doing so, retrieve some interesting and useful
 information.
 
-## Introduction
-
 Backpacking is a form of low-cost independent travel. It includes the use of
 public transportation, inexpensive hostels and is often longer in duration than
 conventional vacations. This article explores the European Backpackers Index

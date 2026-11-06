@@ -8,8 +8,6 @@ description: Visualize and optimize Marvel Universe data with Memgraph's graph a
 This article is a part of a series intended to show how to use Memgraph on
 real-world data to retrieve some interesting and useful information.
 
-## Introduction
-
 Spandex. Muscles. Big egos. Bad hair. No, we're not talking about your high
 school thrash metal band. We're talking about one of the largest fictional
 social networks that is the Marvel Comic Universe! Here we'll teach you how to
