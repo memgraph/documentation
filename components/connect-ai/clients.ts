@@ -27,8 +27,8 @@ export const CLIENTS: Client[] = [
   {
     id: "codex",
     label: "Codex",
-    where: "Run in your terminal (needs Node.js):",
-    snippet: `codex mcp add ${NAME} -- npx -y mcp-remote@latest ${DOCS_MCP_URL}`,
+    where: "Run in your terminal:",
+    snippet: `codex mcp add ${NAME} --url ${DOCS_MCP_URL}`,
   },
   {
     id: "cursor",
