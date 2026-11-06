@@ -3319,6 +3319,16 @@ export default withNextra({
         permanent: true
       },
       {
+        source: '/clustering/high-availability/setup-ha-cluster-k8s',
+        destination: '/deployment/environments/kubernetes/ha-helm-chart',
+        permanent: true
+      },
+      {
+        source: '/database-management/clustering/high-availability/setup-ha-cluster-k8s',
+        destination: '/deployment/environments/kubernetes/ha-helm-chart',
+        permanent: true
+      },
+      {
         source: '/configuration/logs',
         destination: '/database-management/logs',
         permanent: true

@@ -1,0 +1,84 @@
+---
+title: Kubernetes
+description: Choose the Helm chart or the Kubernetes operator that runs Memgraph, a high availability cluster, Memgraph Lab or the MCP server on Kubernetes.
+---
+
+import { Callout } from 'nextra/components'
+
+# Kubernetes
+
+Run Memgraph, a high availability cluster, Memgraph Lab or the MCP server on
+Kubernetes with the Memgraph Helm charts and the Memgraph Kubernetes operator.
+All of them install from the Memgraph Helm repository
+(`https://memgraph.github.io/helm-charts`). The charts are listed on [Artifact
+Hub](https://artifacthub.io/packages/search?org=memgraph&sort=relevance&page=1),
+and their source is in the [Memgraph Helm charts
+repository](https://github.com/memgraph/helm-charts). To try Memgraph on a
+cluster in a few commands, see [Install Memgraph on
+Kubernetes](/getting-started/install-memgraph/kubernetes).
+
+## Choose a deployment
+
+| To run | Use |
+|---|---|
+| One Memgraph instance | [Standalone Helm chart](/deployment/environments/kubernetes/standalone-helm-chart) |
+| A [high availability](/database-management/clustering/high-availability) cluster with automatic failover | [Kubernetes operator](/deployment/environments/kubernetes/operator), or the [HA Helm chart](/deployment/environments/kubernetes/ha-helm-chart) for existing chart deployments |
+| [Memgraph Lab](/memgraph-lab) | [Memgraph Lab Helm chart](/deployment/environments/kubernetes/lab-helm-chart) |
+| The Memgraph [MCP server](/ai-ecosystem/integrations/mcp) | [MCP server Helm chart](/deployment/environments/kubernetes/mcp-helm-chart) |
+
+Every chart is a starting point: override its values to match your cluster's
+storage, networking and security setup. Each page lists the chart's values.
+
+A high availability cluster needs a [Memgraph Enterprise
+license](/database-management/enabling-memgraph-enterprise), and runs the
+same coordinators and data instances whichever way you deploy it:
+
+- **[Kubernetes operator](/deployment/environments/kubernetes/operator)**: one
+  `MemgraphDBCluster` resource describes the cluster, and the operator creates
+  it, registers its members and keeps them registered. It also carries out
+  scaling, flag changes, storage growth and rolling restarts.
+- **[HA Helm chart](/deployment/environments/kubernetes/ha-helm-chart)**: you
+  list every coordinator and data instance in the chart values, and a Job
+  registers them on every `helm install` and `helm upgrade`.
+
+<Callout type="info">
+The operator is the successor to the `memgraph-high-availability` chart, and
+the recommended way to run a new cluster. Memgraph plans to deprecate the Helm
+chart, after which the chart receives only necessary and critical bug fixes.
+</Callout>
+
+## Choose between the operator and the HA Helm chart <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+| | HA Helm chart | Operator |
+|---|---|---|
+| How you describe the cluster | Helm values, one block per instance | One `MemgraphDBCluster` resource with a count per role |
+| Workloads | One StatefulSet per instance | One StatefulSet per role |
+| Registration | A Job, on every `helm install` and `helm upgrade` | The operator, continuously, restoring a lost registration |
+| Scaling | Edit instance entries, then `helm upgrade` | Change a count; the MAIN moves off a retiring instance first |
+| Changing a flag | Every change restarts the pods | Run-time flags apply without a restart; startup-only flags restart pods |
+| Coordinator settings | `SET COORDINATOR SETTING` by hand | `flags.coordinators`, applied without a restart |
+| Renewing the license | `SET DATABASE SETTING` on every instance, then update the Secret | Update the Secret; applied without a restart and reported in [`LicenseApplied`](/deployment/environments/kubernetes/operator#conditions) |
+| Restarting pods | The StatefulSet `updateStrategy`; [in-service software upgrade (ISSU)](/deployment/environments/kubernetes/ha-helm-chart#in-service-software-upgrade-issu) by hand with `OnDelete` | The operator, one pod at a time in the ISSU order |
+| Storage | Separate data and log claims (1Gi by default); the log claim can be dropped with `createLogStorageClaim: false` | One claim per pod (10Gi by default), or no log files (`logFile: None`); claims grow without a restart |
+| Probes | Startup, readiness and liveness; the startup probe must outlast the longest recovery | Readiness probe only, so a long recovery is never killed |
+| Scheduling | Four affinity modes (`default`, `unique`, `parity`, `nodeSelection`) | One anti-affinity rule plus per-role node selectors, tolerations, spread constraints and priority classes |
+| Security context | `memgraphUserId` and `memgraphGroupId` | `securityContext`; `{}` lets the platform assign it, as OpenShift requires |
+| External access | Five methods per tier; addresses registered by the Job or `UPDATE CONFIG` | `LoadBalancer` or `Gateway`; addresses tracked automatically |
+| Bolt authentication | Supported; create users with Cypher | Supported; create users with Cypher |
+
+Start a new cluster with the operator, and check its
+[limitations](/deployment/environments/kubernetes/operator#limitations)
+for the chart features it doesn't have.
+
+## Move from the chart to the operator
+
+There is no migration path from the chart to the operator: no tool or hook
+converts a chart-deployed cluster, and the operator never takes over one. To
+move, create a new cluster with the operator and transfer the data to it, with a
+[backup and restore](/database-management/backup-and-restore), or by
+[replicating](/database-management/clustering/replication) it to the new
+cluster and then moving clients over.
+
+Some settings keep the chart's name, such as the `secrets` block that names
+the license Secret. The topology is where they differ: the chart's
+per-instance blocks become two counts, `coordinators` and `dataInstances`.
