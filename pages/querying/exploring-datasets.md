@@ -15,6 +15,9 @@ To follow a tutorial, start Memgraph and Memgraph Lab with Docker, as in
 Memgraph Lab at `http://localhost:3000`, open **Datasets** in the sidebar and
 load the tutorial's dataset.
 
+All datasets, with their sizes and download links, are listed on [Sample
+datasets](/querying/sample-datasets).
+
 You can also run an instance in [Memgraph
 Cloud](/getting-started/install-memgraph/memgraph-cloud). Once you [sign
 up](https://cloud.memgraph.com/), create a new project. From the project you can
