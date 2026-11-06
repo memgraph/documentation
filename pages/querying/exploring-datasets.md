@@ -10,40 +10,25 @@ Memgraph on that particular dataset using Cypher queries. We encourage all
 Memgraph users to go through at least one of the tutorials to get familiar with
 Memgraph.
 
-You can explore the datasets in two ways. If you just want to take a better look
-at the data and the data model, and try out a few queries, open [Memgraph
-Playground](https://playground.memgraph.com/sandboxes/) and continue with the
-tutorials there. Note that you will not be able to execute `write` operations.
-
-On the other hand, if you would like to add changes to the dataset, download the
-[Memgraph Platform](https://memgraph.com/download). Once you
-have it up and running, open Memgraph Lab web application within the browser on
-[`localhost:3000`](http://localhost:3000) and navigate to the `Datasets` in the
-sidebar. From there, choose the dataset that seems interesting to you and
-continue with the tutorial. 
+To follow a tutorial, start Memgraph and Memgraph Lab with Docker, as in
+[step 1 of the quickstart](/getting-started#install-memgraph-platform). Open
+Memgraph Lab at `http://localhost:3000`, open **Datasets** in the sidebar and
+load the tutorial's dataset.
 
 You can also run an instance in [Memgraph
 Cloud](/getting-started/install-memgraph/memgraph-cloud). Once you [sign
 up](https://cloud.memgraph.com/), create a new project. From the project you can
-connect to Memgraph Lab web application and navigate to the `Datasets` in the
+connect to Memgraph Lab web application and navigate to **Datasets** in the
 sidebar to choose the preferred dataset.
 
 So far we have covered the following topics with basic tutorials:
 
-- **[Analyzing TED Talks](/querying/exploring-datasets/analyzing-ted-talks)** - [Try it on
-  Playground!](https://playground.memgraph.com/sandbox/ted-talks)
-- **[Backpacking Through Europe](/querying/exploring-datasets/backpacking-through-europe)** - [Try it on
-  Playground!](https://playground.memgraph.com/sandbox/europe-backpacking)
-- **[Exploring the European Road
-  Network](/querying/exploring-datasets/exploring-the-european-road-network)** - [Try it on
-  Playground!](https://playground.memgraph.com/sandbox/europe-roads)
-- **[Football Transfers](/querying/exploring-datasets/football-transfers)** - [Try it on
-  Playground!](https://playground.memgraph.com/sandbox/football-transfers)
-- **[Game of Thrones deaths](/querying/exploring-datasets/got-deaths)** - [Try it on
-  Playground!](https://playground.memgraph.com/sandbox/game-of-thrones-deaths)
-- **[Graphing the Premier League](/querying/exploring-datasets/graphing-the-premier-league)** - [Try it on
-  Playground!](https://playground.memgraph.com/sandbox/football-premier-league)
-- **[Marvel Comic Universe Social Network](/querying/exploring-datasets/marvel-universe)** - [Try it on
-  Playground!](https://playground.memgraph.com/sandbox/marvel-comics)
-- **[Movie Recommendation System](/querying/exploring-datasets/movie-recommendation)** - [Try it on
-  Playground!](https://playground.memgraph.com/sandbox/movielens)
+- [Analyzing TED Talks](/querying/exploring-datasets/analyzing-ted-talks)
+- [Backpacking Through Europe](/querying/exploring-datasets/backpacking-through-europe)
+- [Exploring the European Road
+  Network](/querying/exploring-datasets/exploring-the-european-road-network)
+- [Football Transfers](/querying/exploring-datasets/football-transfers)
+- [Game of Thrones deaths](/querying/exploring-datasets/got-deaths)
+- [Graphing the Premier League](/querying/exploring-datasets/graphing-the-premier-league)
+- [Marvel Comic Universe Social Network](/querying/exploring-datasets/marvel-universe)
+- [Movie Recommendation System](/querying/exploring-datasets/movie-recommendation)

@@ -82,11 +82,6 @@ const Footer = () => {
           </ExternalLink>
         </div>
         <div className="text-[#231F20] text-[16px] leading-[31px] font-normal dark:text-[#E6E6E6]">
-          <ExternalLink href="https://playground.memgraph.com">
-            Memgraph Playground
-          </ExternalLink>
-        </div>
-        <div className="text-[#231F20] text-[16px] leading-[31px] font-normal dark:text-[#E6E6E6]">
           <ExternalLink href="https://github.com/memgraph/memgraph">
             GitHub
           </ExternalLink>
