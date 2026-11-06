@@ -1,5 +1,5 @@
 export default {
-    "skills": "Agent Skills",
+    "plugin": "Memgraph plugin",
     "docs-mcp": "Docs MCP server",
     "llms-txt": "llms.txt",
 }
