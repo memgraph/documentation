@@ -679,6 +679,36 @@ with driver.session(database="db2") as session:
 
 The database selected with `USE DATABASE` stays selected for the client connection. A failed query or a rollback keeps it, including the Bolt `RESET` a driver sends after a failure. Switching to another user on the same connection (the driver re-authenticates, sending `LOGOFF` and `LOGON`) clears it. Queries then run on the database the new session requests, or on the new user's [main database](#users-main-database).
 
+### Databases without a valid license
+
+Multi-tenancy needs an Enterprise license. If the license is invalid, for
+example because it expired, the default `memgraph` database works as usual and
+every other database becomes read-only. Its data stays on disk, and you can
+still open and read it:
+
+- **Works:** `USE DATABASE`, `SHOW DATABASE`, `SHOW DATABASES`, the driver's
+  `database` field, and the user's main database. On another database, queries
+  that read data or leave it unchanged also work, such as `MATCH`, `RETURN 1`,
+  `EXPLAIN`, `SHOW TRIGGERS`, `SHOW STREAMS`, and `CREATE SNAPSHOT`.
+- **Refused on a database other than `memgraph`:** queries that change data or
+  schema, such as `CREATE`, `MERGE`, `SET`, `DELETE`, creating or dropping an
+  index or constraint, `STORAGE MODE`, `DROP GRAPH`, and creating or dropping a
+  trigger or stream. They fail with
+  `Database '<name>' is read-only without a valid license. Check your license status by running SHOW LICENSE INFO.`
+- **Refused everywhere:** `CREATE DATABASE`, `DROP DATABASE`, and
+  `RENAME DATABASE` fail with `Access to multi-tenancy requires an enterprise,
+  ai_platform, or oem license.`
+
+Memgraph checks the license when each query starts. A query that started while
+the license was valid finishes and commits. Once you
+[set a valid license](/database-management/enabling-memgraph-enterprise#providing-the-license),
+writes work again without a restart.
+
+Before Memgraph 3.15, `USE DATABASE`, `SHOW DATABASE`, and `SHOW DATABASES`
+were refused without a valid license, while a connection that selected a
+database through the driver's `database` field or the user's main database
+could still write to it.
+
 ### Audit Logs
 
 Audit logs now encompass the active database name, positioned immediately after
