@@ -20,8 +20,8 @@ export default withNextra({
   async redirects() {
     return [
       {
-        source: '/preview',
-        destination: '/memgraph-zero',
+        source: '/preview/memgql/config',
+        destination: '/memgraph-zero/memgql/reference#configuration-reference',
         permanent: true
       },
       {
