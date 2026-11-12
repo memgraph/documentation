@@ -52,6 +52,7 @@ guide.
 
 - Values set with `SET DATABASE SETTING` no longer survive a restart, except
   the license and AWS settings.
+  [#5013](https://github.com/memgraph/memgraph/pull/5013)
   - Before: a value set for `server.name`, `timezone`,
     `hops_limit_partial_results`, `storage-gc-aggressive`,
     `storage.omit_vector_index_properties_on_return`,
@@ -60,61 +61,53 @@ guide.
     and applied again at every start, unless its flag was set.
   - Now: at every start, each of these settings takes the value of its flag,
     or the flag's default. The first start after upgrading still applies a
-    stored value once, then deletes it.
+    stored value once, then deletes it. `enterprise.license`,
+    `organization.name` and the AWS settings (`aws.region`, `aws.access_key`,
+    `aws.secret_key`, `aws.endpoint_url`) are still stored and survive
+    restarts, and a flag set at startup replaces a stored AWS value.
   - What to do: before the second restart after upgrading, set the flag for
     every value to keep, such as `--timezone=Europe/Zagreb` for `timezone` or
     `--bolt-server-name-for-init="My Server"` for `server.name`. The
     [settings table](/database-management/configuration#change-configuration-during-runtime)
     names the flag for each setting.
-  - Unchanged: `enterprise.license`, `organization.name` and the AWS settings
-    (`aws.region`, `aws.access_key`, `aws.secret_key`, `aws.endpoint_url`) are
-    still stored and survive restarts. A flag set at startup replaces a stored
-    AWS value.
-  [#5013](https://github.com/memgraph/memgraph/pull/5013)
 - `GRANT`, `DENY` and `REVOKE` on `{*}` in a label or edge-type property rule
   change only the `{*}` entry, as they already did for
-  `ON NODES CONTAINING LABELS *` and `ON EDGES OF TYPE *`. After upgrading,
-  `GRANT {*}` and `DENY {*}` no longer remove a user's or role's named property
-  grants or denies on the same rule, so `SHOW PRIVILEGES` can list both, and the result
-  no longer depends on the order the statements ran in. `REVOKE {*}` no longer
-  removes named properties; revoke them by name.
+  `ON NODES CONTAINING LABELS *` and `ON EDGES OF TYPE *`.
   [Property-based access control](/database-management/authentication-and-authorization/role-based-access-control#property-based-access-control)
   [#5160](https://github.com/memgraph/memgraph/pull/5160)
-- The name `memgraph_internal` is reserved for a new system user, even when
-  `--system-user-internal-hash-file` isn't set. After upgrading, an LDAP or
-  SSO login that returns that name as a user or group is refused, and
-  `CREATE USER IF NOT EXISTS memgraph_internal` and
-  `CREATE ROLE IF NOT EXISTS memgraph_internal` fail. `CREATE USER` and
-  `SET PASSWORD` also refuse a password that starts with a hash prefix but
-  isn't a valid hash, which used to be stored as plaintext; stored passwords
-  are unaffected. Before upgrading, rename a user or role named
-  `memgraph_internal` on MAIN and let the change replicate, rename such LDAP
-  or SSO users and groups in the identity provider, and change scripts that
-  create the name. The system user lets automation such as the Kubernetes
-  operator log in on data instances and coordinators, whether or not other
-  users, roles or SSO are configured: set `--system-user-internal-hash-file`
-  to a file holding a bcrypt or pbkdf2-sha256 hash of its password. Its
-  session has every privilege on data instances and the coordinator
-  privileges on coordinators, and logging in doesn't require an enterprise
-  license. `CREATE USER` and `SET PASSWORD` accept pre-hashed pbkdf2-sha256
-  passwords (`pbkdf2-sha256:600000:<salt>:<key>`), also with `--fips-mode`.
-  With `--fips-mode`, an instance without a valid license starts and accepts
-  only `SHOW LICENSE INFO`, `SHOW DATABASE SETTINGS` and the settings that set
-  the license, so the license can be delivered over Bolt. The same applies when
-  the license expires while the instance runs. If init queries are also
-  configured, the license has to be given at startup (`--license-key` and
-  `--organization-name`, or the `MEMGRAPH_ENTERPRISE_LICENSE` and
-  `MEMGRAPH_ORGANIZATION_NAME` environment variables). Coordinators refuse a
-  connection with an empty authentication scheme.
+  - Before: `GRANT {*}` and `DENY {*}` removed a user's or role's named
+    property grants or denies on the same rule, `REVOKE {*}` removed the named
+    properties too, and the result depended on the order the statements ran
+    in.
+  - Now: `{*}` and named properties are separate entries, so `SHOW PRIVILEGES`
+    can list both, and `REVOKE {*}` removes only `{*}`.
+  - What to do: revoke named properties by name, and change scripts that use
+    `GRANT {*}` or `DENY {*}` to clear named properties.
+- The name `memgraph_internal` is reserved for the new internal system user,
+  in any letter case, even when `--system-user-internal-hash-file` isn't set.
   [Users](/database-management/authentication-and-authorization/users)
   [#5170](https://github.com/memgraph/memgraph/pull/5170)
-- `link_prediction` saves and loads only model weights, so loading a saved
-  model with `load_context()` can no longer run arbitrary code. Models saved
-  by earlier versions can't be loaded; train them again.
+  - Before: `memgraph_internal` was an ordinary name for a user, a role, or an
+    LDAP or SSO user or group.
+  - Now: `CREATE USER` and `CREATE ROLE` refuse it, also with `IF NOT EXISTS`.
+    An LDAP or SSO login that returns it as the username or as a role is
+    refused. A user or role with that name stored before the upgrade still
+    works and Memgraph logs a warning at startup, but with
+    `--system-user-internal-hash-file` set, Memgraph refuses to start.
+  - What to do: before upgrading, rename a `memgraph_internal` user or role on
+    MAIN and let the change replicate, rename such users and groups in the
+    identity provider, and change scripts that create the name.
+- `link_prediction` saves and loads only model weights.
   [`load_context()`](/advanced-algorithms/available-algorithms/gnn_link_prediction#load_context)
   [#5299](https://github.com/memgraph/memgraph/pull/5299)
+  - Before: `load_context()` loaded the whole saved model, which could run
+    arbitrary code.
+  - Now: it loads only weights, so models saved by earlier versions can't be
+    loaded.
+  - What to do: train saved models again.
 
-{<h4 className="custom-header">✨ New features</h4>}
+{<h4 className="custom-header">
+✨ New features</h4>}
 
 - ASYNC replicas are caught up from durability files by the periodic replica
   check instead of receiving each transaction as it commits. Data reaches an
@@ -133,6 +126,26 @@ guide.
   client falls behind, and closes the connection on a read or write error.
   [ASYNC replication mode](/database-management/clustering/replication/how-replication-works#async-replication-mode)
   [#4694](https://github.com/memgraph/memgraph/pull/4694)
+- The internal system user, `memgraph_internal`, lets automation such as the
+  Kubernetes operator log in on data instances and coordinators, whether or
+  not other users, roles or SSO are configured. Set
+  `--system-user-internal-hash-file` to a file holding a bcrypt or
+  pbkdf2-sha256 hash of its password. Its session has every privilege on data
+  instances and the coordinator privileges on coordinators, and logging in
+  doesn't require an Enterprise license. `CREATE USER` and `SET PASSWORD`
+  accept pre-hashed pbkdf2-sha256 passwords
+  (`pbkdf2-sha256:600000:<salt>:<key>`), also with `--fips-mode`, which used
+  to reject every pre-hashed password. With `--fips-mode`, an instance without
+  a valid license starts instead of refusing to, and accepts only
+  `SHOW LICENSE INFO`, `SHOW DATABASE SETTINGS` and the settings that set the
+  license, so the license can be delivered over Bolt. The same restriction
+  applies when the license expires while the instance runs. With init queries
+  configured, the license has to be given at startup (`--license-key` and
+  `--organization-name`, or the `MEMGRAPH_ENTERPRISE_LICENSE` and
+  `MEMGRAPH_ORGANIZATION_NAME` environment variables). Coordinators, like data
+  instances, refuse a connection with an empty authentication scheme.
+  [Users](/database-management/authentication-and-authorization/users)
+  [#5170](https://github.com/memgraph/memgraph/pull/5170)
 - `DENY DATABASE <name> TO <user_or_role>` matches the other `DENY`
   statements. `DENY DATABASE ... FROM` still works, but is deprecated and
   returns a `DeprecatedQuery` warning; it stops working in a release no
@@ -178,6 +191,12 @@ guide.
   `MATCH (x:Label) MATCH (a)-->(b) WHERE a.v = b.v`, returns the matching
   rows instead of an empty result.
   [#5169](https://github.com/memgraph/memgraph/pull/5169)
+- `CREATE USER` and `SET PASSWORD` refuse a password that starts with
+  `bcrypt:`, `sha256:`, `sha256-multiple:` or `pbkdf2-sha256:`, in any letter
+  case, but isn't a valid hash, instead of storing the whole string as a
+  plaintext password. Users created that way before still log in with that
+  string.
+  [#5170](https://github.com/memgraph/memgraph/pull/5170)
 - A map literal that reads two or more properties of the same variable, such
   as `[x IN nodes(p) | {id: x.id, name: x.name}]`, returns each node's own
   properties instead of repeating the first node's. The same applies to such
