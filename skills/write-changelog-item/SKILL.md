@@ -52,21 +52,25 @@ look at the release notes first to learn what changed; the link takes them to
 how it works now. A bug fix carries only its PR link, even when a page
 covers it.
 
-Start from the release note in the product PR's comments, if there is one,
-and improve it by the rules above. The PR description and that note describe
+For a `Docs needed` PR, the docs PR has the note: the merged one whose
+description names the product PR as `memgraph/memgraph#NNNN`, not the
+release PR (titled `Memgraph v<version>`). Copy the items from its
+`### Release note` section as they are, Before, Now and What to do
+included. They were checked against the build when the docs were written.
+Change an item only where it breaks a rule in this file, and tell the
+reviewer what you changed.
+
+An older docs PR has a `### Release note corrections` section instead,
+which lists where the product PR's release note is wrong or misses
+something. Write the note from the product PR as for a `Docs - changelog
+only` PR, and follow the corrections where they disagree with it.
+
+For a `Docs - changelog only` PR, which has no docs PR, start from the
+release note in the product PR's comments, if there is one, and improve it
+by the rules above. The PR description and that note describe
 the PR as it was opened. If a later PR in the same series (one stacked on it
 or changing the same behavior) changed what users see, describe the behavior
 that ships: read the later PRs, or the code at the release tag.
-
-Then read the docs PR that covers the product PR: the open or merged one
-whose description names it as `memgraph/memgraph#NNNN`, not the release PR
-(titled `Memgraph v<version>`) and not one closed without merging. Its
-`### Release note corrections` section lists, for the whole series of
-product PRs, where the release note is wrong or misses something, checked
-against the build after the last PR in the series. Where it disagrees with
-the comment, follow the docs PR. An older docs PR without that section may
-still note release-note problems in its description; read them the same
-way.
 
 If the product PR has no release note, write one by the same rules.
 
@@ -80,14 +84,14 @@ right after its first sentence, before the sub-items: links after the last
 sub-item render as part of it.
 
 Don't run Memgraph to check a release note. The product PR and the docs PR
-settle what the change does; the release note takes it from them. Write the
-note for a `Docs needed` PR only after its docs PR is merged into the
-release branch, and take Before and Now from the docs PR: its pages, its
-description and its `### Release note corrections`. Until then, the PR isn't
-due for a note. If the docs PR leaves a claim open, ask the reviewer instead
-of settling it here. When an example helps, say who the user is and what
-they want before the statements, and show the full statements, not
-fragments.
+settle what the change does; the release note takes it from them. A
+`Docs needed` PR is due for a note only after its docs PRs are merged into
+the release branch. A `Docs - changelog only` PR is due once it's merged
+and `check-release` agrees with its label, and its Before and Now come from
+the product PR's description, release note and diff. If the docs PR or the
+product PR leaves a claim open, ask the reviewer instead of settling it
+here. When an example helps, say who the user is and what they want before
+the statements, and show the full statements, not fragments.
 
 A change is breaking when something a user set up the documented way, for a
 sensible reason, stops working or gives a different result after upgrading,
