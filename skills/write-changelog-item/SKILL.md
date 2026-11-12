@@ -40,7 +40,8 @@ Avoid:
   "we fixed"). State the behavior without naming the reader.
 
 Lead with the benefit. Write the item as one Markdown bullet starting with
-`-`: keep code ticks and links, and use no bold or italic.
+`-`, with sub-items only for a breaking change (see below): keep code ticks
+and links, and use no bold or italic.
 
 Link the docs page for a new feature, improvement or breaking change in the
 item whenever there is one: the page from the docs PR for a **Docs needed**
@@ -69,10 +70,12 @@ way.
 
 If the product PR has no release note, write one by the same rules.
 
-If the PR is labeled `breaking`, put it **only** under the Breaking section —
-do not also list it under New features, Improvements, or Bug fixes. The
-Breaking item should be in the format: "What happened? What the end-user
-should do about it?".
+If the PR is labeled `breaking`, put what breaks under the Breaking section,
+with three sub-items: Before (what users relied on), Now (what happens after
+upgrading) and What to do. If the PR also changes something that isn't
+breaking by the definition below, write that as its own item under the
+section it fits (New features, Improvements or Bug fixes), with the same PR
+link. Don't list the breaking part twice.
 
 A change is breaking when something a user set up the documented way, for a
 sensible reason, stops working or gives a different result after upgrading,
