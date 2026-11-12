@@ -1,0 +1,570 @@
+---
+title: Memgraph Agent
+description: Install Memgraph Agent, the AI terminal assistant that queries, imports data into and troubleshoots Memgraph from natural language.
+---
+
+import { Callout } from 'nextra/components'
+import { Tabs } from 'nextra/components'
+
+# Memgraph Agent
+
+Memgraph Agent (`mgagent`) is an AI assistant for Memgraph that runs in your
+terminal. It connects to a Memgraph instance and to a large language model
+(LLM) of your choice, then answers questions about your graph, writes and runs
+Cypher, imports data, diagnoses query and connection problems and searches the
+Memgraph documentation.
+
+By default, every write query, script and file write is shown to you for
+approval before it runs (see [Approvals and
+permissions](#approvals-and-permissions)).
+
+This page covers how to [install](#install-memgraph-agent) and
+[start](#start-memgraph-agent) Memgraph Agent, its
+[features](#features), and its [command-line
+options](#command-line-options), [configuration](#configuration) and
+[telemetry](#telemetry).
+
+## Requirements
+
+- A running [Memgraph instance](/getting-started), or Docker or a Linux
+  machine where Memgraph Agent can start one for you (see [Start
+  Memgraph](#start-memgraph)).
+- An API key for a cloud LLM provider, or a local server with an
+  OpenAI-compatible API such as Ollama, llama.cpp, LM Studio or vLLM. See
+  [LLM providers](#llm-providers) for the full list.
+- Linux, macOS 12 or later, or Windows, on x86_64 or aarch64 (ARM64).
+- To let the assistant run Python scripts, Python 3. On Debian or Ubuntu,
+  also the `python3-venv` package or [`uv`](https://docs.astral.sh/uv/) (see
+  [Scripts and background jobs](#scripts-and-background-jobs)).
+
+## Install Memgraph Agent
+
+Memgraph Agent is a single executable called `mgagent`. Each release is
+published at `https://download.memgraph.com/memgraph-agent/v<version>/`, with
+one folder per platform that holds its installers and the bare `mgagent`
+executable. The commands below install version 0.1.0.
+
+<Tabs items={['Debian/Ubuntu', 'RHEL/Fedora', 'Other Linux', 'macOS', 'Windows', 'Docker']}>
+<Tabs.Tab>
+
+Download the `.deb` package and install it:
+
+```bash
+curl -fLO https://download.memgraph.com/memgraph-agent/v0.1.0/linux-x86_64/memgraph-agent-v0.1.0-linux-x86_64.deb
+sudo apt install ./memgraph-agent-v0.1.0-linux-x86_64.deb
+```
+
+On an aarch64 (ARM64) machine, replace every `x86_64` in both commands with
+`aarch64`. The package installs `mgagent` in `/usr/bin`. To uninstall it,
+run `sudo apt remove memgraph-agent`.
+
+</Tabs.Tab>
+<Tabs.Tab>
+
+Download the `.rpm` package and install it:
+
+```bash
+curl -fLO https://download.memgraph.com/memgraph-agent/v0.1.0/linux-x86_64/memgraph-agent-v0.1.0-linux-x86_64.rpm
+sudo dnf install ./memgraph-agent-v0.1.0-linux-x86_64.rpm
+```
+
+On an aarch64 (ARM64) machine, replace every `x86_64` in both commands with
+`aarch64`. The package installs `mgagent` in `/usr/bin`. To uninstall it,
+run `sudo dnf remove memgraph-agent`.
+
+The package has no GPG signature, so install it with `dnf`. Since RPM 6.0,
+`rpm -i` refuses unsigned packages.
+
+</Tabs.Tab>
+<Tabs.Tab>
+
+On any other Linux distribution, use the self-extracting `.run` installer,
+which copies `mgagent` to `/usr/bin`:
+
+```bash
+curl -fLO https://download.memgraph.com/memgraph-agent/v0.1.0/linux-x86_64/memgraph-agent-v0.1.0-linux-x86_64.run
+sudo sh memgraph-agent-v0.1.0-linux-x86_64.run
+```
+
+To install without root, download the bare executable and put it in a
+directory on your `PATH`:
+
+```bash
+curl -fL -o mgagent https://download.memgraph.com/memgraph-agent/v0.1.0/linux-x86_64/mgagent
+chmod +x mgagent
+mkdir -p ~/.local/bin
+mv mgagent ~/.local/bin/
+```
+
+On an aarch64 (ARM64) machine, replace every `x86_64` in these commands with
+`aarch64`.
+
+</Tabs.Tab>
+<Tabs.Tab>
+
+Download the installer package and run it:
+
+```bash
+curl -fLO https://download.memgraph.com/memgraph-agent/v0.1.0/macos/memgraph-agent-v0.1.0-macos.pkg
+sudo installer -pkg memgraph-agent-v0.1.0-macos.pkg -target /
+```
+
+You can also open the downloaded `.pkg` in Finder. The package is signed by
+Memgraph and notarized by Apple, runs on Intel and Apple silicon Macs, and installs
+`mgagent` in `/usr/local/bin`.
+
+</Tabs.Tab>
+<Tabs.Tab>
+
+Download
+[`memgraph-agent-v0.1.0-windows-x64.msi`](https://download.memgraph.com/memgraph-agent/v0.1.0/windows-x64/memgraph-agent-v0.1.0-windows-x64.msi)
+(or
+[`memgraph-agent-v0.1.0-windows-arm64.msi`](https://download.memgraph.com/memgraph-agent/v0.1.0/windows-arm64/memgraph-agent-v0.1.0-windows-arm64.msi)
+on an ARM64 machine) and run it.
+
+The installer puts `mgagent.exe` in `C:\Program Files\Memgraph\Agent` and adds
+that folder to the system `PATH`. Open a new terminal afterward, so it picks up
+the new `PATH`. To uninstall Memgraph Agent, remove it in **Settings** >
+**Apps**.
+
+</Tabs.Tab>
+<Tabs.Tab>
+
+The `memgraph/mgagent` image runs on x86_64 and aarch64. Run it interactively,
+with a volume so the configuration, conversations and memory outlive the
+container:
+
+```bash
+docker run -it --rm -v mgagent:/home/nonroot/.mgagent -e ANTHROPIC_API_KEY \
+  --add-host=host.docker.internal:host-gateway \
+  memgraph/mgagent:latest -c bolt://host.docker.internal:7687
+```
+
+- `-e ANTHROPIC_API_KEY` passes the key set in your shell to the container.
+  Pass the variable of your provider instead (see [Start Memgraph
+  Agent](#start-memgraph-agent)).
+- Inside the container, `localhost` is the container itself, so a Memgraph
+  running on the host is at `host.docker.internal`. Reach Memgraph in another
+  container by its name on a shared Docker network.
+- `mgagent` runs as the `nonroot` user (UID 65532). To let it work on your
+  files, mount them and start there with `-v "$PWD":/work -w /work`. Files it
+  writes there are owned by UID 65532.
+- The image has Python (with `uv`), `bash`, `curl`, `jq` and `git` for the
+  assistant's scripts. It has no Docker of its own, so it can't start Memgraph
+  in Docker for you.
+
+</Tabs.Tab>
+</Tabs>
+
+On Linux, macOS or Windows, check that the install worked:
+
+```bash
+mgagent --version
+```
+
+Each download folder has a `SHA256SUMS` file. To verify a download on Linux,
+download that file into the same directory and run:
+
+```bash
+sha256sum --check --ignore-missing SHA256SUMS
+```
+
+## Start Memgraph Agent
+
+Run `mgagent` to open the interactive terminal interface:
+
+```bash
+mgagent
+```
+
+On the first run, a setup wizard asks for an LLM provider and its API key or
+server URL, and selects that provider's default model. Run `/setup` at any
+time to add another provider. If one of these environment variables is set,
+the wizard is skipped and that provider is used:
+
+| Variable | Provider |
+|---|---|
+| `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_BASE_URL`) | Anthropic |
+| `OPENAI_API_KEY` (and optionally `OPENAI_BASE_URL`) | OpenAI |
+| `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Google Gemini |
+| `DEEPSEEK_API_KEY` | DeepSeek |
+| `XAI_API_KEY` | xAI |
+| `MISTRAL_API_KEY` | Mistral |
+| `OLLAMA_HOST` or `OLLAMA_BASE_URL` | Ollama |
+
+A key read from an environment variable is used for that run only and is
+never written to disk. With none of them set, Memgraph Agent also looks for
+Ollama, llama.cpp, LM Studio or vLLM on its default port on this machine, and
+uses the first one it finds.
+
+### Connect to Memgraph
+
+Inside Memgraph Agent, connect with the `/connect` command. Without a URI, it
+connects to `bolt://localhost:7687`:
+
+```plaintext
+/connect bolt://localhost:7687
+```
+
+To connect with a username and password, pick a database and save the
+connection under a name:
+
+```plaintext
+/connect bolt://db.example.com:7687 -u memgraph -p YOUR_PASSWORD -d analytics --name prod
+```
+
+Replace `YOUR_PASSWORD` with the user's password. Connections are saved, and
+the last one used becomes the default, so the next start connects on its own.
+`/connections` lists the saved connections, and `/connect prod` switches to
+one by name.
+
+You can also connect when you start Memgraph Agent:
+
+```bash
+mgagent -c bolt://localhost:7687 -u memgraph --password YOUR_PASSWORD
+```
+
+Memgraph Agent checks every 15 seconds that the server still answers. If it
+stops answering, the status bar shows it as disconnected, and Memgraph Agent
+reconnects on its own once the server is back.
+
+### Start Memgraph
+
+If no Memgraph is running yet, run `/start-memgraph`. Memgraph Agent checks
+what the machine has and offers only the options that apply:
+
+- **Run Memgraph in Docker**, with the `memgraph/memgraph` image, or restart a
+  stopped Memgraph container.
+- **Install Memgraph** as a Linux package on Debian, Ubuntu or a RHEL- or
+  Fedora-family distribution, or start one that is already installed.
+- **Connect to an existing instance**, which fills in `/connect` for you.
+
+Before it starts a new instance, the assistant asks which settings you want:
+the [MAGE](/advanced-algorithms) graph algorithms, a username and password,
+TLS on Bolt, the [analytical storage
+mode](/fundamentals/storage-memory-usage#storage-modes), a memory limit,
+[schema info](/querying/schema) or [Memgraph Lab](/memgraph-lab). It shows
+every command for approval, then connects once Memgraph answers.
+
+To skip the questions, describe what you want:
+`/start-memgraph docker with TLS and a password`.
+
+Installing a Linux package needs root. Unless `sudo` works without a password,
+the assistant gives you the script to run yourself.
+
+### Ask a question
+
+Type a question and press `Enter`:
+
+```plaintext
+Which labels have the most nodes?
+```
+
+The assistant reads the schema, writes a query, runs it, and answers with the
+result and the Cypher it used. `Esc` stops a response, `Tab` completes a slash
+command, and `Ctrl+C` twice quits. Type `/help` to list the commands.
+
+## Features
+
+Memgraph Agent works through tools the model calls: tools for Memgraph, the
+documentation, scripts, [skills](#skills), [memory](#memory) and any [Model
+Context Protocol (MCP) servers](#mcp-servers) you connect. The sections below
+describe what each area does.
+
+### Natural language querying
+
+- **Schema first.** Before it writes a query, the assistant reads the labels,
+  relationship types, properties, indexes and constraints. It uses
+  [`SHOW SCHEMA INFO`](/querying/schema) when it's enabled, and metadata or
+  sampling when it isn't, and never guesses a label or property name.
+- **Reads run, writes ask.** Read queries run immediately. `CREATE`, `MERGE`,
+  `SET`, `DELETE`, `LOAD CSV`, index and constraint changes and calls to most
+  procedures stop for your approval, showing the exact query.
+- **Query plans.** The assistant reads a query's
+  [plan](/querying/query-plan) with `EXPLAIN` and `PROFILE`, points out full
+  scans and suggests the index that removes them.
+- **Server health.** The assistant reports the Memgraph version, storage mode,
+  node and relationship counts, memory use and indexes.
+- **Long queries in the background.** A query that may take minutes runs as a
+  background job with a one-hour timeout, and the assistant checks on it.
+
+### Cypher console
+
+Press `Ctrl+G` (or run `/cypher`) to turn the prompt into a Cypher console.
+`Enter` runs the line on the current connection without an approval prompt,
+and the model doesn't see the query or its result.
+
+- `Tab` completes keywords, functions and variables, and the labels,
+  relationship types, property keys and procedures of the connected database.
+- `/param NAME VALUE` sets a `$parameter` for console queries; the value is
+  JSON, or text when it isn't valid JSON.
+- `Ctrl+O` opens the latest result to scroll through, and `n` and `p` step
+  through earlier results.
+- `Ctrl+Y` attaches the latest result to your next message, so the assistant
+  sees it. Press it again to attach every result, and a third time for none.
+- `/console` docks the console in a pane beside the prompt, so results stay
+  in view next to the conversation. `/console bottom` puts the pane above the
+  prompt, `/console full` over most of the screen, and `/console off` closes
+  it.
+- `mgagent --console`, or `/focus console` for every session, starts in the
+  console. The console needs no LLM, so you can use Memgraph Agent as a Cypher
+  shell.
+
+`Esc` on an empty line, or `Ctrl+G` again, returns to the chat.
+
+### Data import
+
+- `/import PATH_OR_DESCRIPTION` asks the assistant to inspect a source, propose
+  a graph model, create the indexes and load the data. It asks you to choose
+  the graph model before it writes anything.
+- The assistant uses Memgraph's server-side loaders: [`LOAD
+  CSV`](/querying/clauses/load-csv), [`LOAD
+  JSONL`](/data-migration/json#load-jsonl-cypher-clause) and [`LOAD
+  PARQUET`](/querying/clauses/load-parquet).
+- Data that needs transforming first, or lives in another database, goes
+  through a Python or shell script the assistant writes and you approve.
+- Type `@` to mention a file. The prompt offers the closest matches from the
+  working directory, and the assistant reads the file only if it needs to.
+
+### Troubleshooting
+
+- **Connection checks.** The assistant tests a URI's DNS resolution, TCP port
+  and Bolt handshake as separate steps and names the one that failed.
+- **Error hints.** Common query errors come back with a hint, and the assistant
+  checks the documentation rather than guessing at syntax.
+- **Getting Memgraph running.** See [Start Memgraph](#start-memgraph).
+
+### Documentation search
+
+The assistant searches and reads the [Memgraph
+documentation](/), and cites the pages it used. The [Memgraph Docs MCP
+server](/getting-started/coding-with-ai/docs-mcp) is configured on the first
+run and needs no key. `/docs QUERY` searches the documentation without
+calling the model.
+
+### Scripts and background jobs
+
+The assistant can write a bash script (PowerShell on Windows) or a Python
+script and run it in your working directory, after you approve it. Scripts run
+as background jobs: `/jobs` lists them with their status and exit code,
+`/jobs output ID` shows a job's output and `/jobs cancel ID` stops it.
+
+Python scripts run in a virtual environment, and packages are never installed
+into the system Python. A script inside a project uses the project's
+environment (an active `VIRTUAL_ENV`, or a `.venv` or `venv` folder), and
+installing packages into it needs a separate approval.
+
+Other scripts use an environment that Memgraph Agent creates in
+`~/.mgagent/python/venv` on first use. On Debian and Ubuntu, install the venv
+module, or [`uv`](https://docs.astral.sh/uv/), before the first run. Without
+it, a script that needs no packages runs with the system Python, and one that
+needs packages fails:
+
+```bash
+sudo apt install python3-venv
+```
+
+### Skills
+
+Skills are folders with a `SKILL.md` file that teach the assistant a
+procedure. The assistant loads a skill when it applies. Memgraph Agent reads
+skills from three places, in this order of precedence:
+
+1. `.mgagent/skills` in the working directory, for a project's procedures.
+2. `~/.mgagent/skills`, for your own.
+3. `~/.mgagent/memgraph-skills`, Memgraph's [Agent
+   Skills](/getting-started/coding-with-ai/plugins#available-skills), updated
+   weekly from [memgraph/skills](https://github.com/memgraph/skills).
+
+`/skills` lists them, `/skills show NAME` shows one, and `/skills sync` updates
+the Agent Skills now. When the assistant works out a repeatable procedure,
+it offers to save it as a skill, after your approval.
+
+### Memory
+
+The assistant keeps one document of what it knows about you and your data
+across conversations, and reads it at the start of every turn. Every change is
+a revision: `/memory history` lists them, `/memory revert NUMBER` undoes one,
+and `/memory off` turns memory off.
+
+### MCP servers
+
+Connect any MCP server with `/mcp add`, over
+streamable HTTP, server-sent events (SSE) or standard input and output:
+
+```plaintext
+/mcp add internal https://mcp.example.com/mcp --header x-team=data
+/mcp add files npx -y @modelcontextprotocol/server-filesystem /data
+```
+
+The first form connects to a URL (add `--sse` for SSE, `--token` for a bearer
+token); the second runs a command and passes the remaining arguments to it.
+`/mcp list` lists the servers, and `/mcp remove NAME` removes one.
+
+The model finds a server's tools when it needs them, so connecting more
+servers doesn't make every request larger. A tool that isn't marked read-only
+asks for approval before it runs.
+
+### LLM providers
+
+Memgraph Agent works with these providers:
+
+- **Cloud:** Anthropic, OpenAI, Azure OpenAI, Google Gemini, DeepSeek, Amazon
+  Bedrock, xAI and Mistral.
+- **Local:** any server with an OpenAI-compatible API, with built-in defaults
+  for Ollama, llama.cpp, LM Studio and vLLM.
+
+Add a provider with `/provider add`, then pick a model:
+
+```plaintext
+/provider add openai-compatible http://localhost:11434/v1 --id ollama
+/models
+/model qwen3:32b
+```
+
+Replace `qwen3:32b` with a model from the `/models` list. `/provider` alone
+lists the configured providers and the provider types.
+
+The status bar shows how full the model's context window is, and `/context`
+shows what fills it. When the conversation reaches 70% of the window, its older
+part is summarized; `/compact` does that on demand. If a local server doesn't
+report its context window, set it with `/model --context 32k`.
+
+Each answer shows its input, output, cached and reasoning tokens and, for a
+cloud model, an estimated cost. `/status` shows the totals for the
+conversation and the session.
+
+After each reply, the prompt suggests your likely next message. When the reply
+doesn't suggest one, Memgraph Agent asks the model in a short background
+request, which a paid API charges for. `/suggest off` turns that request off.
+
+### Approvals and permissions
+
+When the assistant wants to run a write query, a script, a file write or an
+MCP tool that isn't read-only, it shows what it will run and waits:
+
+- `y` runs it once.
+- `a` runs it and allows the same kind of call from now on (all Memgraph
+  writes, that tool or that MCP server), also in later sessions.
+- `n` declines it. The assistant explains what it wanted and asks how to
+  proceed.
+
+`/permissions yolo` turns approval prompts off for every tool, and
+`/permissions ask` (the default) turns them back on. Use `yolo` only on a
+database you can lose.
+
+### Headless mode
+
+`mgagent -p` runs one question without the interactive interface, for scripts
+and pipelines. The answer goes to standard output, tool calls to standard
+error, and the exit code isn't `0` if the run fails:
+
+```bash
+mgagent -c bolt://localhost:7687 -p "which labels have the most nodes?"
+```
+
+Without `-y`, a headless run declines every write, script and other call that
+needs approval, whatever you approved in the interactive interface. With
+`-y`, it approves them all:
+
+```bash
+mgagent -p "create an index on Person(id)" -y
+```
+
+Add `--json` to get the answer as JSON.
+
+### Conversations
+
+Conversations are saved locally. `/threads` lists recent ones, `/resume`
+continues one, and `/new` starts a new one. When you quit, Memgraph Agent
+prints the command that resumes the conversation, such as `mgagent --resume
+ID`.
+
+## Command-line options
+
+```plaintext
+mgagent [options] [prompt]
+```
+
+A prompt given without an option is sent as the first message of an
+interactive session.
+
+| Option | Description |
+|---|---|
+| `-p`, `--print <prompt>` | Run one turn without the interactive interface (see [Headless mode](#headless-mode)). |
+| `--json` | With `--print`: print the answer as JSON. |
+| `-y`, `--yes` | With `--print`: approve every tool call. |
+| `-v`, `--verbose` | With `--print`: show tool calls, token usage and estimated cost. |
+| `-c`, `--connect <uri>` | Connect to Memgraph on start, such as `bolt://localhost:7687`. |
+| `-u`, `--user <name>` | Memgraph username. |
+| `--password <secret>` | Memgraph password. |
+| `-d`, `--database <name>` | Memgraph database. |
+| `-r`, `--resume [id]` | Continue a saved conversation. Without an ID, pick one from a list. |
+| `-m`, `--model <name>` | Use this model, and save it as the selected model. |
+| `--prefill <text>` | Put text in the input box without sending it. |
+| `--console` | Start in the Cypher console, and run the prompt there as a query. |
+| `--theme <dark\|light\|ansi\|auto>` | Color theme: Memgraph's dark or light theme, the terminal's own colors, or `auto` to follow the terminal background. The default is `auto`. |
+| `--cwd <dir>` | Working directory for scripts and project skills. |
+| `--no-sync` | Skip the weekly update of the Agent Skills and the MCP servers Memgraph configures. |
+| `--telemetry-enabled <true\|false>` | Send usage statistics to Memgraph for this run. The default is `true`. |
+| `-h`, `--help` | Show the help. |
+| `-V`, `--version` | Show the version. |
+
+## Configuration
+
+Memgraph Agent keeps its files in `~/.mgagent/`, or in the directory set by the
+`MGAGENT_HOME` environment variable:
+
+| Path | Holds |
+|---|---|
+| `config.json` | Providers, the selected model, Memgraph connections, MCP servers, permissions, theme and other settings. |
+| `mgagent.db` | Conversations and the memory revisions, in SQLite. |
+| `history.jsonl` | The prompt's input history, kept across sessions. |
+| `skills/` | Your skills. |
+| `memgraph-skills/` | Memgraph's Agent Skills. |
+| `python/venv/` | The virtual environment for the assistant's Python scripts. |
+| `mgagent.log` | The log. |
+
+Two settings have no command and are set in `config.json`:
+
+- `instructions`: text added to the assistant's instructions, such as how you
+  like answers or what your data means.
+- `maxIterations`: how many model and tool steps one turn may take. The default
+  is 100.
+
+<Callout type="warning">
+API keys entered in the setup wizard or with `/provider add`, and the
+passwords of saved Memgraph connections, are stored in `config.json` in plain
+text. On Linux and macOS, only your user can read the file. To keep a key off disk, pass it through an
+[environment variable](#start-memgraph-agent).
+</Callout>
+
+## Telemetry
+
+Like [Memgraph](/fundamentals/telemetry), Memgraph Agent sends anonymous usage
+statistics to Memgraph. A report goes out a minute after start, every hour and
+at shutdown, and holds:
+
+- A machine ID, a random ID for the run and the Memgraph Agent version.
+- The operating system, architecture, CPU count and memory.
+- The providers and models used, token usage, the slash commands run, and the
+  names of the skills loaded and the MCP servers configured.
+- How often each tool ran and succeeded, how you answered approval prompts,
+  and how many Cypher queries ran.
+- For each connected Memgraph instance: its version, edition, storage mode,
+  replication role, node and relationship counts, and whether it runs locally.
+
+It never sends queries, data, prompts, answers, file paths, hostnames,
+usernames, keys or tokens.
+
+To turn telemetry off:
+
+- For one run, start with `mgagent --telemetry-enabled false`.
+- For every run in an environment, set `MGAGENT_TELEMETRY=off`.
+- Permanently, set `"isTelemetryEnabled": false` in `config.json`.
+
+The command-line option overrides the other two.
+
+## Get help
+
+If you get stuck, ask on [Discord](https://discord.gg/memgraph).
