@@ -50,62 +50,6 @@ guide.
 
 {<h4 className="custom-header">⚠️ Breaking changes</h4>}
 
-- Values set with `SET DATABASE SETTING` no longer survive a restart, except
-  the license and AWS settings.
-  [#5013](https://github.com/memgraph/memgraph/pull/5013)
-  - Before: a value set for `server.name`, `timezone`,
-    `hops_limit_partial_results`, `storage-gc-aggressive`,
-    `storage.omit_vector_index_properties_on_return`,
-    `file.download_conn_timeout_sec`, `log.min_duration_ms`,
-    `log.failed_queries` or `log.query_plan` was stored in the data directory
-    and applied again at every start, unless its flag was set.
-  - Now: at every start, each of these settings takes the value of its flag,
-    or the flag's default. The first start after upgrading still applies a
-    stored value once, then deletes it. `enterprise.license`,
-    `organization.name` and the AWS settings (`aws.region`, `aws.access_key`,
-    `aws.secret_key`, `aws.endpoint_url`) are still stored and survive
-    restarts, and a flag set at startup replaces a stored AWS value.
-  - What to do: before the second restart after upgrading, set the flag for
-    every value to keep, such as `--timezone=Europe/Zagreb` for `timezone` or
-    `--bolt-server-name-for-init="My Server"` for `server.name`. The
-    [settings table](/database-management/configuration#change-configuration-during-runtime)
-    names the flag for each setting.
-- `{*}` in a property privilege no longer removes the grants and denies on
-  named properties in the same rule.
-  [Property-based access control](/database-management/authentication-and-authorization/role-based-access-control#property-based-access-control)
-  [#5160](https://github.com/memgraph/memgraph/pull/5160)
-  - Before: `GRANT {*}` removed the named grants in the rule, `DENY {*}`
-    removed the named denies, and `REVOKE {*}` removed both. For example, a
-    user `charlie` isn't allowed to read the `ssn` property of `:Employee`
-    nodes. An admin then blocks all `:Employee` properties for `charlie` and
-    later allows them again. The block also removed the deny on `ssn`, so
-    afterwards `charlie` could read `ssn`:
-    ```cypher
-    DENY READ {ssn} ON NODES CONTAINING LABELS :Employee TO charlie;
-    DENY READ {*} ON NODES CONTAINING LABELS :Employee TO charlie;
-    GRANT READ {*} ON NODES CONTAINING LABELS :Employee TO charlie;
-    ```
-  - Now: `{*}` applies only to properties without a grant or deny of their
-    own, so after the same statements `charlie` can't read `ssn`.
-    `REVOKE {*}` removes only the `{*}` entry, and `SHOW PRIVILEGES` lists
-    `{*}` and the named properties as separate entries.
-  - What to do: remove a named grant or deny by naming it, such as
-    `REVOKE READ {ssn} ON NODES CONTAINING LABELS :Employee FROM charlie`, and
-    check scripts that relied on a `{*}` statement to clear named properties.
-- The name `memgraph_internal` is reserved for the new internal system user,
-  in any letter case, even when `--system-user-internal-hash-file` isn't set.
-  [Users](/database-management/authentication-and-authorization/users)
-  [#5170](https://github.com/memgraph/memgraph/pull/5170)
-  - Before: `memgraph_internal` was an ordinary name for a user, a role, or an
-    LDAP or SSO user or group.
-  - Now: `CREATE USER` and `CREATE ROLE` refuse it, also with `IF NOT EXISTS`.
-    An LDAP or SSO login that returns it as the username or as a role is
-    refused. A user or role with that name stored before the upgrade still
-    works and Memgraph logs a warning at startup, but with
-    `--system-user-internal-hash-file` set, Memgraph refuses to start.
-  - What to do: before upgrading, rename a `memgraph_internal` user or role on
-    MAIN and let the change replicate, rename such users and groups in the
-    identity provider, and change scripts that create the name.
 - `link_prediction` saves and loads only model weights.
   [`load_context()`](/advanced-algorithms/available-algorithms/gnn_link_prediction#load_context)
   [#5299](https://github.com/memgraph/memgraph/pull/5299)
@@ -135,32 +79,6 @@ guide.
   client falls behind, and closes the connection on a read or write error.
   [ASYNC replication mode](/database-management/clustering/replication/how-replication-works#async-replication-mode)
   [#4694](https://github.com/memgraph/memgraph/pull/4694)
-- The internal system user, `memgraph_internal`, lets automation such as the
-  Kubernetes operator log in on data instances and coordinators, whether or
-  not other users, roles or SSO are configured. Set
-  `--system-user-internal-hash-file` to a file holding a bcrypt or
-  pbkdf2-sha256 hash of its password. Its session has every privilege on data
-  instances and the coordinator privileges on coordinators, and logging in
-  doesn't require an Enterprise license. `CREATE USER` and `SET PASSWORD`
-  accept pre-hashed pbkdf2-sha256 passwords
-  (`pbkdf2-sha256:600000:<salt>:<key>`), also with `--fips-mode`, which used
-  to reject every pre-hashed password. With `--fips-mode`, an instance without
-  a valid license starts instead of refusing to, and accepts only
-  `SHOW LICENSE INFO`, `SHOW DATABASE SETTINGS` and the settings that set the
-  license, so the license can be delivered over Bolt. The same restriction
-  applies when the license expires while the instance runs. With init queries
-  configured, the license has to be given at startup (`--license-key` and
-  `--organization-name`, or the `MEMGRAPH_ENTERPRISE_LICENSE` and
-  `MEMGRAPH_ORGANIZATION_NAME` environment variables). Coordinators, like data
-  instances, refuse a connection with an empty authentication scheme.
-  [Users](/database-management/authentication-and-authorization/users)
-  [#5170](https://github.com/memgraph/memgraph/pull/5170)
-- `DENY DATABASE <name> TO <user_or_role>` matches the other `DENY`
-  statements. `DENY DATABASE ... FROM` still works, but is deprecated and
-  returns a `DeprecatedQuery` warning; it stops working in a release no
-  earlier than 3.16. Use `TO` instead.
-  [Cypher queries for multi-tenancy](/database-management/multi-tenancy#cypher-queries-for-multi-tenancy)
-  [#5178](https://github.com/memgraph/memgraph/pull/5178)
 - `cross_database.s3()` takes an optional `bucket_owner` key in its `config`
   map, a 12-digit AWS account ID. When it's set, the read fails if the bucket
   belongs to another account.
@@ -174,14 +92,6 @@ guide.
   `collect()` or `properties(n)`, stay within the memory limit instead of
   failing well below it. Results are unchanged.
   [#4780](https://github.com/memgraph/memgraph/pull/4780)
-- `--query-execution-timeout-sec` and the `query.timeout` setting accept only
-  values from 0 to 1000000000, where `0` means no limit. A value above that
-  range no longer makes every slow query time out at once. Memgraph refuses to
-  start with an out-of-range `--query-execution-timeout-sec`, and
-  `SET DATABASE SETTING` refuses an out-of-range `query.timeout` with
-  "Cannot update setting 'query.timeout': Value must be a number in range
-  [0, 1000000000]."
-  [#5013](https://github.com/memgraph/memgraph/pull/5013)
 - A write that hits a memory limit while changing nodes covered by a point
   index (setting a point property, adding or removing a label, or deleting a
   node) fails with "Memory limit exceeded", and the instance keeps running.
@@ -200,12 +110,6 @@ guide.
   `MATCH (x:Label) MATCH (a)-->(b) WHERE a.v = b.v`, returns the matching
   rows instead of an empty result.
   [#5169](https://github.com/memgraph/memgraph/pull/5169)
-- `CREATE USER` and `SET PASSWORD` refuse a password that starts with
-  `bcrypt:`, `sha256:`, `sha256-multiple:` or `pbkdf2-sha256:`, in any letter
-  case, but isn't a valid hash, instead of storing the whole string as a
-  plaintext password. Users created that way before still log in with that
-  string.
-  [#5170](https://github.com/memgraph/memgraph/pull/5170)
 - A map literal that reads two or more properties of the same variable, such
   as `[x IN nodes(p) | {id: x.id, name: x.name}]`, returns each node's own
   properties instead of repeating the first node's. The same applies to such
