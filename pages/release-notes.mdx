@@ -70,19 +70,25 @@ guide.
     `--bolt-server-name-for-init="My Server"` for `server.name`. The
     [settings table](/database-management/configuration#change-configuration-during-runtime)
     names the flag for each setting.
-- `GRANT`, `DENY` and `REVOKE` on `{*}` in a label or edge-type property rule
-  change only the `{*}` entry, as they already did for
-  `ON NODES CONTAINING LABELS *` and `ON EDGES OF TYPE *`.
+- `{*}` in a property privilege no longer removes the grants and denies on
+  named properties in the same rule.
   [Property-based access control](/database-management/authentication-and-authorization/role-based-access-control#property-based-access-control)
   [#5160](https://github.com/memgraph/memgraph/pull/5160)
-  - Before: `GRANT {*}` and `DENY {*}` removed a user's or role's named
-    property grants or denies on the same rule, `REVOKE {*}` removed the named
-    properties too, and the result depended on the order the statements ran
-    in.
-  - Now: `{*}` and named properties are separate entries, so `SHOW PRIVILEGES`
-    can list both, and `REVOKE {*}` removes only `{*}`.
-  - What to do: revoke named properties by name, and change scripts that use
-    `GRANT {*}` or `DENY {*}` to clear named properties.
+  - Before: `GRANT {*}` removed the named grants in the rule, `DENY {*}`
+    removed the named denies, and `REVOKE {*}` removed both. After these
+    statements, the deny on `ssn` was gone and `charlie` could read `ssn`:
+    ```cypher
+    DENY READ {ssn} ON NODES CONTAINING LABELS :Employee TO charlie;
+    DENY READ {*} ON NODES CONTAINING LABELS :Employee TO charlie;
+    GRANT READ {*} ON NODES CONTAINING LABELS :Employee TO charlie;
+    ```
+  - Now: `{*}` applies only to properties without a grant or deny of their
+    own, so after the same statements `ssn` stays hidden from `charlie`.
+    `REVOKE {*}` removes only the `{*}` entry, and `SHOW PRIVILEGES` lists
+    `{*}` and the named properties as separate entries.
+  - What to do: remove a named grant or deny by naming it, such as
+    `REVOKE READ {ssn} ON NODES CONTAINING LABELS :Employee FROM charlie`, and
+    check scripts that relied on a `{*}` statement to clear named properties.
 - The name `memgraph_internal` is reserved for the new internal system user,
   in any letter case, even when `--system-user-internal-hash-file` isn't set.
   [Users](/database-management/authentication-and-authorization/users)
