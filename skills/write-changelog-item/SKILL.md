@@ -43,6 +43,15 @@ Lead with the benefit. Write the item as one Markdown bullet starting with
 `-`, with sub-items only for a breaking change (see below): keep code ticks
 and links, and use no bold or italic.
 
+Keep it short: one to three sentences on what changed for the user, with old
+and new behavior in one clause where it helps ("now X instead of Y"). The
+linked docs page explains how the feature works, so leave out what it
+covers: full error messages (unless users need one to recognize the
+problem), lists of every affected statement or setting, log wording, edge
+cases and examples. A bug fix is one sentence on what works now. If an item
+can't be short because no page explains the change, the docs are missing
+something: say so instead of writing it into the note.
+
 Link the docs page for a new feature, improvement or breaking change in the
 item whenever there is one: the page from the docs PR for a **Docs needed**
 PR, or the existing page that covers the changed flag, command or behavior.
@@ -75,8 +84,9 @@ that ships: read the later PRs, or the code at the release tag.
 If the product PR has no release note, write one by the same rules.
 
 If the PR is labeled `breaking`, put what breaks under the Breaking section,
-with three sub-items: Before (what users relied on), Now (what happens after
-upgrading) and What to do. If the PR also changes something that isn't
+with three sub-items of one sentence each: Before (what users relied on),
+Now (what happens after upgrading) and What to do. Use no code blocks; name a
+statement only when running it is what to do. If the PR also changes something that isn't
 breaking by the definition below, write that as its own item under the
 section it fits (New features, Improvements or Bug fixes), with the same PR
 link. Don't list the breaking part twice. Put the item's links on the lines
@@ -90,8 +100,7 @@ the release branch. A `Docs - changelog only` PR is due once it's merged
 and `check-release` agrees with its label, and its Before and Now come from
 the product PR's description, release note and diff. If the docs PR or the
 product PR leaves a claim open, ask the reviewer instead of settling it
-here. When an example helps, say who the user is and what they want before
-the statements, and show the full statements, not fragments.
+here.
 
 A change is breaking when something a user set up the documented way, for a
 sensible reason, stops working or gives a different result after upgrading,
