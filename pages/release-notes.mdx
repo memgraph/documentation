@@ -50,24 +50,26 @@ guide.
 
 {<h4 className="custom-header">⚠️ Breaking changes</h4>}
 
-- `SET DATABASE SETTING` changes a setting only until the instance restarts.
-  After a restart, every setting takes the value of its flag, or the flag's
-  default. Only the license settings (`enterprise.license`,
-  `organization.name`) and the AWS settings (`aws.region`, `aws.access_key`,
-  `aws.secret_key`, `aws.endpoint_url`) are still stored and survive
-  restarts, and a flag on the command line replaces a stored AWS value. To
-  keep a value set with `SET DATABASE SETTING`, add its flag to the
-  configuration, such as `--timezone` or `--bolt-server-name-for-init`. On
-  the first start after upgrading, a value an earlier version stored for
-  `server.name`, `timezone`, `hops_limit_partial_results`,
-  `storage-gc-aggressive`, `storage.omit_vector_index_properties_on_return`,
-  `file.download_conn_timeout_sec`, `log.min_duration_ms`,
-  `log.failed_queries` or `log.query_plan` applies once, unless its flag is
-  set, and is then removed. `query.timeout` and
-  `--query-execution-timeout-sec` accept only numbers from 0 to 1000000000,
-  so Memgraph no longer starts with a negative timeout; use `0` for no
-  limit.
-  [Change configuration during runtime](/database-management/configuration#change-configuration-during-runtime)
+- Values set with `SET DATABASE SETTING` no longer survive a restart, except
+  the license and AWS settings.
+  - Before: a value set for `server.name`, `timezone`,
+    `hops_limit_partial_results`, `storage-gc-aggressive`,
+    `storage.omit_vector_index_properties_on_return`,
+    `file.download_conn_timeout_sec`, `log.min_duration_ms`,
+    `log.failed_queries` or `log.query_plan` was stored in the data directory
+    and applied again at every start, unless its flag was set.
+  - Now: at every start, each of these settings takes the value of its flag,
+    or the flag's default. The first start after upgrading still applies a
+    stored value once, then deletes it.
+  - What to do: before the second restart after upgrading, set the flag for
+    every value to keep, such as `--timezone=Europe/Zagreb` for `timezone` or
+    `--bolt-server-name-for-init="My Server"` for `server.name`. The
+    [settings table](/database-management/configuration#change-configuration-during-runtime)
+    names the flag for each setting.
+  - Unchanged: `enterprise.license`, `organization.name` and the AWS settings
+    (`aws.region`, `aws.access_key`, `aws.secret_key`, `aws.endpoint_url`) are
+    still stored and survive restarts. A flag set at startup replaces a stored
+    AWS value.
   [#5013](https://github.com/memgraph/memgraph/pull/5013)
 - `GRANT`, `DENY` and `REVOKE` on `{*}` in a label or edge-type property rule
   change only the `{*}` entry, as they already did for
@@ -150,6 +152,14 @@ guide.
   `collect()` or `properties(n)`, stay within the memory limit instead of
   failing well below it. Results are unchanged.
   [#4780](https://github.com/memgraph/memgraph/pull/4780)
+- `--query-execution-timeout-sec` and the `query.timeout` setting accept only
+  values from 0 to 1000000000, where `0` means no limit. A value above that
+  range no longer makes every slow query time out at once. Memgraph refuses to
+  start with an out-of-range `--query-execution-timeout-sec`, and
+  `SET DATABASE SETTING` refuses an out-of-range `query.timeout` with
+  "Cannot update setting 'query.timeout': Value must be a number in range
+  [0, 1000000000]."
+  [#5013](https://github.com/memgraph/memgraph/pull/5013)
 - A write that hits a memory limit while changing nodes covered by a point
   index (setting a point property, adding or removing a label, or deleting a
   node) fails with "Memory limit exceeded", and the instance keeps running.
