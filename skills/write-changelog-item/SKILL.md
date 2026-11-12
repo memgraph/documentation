@@ -75,7 +75,9 @@ with three sub-items: Before (what users relied on), Now (what happens after
 upgrading) and What to do. If the PR also changes something that isn't
 breaking by the definition below, write that as its own item under the
 section it fits (New features, Improvements or Bug fixes), with the same PR
-link. Don't list the breaking part twice.
+link. Don't list the breaking part twice. Put the item's links on the lines
+right after its first sentence, before the sub-items: links after the last
+sub-item render as part of it.
 
 A change is breaking when something a user set up the documented way, for a
 sensible reason, stops working or gives a different result after upgrading,
