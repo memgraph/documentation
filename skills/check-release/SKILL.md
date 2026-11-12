@@ -71,7 +71,8 @@ PRs; finish the docs numbers after steps 3 and 4:
 - **Memgraph:** merged PRs out of merged + open + draft.
 - **Release notes:** PRs labeled `Docs needed` or `Docs - changelog only`.
   Total, how many are merged, how many have their entry in the release
-  notes (step 3), and to do now: merged ones without an entry.
+  notes (step 3), and to do now: merged ones without an entry, leaving out
+  `Docs needed` PRs whose docs PRs aren't all merged yet.
 - **Docs pages:** PRs labeled `Docs needed`. Total, how many are merged, how
   many have all their docs PRs merged (step 4), and to do now: merged ones
   whose docs aren't merged.
@@ -107,8 +108,9 @@ When asked only to "audit docs labels", stop after this step and report.
 
 In the release notes section on the release branch:
 
-- Every merged PR labeled `Docs needed` or `Docs - changelog only` has an
-  entry with its PR link (`[#NNNN](https://github.com/memgraph/memgraph/pull/NNNN)`).
+- Every merged PR labeled `Docs - changelog only`, and every merged PR
+  labeled `Docs needed` whose docs PRs are all merged into the release
+  branch, has an entry with its PR link (`[#NNNN](https://github.com/memgraph/memgraph/pull/NNNN)`).
   If work landed in a different PR than planned, the entry references the
   merged PR that shipped the behavior.
 - Every PR labeled `breaking` is under the Breaking changes heading, and only
@@ -134,8 +136,9 @@ gh pr list --repo memgraph/documentation --state all --search "milestone:<versio
 - Ignore docs PRs in state `CLOSED`: they were closed without merging.
 - Ignore the release PR (titled `Memgraph v<version>`): it names every PR in
   the release.
-- Note the docs PRs whose description has a `### Release note corrections`
-  section, and which product PRs it lists. The overview points to them.
+- Note the docs PRs whose description has a `### Release note` section (or,
+  in older docs PRs, `### Release note corrections`), and which product PRs
+  it covers. The overview points to them.
 - Collect the items under `### Noticed, not fixed` in each docs PR
   description, with the docs PR they came from, for step 6. A docs PR
   written before the section had a fixed heading may list them as free text
@@ -260,9 +263,11 @@ Progress are an example):
 - **Changelog:** merged PRs labeled `Docs needed` or `Docs - changelog only`.
   This deliberately repeats the `Docs needed` PRs: it tracks the release
   note apart from the docs page. Ticked when the entry is in the release
-  notes. When a docs PR lists release note corrections for the product PR,
-  end the line with `⚠ corrections in memgraph/documentation#MMMM`, so
-  whoever writes the entry starts from them.
+  notes. When a docs PR has the release note for the product PR, end the
+  line with `note in memgraph/documentation#MMMM`; when an older docs PR
+  lists release note corrections for it, end it with
+  `⚠ corrections in memgraph/documentation#MMMM`. Whoever writes the entry
+  starts from them.
 - **Missing docs labels:** merged PRs with no docs label. Leave the section
   out when there are none.
 - **Noticed, not fixed:** the items from step 6. Ticked when the
