@@ -79,16 +79,15 @@ link. Don't list the breaking part twice. Put the item's links on the lines
 right after its first sentence, before the sub-items: links after the last
 sub-item render as part of it.
 
-Every claim in a Before or Now sub-item comes from running it, not from the
-PR description, its release note or the code: run the same statements or
-startup on the previous release's Docker image (Before) and on the newest
-daily build that includes the PR (Now). Pick an example a reader can follow
-without context: say who the user is and what they want before the
-statements, and show the full statements, not fragments. Leave out a claim
-you couldn't run, or list it for the reviewer as unconfirmed. Keep the
-script and its output, and put them in the docs PR description (or, if
-there is no docs PR, tell the reviewer where they are), so the reviewer can
-rerun them.
+Don't run Memgraph to check a release note. The product PR and the docs PR
+settle what the change does; the release note takes it from them. Write the
+note for a `Docs needed` PR only after its docs PR is merged into the
+release branch, and take Before and Now from the docs PR: its pages, its
+description and its `### Release note corrections`. Until then, the PR isn't
+due for a note. If the docs PR leaves a claim open, ask the reviewer instead
+of settling it here. When an example helps, say who the user is and what
+they want before the statements, and show the full statements, not
+fragments.
 
 A change is breaking when something a user set up the documented way, for a
 sensible reason, stops working or gives a different result after upgrading,

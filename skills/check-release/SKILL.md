@@ -71,7 +71,8 @@ PRs; finish the docs numbers after steps 3 and 4:
 - **Memgraph:** merged PRs out of merged + open + draft.
 - **Release notes:** PRs labeled `Docs needed` or `Docs - changelog only`.
   Total, how many are merged, how many have their entry in the release
-  notes (step 3), and to do now: merged ones without an entry.
+  notes (step 3), and to do now: merged ones without an entry, leaving out
+  `Docs needed` PRs whose docs PRs aren't all merged yet.
 - **Docs pages:** PRs labeled `Docs needed`. Total, how many are merged, how
   many have all their docs PRs merged (step 4), and to do now: merged ones
   whose docs aren't merged.
@@ -107,8 +108,9 @@ When asked only to "audit docs labels", stop after this step and report.
 
 In the release notes section on the release branch:
 
-- Every merged PR labeled `Docs needed` or `Docs - changelog only` has an
-  entry with its PR link (`[#NNNN](https://github.com/memgraph/memgraph/pull/NNNN)`).
+- Every merged PR labeled `Docs - changelog only`, and every merged PR
+  labeled `Docs needed` whose docs PRs are all merged into the release
+  branch, has an entry with its PR link (`[#NNNN](https://github.com/memgraph/memgraph/pull/NNNN)`).
   If work landed in a different PR than planned, the entry references the
   merged PR that shipped the behavior.
 - Every PR labeled `breaking` is under the Breaking changes heading, and only
