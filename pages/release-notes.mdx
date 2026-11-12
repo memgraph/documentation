@@ -50,6 +50,25 @@ guide.
 
 {<h4 className="custom-header">⚠️ Breaking changes</h4>}
 
+- `SET DATABASE SETTING` changes a setting only until the instance restarts.
+  After a restart, every setting takes the value of its flag, or the flag's
+  default. Only the license settings (`enterprise.license`,
+  `organization.name`) and the AWS settings (`aws.region`, `aws.access_key`,
+  `aws.secret_key`, `aws.endpoint_url`) are still stored and survive
+  restarts, and a flag on the command line replaces a stored AWS value. To
+  keep a value set with `SET DATABASE SETTING`, add its flag to the
+  configuration, such as `--timezone` or `--bolt-server-name-for-init`. On
+  the first start after upgrading, a value an earlier version stored for
+  `server.name`, `timezone`, `hops_limit_partial_results`,
+  `storage-gc-aggressive`, `storage.omit_vector_index_properties_on_return`,
+  `file.download_conn_timeout_sec`, `log.min_duration_ms`,
+  `log.failed_queries` or `log.query_plan` applies once, unless its flag is
+  set, and is then removed. `query.timeout` and
+  `--query-execution-timeout-sec` accept only numbers from 0 to 1000000000,
+  so Memgraph no longer starts with a negative timeout; use `0` for no
+  limit.
+  [Change configuration during runtime](/database-management/configuration#change-configuration-during-runtime)
+  [#5013](https://github.com/memgraph/memgraph/pull/5013)
 - `GRANT`, `DENY` and `REVOKE` on `{*}` in a label or edge-type property rule
   change only the `{*}` entry, as they already did for
   `ON NODES CONTAINING LABELS *` and `ON EDGES OF TYPE *`. After upgrading,
@@ -126,6 +145,11 @@ guide.
 
 {<h4 className="custom-header">🐞 Bug fixes</h4>}
 
+- With an `AI_PLATFORM` license, read queries that sort, deduplicate or
+  aggregate vector-indexed embeddings, such as `ORDER BY n.emb`, `DISTINCT`,
+  `collect()` or `properties(n)`, stay within the memory limit instead of
+  failing well below it. Results are unchanged.
+  [#4780](https://github.com/memgraph/memgraph/pull/4780)
 - A write that hits a memory limit while changing nodes covered by a point
   index (setting a point property, adding or removing a label, or deleting a
   node) fails with "Memory limit exceeded", and the instance keeps running.
@@ -165,6 +189,11 @@ guide.
   `--storage-property-store-compression-enabled` and
   `--storage-property-store-compression-level`.
   [#5192](https://github.com/memgraph/memgraph/pull/5192)
+- The metrics endpoints, in both JSON and OpenMetrics format, serve metrics
+  only with a valid Enterprise license, as they did before Memgraph 3.11.
+  Without one, they return HTTP 400 with "Memgraph must have an Enterprise
+  License for providing metrics".
+  [#5207](https://github.com/memgraph/memgraph/pull/5207)
 - `llm.complete()` without a configured model (`config.model` or
   `LITELLM_MODEL`) uses `openai/gpt-5.6-terra` instead of `gpt-5-mini`, which
   OpenAI removes from its API on December 11, 2026.
@@ -174,6 +203,29 @@ guide.
   date or a datetime. An index on a nested property no longer matches a
   record by a top-level property that shares the nested key's name.
   [#5222](https://github.com/memgraph/memgraph/pull/5222)
+- A database's tracked graph memory (`graph_memory_tracked`) includes the
+  copy of an old embedding kept after a vector-indexed property is overwritten
+  or removed, so it matches the global total. `SET n += {...}` and
+  `SET n = {...}` on nodes follow `--storage-delta-on-identical-property-update`
+  as `SET n.prop = ...` does, instead of applying it inverted.
+  [#5229](https://github.com/memgraph/memgraph/pull/5229)
+- With a timezone that observes daylight saving time, a datetime in the
+  hour the clock skips or repeats converts instead of raising an error, and a
+  zoned datetime keeps the timezone it names instead of shifting by the
+  configured timezone's change. A cron schedule no longer runs back to back
+  through the repeated hour, and a scheduled task that fails is logged and
+  tried again at its next run instead of stopping Memgraph.
+  [#5298](https://github.com/memgraph/memgraph/pull/5298)
+- A SYNC replica that replicated a transaction successfully is no longer
+  marked as behind right after it. Before, the replica went through an
+  unnecessary recovery, and writes made during it reached the replica late,
+  with only a warning to the client.
+  [#5307](https://github.com/memgraph/memgraph/pull/5307)
+- `GRANT`, `DENY` and `REVOKE` with the `COORDINATOR` privilege, removed in
+  Memgraph 3.13, fail with an error that explains the removal and points to
+  `COORDINATOR_READ` and `COORDINATOR_WRITE`, instead of a generic parse
+  error.
+  [#5327](https://github.com/memgraph/memgraph/pull/5327)
 
 {<h4 className="custom-header">🛠️ Improvements</h4>}
 
@@ -181,6 +233,11 @@ guide.
   supernode) uses much less memory while the query runs. Results are
   unchanged, including the order relationships come back in.
   [#5154](https://github.com/memgraph/memgraph/pull/5154)
+- A `RETURN` or `WITH` that reads several properties of the same node or
+  relationship reads them in one pass over its properties instead of one pass
+  per property. Results are unchanged, and the query plan shows one more
+  operator. `--query-cache-properties=false` turns this off.
+  [#5155](https://github.com/memgraph/memgraph/pull/5155)
 - A `RETURN` or `WITH` that sorts and limits evaluates its projected
   expressions only for the rows it returns, so a costly expression no longer
   runs for rows the `LIMIT` discards. Building a string with `reduce` no
@@ -194,6 +251,9 @@ guide.
 - HTTPS requests that Memgraph sends for telemetry and license reporting
   require TLS 1.2 or newer, as file downloads already did.
   [#5241](https://github.com/memgraph/memgraph/pull/5241)
+- A query that a memory limit stops while one of Memgraph's internal hash
+  tables grows fails without leaving that table corrupted.
+  [#5339](https://github.com/memgraph/memgraph/pull/5339)
 
 ### Lab v3.15.0 - December 2nd, 2026
 
