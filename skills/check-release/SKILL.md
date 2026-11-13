@@ -17,6 +17,25 @@ skill (`memgraph/infra`, `agents/docs/skills/write-docs-page`), which covers
 names, terms and links to new pages, and CI checks links, anchors, names and
 Cypher examples.
 
+## The overview script
+
+`scripts/overview.py` (next to this file) does the counting for steps 1–4
+and writes the step 8 block, so every run gets the same numbers whoever
+runs it:
+
+```bash
+python3 skills/check-release/scripts/overview.py mg-v<version> --json findings.json
+```
+
+It needs `gh`, signed in with read access to `memgraph/memgraph` and
+`memgraph/documentation`. It prints the overview block and a summary of
+what needs attention, and `--json` writes the findings: notes to write,
+breaking changes outside their section, docs PRs to merge or missing, docs
+milestone problems, missing and questionable labels, and noticed items. Run
+it first and use its findings in the steps below instead of counting by
+hand. The steps say what it checks and what's left to judgment: label
+recommendations, writing notes, the noticed-fixes PR and the site checks.
+
 ## Rules
 
 - **Merged PRs only:** a Memgraph PR counts once `merged_at != null`. PRs
@@ -274,14 +293,16 @@ Progress are an example):
   noticed-fixes PR that fixes them is merged; an item it couldn't fix ends
   with the reason. Leave the section out when there are none.
 
-Write the description with `gh api`, not `gh pr edit` (which can fail on
-this repo):
+Write it with the script, which replaces only the block between the
+markers (it needs write access to `memgraph/documentation`):
 
 ```bash
-gh api repos/memgraph/documentation/pulls/<release_pr> --jq .body > body.md
-# replace the block between the markers in body.md
-gh api repos/memgraph/documentation/pulls/<release_pr> -X PATCH -F body=@body.md
+python3 skills/check-release/scripts/overview.py mg-v<version> --apply
 ```
+
+Run it again after anything changes that the overview counts, such as a
+release note committed in step 3. By hand, use `gh api`, not `gh pr edit`
+(which can fail on this repo).
 
 ### 9. Report
 
