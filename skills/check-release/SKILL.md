@@ -17,6 +17,25 @@ skill (`memgraph/infra`, `agents/docs/skills/write-docs-page`), which covers
 names, terms and links to new pages, and CI checks links, anchors, names and
 Cypher examples.
 
+## The overview script
+
+`scripts/overview.py` (next to this file) does the counting for steps 1–4
+and writes the step 8 block, so every run gets the same numbers whoever
+runs it:
+
+```bash
+python3 skills/check-release/scripts/overview.py mg-v<version> --json findings.json
+```
+
+It needs `gh`, signed in with read access to `memgraph/memgraph` and
+`memgraph/documentation`. It prints the overview block and a summary of
+what needs attention, and `--json` writes the findings: notes to write,
+breaking changes outside their section, docs PRs to merge or missing, docs
+milestone problems, missing and questionable labels, and noticed items. Run
+it first and use its findings in the steps below instead of counting by
+hand. The steps say what it checks and what's left to judgment: label
+recommendations, writing notes, the noticed-fixes PR and the site checks.
+
 ## Rules
 
 - **Merged PRs only:** a Memgraph PR counts once `merged_at != null`. PRs
@@ -71,7 +90,8 @@ PRs; finish the docs numbers after steps 3 and 4:
 - **Memgraph:** merged PRs out of merged + open + draft.
 - **Release notes:** PRs labeled `Docs needed` or `Docs - changelog only`.
   Total, how many are merged, how many have their entry in the release
-  notes (step 3), and to do now: merged ones without an entry.
+  notes (step 3), and to do now: merged ones without an entry, leaving out
+  `Docs needed` PRs whose docs PRs aren't all merged yet.
 - **Docs pages:** PRs labeled `Docs needed`. Total, how many are merged, how
   many have all their docs PRs merged (step 4), and to do now: merged ones
   whose docs aren't merged.
@@ -107,8 +127,9 @@ When asked only to "audit docs labels", stop after this step and report.
 
 In the release notes section on the release branch:
 
-- Every merged PR labeled `Docs needed` or `Docs - changelog only` has an
-  entry with its PR link (`[#NNNN](https://github.com/memgraph/memgraph/pull/NNNN)`).
+- Every merged PR labeled `Docs - changelog only`, and every merged PR
+  labeled `Docs needed` whose docs PRs are all merged into the release
+  branch, has an entry with its PR link (`[#NNNN](https://github.com/memgraph/memgraph/pull/NNNN)`).
   If work landed in a different PR than planned, the entry references the
   merged PR that shipped the behavior.
 - Every PR labeled `breaking` is under the Breaking changes heading, and only
@@ -134,8 +155,9 @@ gh pr list --repo memgraph/documentation --state all --search "milestone:<versio
 - Ignore docs PRs in state `CLOSED`: they were closed without merging.
 - Ignore the release PR (titled `Memgraph v<version>`): it names every PR in
   the release.
-- Note the docs PRs whose description has a `### Release note corrections`
-  section, and which product PRs it lists. The overview points to them.
+- Note the docs PRs whose description has a `### Release note` section (or,
+  in older docs PRs, `### Release note corrections`), and which product PRs
+  it covers. The overview points to them.
 - Collect the items under `### Noticed, not fixed` in each docs PR
   description, with the docs PR they came from, for step 6. A docs PR
   written before the section had a fixed heading may list them as free text
@@ -260,23 +282,27 @@ Progress are an example):
 - **Changelog:** merged PRs labeled `Docs needed` or `Docs - changelog only`.
   This deliberately repeats the `Docs needed` PRs: it tracks the release
   note apart from the docs page. Ticked when the entry is in the release
-  notes. When a docs PR lists release note corrections for the product PR,
-  end the line with `⚠ corrections in memgraph/documentation#MMMM`, so
-  whoever writes the entry starts from them.
+  notes. When a docs PR has the release note for the product PR, end the
+  line with `note in memgraph/documentation#MMMM`; when an older docs PR
+  lists release note corrections for it, end it with
+  `⚠ corrections in memgraph/documentation#MMMM`. Whoever writes the entry
+  starts from them.
 - **Missing docs labels:** merged PRs with no docs label. Leave the section
   out when there are none.
 - **Noticed, not fixed:** the items from step 6. Ticked when the
   noticed-fixes PR that fixes them is merged; an item it couldn't fix ends
   with the reason. Leave the section out when there are none.
 
-Write the description with `gh api`, not `gh pr edit` (which can fail on
-this repo):
+Write it with the script, which replaces only the block between the
+markers (it needs write access to `memgraph/documentation`):
 
 ```bash
-gh api repos/memgraph/documentation/pulls/<release_pr> --jq .body > body.md
-# replace the block between the markers in body.md
-gh api repos/memgraph/documentation/pulls/<release_pr> -X PATCH -F body=@body.md
+python3 skills/check-release/scripts/overview.py mg-v<version> --apply
 ```
+
+Run it again after anything changes that the overview counts, such as a
+release note committed in step 3. By hand, use `gh api`, not `gh pr edit`
+(which can fail on this repo).
 
 ### 9. Report
 
