@@ -1011,6 +1011,43 @@ Revoking property permissions on relationships:
 REVOKE READ {start_date} ON EDGES OF TYPE :WORKS_AT FROM charlie;
 ```
 
+#### Wildcard and named properties in one rule
+
+A property rule is one label list with its `MATCHING` mode, or one edge type.
+In a rule, `{*}` and each named property are separate entries:
+
+- `GRANT`, `DENY` and `REVOKE` on `{*}` change only the `{*}` entry. Named
+  properties in the same rule keep their grants and denies.
+- A named property's entry decides each privilege it grants or denies for
+  that property. `{*}` applies to the rest. For example, with
+  `GRANT SET PROPERTY {ssn}` and `DENY READ {*}`, reading `ssn` is still
+  denied.
+- To remove a named property's entry, revoke it by name. `REVOKE {*}` leaves
+  it in place.
+
+For example, these two statements let `charlie` read every property of
+`:Employee` nodes except `ssn`, in whichever order they run:
+
+```cypher
+GRANT READ {*} ON NODES CONTAINING LABELS :Employee TO charlie;
+DENY READ {ssn} ON NODES CONTAINING LABELS :Employee TO charlie;
+```
+
+Revoking the wildcard removes only the `{*}` entry, so the deny on `ssn` stays
+in place:
+
+```cypher
+REVOKE READ {*} ON NODES CONTAINING LABELS :Employee FROM charlie;
+```
+
+`SHOW PRIVILEGES` lists the `{*}` entry and the named entries of a rule. Entries
+with the same effect share a row, such as `READ {*, salary}`.
+
+The global rules (`ON NODES CONTAINING LABELS *` and `ON EDGES OF TYPE *`) treat
+`{*}` the same way. Before Memgraph 3.15, `GRANT {*}` on a label or edge-type
+rule removed the named grants in that rule, `DENY {*}` removed the named denies,
+and `REVOKE {*}` removed every named property too.
+
 #### How denied properties behave
 
 When a user does not have `READ` permission on a property, the property value is
@@ -1049,8 +1086,8 @@ Global property permissions (granted on `{*}`) act as a per-property fallback.
 For each property access check, the resolution order is:
 
 1. Check all entity-specific rules that match the node's labels (or the edge's
-type). If any matching rule covers the property being checked (either by name
-or via `{*}` within that rule), use that result.
+type). If any matching rule covers the property being checked (by name, or
+otherwise via `{*}` within that rule), use that result.
 2. If no matching rule covers the property, fall through to the global rules.
 
 This means that having a property rule on `:Employee` for one property (e.g.
