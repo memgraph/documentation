@@ -172,33 +172,49 @@ of replicas.
 
 ### ASYNC replication mode
 
-In the ASYNC replication mode, the MAIN instance will commit a transaction
-without receiving confirmation from REPLICA instances that they have received
-the same transaction. This means that the **MAIN instance does not wait for the
-response from the REPLICA instances** in the main thread but in some other thread.
+In the ASYNC replication mode, the MAIN instance commits a transaction without
+sending it to ASYNC REPLICAs and without waiting for them. After each commit,
+MAIN marks every ASYNC REPLICA as behind, and the periodic replica check catches
+it up from durability files: the snapshot and WAL files the REPLICA is missing,
+and MAIN's current WAL file. This is the same
+[recovery](#instance-synchronization) that brings any REPLICA back in sync after
+an outage.
 
-For each registered REPLICA, the MAIN instance keeps a permanent background
-worker that carries the commit-path work for that replica: it encodes the
-transaction, ships it, and receives the confirmation of successful replication.
-In ASYNC mode the commit thread does not wait for that worker, so confirmations
-are handled entirely off the main storage thread. A second per-replica worker
-runs the periodic state checks and recovery, so a long recovery cannot delay
-replication of new transactions. See [parallel WAL writes and delta
-shipping](#parallel-wal-writes-and-delta-shipping) for how the commit-path
-workers overlap with the MAIN instance's own WAL write.
+Recovery runs in rounds. MAIN checks each REPLICA every
+`--replication-replica-check-frequency-sec` seconds (1 by default), and a check
+that finds an ASYNC REPLICA behind starts a round once
+`--replication-async-recovery-interval-sec` seconds (10 by default) have passed
+since its previous round ended. Under constant writes, data reaches an ASYNC
+REPLICA in bursts about 11 seconds apart with the defaults, not transaction by
+transaction. Before Memgraph 3.15, MAIN sent each transaction to ASYNC REPLICAs
+as it committed.
+
+This affects how you run ASYNC REPLICAs:
+
+- **Failover:** promoting an ASYNC REPLICA to MAIN loses the writes since its
+  last round, up to about the interval plus one check. To shrink this window, lower
+  `--replication-async-recovery-interval-sec`; MAIN then re-sends its current
+  WAL file more often. With `0`, a round starts at every check that finds the
+  REPLICA behind.
+- **Monitoring:** under constant writes, `SHOW REPLICAS` shows a healthy ASYNC
+  REPLICA as `invalid` most of the time (see [REPLICA states](#replica-states)).
 
 **ASYNC mode ensures system availability and partition tolerance (AP).**
-
-![](/pages/clustering/replication/memgraph-replication-async.png)
 
 ## REPLICA states
 
 There are 5 states in which replica can be at a point in time:
 - **READY** - replica is not lagging behind and all the data is replicated
-- **REPLICATING** - state the REPLICA is in when it's receiving transaction
-commits. If this action succeeds, the replica will again move to READY state. If
-it fails, it will move to INVALID.
-- **INVALID/BEHIND** - replica is behind, and needs to be synced with MAIN
+- **REPLICATING** - state a SYNC or STRICT_SYNC REPLICA is in when it's
+receiving transaction commits. If this action succeeds, the replica will again
+move to READY state. If it fails, it will move to INVALID.
+- **INVALID/BEHIND** - replica may be behind, and the next replica check syncs
+it with MAIN. `SHOW REPLICAS` shows this state as `invalid`. An ASYNC REPLICA
+enters it after every commit on MAIN, so under constant writes a healthy ASYNC
+REPLICA is `invalid` most of the time and `ready` only between the end of a
+recovery round and the next commit. For an ASYNC REPLICA, watch its `ts` in
+`SHOW REPLICAS` instead: it advances after each round while the REPLICA keeps
+up.
 - **RECOVERY** - after MAIN detects that a REPLICA is invalid/behind, the
 REPLICA state is changed to RECOVERY. At this point, the transfer of durability
 files is performed in order for the REPLICA to catch up with MAIN
@@ -246,6 +262,9 @@ In that case, REPLICA will transfer from READY to REPLICATING state, and then
 come back again to the READY state. Transfer of delta objects in real-time is
 the optimal approach, because they're the smallest units to be transferred over
 the network. This happy flow ensures the REPLICA is always in-sync with MAIN.
+This flow applies to SYNC and STRICT_SYNC REPLICAs only; ASYNC REPLICAs catch up
+from durability files, as described in [ASYNC replication
+mode](#async-replication-mode).
 
 There are a variety of scenarios when that happy flow can not be maintained,
 such as network issues, or failing of the instance. By comparing timestamps, the
@@ -300,6 +319,16 @@ the set of MAIN databases and the set of REPLICA databases.
 When sending replication data over the network, durability files are also
 assigned the database UUID. It serves as a unique location of which database to
 apply the durability files to in the replicas.
+
+A REPLICA creates each database it receives from MAIN with its own
+per-database flags, such as `--schema-info-enabled`, as it does its default
+`memgraph` database. Only the database name and UUID come from MAIN. Run every
+instance with the same [per-database
+flags](/database-management/clustering/replication/best-practices#per-database-flags),
+so each database behaves the same on MAIN and on its REPLICAs. Before Memgraph
+3.15, a REPLICA created these databases with the default values of most
+per-database flags instead of its own, and they changed behavior when the
+REPLICA restarted.
 
 ![](/pages/clustering/replication/multi-tenant-replication.png)
 
@@ -377,7 +406,8 @@ every registered REPLICA. Both happen on the commit path, but they do not happen
 one after another.
 
 The commit thread walks the transaction's deltas once and records everything
-that has to be written. It then schedules one task per streaming REPLICA — each
+that has to be written. It then schedules one task per SYNC and STRICT_SYNC
+REPLICA — each
 task encodes the whole transaction (metadata deltas first, then data deltas)
 into that replica's RPC stream, on that replica's own background worker — and
 writes its own WAL inline, at the same time. Encoding for all replicas and the
@@ -407,9 +437,10 @@ Ordering and failure containment are preserved:
 
 The commit thread collects every per-replica task before it publishes the
 transaction's commit timestamp, because encoding reads live node and edge state
-that later transactions may overwrite in place. Waiting for a replica's *reply*
-still follows the replica's replication mode: SYNC and STRICT_SYNC block the
-commit, ASYNC does not.
+that later transactions may overwrite in place. SYNC and STRICT_SYNC block the
+commit while they wait for a replica's *reply*. ASYNC REPLICAs aren't on the
+commit path at all: they catch up through recovery, as described in [ASYNC
+replication mode](#async-replication-mode).
 
 ### Fixing timestamp consistency
 

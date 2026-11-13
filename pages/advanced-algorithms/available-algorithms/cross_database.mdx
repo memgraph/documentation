@@ -357,13 +357,19 @@ Read a CSV file directly from AWS S3 and stream its rows into Memgraph.
 {<h4 className="custom-header"> Input: </h4>}
 
 - `file_path: str` ➡ S3 path in the form `s3://bucket-name/path/to/file.csv`.
-- `config: mgp.Map` ➡ AWS credentials; all keys optional. Missing keys fall back to the corresponding
-  environment variables:
+- `config: mgp.Map` ➡ AWS credentials and the bucket owner check; all keys optional. Missing
+  credentials fall back to the corresponding environment variables:
   - `aws_access_key_id` (env: `AWS_ACCESS_KEY_ID`)
   - `aws_secret_access_key` (env: `AWS_SECRET_ACCESS_KEY`)
   - `region_name` (env: `AWS_REGION`)
   - `aws_session_token` (env: `AWS_SESSION_TOKEN`)
-- `config_path: str` (optional) ➡ Path to a JSON file with AWS credentials.
+  - `bucket_owner` (no environment variable) ➡ The 12-digit AWS account ID that must own the
+    bucket. If another account owns it, S3 refuses the read and the procedure fails. Pass it as a
+    string, such as `'012345678901'`, so leading zeros are kept. A value that isn't 12 digits fails
+    with `Invalid 'bucket_owner'. Expected a 12-digit AWS account ID.` Without `bucket_owner`, the
+    bucket's owner isn't checked.
+- `config_path: str` (optional) ➡ Path to a JSON file with the same keys as `config`. Its values
+  override those in `config`.
 
 {<h4 className="custom-header"> Output: </h4>}
 
@@ -375,6 +381,16 @@ Read a CSV file directly from AWS S3 and stream its rows into Memgraph.
 CALL cross_database.s3('s3://my-bucket/employees.csv', {aws_access_key_id: 'your-key',
         aws_secret_access_key: 'your-secret',
         region_name: 'eu-central-1'})
+YIELD row
+CREATE (e:Employee {id: row.id, name: row.name, position: row.position});
+```
+
+To read the file only if the bucket belongs to a given AWS account, add `bucket_owner`. Here the
+credentials come from the environment variables:
+
+```cypher
+CALL cross_database.s3('s3://my-bucket/employees.csv', {region_name: 'eu-central-1',
+        bucket_owner: '123456789012'})
 YIELD row
 CREATE (e:Employee {id: row.id, name: row.name, position: row.position});
 ```

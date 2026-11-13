@@ -50,68 +50,27 @@ guide.
 
 {<h4 className="custom-header">⚠️ Breaking changes</h4>}
 
-- `GRANT`, `DENY` and `REVOKE` on `{*}` in a label or edge-type property rule
-  change only the `{*}` entry, as they already did for
-  `ON NODES CONTAINING LABELS *` and `ON EDGES OF TYPE *`. After upgrading,
-  `GRANT {*}` and `DENY {*}` no longer remove a role's named property grants or
-  denies on the same rule, so `SHOW PRIVILEGES` can list both, and the result
-  no longer depends on the order the statements ran in. `REVOKE {*}` no longer
-  removes named properties; revoke them by name.
-  [Property-based access control](/database-management/authentication-and-authorization/role-based-access-control#property-based-access-control)
-  [#5160](https://github.com/memgraph/memgraph/pull/5160)
-- The name `memgraph_internal` is reserved for a new system user, even when
-  `--system-user-internal-hash-file` isn't set. After upgrading, an LDAP or
-  SSO login that returns that name as a user or group is refused, and
-  `CREATE USER IF NOT EXISTS memgraph_internal` and
-  `CREATE ROLE IF NOT EXISTS memgraph_internal` fail. `CREATE USER` and
-  `SET PASSWORD` also refuse a password that starts with a hash prefix but
-  isn't a valid hash, which used to be stored as plaintext; stored passwords
-  are unaffected. Before upgrading, rename a user or role named
-  `memgraph_internal` on MAIN and let the change replicate, rename such LDAP
-  or SSO users and groups in the identity provider, and change scripts that
-  create the name. The system user lets automation such as the Kubernetes
-  operator log in on data instances and coordinators, whether or not other
-  users, roles or SSO are configured: set `--system-user-internal-hash-file`
-  to a file holding a bcrypt or pbkdf2-sha256 hash of its password. Its
-  session has every privilege on data instances and the coordinator
-  privileges on coordinators, and logging in doesn't require an enterprise
-  license. `CREATE USER` and `SET PASSWORD` accept pre-hashed pbkdf2-sha256
-  passwords (`pbkdf2-sha256:600000:<salt>:<key>`). With `--fips-mode`, an
-  instance without a valid license starts and accepts only
-  `SHOW LICENSE INFO`, `SHOW DATABASE SETTINGS` and the settings that set the
-  license, so the license can be delivered over Bolt; it refuses to start if
-  init queries are configured.
-  [Users](/database-management/authentication-and-authorization/users)
-  [#5170](https://github.com/memgraph/memgraph/pull/5170)
-- `link_prediction` saves and loads only model weights, so loading a saved
-  model with `load_context()` can no longer run arbitrary code. Models saved
-  by earlier versions can't be loaded; train them again.
+- `link_prediction` saves and loads only model weights.
   [`load_context()`](/advanced-algorithms/available-algorithms/gnn_link_prediction#load_context)
   [#5299](https://github.com/memgraph/memgraph/pull/5299)
+  - Before: `load_context()` loaded the whole saved model, which could run
+    arbitrary code.
+  - Now: it loads only weights, so models saved by earlier versions can't be
+    loaded.
+  - What to do: train saved models again.
 
-{<h4 className="custom-header">✨ New features</h4>}
+{<h4 className="custom-header">
+✨ New features</h4>}
 
-- ASYNC replicas are caught up from durability files by the periodic replica
-  check instead of receiving each transaction as it commits. Data reaches an
-  ASYNC replica in rounds spaced by the new
-  `--replication-async-recovery-interval-sec` flag (default 10 seconds, range
-  0–3600) plus one replica check, so the data-loss window when failing over to
-  an ASYNC replica is at least that interval; lower the flag to shrink it.
-  Under constant writes, `SHOW REPLICAS` shows a healthy ASYNC replica as
-  `invalid` most of the time, because each commit leaves it a few seconds
-  behind until the next recovery round.
-  `--replication-replica-check-frequency-sec` must be between
-  1 and 86400: `0`, which used to turn the check off, and values above a day
-  fail startup. A replica registered with a value outside that range before the
-  upgrade is clamped into it on load, with a warning.
+- ASYNC replicas catch up from durability files in rounds spaced by the new
+  `--replication-async-recovery-interval-sec` flag (default 10 seconds)
+  instead of receiving each transaction as it commits, so the data-loss window
+  when failing over to an ASYNC replica is at least that interval. Under
+  constant writes, `SHOW REPLICAS` shows a healthy ASYNC replica as `invalid`
+  most of the time. `--replication-replica-check-frequency-sec` must be
+  between 1 and 86400, so `0`, which used to turn the check off, fails startup.
   [ASYNC replication mode](/database-management/clustering/replication/how-replication-works#async-replication-mode)
   [#4694](https://github.com/memgraph/memgraph/pull/4694)
-- `DENY DATABASE <name> TO <user_or_role>` matches the other `DENY`
-  statements. `DENY DATABASE ... FROM` still works, but is deprecated and
-  returns a `DeprecatedQuery` warning; it stops working in a release no
-  earlier than 3.16. Use `TO` instead.
-  [Cypher queries for multi-tenancy](/database-management/multi-tenancy#cypher-queries-for-multi-tenancy)
-  [#5178](https://github.com/memgraph/memgraph/pull/5178)
 - `cross_database.s3()` takes an optional `bucket_owner` key in its `config`
   map, a 12-digit AWS account ID. When it's set, the read fails if the bucket
   belongs to another account.
@@ -120,9 +79,12 @@ guide.
 
 {<h4 className="custom-header">🐞 Bug fixes</h4>}
 
+- With an `AI_PLATFORM` license, read queries that sort, deduplicate or
+  aggregate vector-indexed embeddings stay within the memory limit instead of
+  failing well below it.
+  [#4780](https://github.com/memgraph/memgraph/pull/4780)
 - A write that hits a memory limit while changing nodes covered by a point
-  index (setting a point property, adding or removing a label, or deleting a
-  node) fails with "Memory limit exceeded", and the instance keeps running.
+  index fails with "Memory limit exceeded", and the instance keeps running.
   [#5140](https://github.com/memgraph/memgraph/pull/5140)
 - A read query that hits a memory limit while reading nodes that other
   transactions changed since it started fails with "Memory limit exceeded",
@@ -130,43 +92,47 @@ guide.
   [#5146](https://github.com/memgraph/memgraph/pull/5146)
 - An instance with lightweight edges (`--storage-light-edge=true`) whose
   snapshot recovery hits the memory limit fails recovery with "Memory limit
-  exceeded" instead of crashing. With `--storage-allow-recovery-failure`, the
-  instance starts and that database comes up in a broken state.
+  exceeded" instead of crashing.
   [#5147](https://github.com/memgraph/memgraph/pull/5147)
 - A query that pairs one pattern with another whose own variables are
-  compared to each other, such as
-  `MATCH (x:Label) MATCH (a)-->(b) WHERE a.v = b.v`, returns the matching
-  rows instead of an empty result.
+  compared to each other returns the matching rows instead of an empty result.
   [#5169](https://github.com/memgraph/memgraph/pull/5169)
-- A map literal that reads two or more properties of the same variable, such
-  as `[x IN nodes(p) | {id: x.id, name: x.name}]`, returns each node's own
-  properties instead of repeating the first node's. The same applies to such
-  map literals in `WHERE`, in `ORDER BY`, and in the filter and weight lambdas
-  of variable-length, BFS and weighted shortest path expansions.
+- A map literal that reads two or more properties of the same variable
+  returns each node's own properties instead of repeating the first node's.
   [#5181](https://github.com/memgraph/memgraph/pull/5181)
 - Tenant databases on a replica use the replica's own per-database flags, as
-  its default database already did, instead of the built-in defaults. For
-  example, `SHOW SCHEMA INFO` works on replica tenants with
-  `--schema-info-enabled`, and a tenant keeps the same settings after the
-  replica restarts. Every instance in a cluster must run with the same
-  `--schema-info-enabled`, `--storage-properties-on-edges`,
-  `--storage-light-edge`, `--storage-enable-edges-metadata`,
-  `--storage-enable-schema-metadata`,
-  `--storage-automatic-label-index-creation-enabled`,
-  `--storage-automatic-edge-type-index-creation-enabled`,
-  `--storage-delta-on-identical-property-update`,
-  `--storage-property-store-compression-enabled` and
-  `--storage-property-store-compression-level`.
+  its default database already did, instead of the values MAIN sent and the
+  built-in defaults, so every instance in a cluster needs the same
+  per-database flags.
   [#5192](https://github.com/memgraph/memgraph/pull/5192)
+- The metrics endpoints, in both JSON and OpenMetrics format, serve metrics
+  only with a valid Enterprise license, as they did before Memgraph 3.11.
+  [#5207](https://github.com/memgraph/memgraph/pull/5207)
 - `llm.complete()` without a configured model (`config.model` or
   `LITELLM_MODEL`) uses `openai/gpt-5.6-terra` instead of `gpt-5-mini`, which
   OpenAI removes from its API on December 11, 2026.
   [#5219](https://github.com/memgraph/memgraph/pull/5219)
-- A filter on a nested property such as `n.a.year` returns the same rows
-  whether or not an index on that path exists, including when `a` holds a
-  date or a datetime. An index on a nested property no longer matches a
-  record by a top-level property that shares the nested key's name.
+- A filter on a nested property returns the same rows whether or not an index
+  on that path exists.
   [#5222](https://github.com/memgraph/memgraph/pull/5222)
+- A database's tracked graph memory (`graph_memory_tracked`) matches the
+  global total after a vector-indexed property is overwritten or removed, and
+  `SET n += {...}` and `SET n = {...}` on nodes apply
+  `--storage-delta-on-identical-property-update` instead of its inverse.
+  [#5229](https://github.com/memgraph/memgraph/pull/5229)
+- Datetimes in the hour that daylight saving time skips or repeats convert
+  instead of raising an error, cron schedules no longer run back to back
+  through the repeated hour, and a scheduled task that fails is tried again at
+  its next run instead of stopping Memgraph. A zoned datetime keeps the
+  timezone it names.
+  [#5298](https://github.com/memgraph/memgraph/pull/5298)
+- A SYNC replica that replicated a transaction successfully is no longer
+  marked as behind right after it.
+  [#5307](https://github.com/memgraph/memgraph/pull/5307)
+- `GRANT`, `DENY` and `REVOKE` with the `COORDINATOR` privilege, removed in
+  Memgraph 3.13, fail with an error that points to `COORDINATOR_READ` and
+  `COORDINATOR_WRITE` instead of a generic parse error.
+  [#5327](https://github.com/memgraph/memgraph/pull/5327)
 
 {<h4 className="custom-header">🛠️ Improvements</h4>}
 
@@ -174,6 +140,10 @@ guide.
   supernode) uses much less memory while the query runs. Results are
   unchanged, including the order relationships come back in.
   [#5154](https://github.com/memgraph/memgraph/pull/5154)
+- A `RETURN` or `WITH` that reads several properties of the same node or
+  relationship reads them in one pass over its properties instead of one pass
+  per property. `--query-cache-properties=false` turns this off.
+  [#5155](https://github.com/memgraph/memgraph/pull/5155)
 - A `RETURN` or `WITH` that sorts and limits evaluates its projected
   expressions only for the rows it returns, so a costly expression no longer
   runs for rows the `LIMIT` discards. Building a string with `reduce` no
@@ -187,6 +157,9 @@ guide.
 - HTTPS requests that Memgraph sends for telemetry and license reporting
   require TLS 1.2 or newer, as file downloads already did.
   [#5241](https://github.com/memgraph/memgraph/pull/5241)
+- A query that a memory limit stops while one of Memgraph's internal hash
+  tables grows fails without leaving that table corrupted.
+  [#5339](https://github.com/memgraph/memgraph/pull/5339)
 
 ### Lab v3.15.0 - December 2nd, 2026
 
