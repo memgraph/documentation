@@ -160,6 +160,40 @@ MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN p.name, c.name;
 MATCH (a:Person)((-[:KNOWS]->()){1,3})(b:Person) RETURN DISTINCT b.name;
 ```
 
+## Joining Redshift with a graph
+
+A Redshift table can be one home of an entity that also lives in a graph
+database. Declare it with the same label and `linkKey` as the graph's
+declaration, and a path crosses from the graph into Redshift at that node.
+Next to the graph's own vertices and edges (here `Author` and `WRITTEN_BY` in
+a `catalog` Memgraph), the Redshift side of the graph is:
+
+```json
+{ "label": "Book", "mappedGraphSource": { "connector": "catalog" }, "linkKey": "isbn" },
+{ "label": "Book",
+  "mappedTableSource": { "connector": "warehouse", "table": "books", "metaFields": { "id": "isbn" } },
+  "attributes": [ { "name": "isbn" }, { "name": "title" } ],
+  "linkKey": "isbn" },
+{ "label": "Sale",
+  "mappedTableSource": { "connector": "warehouse", "table": "sales", "metaFields": { "id": "sale_id" } },
+  "attributes": [ { "name": "isbn" }, { "name": "region" }, { "name": "units", "type": "Int" } ] },
+{ "label": "SOLD_IN",
+  "from": "Book",
+  "to": "Sale",
+  "mappedJoinSource": { "fromKey": "isbn", "toKey": "isbn" } }
+```
+
+```gql
+MATCH (a:Author)<-[:WRITTEN_BY]-(b:Book)-[:SOLD_IN]->(s:Sale)
+WHERE a.name = 'Frank Herbert'
+RETURN b.title, s.region, s.units;
+```
+
+The books are found in the graph, and Redshift is asked about their `isbn`
+values only, as bind parameters, with `books` joined to `sales` inside
+Redshift. See
+[One vertex in several connectors](/memgraph-zero/memgql/schema-file#one-vertex-in-several-connectors).
+
 ## Authentication
 
 The URI scheme selects the method:

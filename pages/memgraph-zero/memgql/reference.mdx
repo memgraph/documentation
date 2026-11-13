@@ -26,6 +26,9 @@ supports.
 | Pass a whole node through `WITH n` to a later step                 | ✓               | ✓            | ✓       |
 | `MATCH (n)-[r:R]->(m)` typed edge expansion                        | ✓               | ✓            | ✓       |
 | Multi-label pattern `(n:A&B)`; shared label over several mappings  | ✓               | ✓            | ✗       |
+| Path crossing connectors at a [linked vertex](/memgraph-zero/memgql/schema-file#one-vertex-in-several-connectors) (`linkKey`) | ✓ | ✓ | ✓ |
+| [Cross-connector edge](/memgraph-zero/memgql/schema-file#cross-connector-edges) (`mappedJoinSource`) | ✓ | ✓ | ✓ |
+| Holding the [content of a vertex](/memgraph-zero/memgql/schema-file#content-in-another-connector) in another connector (`mappedContentSource`) | ✗ | ✓ | ✓ |
 | Untyped edge `()-[]->(b)` (union over types)                       | ✓               | ✗            | ✗       |
 | `UNION` / `UNION ALL` / `UNION DISTINCT`                           | ✓               | ✓            | ✗       |
 | `INTERSECT` / `EXCEPT`                                             | ✓               | ✓            | ✓       |
@@ -59,6 +62,11 @@ supports.
 | `REMOVE` (property delete)                                         | ✓               | ✗            | ✓       |
 | `SET` / `REMOVE` of a **label**                                    | ✓               | ✗            | ✗       |
 
+The three cross-connector mapping rows hold for every connector tested against
+Memgraph on the other side: PostgreSQL, MySQL, DuckDB, SQL Server, ClickHouse,
+Amazon Redshift, MongoDB and Neo4j. A native graph (Memgraph, Neo4j) cannot
+hold a vertex's content, which lives in a table or collection.
+
 ### Known limitations
 
 - **Unbounded variable-length paths on SQL backends** (`()-[*]->()`)
@@ -91,8 +99,12 @@ supports.
   individual nodes / edges instead.
 - **Shared labels** (a label listed by several vertex mappings, see
   [Vertices](/memgraph-zero/memgql/schema-file#vertices)) are unioned only
-  within one connector; a label shared across connectors is refused by routing
-  as ambiguous. A pattern matched through a shared label can be returned,
+  within one connector. A label several connectors carry is placed by the
+  relationship types next to it in the pattern (`(b:Book)<-[:REVIEWED]-()`
+  with `REVIEWED` stored in one connector); with nothing to place it, routing
+  refuses it as ambiguous and names the candidates. Declared with a
+  [`linkKey`](/memgraph-zero/memgql/schema-file#one-vertex-in-several-connectors),
+  such a label is one entity, and a path may cross connectors at it. A pattern matched through a shared label can be returned,
   filtered, sorted and aggregated, but not traversed from (`(a:Animal)-[:R]->()`),
   not `INSERT`ed, and JSON keys (`a.props.key`) cannot be read through it —
   each is refused with a pointer to the identifying label to use instead.
@@ -472,7 +484,10 @@ USE <graph2> <query>;
 
 In `multi` mode, a query with no `USE` clause routes automatically when its
 schema signals (labels, relationship types, properties) match exactly one
-source; zero or multiple matches hard-error. Identifier matching is **exact**
+source; zero or multiple matches hard-error. A label several sources carry is
+narrowed by the relationship types and properties around it, and when the
+candidates are connectors of one graph the error names those connectors.
+Identifier matching is **exact**
 (`:person` ≠ `Person`). Memgraph sources must run with `--schema-info-enabled`
 for property-level introspection. See
 [Multiple Graphs → Routing](/memgraph-zero/memgql/multiple-graphs#routing).
@@ -781,6 +796,10 @@ The same mapping body is used everywhere a graph is defined:
 - **`CREATE GRAPH <name> FROM '<json>'`** / **`FROM FILE '<path>'`** at runtime.
 - **`MAPPING_FILE`** in single-connector mode: a bare `{ "vertices": …, "edges": … }`
   body (the connector comes from the environment).
+
+A label is unique within a graph, except that the same entity may be declared
+once per connector when every declaration names the same `linkKey`; see
+[One vertex in several connectors](/memgraph-zero/memgql/schema-file#one-vertex-in-several-connectors).
 
 A mapping with a required field missing (for example a relational edge without
 `metaFields.from` / `metaFields.to`) is rejected before the server serves
