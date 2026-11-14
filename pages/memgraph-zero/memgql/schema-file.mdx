@@ -247,6 +247,8 @@ A vertex maps a **label** to a backend source. Exactly one source kind is set:
 
 - **`mappedTableSource`**: a relational table (PostgreSQL, MySQL, Oracle,
   SQL Server, DuckDB, ClickHouse, Iceberg). Rows become nodes.
+- **`mappedQuerySource`**: a read-only `SELECT` on a relational connector,
+  used in place of a table (see [A query as the source](#a-query-as-the-source)).
 - **`mappedGraphSource`**: a native graph backend (Memgraph / Neo4j). Queries
   pass through as Cypher; only the connector is declared, plus `label` when
   the backend stores the element under another name.
@@ -351,11 +353,54 @@ spelling [schema discovery](#discovered-native-schema) produces.
 | `mappedTableSource.database`  | relational | Optional outer namespace for backends with three-part names; on SQL Server it renders `database.schema.table`, so one connection can reach views in other databases. |
 | `mappedTableSource.table`     | relational | The backing table or view. |
 | `mappedTableSource.metaFields.id` | relational | Primary-key column, or a list of columns for a composite key (`["region", "order_no"]`); the node's identity and the join key for edges. Each column is also exposed as a property, so `RETURN n` includes it and `n.<id_column>` reads it by name. |
+| `mappedQuerySource.connector` | query       | Connector name (alias `catalog`). |
+| `mappedQuerySource.query`     | query       | One read-only `SELECT` (a leading `WITH` is allowed) in the backend's own dialect, without a trailing `;`. |
+| `mappedQuerySource.metaFields.id` | query   | Column(s) of the query's result identifying a row, as for a table. |
 | `mappedGraphSource.connector` | native      | Connector name (Memgraph / Neo4j); the query passes through as Cypher. |
 | `mappedGraphSource.label`     | native      | Optional backend label (on an edge, backend relationship type) exposed under this element's `label`. Queries use the exposed name, MemGQL rewrites it for the backend, and returned nodes and relationships carry the exposed name. Two elements cannot share a backend name. Not renamed: strings a query computes from names (`labels(n)`, `type(r)`), the extra labels of a multi-label vertex, and property keys. |
 | `mappedContentSource`         | either      | Optional second source for some of the vertex's properties; see [Content in another connector](#content-in-another-connector). |
 | `linkKey`                     | either      | Optional property identifying the same entity in every connector that declares this label; see [One vertex in several connectors](#one-vertex-in-several-connectors). |
 | `attributes`                  | either      | The properties the vertex exposes; see [Attributes](#attributes). |
+
+#### A query as the source
+
+When a node is better described by a query than by a table (rows joined,
+filtered or aggregated on the source, the way you would define a view if you
+could create one there), give the `SELECT` itself as a `mappedQuerySource`:
+
+```json
+{
+  "label": "Bestseller",
+  "mappedQuerySource": {
+    "connector": "shop",
+    "query": "SELECT b.isbn, b.title, SUM(l.qty) AS copies_sold FROM books b JOIN order_lines l ON l.isbn = b.isbn GROUP BY b.isbn, b.title HAVING SUM(l.qty) >= 100",
+    "metaFields": { "id": "isbn" }
+  },
+  "attributes": [
+    { "name": "isbn" },
+    { "name": "title" },
+    { "name": "copiesSold", "column": "copies_sold" }
+  ]
+}
+```
+
+Every read wraps the query as a derived table, `FROM (<query>) b`, and puts
+the filters and projection of the GQL query on that outer `SELECT`, so
+`MATCH (b:Bestseller) WHERE b.copiesSold > 500 RETURN b.title` is one statement
+on the backend. MemGQL passes the query text through unchanged.
+
+- `metaFields.id` (and on an edge, `from` / `to`) name columns of the query's
+  result. The result has no primary key, so keep those columns unique, as you
+  would for a view.
+- Attributes work as on a table. A query-backed label takes part in
+  `mappedJoinSource` edges like any other, and an edge can be query-backed too.
+- Query-backed labels and relationship types are read-only: `INSERT` and
+  `DELETE` on them return an error. `EXPORT SCHEMA` returns the query
+  unchanged; `GENERATE MAPPING` never produces one.
+- Available on the SQL connectors: PostgreSQL, MySQL, Oracle, SQL Server,
+  Fabric, DuckDB, ClickHouse, Pinot, Snowflake, SAP HANA, Redshift and Iceberg
+  through Trino. MongoDB, `iceberg-direct`, Memgraph and Neo4j refuse it when
+  the schema loads.
 
 #### Content in another connector
 
@@ -506,7 +551,8 @@ instead):
 
 An edge maps a **relationship type** between two labels. Relational edges name
 the foreign-key columns via `metaFields.from` / `metaFields.to`; native-graph
-edges pass through; and a `mappedJoinSource` edge has no table at all — it
+edges pass through; a `mappedQuerySource` edge reads the same columns from a
+[query](#a-query-as-the-source) instead of a table; and a `mappedJoinSource` edge has no table at all — it
 links two labels by the equality of one property on each side, whether they
 live in **different connectors** or in the same one (see
 [Cross-connector edges](#cross-connector-edges)). Exactly one source kind is
@@ -551,7 +597,7 @@ entry of a `labels` list).
 |-------|-------------|
 | `label` | The relationship type. |
 | `from` / `to` | The identifying **labels** of the source and target vertex. |
-| `mappedTableSource` / `mappedGraphSource` / `mappedJoinSource` | Where the edge lives; exactly one is set. |
+| `mappedTableSource` / `mappedQuerySource` / `mappedGraphSource` / `mappedJoinSource` | Where the edge lives; exactly one is set. |
 | `attributes` | Edge properties; see [Attributes](#attributes). Not allowed on a `mappedJoinSource` edge. |
 
 A native relationship type is often used between several label pairs. Declare
@@ -942,7 +988,7 @@ Every name a schema file can contain, grouped by where it appears.
 |------|---------|
 | `label` | The exposed node label; unique within a graph, except that a linked label is declared once per connector. |
 | `labels` | Several labels; the first identifies the mapping, the rest may be shared. |
-| `mappedTableSource` / `mappedGraphSource` | Where the vertex lives; exactly one is set. |
+| `mappedTableSource` / `mappedQuerySource` / `mappedGraphSource` | Where the vertex lives; exactly one is set. |
 | `mappedContentSource` | Optional table in another connector for some of its properties. |
 | `linkKey` | The **property** identifying the same entity in every connector that declares the label. |
 | `attributes` | The properties read from the vertex's own source. |
@@ -953,7 +999,7 @@ Every name a schema file can contain, grouped by where it appears.
 |------|---------|
 | `label` | The relationship type. |
 | `from` / `to` | The **labels** of the source and target vertex. |
-| `mappedTableSource` / `mappedGraphSource` / `mappedJoinSource` | Where the edge lives; exactly one is set. |
+| `mappedTableSource` / `mappedQuerySource` / `mappedGraphSource` / `mappedJoinSource` | Where the edge lives; exactly one is set. |
 | `attributes` | Edge properties; not allowed with `mappedJoinSource`. |
 
 ### Sources
@@ -966,6 +1012,9 @@ Every name a schema file can contain, grouped by where it appears.
 | ↳ `table` | Table, view or collection. |
 | ↳ `metaFields.id` | **Column(s)** identifying a row; a list for a composite key. |
 | ↳ `metaFields.from` / `to` | Edges: **column(s)** holding the source and target vertex's `id`. |
+| `mappedQuerySource` | A read-only `SELECT` in a relational connector, standing in for a table. |
+| ↳ `connector` / `metaFields` | As for `mappedTableSource`; `metaFields` name **columns** of the query's result. |
+| ↳ `query` | The `SELECT`, in the backend's own dialect. |
 | `mappedGraphSource` | A label or relationship type in a native graph connector. |
 | ↳ `connector` | Which connector. Alias: `catalog`. |
 | ↳ `label` | The backend's own name, when it differs from the exposed one. |
