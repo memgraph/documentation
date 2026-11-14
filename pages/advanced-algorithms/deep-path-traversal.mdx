@@ -799,8 +799,9 @@ was reached.
 
 ## K shortest paths
 
-The K shortest paths algorithm finds K shortest paths between two nodes in order
-of increasing length. This algorithm is useful when you need to find alternative
+The K shortest paths algorithm finds K shortest paths between two nodes, ordered
+by the number of hops or, with a [weight lambda](#order-paths-by-weight), by
+total weight. This algorithm is useful when you need to find alternative
 routes or analyze path diversity in a graph.
 
 ### Syntax
@@ -851,6 +852,21 @@ The limit is evaluated once per pair and must be an integer on every one of them
 so guard an optional property with `coalesce` as above - a `null` limit raises an
 error. A limit of `0` returns no paths for that pair without searching, and a
 negative limit raises an error.
+
+Every part after `*KSHORTEST` is optional, and the parts come in this order:
+
+```plaintext
+*KSHORTEST [MIN_HOPS..MAX_HOPS] [|K] [(r, n | WEIGHT) [TOTAL_WEIGHT] [(r, n | FILTER)]]
+```
+
+- `MIN_HOPS..MAX_HOPS`: the range of path lengths, in hops. Either end can be
+  left out.
+- `|K`: the maximum number of paths for each source-target pair.
+- `(r, n | WEIGHT)`: the weight lambda, which [orders the paths by
+  weight](#order-paths-by-weight).
+- `TOTAL_WEIGHT`: a variable that holds each path's total weight.
+- `(r, n | FILTER)`: the filter lambda, which decides which relationships and
+  nodes the search can expand to. It comes after the weight lambda.
 
 ### Example
 
@@ -907,36 +923,208 @@ A negative minimum depth and a maximum depth below 1 both raise an error. A rang
 whose minimum exceeds its maximum, such as `4..3`, is empty and returns no paths
 without searching.
 
-### Constraining the expansion based on property values
+### Order paths by weight
 
-K shortest paths expansion allows an arbitrary expression filter that determines
-if an expansion is allowed over a certain relationship to a certain node. The
-filter is defined as a lambda function over `r` and `n`, which denotes the
-relationship expanded over and the node expanded to. The paths returned are the
-K shortest paths of the subgraph the filter leaves behind.
+To rank paths by cost instead of by the number of hops, add a weight lambda after
+`*KSHORTEST`. Memgraph returns the cheapest path first, and of two paths with
+the same total weight, the one with fewer hops first. Available since Memgraph
+3.15.
 
-Using the dataset above, the following example allows expansion only to nodes
-other than `B`, which leaves a single path from `A` to `E`:
+In the weight lambda `(r, n | expression)`, `r` is a relationship and `n` is the
+node it leads to, in the direction the pattern is written. A path's total
+weight is the sum of the lambda over the path's relationships, so the first
+node of the path adds no weight.
+
+To return the total weight, add a variable after the lambda. The following
+dataset is the one from the [example](#example), with a `weight` property on
+each relationship:
+
+```cypher
+MATCH (n) DETACH DELETE n;
+CREATE (n1:Node {name: "A"}), (n2:Node {name: "B"}), (n3:Node {name: "C"}), (n4:Node {name: "D"}), (n5:Node {name: "E"}),
+      (n1)-[:ConnectedTo {weight: 1}]->(n2), (n1)-[:ConnectedTo {weight: 10}]->(n3), (n2)-[:ConnectedTo {weight: 2}]->(n3),
+      (n2)-[:ConnectedTo {weight: 1}]->(n4), (n4)-[:ConnectedTo {weight: 1}]->(n3), (n3)-[:ConnectedTo {weight: 1}]->(n5);
+```
+
+The following query returns the paths from `A` to `E` ordered by the sum of
+their `weight` properties:
 
 ```cypher
 MATCH (a:Node {name: "A"}), (e:Node {name: "E"})
 WITH a, e
-MATCH path=(a)-[*KSHORTEST (r, n | n.name <> "B")]->(e)
+MATCH path=(a)-[*KSHORTEST (r, n | r.weight) total_weight]->(e)
+RETURN [x IN nodes(path) | x.name] AS nodes, total_weight;
+```
+
+```plaintext copy=false
++---------------------------+---------------------------+
+| nodes                     | total_weight              |
++---------------------------+---------------------------+
+| ["A", "B", "C", "E"]      | 4                         |
+| ["A", "B", "D", "C", "E"] | 4                         |
+| ["A", "C", "E"]           | 11                        |
++---------------------------+---------------------------+
+```
+
+The path through `C` alone has the fewest hops, but it costs 11, so it comes
+last. The other two paths both cost 4, and the one with fewer hops comes first.
+
+The weight lambda works with the path limit and the length range. A maximum
+length leaves out longer paths even when they're cheaper:
+
+```cypher
+MATCH (a:Node {name: "A"}), (e:Node {name: "E"})
+WITH a, e
+MATCH path=(a)-[*KSHORTEST ..3 (r, n | r.weight) total_weight]->(e)
+RETURN [x IN nodes(path) | x.name] AS nodes, total_weight;
+```
+
+```plaintext copy=false
++----------------------+----------------------+
+| nodes                | total_weight         |
++----------------------+----------------------+
+| ["A", "B", "C", "E"] | 4                    |
+| ["A", "C", "E"]      | 11                   |
++----------------------+----------------------+
+```
+
+Each weight must be a non-negative number or a
+[duration](/fundamentals/data-types#duration), and all weights in a search must
+be of the same kind. Otherwise, the query fails:
+
+- **Negative weight**, such as `-1`: `Weight must be non-negative, got -1.`
+- **`null` weight**, for example from a missing property: the error starts with
+  `The weight lambda of a KSHORTEST path expansion must not evaluate to null.`
+- **`NaN` weight:** `The weight lambda of a KSHORTEST path expansion must not
+  evaluate to NaN.`
+- **Boolean weight:** see the breaking change in the next section.
+- **Any other type**, such as a string: `Weight must be numeric or a Duration,
+  got string.`
+- **Numbers and durations mixed:** the error starts with `All weights should be
+  of the same type, either numeric or a Duration.`
+- **Integer total weight above the 64-bit maximum:** `The total weight of a
+  KSHORTEST path overflows a 64-bit integer.`
+
+Before the search, Memgraph evaluates the weight lambda on every relationship
+that leads to the target node, directly or through other nodes and allowed by
+the pattern's relationship types, direction and filter. That includes
+relationships that no path from the source uses.
+
+One such relationship without a valid weight makes the query fail. Give those
+relationships a default with the `coalesce()` function, or leave them out with
+a filter lambda, described in the next section:
+
+```cypher
+MATCH (a:Node {name: "A"}), (e:Node {name: "E"})
+WITH a, e
+MATCH path=(a)-[*KSHORTEST (r, n | coalesce(r.weight, 1)) total_weight]->(e)
+RETURN [x IN nodes(path) | x.name] AS nodes, total_weight;
+```
+
+```plaintext copy=false
++---------------------------+---------------------------+
+| nodes                     | total_weight              |
++---------------------------+---------------------------+
+| ["A", "B", "C", "E"]      | 4                         |
+| ["A", "B", "D", "C", "E"] | 4                         |
+| ["A", "C", "E"]           | 11                        |
++---------------------------+---------------------------+
+```
+
+For the same reason, a weighted search does more work than a hop-count search,
+in proportion to the part of the graph that can reach the target.
+
+A literal or parameter weight, such as `(r, n | 1)` or `(r, n | $cost)`, orders
+paths by the number of hops, as `*KSHORTEST` without a lambda does, and runs
+the same hop-count search. The total weight is then the constant multiplied by
+the number of hops.
+
+### Constraining the expansion based on property values
+
+K shortest paths expansion allows an arbitrary expression filter that determines
+if an expansion is allowed over a certain relationship to a certain node. The
+filter is a second lambda over `r` and `n`, which denote the relationship
+expanded over and the node expanded to.
+
+The filter comes after the [weight lambda](#order-paths-by-weight) and the
+optional total weight variable. The paths returned are the K shortest paths of
+the subgraph the filter leaves behind.
+
+To filter without weighting the paths, use the constant weight `(r, n | 1)`,
+which keeps the hop-count order. Using the dataset above, the following example
+allows expansion only to nodes other than `B`, which leaves a single path from
+`A` to `E`:
+
+```cypher
+MATCH (a:Node {name: "A"}), (e:Node {name: "E"})
+WITH a, e
+MATCH path=(a)-[*KSHORTEST (r, n | 1) (r, n | n.name <> "B")]->(e)
 RETURN path;
 ```
+
+```plaintext copy=false
++----------------------------------------------------------------------------------------------------------------------+
+| path                                                                                                                 |
++----------------------------------------------------------------------------------------------------------------------+
+| (:Node {name: "A"})-[:ConnectedTo {weight: 10}]->(:Node {name: "C"})-[:ConnectedTo {weight: 1}]->(:Node {name: "E"}) |
++----------------------------------------------------------------------------------------------------------------------+
+```
+
+<Callout type="warning">
+**Breaking change in Memgraph 3.15**: a single lambda after `*KSHORTEST` is now
+the weight lambda, not the filter. Rewrite a filter `(r, n | <filter>)` from
+Memgraph 3.13 or 3.14 as `(r, n | 1) (r, n | <filter>)`.
+</Callout>
+
+A filter in the old form raises an error instead of returning different paths:
+
+- **A comparison or other boolean expression**, such as
+  `(r, n | n.name <> "B")`: fails when the query is parsed.
+- **A lambda that returns a boolean or `null` at run time**, such as
+  `(r, n | r.active)`: fails when the query runs.
+
+Both errors include the hint `KSHORTEST takes the weight lambda first. To
+filter without a weight, write (e, n | 1) (e, n | <filter>).`
 
 The filter can be combined with the path limit and the length constraints:
 
 ```cypher
 MATCH (a:Node {name: "A"}), (e:Node {name: "E"})
 WITH a, e
-MATCH path=(a)-[*KSHORTEST 2..4 |3 (r, n | n.name <> "D")]->(e)
+MATCH path=(a)-[*KSHORTEST 2..4 |3 (r, n | 1) (r, n | n.name <> "D")]->(e)
 RETURN path;
 ```
 
-Unlike the other deep path traversal algorithms, K shortest paths does not
-support the three-argument `(r, n, p | ...)` form that exposes the already
-collected path. Using it raises an error.
+```plaintext copy=false
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| path                                                                                                                                                                |
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| (:Node {name: "A"})-[:ConnectedTo {weight: 10}]->(:Node {name: "C"})-[:ConnectedTo {weight: 1}]->(:Node {name: "E"})                                                |
+| (:Node {name: "A"})-[:ConnectedTo {weight: 1}]->(:Node {name: "B"})-[:ConnectedTo {weight: 2}]->(:Node {name: "C"})-[:ConnectedTo {weight: 1}]->(:Node {name: "E"}) |
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+```
+
+To filter and order by weight at the same time, put the weight lambda and the
+total weight variable before the filter:
+
+```cypher
+MATCH (a:Node {name: "A"}), (e:Node {name: "E"})
+WITH a, e
+MATCH path=(a)-[*KSHORTEST (r, n | r.weight) total_weight (r, n | n.name <> "D")]->(e)
+RETURN [x IN nodes(path) | x.name] AS nodes, total_weight;
+```
+
+```plaintext copy=false
++----------------------+----------------------+
+| nodes                | total_weight         |
++----------------------+----------------------+
+| ["A", "B", "C", "E"] | 4                    |
+| ["A", "C", "E"]      | 11                   |
++----------------------+----------------------+
+```
+
+Neither lambda takes the accumulated path: the `(r, n, p | ...)` and
+`(r, n, p, w | ...)` forms raise an error.
 
 ### When to use K shortest paths?
 
@@ -949,17 +1137,21 @@ Use the K shortest paths algorithm when you need to:
 ### Interaction with other systems
 
 - **Fine-grained access control**: Supports enterprise access control features
-- **Hops limit**: Supports query level hops limit
+- **Hops limit**: Supports query level hops limit. If the limit runs out during
+  the search for a source-target pair and [partial
+  results](#controlling-partial-results) are on (the default), that pair
+  returns only the paths the search has proven to be its shortest (or
+  cheapest, with a weight lambda), in order. That can be fewer than `K` paths,
+  or none. A weighted search uses more of the limit, because it also reads the
+  relationships that lead to the target
 
 ### Important limitations
 
 - **Predefined nodes**: Both source and target nodes must be matched first using
   a `WITH` clause
-- **Unweighted**: Paths are ordered by the number of hops. Relationship
-  properties are never treated as weights, and no weight lambda is accepted
-- **No accumulated path in the filter lambda**: the two-argument
-  `(r, n | ...)` filter is supported, the three-argument `(r, n, p | ...)` form
-  is not
+- **No accumulated path or weight in the lambdas**: the weight and filter
+  lambdas take `(r, n | ...)`; the `(r, n, p | ...)` and `(r, n, p, w | ...)`
+  forms raise an error
 - **Filter results**: the filter must evaluate to a boolean or `null`. `null`
   prunes the expansion, as `false` does; any other type raises an error
 
