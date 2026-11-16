@@ -20,6 +20,31 @@ export default withNextra({
   async redirects() {
     return [
       {
+        source: '/preview/memgql/config',
+        destination: '/memgraph-zero/memgql/reference#configuration-reference',
+        permanent: true
+      },
+      {
+        source: '/preview/:path*',
+        destination: '/memgraph-zero/:path*',
+        permanent: true
+      },
+      {
+        source: '/cypher-manual/load-csv',
+        destination: '/querying/clauses/load-csv',
+        permanent: true
+      },
+      {
+        source: '/memgraph/connect-devices/cli',
+        destination: '/getting-started/cli',
+        permanent: true
+      },
+      {
+        source: '/best-practices',
+        destination: '/deployment/best-practices',
+        permanent: true
+      },
+      {
         source: '/getting-started/install-memgraph/debian',
         destination: '/getting-started/install-memgraph/linux',
         permanent: true
@@ -175,8 +200,18 @@ export default withNextra({
         permanent: true
       },
       {
+        source: '/getting-started/coding-with-ai/skills',
+        destination: '/getting-started/coding-with-ai/plugins',
+        permanent: true
+      },
+      {
+        source: '/getting-started/coding-with-ai/skills.md',
+        destination: '/getting-started/coding-with-ai/plugins.md',
+        permanent: true
+      },
+      {
         source: '/ai-ecosystem/skills',
-        destination: '/getting-started/coding-with-ai/skills',
+        destination: '/getting-started/coding-with-ai/plugins',
         permanent: true
       },
       {
@@ -206,7 +241,7 @@ export default withNextra({
       },
       {
         source: '/ai-ecosystem/skills.md',
-        destination: '/getting-started/coding-with-ai/skills.md',
+        destination: '/getting-started/coding-with-ai/plugins.md',
         permanent: true
       },
       {

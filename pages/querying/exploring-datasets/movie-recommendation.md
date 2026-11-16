@@ -30,12 +30,11 @@ a property `rating` &mdash; float number between 0 and 5.
 
 ## Exploring the dataset
 
-To follow this tutorial, download the [Memgraph
-Platform](https://memgraph.com/download). Once you have it up
-and running, open Memgraph Lab web application within the browser on
-[`localhost:3000`](http://localhost:3000) and navigate to `Datasets` in the
-sidebar. From there, choose the dataset `MovieLens: Movies, genres and users`
-and continue with the tutorial. 
+To follow this tutorial, start Memgraph and Memgraph Lab with Docker, as in
+[step 1 of the quickstart](/getting-started#install-memgraph-platform). Open
+Memgraph Lab at `http://localhost:3000`, open **Datasets** in the sidebar and
+load the **MovieLens: Movies, genres and
+users** dataset.
 
 ## Example queries
 
