@@ -9,6 +9,38 @@ Some Memgraph releases introduce breaking changes or modify internal behavior
 in ways that require extra steps during an upgrade. Before upgrading, check
 whether your target version is listed below and follow the corresponding guide.
 
+## v3.15 - Reserved memgraph_internal name
+
+Memgraph 3.15 reserves the name `memgraph_internal` for the [internal system
+user](/database-management/authentication-and-authorization/users#internal-system-user),
+even when `--system-user-internal-hash-file` is empty. Before upgrading:
+
+1. **Users and roles:** if a user or role named `memgraph_internal` exists,
+   create one under another name with the same privileges and drop the old
+   one. In a replicated cluster, do this on MAIN and check with `SHOW USERS`
+   and `SHOW ROLES` that the change reached every REPLICA. Rename coordinator
+   roles with that name too.
+2. **LDAP and SSO:** rename users and groups with that name in the identity
+   provider. After the upgrade, Memgraph refuses a login whose auth module
+   returns `memgraph_internal` as the username or as a role.
+3. **Scripts:** change scripts that run `CREATE USER IF NOT EXISTS
+   memgraph_internal` or `CREATE ROLE IF NOT EXISTS memgraph_internal`. Both
+   now fail with `The name 'memgraph_internal' is reserved for the internal
+   system user.`
+4. **Passwords:** a script that sets a plaintext password starting with
+   `bcrypt:`, `sha256:`, `sha256-multiple:` or `pbkdf2-sha256:` now fails,
+   unless the password is a valid [pre-hashed
+   password](/database-management/authentication-and-authorization/users#administer-users).
+   Passwords already stored keep working.
+
+An instance with a stored `memgraph_internal` user or role starts and logs a
+warning. With `--system-user-internal-hash-file` set, it refuses to start.
+Replication doesn't check the name, so a `memgraph_internal` user or role on a
+MAIN that isn't upgraded yet reaches upgraded REPLICAs. If a REPLICA refuses
+to start because of it, start it without `--system-user-internal-hash-file`,
+rename the user or role on MAIN, and restart the REPLICA with the flag once
+the change has replicated.
+
 ## v3.14 - Profile changes in transactions
 
 Memgraph 3.14 refuses [user
