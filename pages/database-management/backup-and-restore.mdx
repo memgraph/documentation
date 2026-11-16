@@ -317,8 +317,7 @@ separately. This section covers the [data directory
 layout](#data-directory-layout), how to [back up a
 database](#back-up-a-database) and how long [snapshots are
 kept](#keep-snapshots-long-enough-to-restore). To restore one database, see
-[Restore a single database on
-Kubernetes](#restore-a-single-database-on-kubernetes-enterprise).
+[Restore a single database](#restore-a-single-database-enterprise).
 
 The examples use a database named `customers`:
 
@@ -403,16 +402,16 @@ Snapshots on the instance's own volume are not a backup: they're lost with
 the volume, and they age out quickly. Copy them off the instance on a
 schedule that covers the point in time you might need to restore to.
 
-## Restore a single database on Kubernetes <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+## Restore a single database <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
 
 You can replace the data of one database with a snapshot while the other
-databases on the instance keep serving queries. The steps work with the
-standalone and the [high availability](/database-management/clustering/high-availability/setup-ha-cluster-k8s)
-Memgraph Helm charts.
+databases on the instance keep serving queries. The steps are the same in
+Docker, on Linux and on Kubernetes; only copying a snapshot file onto the
+instance differs. On Kubernetes, also see [Restore a single database on
+Kubernetes](#restore-a-single-database-on-kubernetes-enterprise).
 
 Before you start, you need:
 
-- `kubectl` access to the namespace Memgraph runs in.
 - A Memgraph user with access to the database you restore and these
   [privileges](/database-management/authentication-and-authorization/role-based-access-control):
   `DURABILITY` for `RECOVER SNAPSHOT` and `SHOW SNAPSHOTS`,
@@ -420,20 +419,9 @@ Before you start, you need:
   `SHOW STORAGE INFO`. Resuming a suspended database or restoring into a
   new database also needs `MULTI_DATABASE_EDIT`, and a new database needs
   access to the `memgraph` database.
-- In a high availability cluster, a connection to the MAIN instance. Run
-  `SHOW INSTANCES;` on a coordinator to find it.
-
-The charts name the pods and containers as follows, and both mount the data
-volume at `/var/lib/memgraph`:
-
-| Helm chart | Pod | Container | Data directory |
-|---|---|---|---|
-| Standalone (`memgraph`) | `RELEASE_NAME-0` | `memgraph` | `/var/lib/memgraph/mg_data` |
-| High availability (`memgraph-high-availability`) | `memgraph-data-ID-0` | `memgraph-data` | `/var/lib/memgraph/mg_data` |
-
-`RELEASE_NAME` is the Helm release name; if it doesn't contain `memgraph`,
-the chart appends `-memgraph` to it. `ID` is the data instance's `id` from
-the chart values. Check the exact names with `kubectl get pods`.
+- In a [high availability](/database-management/clustering/high-availability)
+  cluster, a connection to the MAIN instance. Run `SHOW INSTANCES;` on a
+  coordinator to find it.
 
 <Steps>
 
@@ -451,8 +439,8 @@ RESUME DATABASE customers;
 Where the snapshot is decides the path you pass to `RECOVER SNAPSHOT` in the
 next step:
 
-- **On the database's own volume:** switch to the database and list its
-  snapshots. Use the `path` column as is.
+- **Among the database's own snapshots:** switch to the database and list
+  its snapshots. Use the `path` column as is.
 
   ```cypher
   USE DATABASE customers;
@@ -463,17 +451,35 @@ next step:
   [S3-compatible storage](#s3-compatible-storage) for credentials.
 - **On a server reachable over HTTP or FTP:** use the `http://`, `https://`
   or `ftp://` URL.
-- **On your machine:** copy it onto the pod's data volume:
+- **In a file, for example a backup you copied off the instance:** copy it
+  onto the instance, into a directory the `memgraph` user can read, and use
+  that path. The commands below use `/var/lib/memgraph/restore/`.
+  `SNAPSHOT_FILE` is the snapshot's file name.
+
+  In Docker, copy the file into the container and make the `memgraph` user
+  its owner. `docker cp` keeps the file's owner from your machine, and
+  Memgraph can't read it until you change it. `CONTAINER` is the container's
+  name or ID:
 
   ```bash
-  kubectl exec -n NAMESPACE POD -c CONTAINER -- mkdir -p /var/lib/memgraph/restore
-  kubectl cp -n NAMESPACE -c CONTAINER ./SNAPSHOT_FILE POD:/var/lib/memgraph/restore/SNAPSHOT_FILE
+  docker exec CONTAINER mkdir -p /var/lib/memgraph/restore
+  docker cp ./SNAPSHOT_FILE CONTAINER:/var/lib/memgraph/restore/SNAPSHOT_FILE
+  docker exec -u root CONTAINER chown memgraph:memgraph /var/lib/memgraph/restore/SNAPSHOT_FILE
   ```
 
-  `NAMESPACE` is the Kubernetes namespace, `POD` and `CONTAINER` are the
-  names from the table above, and `SNAPSHOT_FILE` is the snapshot's file
-  name. `kubectl cp` writes the file as the container's user, so Memgraph
-  can read it. Use `/var/lib/memgraph/restore/SNAPSHOT_FILE` as the path.
+  On Linux, copy the file with the `memgraph` user as its owner:
+
+  ```bash
+  sudo install -D -o memgraph -g memgraph -m 640 ./SNAPSHOT_FILE /var/lib/memgraph/restore/SNAPSHOT_FILE
+  ```
+
+  On Kubernetes, see [Copy a snapshot onto the pod](#copy-a-snapshot-onto-the-pod).
+
+  If Memgraph can't read the file, `RECOVER SNAPSHOT` fails with:
+
+  ```plaintext copy=false
+  Failed to copy snapshot over to local snapshots directory.
+  ```
 
 {<h3 id="restore-the-snapshot" className="custom-header">Restore the snapshot</h3>}
 
@@ -533,24 +539,84 @@ Drop the original database once you no longer need it.
 {<h3 id="check-the-result" className="custom-header">Check the result</h3>}
 
 Switch to the restored database, `customers` or `customers_restored`, and
-check its contents, for example the node and
-relationship counts in `vertex_count` and `edge_count`:
+check its contents, for example the node and relationship counts in
+`vertex_count` and `edge_count`:
 
 ```cypher template
 USE DATABASE DATABASE_NAME;
 SHOW STORAGE INFO ON CURRENT DATABASE;
 ```
 
-If you copied the snapshot from your machine, delete the copy once you no
-longer need it:
+If you copied a snapshot file onto the instance, delete the copy once you
+no longer need it. In Docker:
 
 ```bash
-kubectl exec -n NAMESPACE POD -c CONTAINER -- rm /var/lib/memgraph/restore/SNAPSHOT_FILE
+docker exec CONTAINER rm /var/lib/memgraph/restore/SNAPSHOT_FILE
+```
+
+On Linux:
+
+```bash
+sudo rm /var/lib/memgraph/restore/SNAPSHOT_FILE
 ```
 
 </Steps>
 
 ### Restore when Memgraph doesn't start
+
+If a database's files are damaged, Memgraph stops at startup. Start it with
+`--storage-allow-recovery-failure=true`: the damaged database comes up empty
+in a broken state, the others start normally, and you can restore it with
+the steps above. See
+[recovery failure handling](/fundamentals/data-durability#recovery-failure-handling).
+On Kubernetes, see [When the pod doesn't start](#when-the-pod-doesnt-start).
+
+## Restore a single database on Kubernetes <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
+
+On Kubernetes, you restore a database with the same steps as in [Restore a
+single database](#restore-a-single-database-enterprise). This section covers
+what's specific to the standalone and the
+[high availability](/database-management/clustering/high-availability/setup-ha-cluster-k8s)
+Memgraph Helm charts: finding the pod, copying a snapshot onto it, and
+starting a pod that restarts in a loop. You need `kubectl` access to the
+namespace Memgraph runs in.
+
+### Pods and data directory
+
+The charts name the pods and containers as follows, and both mount the data
+volume at `/var/lib/memgraph`:
+
+| Helm chart | Pod | Container | Data directory |
+|---|---|---|---|
+| Standalone (`memgraph`) | `RELEASE_NAME-0` | `memgraph` | `/var/lib/memgraph/mg_data` |
+| High availability (`memgraph-high-availability`) | `memgraph-data-ID-0` | `memgraph-data` | `/var/lib/memgraph/mg_data` |
+
+`RELEASE_NAME` is the Helm release name; if it doesn't contain `memgraph`,
+the chart appends `-memgraph` to it. `ID` is the data instance's `id` from
+the chart values. Check the exact names with `kubectl get pods`.
+
+### Copy a snapshot onto the pod
+
+To restore from a snapshot file, copy it onto the pod's data volume:
+
+```bash
+kubectl exec -n NAMESPACE POD -c CONTAINER -- mkdir -p /var/lib/memgraph/restore
+kubectl cp -n NAMESPACE -c CONTAINER ./SNAPSHOT_FILE POD:/var/lib/memgraph/restore/SNAPSHOT_FILE
+```
+
+`NAMESPACE` is the Kubernetes namespace, `POD` and `CONTAINER` are the
+names from the table above, and `SNAPSHOT_FILE` is the snapshot's file
+name. `kubectl cp` writes the file as the container's user, so Memgraph
+can read it. Use `/var/lib/memgraph/restore/SNAPSHOT_FILE` as the path in
+`RECOVER SNAPSHOT`.
+
+Once you no longer need the copy, delete it:
+
+```bash
+kubectl exec -n NAMESPACE POD -c CONTAINER -- rm /var/lib/memgraph/restore/SNAPSHOT_FILE
+```
+
+### When the pod doesn't start
 
 If a database's files are damaged, Memgraph stops at startup and the pod
 restarts in a loop. Add `--storage-allow-recovery-failure=true` to the
@@ -560,9 +626,6 @@ Both values are lists, and Helm replaces a list instead of merging it, so
 keep the existing entries and add the flag to them. In the standalone chart,
 `memgraphConfig` sets `--data-directory=/var/lib/memgraph/mg_data`; without
 it, Memgraph starts from an empty data directory.
-The damaged database comes up empty in a broken state, the others start
-normally, and you can restore it with the steps above. See
-[recovery failure handling](/fundamentals/data-durability#recovery-failure-handling).
 
 ## Usage of .old directory
 
