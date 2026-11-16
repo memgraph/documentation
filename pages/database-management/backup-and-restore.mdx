@@ -413,10 +413,13 @@ Memgraph Helm charts.
 Before you start, you need:
 
 - `kubectl` access to the namespace Memgraph runs in.
-- A Memgraph user with the `DURABILITY` [privilege](/database-management/authentication-and-authorization/role-based-access-control)
-  and access to the database you restore. Restoring into a new database
-  also needs the `MULTI_DATABASE_EDIT` privilege and access to the
-  `memgraph` database.
+- A Memgraph user with access to the database you restore and these
+  [privileges](/database-management/authentication-and-authorization/role-based-access-control):
+  `DURABILITY` for `RECOVER SNAPSHOT` and `SHOW SNAPSHOTS`,
+  `MULTI_DATABASE_USE` for `USE DATABASE`, and `STATS` for
+  `SHOW STORAGE INFO`. Resuming a suspended database or restoring into a
+  new database also needs `MULTI_DATABASE_EDIT`, and a new database needs
+  access to the `memgraph` database.
 - In a high availability cluster, a connection to the MAIN instance. Run
   `SHOW INSTANCES;` on a coordinator to find it.
 
@@ -434,18 +437,10 @@ the chart values. Check the exact names with `kubectl get pods`.
 
 <Steps>
 
-{<h3 id="find-the-databases-snapshot-directory" className="custom-header">Find the database's snapshot directory</h3>}
+{<h3 id="resume-the-database-if-its-suspended" className="custom-header">Resume the database if it's suspended</h3>}
 
-Get the database's UUID:
-
-```cypher
-SHOW STORAGE INFO ON DATABASE customers;
-```
-
-Its snapshots are in
-`/var/lib/memgraph/mg_data/databases/DATABASE_UUID/snapshots/`. If the
-database is suspended, resume it first; `USE DATABASE` on a suspended
-database fails.
+`USE DATABASE` on a [suspended](/database-management/multi-tenancy#suspending-and-resuming-databases-enterprise)
+database fails, so resume it first:
 
 ```cypher
 RESUME DATABASE customers;
@@ -537,16 +532,17 @@ Drop the original database once you no longer need it.
 
 {<h3 id="check-the-result" className="custom-header">Check the result</h3>}
 
-Switch to the restored database (`customers_restored` if you restored into
-a new database) and check its contents, for example the node and
+Switch to the restored database, `customers` or `customers_restored`, and
+check its contents, for example the node and
 relationship counts in `vertex_count` and `edge_count`:
 
-```cypher
-USE DATABASE customers;
+```cypher template
+USE DATABASE DATABASE_NAME;
 SHOW STORAGE INFO ON CURRENT DATABASE;
 ```
 
-Once you no longer need the copied file, delete it:
+If you copied the snapshot from your machine, delete the copy once you no
+longer need it:
 
 ```bash
 kubectl exec -n NAMESPACE POD -c CONTAINER -- rm /var/lib/memgraph/restore/SNAPSHOT_FILE
@@ -560,6 +556,10 @@ If a database's files are damaged, Memgraph stops at startup and the pod
 restarts in a loop. Add `--storage-allow-recovery-failure=true` to the
 instance's flags (`memgraphConfig` in the standalone chart, the data
 instance's `args` in the high availability chart) and upgrade the release.
+Both values are lists, and Helm replaces a list instead of merging it, so
+keep the existing entries and add the flag to them. In the standalone chart,
+`memgraphConfig` sets `--data-directory=/var/lib/memgraph/mg_data`; without
+it, Memgraph starts from an empty data directory.
 The damaged database comes up empty in a broken state, the others start
 normally, and you can restore it with the steps above. See
 [recovery failure handling](/fundamentals/data-durability#recovery-failure-handling).
