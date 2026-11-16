@@ -1,5 +1,6 @@
 import React from "react";
 import { DocsThemeConfig } from "nextra-theme-docs";
+import AlgoliaSearch from "./components/algolia-search/AlgoliaSearch";
 import ConnectAI from "./components/connect-ai/ConnectAI";
 import Footer from "./components/Footer";
 import { HeadComponent } from "./components/HeadComponent";
@@ -14,6 +15,9 @@ const config: DocsThemeConfig = {
   },
   chat: {
     link: "https://discord.gg/memgraph",
+  },
+  search: {
+    component: AlgoliaSearch,
   },
   navbar: {
     extraContent: <ConnectAI />,
