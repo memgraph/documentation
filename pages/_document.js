@@ -7,6 +7,7 @@ class MyDocument extends Document {
           <Head>
             <script
               src="https://widget.kapa.ai/kapa-widget.bundle.js"
+              async
               data-website-id="b077599c-4584-4631-bbe1-aaafe35f8e68"
               data-project-name="Memgraph"
               data-project-color="#8C0081"
