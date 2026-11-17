@@ -43,8 +43,8 @@ The short version, for everyone:
   needs and, on release day, finishes it.
 - Use `.github/pull_request_template.md` and name the product PR as
   `memgraph/memgraph#NNNN`.
-- Keep the headings and line format of "Release note corrections" and
-  "Noticed, not fixed" in a docs PR description: `check-release` reads them.
+- Keep the headings and item format of "Release note" and "Noticed, not
+  fixed" in a docs PR description: the release skills read them.
 
 ## Run locally
 
@@ -55,7 +55,7 @@ pnpm check  # links, section links, redirects, sidebar and release-note versions
 python3 scripts/check-examples.py --base origin/main  # Cypher examples and names on the pages you changed; needs Docker
 ```
 
-Both run on every PR.
+`pnpm check` runs on every PR; the examples check runs on PRs into `main`.
 `pnpm check` reads only the checkout and takes a second. The examples check
 runs each changed page's `cypher` blocks on Memgraph in Docker and fails only
 on the blocks the PR changes; problems elsewhere on the page show as warnings.

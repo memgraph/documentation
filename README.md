@@ -36,7 +36,9 @@ The build also generates the sitemap and the `llms.txt` files.
 
 ## Check your changes
 
-Two checks run on every pull request. You can run them before you push:
+Two checks run on pull requests: `pnpm check` on every one, and the
+examples check on pull requests into `main` (a release branch documents a
+Memgraph version that isn't out yet). You can run both before you push:
 
 ```bash
 pnpm check
