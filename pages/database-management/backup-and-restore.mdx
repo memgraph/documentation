@@ -484,13 +484,16 @@ next step:
 {<h3 id="restore-the-snapshot" className="custom-header">Restore the snapshot</h3>}
 
 You can restore over the existing database, or into a new database and
-switch to it once you've checked the data.
+switch to it once you've checked the data. If you haven't restored from the
+snapshot before, restore it into a new database first: if the snapshot turns
+out to be damaged, the original database stays as it was.
 
 In the examples, `SNAPSHOT_PATH` is the path or URL from the previous step.
 
 Either way, Memgraph copies the snapshot into the database's
 `snapshots/` directory and moves the files that were there to `.old`
-directories (see [Usage of .old directory](#usage-of-old-directory)). Other
+directories (see [Usage of .old directory](#usage-of-old-directory)). With
+`--storage-backup-dir-enabled=false`, it deletes them instead. Other
 databases on the instance aren't affected.
 
 In a high availability cluster, run `RECOVER SNAPSHOT` on MAIN. MAIN then
@@ -515,6 +518,15 @@ RECOVER SNAPSHOT "SNAPSHOT_PATH" FORCE;
 Memgraph keeps the database's previous snapshots and WAL files in `.old`
 directories only until the next `RECOVER SNAPSHOT` on that database, which
 deletes them. Copy them elsewhere first if you might need them.
+</Callout>
+
+<Callout type="warning">
+If the snapshot can't be loaded, for example because the file is damaged,
+`RECOVER SNAPSHOT` fails after `FORCE` has already deleted the data. The
+database stays empty but still accepts queries, including writes, and after
+a restart it's in a broken state. Its previous snapshots are still in its
+`snapshots/` directory. Run `RECOVER SNAPSHOT ... FORCE` again with a good
+snapshot.
 </Callout>
 
 {<h4 id="restore-into-a-new-database" className="custom-header">Restore into a new database</h4>}
@@ -564,12 +576,32 @@ sudo rm /var/lib/memgraph/restore/SNAPSHOT_FILE
 
 ### Restore when Memgraph doesn't start
 
-If a database's files are damaged, Memgraph stops at startup. Start it with
-`--storage-allow-recovery-failure=true`: the damaged database comes up empty
-in a broken state, the others start normally, and you can restore it with
-the steps above. See
+If a database's files are damaged and Memgraph can't recover it from any of
+its snapshots, Memgraph stops at startup. Start it with
+`--storage-allow-recovery-failure=true`, available from Memgraph 3.12: the
+damaged database comes up empty in a broken state, the others start
+normally, and you can restore it with the steps above. See
 [recovery failure handling](/fundamentals/data-durability#recovery-failure-handling).
 On Kubernetes, see [When the pod doesn't start](#when-the-pod-doesnt-start).
+
+On a broken database, `USE DATABASE`, `SHOW STORAGE INFO` and
+`RECOVER SNAPSHOT` work, but `SHOW SNAPSHOTS` and other queries fail with:
+
+```plaintext copy=false
+Database is in the broken state because the recovery process failed.
+```
+
+Restore from a backup you copied off the instance. The database's own
+snapshots are likely the damaged files: Memgraph already tried them at
+startup. A broken database doesn't need `FORCE`.
+
+In a high availability cluster, a broken database on a REPLICA recovers
+from MAIN on its own. Restore only a broken database on MAIN; see
+[databases broken by recovery failure](/database-management/clustering/high-availability/how-high-availability-works#databases-broken-by-recovery-failure).
+
+Once the database is restored, remove the flag and restart Memgraph, so a
+damaged database stops Memgraph at startup again instead of coming up
+empty.
 
 ## Restore a single database on Kubernetes <sup style={{ fontSize: '0.6em', color: '#888' }}>Enterprise</sup>
 
@@ -588,11 +620,11 @@ volume at `/var/lib/memgraph`:
 
 | Helm chart | Pod | Container | Data directory |
 |---|---|---|---|
-| Standalone (`memgraph`) | `RELEASE_NAME-0` | `memgraph` | `/var/lib/memgraph/mg_data` |
+| Standalone (`memgraph`) | `RELEASE_NAME-memgraph-0` | `memgraph` | `/var/lib/memgraph/mg_data` |
 | High availability (`memgraph-high-availability`) | `memgraph-data-ID-0` | `memgraph-data` | `/var/lib/memgraph/mg_data` |
 
-`RELEASE_NAME` is the Helm release name; if it doesn't contain `memgraph`,
-the chart appends `-memgraph` to it. `ID` is the data instance's `id` from
+`RELEASE_NAME` is the Helm release name; if it already contains `memgraph`,
+the chart doesn't append `-memgraph`, and the pod is `RELEASE_NAME-0`. `ID` is the data instance's `id` from
 the chart values. Check the exact names with `kubectl get pods`.
 
 ### Copy a snapshot onto the pod
@@ -622,10 +654,20 @@ If a database's files are damaged, Memgraph stops at startup and the pod
 restarts in a loop. Add `--storage-allow-recovery-failure=true` to the
 instance's flags (`memgraphConfig` in the standalone chart, the data
 instance's `args` in the high availability chart) and upgrade the release.
-Both values are lists, and Helm replaces a list instead of merging it, so
-keep the existing entries and add the flag to them. In the standalone chart,
-`memgraphConfig` sets `--data-directory=/var/lib/memgraph/mg_data`; without
-it, Memgraph starts from an empty data directory.
+Helm replaces a list instead of merging it:
+
+- **Standalone chart:** keep the existing `memgraphConfig` entries and add
+  the flag to them. The defaults set
+  `--data-directory=/var/lib/memgraph/mg_data`; without it, Memgraph starts
+  from an empty data directory.
+- **High availability chart:** `args` is a field of each item in the `data`
+  list, so your values replace the whole `data` list. Copy the full list,
+  with every data instance and all of its fields, and add the flag only to
+  the failing instance's `args`. A data instance missing from the list is
+  removed from the cluster.
+
+Once the database is restored, remove the flag and upgrade the release
+again.
 
 ## Usage of .old directory
 
