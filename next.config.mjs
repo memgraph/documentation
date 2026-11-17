@@ -45,6 +45,36 @@ export default withNextra({
         permanent: true
       },
       {
+        source: '/ai-ecosystem/unstructured2graph',
+        destination: '/ai-ecosystem/knowledge-graph-creation/unstructured2graph-agent',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/unstructured2graph.md',
+        destination: '/ai-ecosystem/knowledge-graph-creation/unstructured2graph-agent.md',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/graph-rag/knowledge-retrieval',
+        destination: '/ai-ecosystem/graph-rag',
+        permanent: true
+      },
+      {
+        source: '/ai-ecosystem/graph-rag/knowledge-retrieval.md',
+        destination: '/ai-ecosystem/graph-rag.md',
+        permanent: true
+      },
+      {
+        source: '/getting-started/licensing',
+        destination: '/database-management/enabling-memgraph-enterprise',
+        permanent: true
+      },
+      {
+        source: '/getting-started/licensing.md',
+        destination: '/database-management/enabling-memgraph-enterprise.md',
+        permanent: true
+      },
+      {
         source: '/getting-started/install-memgraph/debian',
         destination: '/getting-started/install-memgraph/linux',
         permanent: true
