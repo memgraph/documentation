@@ -79,8 +79,7 @@ sudo apt install ./memgraph-agent-v0.1.0-linux-x86_64.deb
 ```
 
 On an aarch64 (ARM64) machine, replace every `x86_64` in both commands with
-`aarch64`. The package installs `mgagent` in `/usr/bin`. To uninstall it,
-run `sudo apt remove memgraph-agent`.
+`aarch64`. The package installs `mgagent` in `/usr/bin`.
 
 </Tabs.Tab>
 <Tabs.Tab>
@@ -93,8 +92,7 @@ sudo dnf install ./memgraph-agent-v0.1.0-linux-x86_64.rpm
 ```
 
 On an aarch64 (ARM64) machine, replace every `x86_64` in both commands with
-`aarch64`. The package installs `mgagent` in `/usr/bin`. To uninstall it,
-run `sudo dnf remove memgraph-agent`.
+`aarch64`. The package installs `mgagent` in `/usr/bin`.
 
 The package has no GPG signature, so install it with `dnf`. Since RPM 6.0,
 `rpm -i` refuses unsigned packages.
@@ -146,10 +144,9 @@ Download
 [`memgraph-agent-v0.1.0-windows-arm64.msi`](https://download.memgraph.com/memgraph-agent/v0.1.0/windows-arm64/memgraph-agent-v0.1.0-windows-arm64.msi)
 on an ARM64 machine) and run it.
 
-The installer puts `mgagent.exe` in `C:\Program Files\Memgraph\Agent` and adds
-that folder to the system `PATH`. Open a new terminal afterward, so it picks up
-the new `PATH`. To uninstall Memgraph Agent, remove it in **Settings** >
-**Apps**.
+The installer and `mgagent.exe` are signed by Memgraph. The installer puts
+`mgagent.exe` in `C:\Program Files\Memgraph\Agent` and adds that folder to the
+system `PATH`. Open a new terminal afterward, so it picks up the new `PATH`.
 
 </Tabs.Tab>
 <Tabs.Tab>
@@ -193,6 +190,59 @@ download that file into the same directory and run:
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
+### Accept the license agreement
+
+Memgraph Agent is proprietary software. Most installers show its license
+agreement and ask you to accept it before they install anything:
+
+| Installer | How it asks |
+|---|---|
+| `.deb` | A question during `apt install` or `dpkg -i`. An upgrade asks again only if the agreement changed, and `sudo apt purge memgraph-agent` forgets your answer. |
+| `.run` | Shows the agreement, then asks yes or no. |
+| `.msi` | A license page with an **I accept** box. |
+| `.pkg` | A license page in Installer. `sudo installer -pkg` doesn't show it, and installing accepts the agreement. |
+| `.rpm`, Docker, the bare executable | Doesn't ask. Installing or running Memgraph Agent accepts the agreement. |
+
+For an unattended install, such as in CI, accept the agreement in advance with
+`MGAGENT_ACCEPT_EULA=yes`. Put the variable after `sudo`, because `sudo` drops
+the rest of your environment:
+
+```bash
+sudo MGAGENT_ACCEPT_EULA=yes apt install ./memgraph-agent-v0.1.0-linux-x86_64.deb
+sudo MGAGENT_ACCEPT_EULA=yes sh memgraph-agent-v0.1.0-linux-x86_64.run
+```
+
+On Windows, pass it to a silent install:
+
+```powershell
+msiexec /i memgraph-agent-v0.1.0-windows-x64.msi /qn MGAGENT_ACCEPT_EULA=yes
+```
+
+Without the variable, the installer refuses a `.deb` install with no one to
+answer (including with `DEBIAN_FRONTEND=noninteractive`), a `.run` install with
+no terminal, and a silent `.msi` install.
+
+Every package except the `.pkg` installs a copy of the agreement: `/usr/share/doc/memgraph-agent/EULA.txt` on Linux and in
+Docker, and `EULA.txt` next to `mgagent.exe` on Windows.
+
+### Uninstall Memgraph Agent
+
+How you remove Memgraph Agent depends on how you installed it:
+
+| Installed with | Remove with |
+|---|---|
+| `.deb` | `sudo apt remove memgraph-agent` |
+| `.rpm` | `sudo dnf remove memgraph-agent` |
+| `.run` | `sudo mgagent-uninstall` |
+| `.pkg` | `sudo mgagent-uninstall` |
+| `.msi` | **Settings** > **Apps** > **Installed apps** > **Memgraph Agent** > **Uninstall** |
+| Docker | `docker rmi memgraph/mgagent:latest`, and `docker volume rm mgagent` to delete its settings, conversations and memory |
+| The bare executable | Delete the `mgagent` file. |
+
+Apart from the Docker volume, none of these remove your settings, conversations and memory in `~/.mgagent`
+(or `MGAGENT_HOME`). To remove everything, including the API keys stored in
+`config.json`, delete that folder too.
+
 ## Start Memgraph Agent
 
 Run `mgagent` to open the interactive terminal interface:
@@ -214,6 +264,8 @@ the wizard is skipped and that provider is used:
 | `DEEPSEEK_API_KEY` | DeepSeek |
 | `XAI_API_KEY` | xAI |
 | `MISTRAL_API_KEY` | Mistral |
+| `AWS_BEARER_TOKEN_BEDROCK` (and optionally `AWS_REGION` or `AWS_DEFAULT_REGION`; the default is `us-east-1`) | Amazon Bedrock, with a Bedrock API key |
+| `QWENCLOUD_API_KEY` or `DASHSCOPE_API_KEY` (and optionally `QWENCLOUD_BASE_URL` for a region's host) | Qwen Cloud |
 | `OLLAMA_HOST` or `OLLAMA_BASE_URL` | Ollama |
 
 A key read from an environment variable is used for that run only and is
@@ -285,14 +337,26 @@ Which labels have the most nodes?
 ```
 
 The assistant reads the schema, writes a query, runs it, and answers with the
-result and the Cypher it used. `Esc` stops a response, `Tab` completes a slash
-command, and `Ctrl+C` twice quits. Type `/help` to list the commands.
+result and the Cypher it used. Type `/help` to list the commands.
+
+These keys work at the prompt:
+
+- `Esc` stops a response, and `Tab` completes a slash command.
+- `↑` and `↓` recall earlier input, also from earlier sessions.
+- `Ctrl+R` searches that history backward, as in a shell. Type part of a line
+  to find the newest line that contains it. `Ctrl+R` steps to an older match,
+  `Ctrl+S` to a newer one, `Enter` runs the line shown, `Tab` puts it on the
+  prompt to edit and `Esc` cancels.
+- `Ctrl+L` clears the screen. What was on it stays in the terminal's
+  scrollback.
+- `Ctrl+C` twice quits.
 
 ## Features
 
 Memgraph Agent works through tools the model calls: tools for Memgraph, the
-documentation, scripts, [skills](#skills), [memory](#memory) and any [Model
-Context Protocol (MCP) servers](#mcp-servers) you connect. The sections below
+documentation, scripts, [skills](#skills), [memory](#memory), any [Model
+Context Protocol (MCP) servers](#mcp-servers) you connect and any
+[plugins](#plugins-and-hooks) you install. The sections below
 describe what each area does.
 
 ### Natural language querying
@@ -429,12 +493,118 @@ The model finds a server's tools when it needs them, so connecting more
 servers doesn't make every request larger. A tool that isn't marked read-only
 asks for approval before it runs.
 
+### Plugins and hooks
+
+Memgraph Agent installs plugins in the
+[Claude Code plugin format](https://code.claude.com/docs/en/plugins), so most
+plugins written for Claude Code work unchanged. A plugin is a folder that can
+hold skills, slash commands, command hooks and MCP servers:
+
+```plaintext
+my-plugin/
+  .claude-plugin/plugin.json   name, version and description
+  skills/NAME/SKILL.md         skills
+  commands/NAME.md             slash commands
+  hooks/hooks.json             command hooks
+  .mcp.json                    MCP servers
+```
+
+Install a plugin from a folder or a Git repository. An installed plugin is
+enabled, and its skills, commands, hooks and MCP servers are available while
+it stays enabled:
+
+```plaintext
+/plugin install https://github.com/ORGANIZATION/PLUGIN.git
+/plugin install ./PLUGIN_FOLDER
+/plugin list
+```
+
+Replace `ORGANIZATION/PLUGIN` with the plugin's repository and `PLUGIN_FOLDER`
+with the path to a plugin folder. Installing from Git needs `git`. To install
+one plugin from a repository that holds several, add its folder after the URL:
+
+```plaintext
+/plugin install https://github.com/ORGANIZATION/PLUGINS.git plugins/PLUGIN
+```
+
+`/plugin show NAME` shows what a plugin contains, and
+`/plugin enable NAME`, `/plugin disable NAME` and `/plugin remove NAME` manage
+it. To try a plugin for one run without installing it, start with
+`mgagent --plugin-dir ./my-plugin`.
+
+Plugins live in `~/.mgagent/plugins` (yours) and `.mgagent/plugins` in the
+working directory (the project's). A plugin found there stays **off until you
+enable it**, because its hooks run commands on your machine.
+
+A plugin command's Markdown file is the prompt it sends: `$ARGUMENTS` is
+replaced by what you typed after the command, and `$1`, `$2` by its words.
+The command is `/PLUGIN:NAME`, or `/NAME` when no other command has that name.
+
+#### Hooks
+
+Hooks are shell commands that run at points in a conversation. They come
+from enabled plugins and from `"hooks"` in `config.json`, in Claude Code's
+[hooks format](https://code.claude.com/docs/en/hooks):
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "~/bin/check-script.sh", "timeout": 30 }]
+      }
+    ]
+  }
+}
+```
+
+Each hook runs in the working directory and gets the event as JSON on
+standard input. The `CLAUDE_PROJECT_DIR` environment variable holds the working
+directory, and a plugin's hooks find the plugin's folder in
+`CLAUDE_PLUGIN_ROOT`. A hook times out after 60 seconds unless it sets
+`timeout`.
+
+How the hook ends decides what happens:
+
+- **Exit code `0`:** the turn continues. To decide, print a JSON decision on
+  standard output.
+- **Exit code `2`:** the hook blocks the prompt or tool call, with its standard
+  error as the reason.
+- **Any other exit code, or a timeout:** the hook failed. Memgraph Agent shows
+  a notice and the turn continues, so a failed `PreToolUse` hook doesn't stop
+  the tool call.
+
+Memgraph Agent reads hooks when it starts; after you change them, run
+`/plugin reload`. `/hooks` lists the hooks in force and any it skipped. Only
+`command` hooks run.
+
+| Event | When it runs | What the hook can do |
+|---|---|---|
+| `SessionStart` | The first prompt of a conversation | Add context the model gets on every turn. |
+| `UserPromptSubmit` | Each prompt, before it's saved | Block the prompt, or add context for that turn. |
+| `PreToolUse` | Before a tool call, and before you're asked to approve it | Refuse the call, stop tool use for the turn, rewrite its input or add a note. |
+| `PostToolUse` | After a tool call | Add a note the model reads with the result. |
+| `Stop` | When the model is about to finish | Send it back to work with a reason. |
+| `PreCompact` | Before the conversation is summarized | Observe only. |
+| `Notification` | When Memgraph Agent waits for your approval | Observe only. |
+| `SessionEnd` | When Memgraph Agent exits | Observe only. |
+
+A hook can refuse a tool call but never approve one: the call still goes
+through Memgraph Agent's own [approvals](#approvals-and-permissions).
+
+A matcher is a regular expression over tool names. Three Memgraph Agent tools
+also match the name of their Claude Code counterpart: `jobs__run-shell` as
+`Bash`, `jobs__read-file` as `Read` and `jobs__write-file` as `Write`. Other
+tools match by their Memgraph Agent name, such as `memgraph__run-cypher`, and
+an external MCP tool also as `mcp__SERVER__TOOL`. `/tools` lists the names.
+
 ### LLM providers
 
 Memgraph Agent works with these providers:
 
 - **Cloud:** Anthropic, OpenAI, Azure OpenAI, Google Gemini, DeepSeek, Amazon
-  Bedrock, xAI and Mistral.
+  Bedrock, xAI, Mistral and Qwen Cloud.
 - **Local:** any server with an OpenAI-compatible API, with built-in defaults
   for Ollama, llama.cpp, LM Studio and vLLM.
 
@@ -449,6 +619,20 @@ Add a provider with `/provider add`, then pick a model:
 Replace `qwen3:32b` with a model from the `/models` list. `/provider` alone
 lists the configured providers and the provider types.
 
+For Amazon Bedrock, add a Bedrock API key:
+
+```plaintext
+/provider add amazon-bedrock YOUR_BEDROCK_API_KEY --region eu-west-1
+```
+
+Replace `YOUR_BEDROCK_API_KEY` with your key. Without `--region`, Memgraph
+Agent uses `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `us-east-1`. A
+short-term Bedrock key works only in the region it was created in.
+
+Qwen Cloud has no `/provider add` type. Add it in the setup wizard (`/setup`),
+which asks for your key and your region's host, or set `QWENCLOUD_API_KEY` (see
+[Start Memgraph Agent](#start-memgraph-agent)).
+
 The status bar shows how full the model's context window is, and `/context`
 shows what fills it. When the conversation reaches 70% of the window, its older
 part is summarized; `/compact` does that on demand. If a local server doesn't
@@ -461,6 +645,27 @@ conversation and the session.
 After each reply, the prompt suggests your likely next message. When the reply
 doesn't suggest one, Memgraph Agent asks the model in a short background
 request, which a paid API charges for. `/suggest off` turns that request off.
+
+### Model settings
+
+`/tune` opens a panel with the selected model's settings: reasoning and its
+effort, maximum output tokens, web search, temperature, top-p, top-k, min-p and
+the frequency, presence and repetition penalties. Settings the provider or
+model doesn't accept are dimmed and not sent. You can also change them from the
+prompt:
+
+```plaintext
+/tune show
+/tune temperature 0.2
+/tune max-tokens 16k
+/tune temperature default
+/tune reset
+```
+
+`/tune show` lists every setting and its value, `default` puts one setting back
+to its default, and `/tune reset` puts them all back. Memgraph Agent saves the
+settings per provider and model in `config.json`, so switching models and back
+keeps them.
 
 ### Approvals and permissions
 
@@ -480,8 +685,8 @@ database you can lose.
 ### Headless mode
 
 `mgagent -p` runs one question without the interactive interface, for scripts
-and pipelines. The answer goes to standard output, tool calls to standard
-error, and the exit code isn't `0` if the run fails:
+and pipelines. The answer goes to standard output, and tool calls go to
+standard error, with the last lines of output of any script that failed:
 
 ```bash
 mgagent -c bolt://localhost:7687 -p "which labels have the most nodes?"
@@ -496,6 +701,18 @@ mgagent -p "create an index on Person(id)" -y
 ```
 
 Add `--json` to get the answer as JSON.
+
+The exit code tells a script how the run ended:
+
+- `0`: the run finished.
+- `1`: the run failed, for example because `-c` couldn't connect or a hook
+  blocked the prompt.
+- `2`: the run didn't start, for example because of an unknown option or no
+  configured model.
+- `3`: the turn ran out of steps (`maxIterations`). The answer the model wraps
+  up with is still printed, and standard error says it's unfinished.
+
+Hook messages also go to standard error.
 
 ### Conversations
 
@@ -529,6 +746,7 @@ interactive session.
 | `--console` | Start in the Cypher console, and run the prompt there as a query. |
 | `--theme <dark\|light\|ansi\|auto>` | Color theme: Memgraph's dark or light theme, the terminal's own colors, or `auto` to follow the terminal background. The default is `auto`. |
 | `--cwd <dir>` | Working directory for scripts and project skills. |
+| `--plugin-dir <dir>` | Load and enable a plugin from a folder for this run. Repeat it for more plugins. |
 | `--no-sync` | Skip the weekly update of the Agent Skills and the MCP servers Memgraph configures. |
 | `--telemetry-enabled <true\|false>` | Send usage statistics to Memgraph for this run. The default is `true`. |
 | `-h`, `--help` | Show the help. |
@@ -541,11 +759,12 @@ Memgraph Agent keeps its files in `~/.mgagent/`, or in the directory set by the
 
 | Path | Holds |
 |---|---|
-| `config.json` | Providers, the selected model, Memgraph connections, MCP servers, permissions, theme and other settings. |
+| `config.json` | Providers, the selected model, model settings, Memgraph connections, MCP servers, enabled plugins, hooks, permissions, theme and other settings. |
 | `mgagent.db` | Conversations and the memory revisions, in SQLite. |
 | `history.jsonl` | The prompt's input history, kept across sessions. |
 | `skills/` | Your skills. |
 | `memgraph-skills/` | Memgraph's Agent Skills. |
+| `plugins/` | Installed plugins, one folder each. |
 | `python/venv/` | The virtual environment for the assistant's Python scripts. |
 | `mgagent.log` | The log. |
 
