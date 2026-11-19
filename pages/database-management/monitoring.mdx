@@ -239,7 +239,7 @@ maintains its own counters, gauges, and histograms. How per-database metrics are
 exposed depends on the format — see the [OpenMetrics](#openmetrics-monitoring)
 and [JSON](#json-monitoring-deprecated) sections below.
 
-Session-related metrics (active sessions, Bolt messages) and high-availability
+Session-related metrics (active sessions, Bolt messages) and most high-availability
 metrics remain global — they are not scoped to any single database.
 
 ### System metrics
@@ -445,7 +445,17 @@ Session metrics are global; they are not scoped to any individual database.
 
 #### HA metrics
 
-HA metrics are global; they are not scoped to any individual database.
+HA metrics are global, except the replica recovery counters, which are labeled
+per database.
+
+<Callout type="warning">
+**Breaking change in Memgraph 3.15**: the ten replication [latency
+histograms](#latency-histograms) listed below, the replica recovery counters, and
+`memgraph_state_check_rpc_seconds` no longer have an unlabeled series. They have
+one series per instance (`mg_instance`), and the recovery counters one per
+instance and database. For the previous total, use
+`sum without (mg_instance, database, uuid) (...)`. `SHOW METRICS INFO` is unchanged.
+</Callout>
 
 ##### Latency histograms
 
@@ -475,6 +485,26 @@ HA metrics are global; they are not scoped to any individual database.
  | memgraph\_state\_check\_rpc\_seconds | Histogram | StateCheckRpc latency. |
  | memgraph\_unregister\_replica\_rpc\_seconds | Histogram | UnregisterReplicaRpc latency. |
  | memgraph\_update\_data\_instance\_config\_rpc\_seconds | Histogram | UpdateDataInstanceConfigRpc latency. |
+
+Ten replication histograms and `memgraph_state_check_rpc_seconds` carry an
+`mg_instance` label; the other latency histograms, such as
+`memgraph_socket_connect_seconds` and the coordinator histograms, don't. The
+MAIN labels these ten with the name the REPLICA is registered under:
+
+- `memgraph_prepare_commit_rpc_seconds`, `memgraph_current_wal_rpc_seconds`,
+  `memgraph_wal_files_rpc_seconds`, and `memgraph_snapshot_rpc_seconds`
+- `memgraph_heartbeat_rpc_seconds`, `memgraph_frequent_heartbeat_rpc_seconds`,
+  and `memgraph_system_recovery_rpc_seconds`
+- `memgraph_replica_stream_seconds`, `memgraph_start_txn_replication_seconds`,
+  and `memgraph_finalize_txn_replication_seconds`
+
+The leader coordinator labels `memgraph_state_check_rpc_seconds` with the name of
+the data instance it checks. The label matches the one on the [throughput
+histograms](#throughput-histograms) and the [instance status
+gauges](#instance-status-gauges), so you can join them. A REPLICA's series go
+away when the MAIN stops replicating to it: when the REPLICA is unregistered, or
+when the MAIN is demoted or replaced in a failover. Unregistering a data instance
+removes its health-check series.
 
 ##### Throughput histograms
 
@@ -521,6 +551,10 @@ Throughput metrics are labeled per replica with an `mg_instance` label.
  | memgraph\_replica\_recovery\_fail\_total | Counter | Failed replica recovery processes. |
  | memgraph\_replica\_recovery\_skip\_total | Counter | Skipped replica recovery tasks. |
 
+The three replica recovery counters carry `mg_instance`, `database`, and `uuid`
+labels, so the MAIN counts the recoveries of each database on each REPLICA
+separately. Dropping a database removes its series.
+
 ### OpenMetrics monitoring
 
 Set [`--metrics-format=OpenMetrics`](/database-management/monitoring#metrics-format)
@@ -536,7 +570,7 @@ to set up scraping.
 #### Per-database labels
 
 Per-database metrics carry `database` and `uuid` labels identifying which
-database they belong to. Global metrics (such as sessions, HA) have no database
+database they belong to. Global metrics (such as sessions and most HA metrics) have no database
 label.
 
 ```
