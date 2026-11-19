@@ -5,6 +5,7 @@ description: Install Memgraph Agent, the AI terminal assistant that queries, imp
 
 import { Callout } from 'nextra/components'
 import { Tabs } from 'nextra/components'
+import {CommunityLinks} from '/components/social-card/CommunityLinks'
 
 # Memgraph Agent
 
@@ -282,15 +283,17 @@ connects to `bolt://localhost:7687`:
 /connect bolt://localhost:7687
 ```
 
-To connect with a username and password, pick a database and save the
-connection under a name:
+To connect with a username and password, add them as flags:
 
 ```plaintext
 /connect bolt://db.example.com:7687 -u memgraph -p YOUR_PASSWORD -d analytics --name prod
 ```
 
-Replace `YOUR_PASSWORD` with the user's password. Connections are saved, and
-the last one used becomes the default, so the next start connects on its own.
+`-u` is the username, `-p` the password, `-d` the
+[database](/database-management/multi-tenancy) to use, and `--name` saves the
+connection as `prod`. Replace `YOUR_PASSWORD` with the user's password.
+Connections are saved, and the last one used becomes the default, so the next
+start connects on its own.
 `/connections` lists the saved connections, and `/connect prod` switches to
 one by name.
 
@@ -299,6 +302,10 @@ You can also connect when you start Memgraph Agent:
 ```bash
 mgagent -c bolt://localhost:7687 -u memgraph --password YOUR_PASSWORD
 ```
+
+The same options work when you start Memgraph Agent (see [Command-line
+options](#command-line-options)), but the password is `--password`, because
+`-p` runs [headless mode](#headless-mode).
 
 Memgraph Agent checks every 15 seconds that the server still answers. If it
 stops answering, the status bar shows it as disconnected, and Memgraph Agent
@@ -356,25 +363,42 @@ These keys work at the prompt:
 Memgraph Agent works through tools the model calls: tools for Memgraph, the
 documentation, scripts, [skills](#skills), [memory](#memory), any [Model
 Context Protocol (MCP) servers](#mcp-servers) you connect and any
-[plugins](#plugins-and-hooks) you install. The sections below
-describe what each area does.
+[plugins](#plugins) and [hooks](#hooks) you install.
+
+<div className="light-only">
+
+![Memgraph Agent runs in your terminal between you and the services it uses. You talk to it through the chat, the Cypher console and slash commands. It sends your request to the LLM you chose, a cloud provider or a local server. It reaches Memgraph over Bolt to query, read the schema, import data and check the server, searches the documentation through the Memgraph Docs MCP server, loads skills from memgraph/skills and your own folders, keeps a memory document, and calls your MCP servers, plugins and hooks. Scripts and background jobs run in your working directory. Writes, scripts and file writes wait for your approval](/pages/memgraph-agent/memgraph-agent-overview.svg)
+
+</div>
+<div className="dark-only">
+
+![Memgraph Agent runs in your terminal between you and the services it uses. You talk to it through the chat, the Cypher console and slash commands. It sends your request to the LLM you chose, a cloud provider or a local server. It reaches Memgraph over Bolt to query, read the schema, import data and check the server, searches the documentation through the Memgraph Docs MCP server, loads skills from memgraph/skills and your own folders, keeps a memory document, and calls your MCP servers, plugins and hooks. Scripts and background jobs run in your working directory. Writes, scripts and file writes wait for your approval](/pages/memgraph-agent/memgraph-agent-overview-dark.svg)
+
+</div>
 
 ### Natural language querying
 
-- **Schema first.** Before it writes a query, the assistant reads the labels,
-  relationship types, properties, indexes and constraints. It uses
-  [`SHOW SCHEMA INFO`](/querying/schema) when it's enabled, and metadata or
-  sampling when it isn't, and never guesses a label or property name.
-- **Reads run, writes ask.** Read queries run immediately. `CREATE`, `MERGE`,
-  `SET`, `DELETE`, `LOAD CSV`, index and constraint changes and calls to most
-  procedures stop for your approval, showing the exact query.
-- **Query plans.** The assistant reads a query's
-  [plan](/querying/query-plan) with `EXPLAIN` and `PROFILE`, points out full
-  scans and suggests the index that removes them.
-- **Server health.** The assistant reports the Memgraph version, storage mode,
-  node and relationship counts, memory use and indexes.
-- **Long queries in the background.** A query that may take minutes runs as a
-  background job with a one-hour timeout, and the assistant checks on it.
+Ask a question in plain language. The assistant:
+
+1. Reads the schema: labels, relationship types, properties, indexes and
+   constraints. It uses [`SHOW SCHEMA INFO`](/querying/schema) when it's
+   enabled, and metadata or sampling when it isn't, so it never guesses a
+   name.
+2. Writes a Cypher query and runs it. Read queries run at once. Queries that
+   change data or the schema (`CREATE`, `MERGE`, `SET`, `DELETE`, `LOAD CSV`,
+   index and constraint changes and most procedure calls) show you the exact
+   query and wait for your approval.
+3. Answers with the result and the Cypher it used.
+
+You can also ask it to:
+
+- Explain why a query is slow. It reads the [query plan](/querying/query-plan)
+  with `EXPLAIN` and `PROFILE`, points out full scans and suggests the index
+  that removes them.
+- Report on the server: version, storage mode, node and relationship counts,
+  memory use and indexes.
+- Run a long query in the background, as a job with a one-hour timeout that it
+  checks on.
 
 ### Cypher console
 
@@ -405,6 +429,10 @@ and the model doesn't see the query or its result.
 - `/import PATH_OR_DESCRIPTION` asks the assistant to inspect a source, propose
   a graph model, create the indexes and load the data. It asks you to choose
   the graph model before it writes anything.
+- The import follows Memgraph's [import
+  skill](/getting-started/coding-with-ai/plugins#available-skills): it creates
+  indexes first, asks before switching to analytical storage mode and checks
+  the counts afterwards.
 - The assistant uses Memgraph's server-side loaders: [`LOAD
   CSV`](/querying/clauses/load-csv), [`LOAD
   JSONL`](/data-migration/json#load-jsonl-cypher-clause) and [`LOAD
@@ -414,22 +442,29 @@ and the model doesn't see the query or its result.
 - Type `@` to mention a file. The prompt offers the closest matches from the
   working directory, and the assistant reads the file only if it needs to.
 
+<Callout type="info">
+If an import is slow or runs out of memory, see [Import best
+practices](/data-migration/best-practices) for indexes, analytical storage mode
+and batched parallel loading. For each source format, see [Data
+migration](/data-migration).
+</Callout>
+
 ### Troubleshooting
 
-- **Connection checks.** The assistant tests a URI's DNS resolution, TCP port
-  and Bolt handshake as separate steps and names the one that failed.
-- **Failed connections.** When `/connect` fails, the details go with your next
-  message: the URI, the username, whether a password was given (never the
-  password itself), the error and the connection checks. Ask "why can't I
-  connect?" and the assistant starts from them.
-- **Error hints.** Common query errors come back with a hint, and the assistant
-  checks the documentation rather than guessing at syntax.
-- **Getting Memgraph running.** See [Start Memgraph](#start-memgraph).
+- When a connection fails, the assistant tests DNS resolution, the TCP port
+  and the Bolt handshake separately, and names the step that failed.
+- After `/connect` fails, your next message carries the details: the URI, the
+  username, whether a password was given (never the password itself), the
+  error and the check results. Ask "why can't I connect?" and the assistant
+  starts from them.
+- Common query errors come back with a hint, and the assistant checks the
+  documentation instead of guessing at syntax.
+- If Memgraph isn't running yet, see [Start Memgraph](#start-memgraph).
 
 ### Documentation search
 
-The assistant searches and reads the [Memgraph
-documentation](/), and cites the pages it used. The [Memgraph Docs MCP
+The assistant searches and reads the Memgraph documentation, and cites the
+pages it used. The [Memgraph Docs MCP
 server](/getting-started/coding-with-ai/docs-mcp) is configured on the first
 run and needs no key. `/docs QUERY` searches the documentation without
 calling the model.
@@ -504,7 +539,7 @@ The model finds a server's tools when it needs them, so connecting more
 servers doesn't make every request larger. A tool that isn't marked read-only
 asks for approval before it runs.
 
-### Plugins and hooks
+### Plugins
 
 Memgraph Agent installs plugins in the
 [Claude Code plugin format](https://code.claude.com/docs/en/plugins), so most
@@ -551,7 +586,7 @@ A plugin command's Markdown file is the prompt it sends: `$ARGUMENTS` is
 replaced by what you typed after the command, and `$1`, `$2` by its words.
 The command is `/PLUGIN:NAME`, or `/NAME` when no other command has that name.
 
-#### Hooks
+### Hooks
 
 Hooks are shell commands that run at points in a conversation. They come
 from enabled plugins and from `"hooks"` in `config.json`, in Claude Code's
@@ -820,6 +855,4 @@ To turn telemetry off:
 
 The command-line option overrides the other two.
 
-## Get help
-
-If you get stuck, ask on [Discord](https://discord.gg/memgraph).
+<CommunityLinks/>
