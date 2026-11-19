@@ -265,6 +265,18 @@ JSON endpoint and `SHOW METRICS INFO` use different names — see
  | memgraph\_disk\_usage\_bytes | Gauge | Disk space used by the database's [data directory](/fundamentals/data-durability) (in bytes). |
  | memgraph\_memory\_res\_bytes | Gauge | RAM used by the Memgraph process as reported by the OS (in bytes). Reflects the resident set size, not the value used for [license enforcement](/database-management/enabling-memgraph-enterprise#upgrading-or-downgrading-the-license). |
  | memgraph\_peak\_memory\_res\_bytes | Gauge | Peak RAM used by the Memgraph process (in bytes). |
+ | memgraph\_workers | Gauge | Number of worker threads that run client queries. |
+ | memgraph\_workers\_busy | Gauge | Number of worker threads running a query. |
+ | memgraph\_worker\_queue\_length | Gauge | Number of tasks waiting for a worker thread. |
+ | process\_start\_time\_seconds | Gauge | Unix time when the Memgraph process started. |
+
+The worker metrics and `process_start_time_seconds` are global. The number of
+workers is set by the [`--bolt-num-workers`](/database-management/configuration#bolt) flag. A worker
+whose query waits on a lock counts as busy, and the queue includes the subtasks
+of [parallel queries](/querying/parallel-execution). If the `--scheduler` flag is
+set to `asio`, the three worker gauges are absent. `SHOW METRICS INFO` reports
+the four metrics as `Workers`, `WorkersBusy`, `WorkerQueueLength`, and
+`ProcessStartTime`.
 
 #### Index metrics
 
@@ -302,6 +314,12 @@ JSON endpoint and `SHOW METRICS INFO` use different names — see
  | memgraph\_unreleased\_delta\_objects | Gauge | Number of unreleased delta objects. |
  | memgraph\_gc\_latency\_seconds | Histogram | GC total cleanup time. |
  | memgraph\_gc\_skiplist\_cleanup\_latency\_seconds | Histogram | GC time spent cleaning skiplists in indexes. |
+ | memgraph\_gc\_running\_seconds | Gauge | Time the running GC has taken so far. |
+
+`memgraph_gc_running_seconds` is `0` when no garbage collection is running, and
+always `0` in `ON_DISK_TRANSACTIONAL` mode. `SHOW METRICS INFO` doesn't include
+it; [`SHOW TRANSACTIONS`](/fundamentals/transactions#garbage-collection-rows)
+shows a running collection, with its time so far in `elapsed_ms`.
 
 #### Operator metrics
 
@@ -407,6 +425,26 @@ Session metrics are global; they are not scoped to any individual database.
  | ---- | ---- | ----------- |
  | memgraph\_snapshot\_creation\_latency\_seconds | Histogram | Snapshot creation latency. |
  | memgraph\_snapshot\_recovery\_latency\_seconds | Histogram | Snapshot recovery latency. |
+ | memgraph\_snapshot\_running\_seconds | Gauge | Time the running snapshot has taken so far. |
+ | memgraph\_last\_snapshot\_timestamp\_seconds | Gauge | Unix time of the last snapshot. |
+ | memgraph\_snapshot\_failures\_total | Counter | Number of snapshots that failed, by `reason`. |
+
+The running time is `0` when no snapshot is running, and always `0` in
+`ON_DISK_TRANSACTIONAL` mode. `SHOW METRICS INFO` doesn't include it; [`SHOW
+TRANSACTIONS`](/fundamentals/transactions#snapshot-progress-rows) shows a running
+snapshot, with its time so far in `elapsed_ms`.
+
+The last snapshot time also advances when a [periodic
+snapshot](/fundamentals/data-durability#periodic-snapshots) finds nothing new to
+write, so it can be later than the newest file that `SHOW SNAPSHOTS` lists. It
+is `0` until the first snapshot or periodic check after Memgraph starts.
+`SHOW METRICS INFO` doesn't include it; `SHOW SNAPSHOTS` lists the snapshot
+files with their physical timestamps.
+
+The failure `reason` is `no_space` when the disk is full, or `write_error` for
+any other failure. A snapshot that Memgraph cancels on purpose isn't a failure.
+`SHOW METRICS INFO` reports the failures as `SnapshotFailuresNoSpace` and
+`SnapshotFailuresWriteError`.
 
 #### Stream metrics
 
@@ -428,6 +466,13 @@ Session metrics are global; they are not scoped to any individual database.
  | memgraph\_successful\_queries\_total | Counter | Number of successful queries. |
  | memgraph\_transient\_errors\_total | Counter | Number of transient errors (errors which can be retried). |
  | memgraph\_write\_write\_conflicts\_total | Counter | Number of write-write conflicts (two transactions modifying the same node simultaneously). |
+ | memgraph\_longest\_transaction\_seconds | Gauge | Age of the oldest open transaction. |
+
+`memgraph_longest_transaction_seconds` is `0` when no transaction is open on the
+database. Snapshots and garbage collection don't count. `SHOW METRICS INFO`
+doesn't include it; [`SHOW
+TRANSACTIONS`](/fundamentals/transactions#show-transactions) shows the age of
+each open transaction in `elapsed_ms`.
 
 #### Trigger metrics
 
