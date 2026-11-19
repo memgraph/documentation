@@ -58,6 +58,14 @@ function toRoute(url: string): string {
   }
 }
 
+// The crawler stores text HTML-escaped ("Questions &amp; Feedback"). Results render as
+// text, not HTML, so turn the escapes back into characters.
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0" };
+const decode = (text: string) =>
+  text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) =>
+    e[0] !== "#" ? ENTITIES[e.toLowerCase()] ?? m
+    : String.fromCodePoint(e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : Number(e.slice(1))));
+
 const LEVELS = ["lvl6", "lvl5", "lvl4", "lvl3", "lvl2", "lvl1"] as const;
 
 // "…/memgql/connect/mongodb#setup" -> "Mongodb"
@@ -70,7 +78,7 @@ function titleFromUrl(url: string): string {
 function toResult(hit: Hit): Result {
   // A heading record is titled by its own level; a paragraph by its deepest heading.
   const level = hit.type.startsWith("lvl") ? hit.type : LEVELS.find((l) => hit.hierarchy[l]) ?? "lvl1";
-  const title = hit._highlightResult?.hierarchy?.[level]?.value ?? hit.hierarchy[level as keyof Hierarchy] ?? "";
+  const title = decode(hit._highlightResult?.hierarchy?.[level]?.value ?? hit.hierarchy[level as keyof Hierarchy] ?? "");
   // Paragraphs show a snippet. Sub-headings ("Warning", "Errors") mean little alone, so they
   // show the headings above them, below the page title: "Errors › Replication failure".
   const depth = Number(level.slice(3));
@@ -79,12 +87,13 @@ function toResult(hit: Hit): Result {
     .map((n) => hit.hierarchy[`lvl${n}` as keyof Hierarchy])
     .filter(Boolean)
     .join(" › ");
-  const excerpt = hit.type === "content" ? hit._snippetResult?.content?.value : parents || undefined;
+  const snippet = hit._snippetResult?.content?.value;
+  const excerpt = hit.type === "content" ? snippet && decode(snippet) : decode(parents) || undefined;
   return {
     id: hit.objectID,
     // Grouped by page title (lvl1): the crawler sets lvl0 to "Documentation" everywhere.
     // A few pages have no title in the index; name those after their URL.
-    page: hit.hierarchy.lvl1 ?? titleFromUrl(hit.url),
+    page: hit.hierarchy.lvl1 ? decode(hit.hierarchy.lvl1) : titleFromUrl(hit.url),
     route: toRoute(hit.url),
     title,
     excerpt,
