@@ -12,6 +12,7 @@ export default {
   "database-management": "Database management",
   "deployment": "Deployment",
   "memgraph-lab": "Memgraph Lab",
+  "memgraph-agent": "Memgraph Agent",
   "help-center": "Help center",
   "release-notes": "Release notes",
   "--": {
