@@ -44,13 +44,14 @@ In other words, each privilege that is granted to a user role is automatically
 granted to all the users with that role (unless it has been explicitly denied to
 that user). Similarly, each privilege that is denied to a user role is
 automatically denied to all users with that role (even if it has been explicitly
-granted to that user).
+granted to that user), unless it's a [weak deny](#make-a-deny-overridable).
 
 When a user has multiple roles, their permissions are combined using the
 following rules:
 - **Grants**: If any role grants a permission, the user has that permission
 - **Denies**: If any role denies a permission, the user is denied that
-  permission
+  permission, unless it's a [weak deny](#make-a-deny-overridable) and another
+  role grants it
 - **Database Access**: If any role grants access to a database, the user has
   access
 - **Fine-grained Permissions**: Label-based, edge type, and property permissions
@@ -363,7 +364,8 @@ connections will be rejected.
 
 Memgraph will execute a query if and only if either a user or its role is
 granted that privilege and neither the user nor its role are denied that
-privilege. Otherwise, Memgraph will not execute that specific query. Note that
+privilege, except by a [weak deny](#make-a-deny-overridable) that a grant
+overrides. Otherwise, Memgraph will not execute that specific query. Note that
 `DENY` is a stronger operation than `GRANT`. This is also notable from the fact
 that if neither the user nor its role are explicitly granted or denied a certain
 privilege, that user will not be able to perform that specific query. This effect
@@ -381,6 +383,9 @@ DENY        | NULL        | DENY
 NULL        | GRANT       | GRANT
 NULL        | DENY        | DENY
 NULL        | NULL        | DENY
+
+In this table, `DENY` is a strong deny. A [weak deny](#make-a-deny-overridable)
+loses to a grant of the same privilege.
 
 Once the privileges are changed, they take full effect once the user reconnects
 to the database.
@@ -415,6 +420,73 @@ For example, to deny `AUTH` and `INDEX` privileges to users with the
 ```cypher
 DENY AUTH, INDEX TO moderator;
 ```
+
+#### Make a deny overridable
+
+A deny is strong by default: no grant overrides it. A weak deny is the same
+prohibition, except that a grant of the same thing from another role, or from
+the user, overrides it. Use it when a user holds two roles and the broader one
+should win. Available since Memgraph 3.15.
+
+```plaintext
+[WEAK | STRONG] DENY PRIVILEGE_LIST TO [USER | ROLE] USER_OR_ROLE;
+```
+
+`PRIVILEGE_LIST` is a comma-separated list of privileges, and `USER_OR_ROLE` is
+the user or role to deny them to. `WEAK` and `STRONG` are optional; without
+either, the deny is strong, so `STRONG DENY` is the same as `DENY`. `WEAK` and
+`STRONG` also work on
+[label](#label-based-access-control), edge-type and
+[property](#property-based-access-control) denies, and on `DENY ALL
+PRIVILEGES`.
+
+For example, the `support` role weak-denies `INDEX` and the `indexer` role
+grants it. `alice` holds both roles and can manage indexes. `bob` holds only
+`support` and can't:
+
+```cypher
+CREATE ROLE support;
+CREATE ROLE indexer;
+WEAK DENY INDEX TO support;
+GRANT INDEX TO indexer;
+CREATE USER alice;
+SET ROLE FOR alice TO support, indexer;
+CREATE USER bob;
+SET ROLE FOR bob TO support;
+```
+
+A grant overrides a weak deny only when it's for the same thing: the same
+privilege, the same label specification or edge type, or the same property on
+the same label specification or edge type.
+
+Weak and strong denies combine as follows:
+
+- **A grant of the same thing overrides a weak deny.** The grant comes from
+  another of the user's roles, or from the user. One role can't hold both,
+  because a grant replaces the role's deny of the same thing, and a deny
+  replaces its grant. On a database the user can access only through a role,
+  the user's own privileges don't count, so they don't override a role's weak
+  deny of a privilege there.
+- **A strong deny always wins.** If any of the user's roles, or the user,
+  strongly denies something, no grant or weak deny elsewhere changes that.
+- **Running a deny again on the same role replaces its strength.** `WEAK DENY`
+  followed by `DENY` on one role leaves a strong deny.
+- **`REVOKE` removes a deny of either strength.**
+- **Only the roles a user holds on the queried database count.** If the role
+  with the grant covers only some databases, a weak deny is overridden on
+  those and holds on the rest.
+
+`DENY DATABASE`, and `DENY IMPERSONATE_USER` with a list of users, take no
+strength and are always absolute.
+
+<Callout type="warning">
+In a [replication](/database-management/clustering/replication) cluster,
+upgrade every instance to Memgraph 3.15 before you run `WEAK DENY`. A
+Memgraph 3.14 REPLICA rejects users and roles that have a weak deny, so system
+replication to it fails until it's upgraded. An earlier REPLICA enforces a weak
+deny as strong, and if it writes the user or role back, the deny stays strong after the upgrade until you run
+the `WEAK DENY` again.
+</Callout>
 
 #### Revoke privileges
 
@@ -473,6 +545,10 @@ To check privilege for a certain user or role, run the following query:
 SHOW PRIVILEGES FOR [USER | ROLE] user_or_role;
 ```
 
+The result has three columns: `privilege`, `effective` and `description`. The
+`effective` column shows `GRANT`, `STRONG DENY` or `WEAK DENY`. Before
+Memgraph 3.15, it showed `DENY` for every deny.
+
 In multi-tenant environments, privileges can differ depending on the target
 database. The SHOW PRIVILEGE query can be expanded to show privileges on
 specific databases as the following:
@@ -529,9 +605,9 @@ data secure from those who don't have adequate permission.
 ### Label-based access control
 
 Label-based permissions use `GRANT`, `DENY`, and `REVOKE` to control access.
-`DENY` takes precedence over `GRANT`: an explicit deny cannot be overridden by
-any grant, regardless of role configuration. If no rule matches a node or edge,
-access is denied by default: this is called a "silent deny".
+`DENY` takes precedence over `GRANT`: an explicit deny can't be overridden by
+any grant, unless it's a [weak deny](#make-a-deny-overridable). If no rule
+matches a node or edge, access is denied by default: this is called a "silent deny".
 
 The available permissions are:
 
@@ -631,7 +707,8 @@ GRANT READ ON NODES CONTAINING LABELS * TO charlie;
 ```
 
 To explicitly deny access to a node, use `DENY`. A deny rule overrides any
-grants for the same label specification, regardless of role configuration.
+grants for the same label specification, regardless of role configuration,
+unless it's a [weak deny](#make-a-deny-overridable).
 
 ```cypher
 DENY * ON NODES CONTAINING LABELS :User, :Person TO charlie;
@@ -760,6 +837,9 @@ logic for grants and explicit denies:
 the user has that permission
 - If any role or the user denies a permission on a label specification, the user
 is denied that access, overriding any grants
+- A [weak deny](#make-a-deny-overridable) is the exception: a grant of the same
+permission on the same label specification, with the same labels and matching
+mode, overrides it
 - Each label specification is evaluated independently based on its label list
 and matching mode
 
@@ -776,7 +856,8 @@ applied and their permissions are combined:
 - The effective permissions for a node are the union (OR) of all grants from
 matching rules
 - If any matching rule has a deny, it overrides all grants for the affected
-permissions
+permissions. This holds for a weak deny too: only a grant on the same label
+specification overrides it
 - Rules are matched based on their label specification and matching mode
 
 For example, given the following rules:
@@ -884,6 +965,9 @@ These commands return the aggregated privileges (including label-based and
 property-based permissions) for the user or role in the specified database
 context.
 
+A grant, a strong deny and a weak deny on the same label, edge type or property
+each get their own row, even when one of them wins.
+
 **Note**:
 - For **users**: In multi-tenant environments, you must specify the database
   context.
@@ -900,7 +984,8 @@ PBAC controls which individual properties on those nodes and relationships a use
 can read or write.
 
 PBAC uses the same `GRANT`, `DENY`, and `REVOKE` commands as LBAC, with the
-same precedence rules: `DENY` overrides `GRANT`, and if no rule matches a
+same precedence rules: `DENY` overrides `GRANT` unless it's a
+[weak deny](#make-a-deny-overridable), and if no rule matches a
 property, access is denied by default (silent deny).
 
 The available permissions are:
@@ -1077,10 +1162,39 @@ permissions, the permissions are combined:
 permission
 - If any role or the user denies a property permission, the user is denied
 that access, overriding any grants
+- A [weak deny](#make-a-deny-overridable) is the exception: a grant of the same
+permission on the same property and label specification overrides it
 
 For example, if a user has Role A granting `READ {salary}` on `:Employee` and
 Role B denying `READ {salary}` on `:Employee`, the deny takes precedence and the
 user cannot see the `salary` property.
+
+To let Role A win, make Role B's deny a [weak deny](#make-a-deny-overridable).
+For example, `engineer` reads every `:Employee` property except `salary`, and
+`hr` reads `salary`:
+
+```cypher
+CREATE ROLE engineer;
+CREATE ROLE hr;
+GRANT READ ON NODES CONTAINING LABELS :Employee TO engineer;
+GRANT READ {*} ON NODES CONTAINING LABELS :Employee TO engineer;
+WEAK DENY READ {salary} ON NODES CONTAINING LABELS :Employee TO engineer;
+GRANT READ ON NODES CONTAINING LABELS :Employee TO hr;
+GRANT READ {salary} ON NODES CONTAINING LABELS :Employee TO hr;
+GRANT MATCH TO engineer;
+GRANT MATCH TO hr;
+CREATE USER eve;
+SET ROLE FOR eve TO engineer;
+CREATE USER frank;
+SET ROLE FOR frank TO engineer, hr;
+CREATE (:Employee {name: 'Alice', salary: 9999});
+```
+
+When `eve` runs `MATCH (e:Employee) RETURN e.name, e.salary;`, the result is
+`Alice` and `NULL`. `frank` gets `Alice` and `9999`, because `hr` grants `READ {salary}`
+on the same label specification. The grant must name the property on the same
+label specification: a `{*}` grant, or a `{salary}` grant on `:Employee,
+:Contractor`, doesn't override the weak deny.
 
 Global property permissions (granted on `{*}`) act as a per-property fallback.
 For each property access check, the resolution order is:
