@@ -221,7 +221,32 @@ true:
 |---|---|
 | `14` | The OpenSSL FIPS provider is unavailable or not operational |
 | `15` | `--password-encryption-algorithm` is set to a non-approved algorithm |
-| `16` | No valid Enterprise license |
+| `16` | No valid Enterprise license at startup, and init queries are set (`--init-file`, `--init-data-file` or `MEMGRAPH_HA_CLUSTER_INIT_QUERIES`) |
+
+Without a valid Enterprise license, an instance in approved mode starts, logs
+a warning, and refuses every query except `SHOW LICENSE INFO`,
+`SHOW DATABASE SETTINGS`, `SET DATABASE SETTING 'organization.name'` and
+`SET DATABASE SETTING 'enterprise.license'`. A client such as a Kubernetes
+operator can then set the license over Bolt. Every other query, `BEGIN`
+included, fails with:
+
+```plaintext copy=false
+FIPS mode requires a valid enterprise license. Until one is set, only SHOW LICENSE INFO, SHOW DATABASE SETTINGS, SET DATABASE SETTING 'organization.name' and SET DATABASE SETTING 'enterprise.license' are accepted.
+```
+
+Init queries run at startup, before a license can be set over Bolt, so with
+any of them set the license has to be given at startup: `--license-key` and
+`--organization-name`, or the `MEMGRAPH_ENTERPRISE_LICENSE` and
+`MEMGRAPH_ORGANIZATION_NAME` environment variables.
+
+The same restriction applies when the license expires while the instance
+runs. From then on, only those queries are served until a valid license is
+set. A transaction open at that moment keeps its writes only if `COMMIT` is
+its next statement, and running streams stop; start them again with
+`START STREAM` once the license is set.
+
+Before Memgraph 3.15, an instance in approved mode without a valid license
+refused to start with exit code `16`.
 
 {<h3 id="what-approved-mode-enforces" className="custom-header">What approved mode enforces</h3>}
 
@@ -232,8 +257,12 @@ true:
   15.
 - **TLS** negotiates a minimum of TLS 1.2 on every connection Memgraph accepts
   or makes, including replication and the coordinator's Raft port.
-- **Pre-computed password hashes** (`CREATE USER … IDENTIFIED BY
-  'bcrypt:$2a$…'`) are rejected.
+- **Pre-computed password hashes** are accepted only as pbkdf2-sha256
+  (`CREATE USER … IDENTIFIED BY 'pbkdf2-sha256:600000:<salt>:<key>'`, see
+  [pre-hashed
+  passwords](/database-management/authentication-and-authorization/users#administer-users)).
+  bcrypt, sha256 and sha256-multiple hashes are rejected. Before Memgraph
+  3.15, every pre-computed hash was rejected.
 
 {<h3 id="verifying-approved-mode" className="custom-header">Verifying approved mode</h3>}
 
