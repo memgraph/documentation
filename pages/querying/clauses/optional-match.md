@@ -10,7 +10,8 @@ The `MATCH` clause can be modified by prepending the `OPTIONAL` keyword.
 missing parts of the pattern will be filled with null values.
 
 1. [Get optional relationships](#1-get-optional-relationships) <br />
-2. [Optional typed and named relationship](#2-optional-typed-and-named-relationship)
+2. [Optional typed and named relationship](#2-optional-typed-and-named-relationship) <br />
+3. [Use MATCH after OPTIONAL MATCH](#3-use-match-after-optional-match)
 
 ## Dataset
 
@@ -62,6 +63,60 @@ Output:
 ```
 
 Because there are no outgoing relationships of type `LIVES_IN` for the node, the value of r is `null` while the value of `country.name` is `'United Kingdom'`.
+
+## 3. Use MATCH after OPTIONAL MATCH
+
+A `MATCH` can follow an `OPTIONAL MATCH`, directly or after other clauses such
+as `UNWIND`, and use the variables the `OPTIONAL MATCH` binds. Before Memgraph
+3.15, such a query raised the `MATCH can't be put after OPTIONAL MATCH.` error
+unless a `WITH` clause separated the two clauses.
+
+The following query finds the country each person works in, if any, and then
+the people who live in that country:
+
+```cypher
+MATCH (p:Person)
+OPTIONAL MATCH (p)-[:WORKING_IN]->(c:Country)
+MATCH (c)<-[:LIVING_IN]-(resident:Person)
+RETURN p.name AS person, c.name AS country, resident.name AS resident
+ORDER BY person, resident;
+```
+
+Output:
+
+```plaintext copy=false
++------------------+------------------+------------------+
+| person           | country          | resident         |
++------------------+------------------+------------------+
+| "Harry"          | "United Kingdom" | "Anna"           |
+| "Harry"          | "United Kingdom" | "Harry"          |
++------------------+------------------+------------------+
+```
+
+Anna has no `WORKING_IN` relationship, so `c` is `null` on her row. The
+`MATCH` drops that row, because a `null` matches no node (see [matching a
+variable that is already bound](/querying/clauses/match#43-matching-a-variable-that-is-already-bound)).
+John works in France, where no one lives, so the `MATCH` drops his row too.
+
+A `MATCH` that doesn't use the `OPTIONAL MATCH` variables doesn't drop a row
+because they are `null`:
+
+```cypher
+MATCH (p:Person {name: 'Anna'})
+OPTIONAL MATCH (p)-[:WORKING_IN]->(c:Country)
+MATCH (g:Country {name: 'Germany'})
+RETURN p.name AS person, c.name AS work_country, g.name AS country;
+```
+
+Output:
+
+```plaintext copy=false
++--------------+--------------+--------------+
+| person       | work_country | country      |
++--------------+--------------+--------------+
+| "Anna"       | Null         | "Germany"    |
++--------------+--------------+--------------+
+```
 
 ## Dataset queries
 
