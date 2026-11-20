@@ -31,8 +31,9 @@ spaces package is installed.
   memories and knowledge graph, and only you can read it.
 - **A shared space** is the database `space_NAME`. Members can read
   everything in it, and write only memory files.
-- **Shared memory files** appear to the agent under `/memories/spaces/NAME/`.
-  The agent writes there only when you want something shared. At the start of
+- **Shared memory files** appear to the agent under `/memories/spaces/NAME/`,
+  and listing `/memories` shows each shared space you can read. The agent
+  writes there only when you want something shared. At the start of
   a session, each shared space adds up to 20 files to the memory index.
 - **Recall** searches your personal space and every shared space you can read,
   in parallel. If a space doesn't answer within 10 seconds, recall returns the
@@ -42,6 +43,90 @@ Your own sessions stay in your personal space. A shared space holds only the
 memory files members put there, and the knowledge graph built from them.
 
 ## Set up spaces as an admin
+
+An admin starts a licensed Memgraph, creates an admin login for Context Graph,
+and declares the members and spaces. Install the `context-graph-spaces` package,
+which has the admin commands:
+
+```bash
+pip install context-graph-spaces
+```
+
+### Start a spaces server
+
+`compose` prints a Docker Compose file for a spaces server. Its `memgraph`
+service runs Memgraph with MAGE, which recall needs for embeddings, with a
+memory limit below the container's. Its `worker` service is the
+[shared space worker](#run-the-shared-space-worker).
+
+```bash
+context-graph-spaces compose --bind 10.0.0.5 --port 7687 --memory-gib 4 > docker-compose.yml
+cat > .env <<'ENV'
+MEMGRAPH_ENTERPRISE_LICENSE=YOUR_LICENSE
+MEMGRAPH_ORGANIZATION_NAME=YOUR_ORGANIZATION
+ENV
+docker compose up -d
+```
+
+In `.env`, replace `YOUR_LICENSE` with your Memgraph Enterprise license key and
+`YOUR_ORGANIZATION` with the organization name the license was issued to.
+`docker compose` refuses to start without them.
+
+- **`--bind`** is the host address Memgraph listens on. Use a private network's
+  address, not `0.0.0.0`. The default is `127.0.0.1`.
+- **`--port`** is the Bolt port on the host. The default is `7687`.
+- **`--memory-gib`** is the container's memory, at least 2 GiB. The default is
+  4.
+- **`--spec`** is the spec file's path on the server, for the worker. The
+  default is `./spaces.toml`.
+
+You can also use a Memgraph you run yourself, such as a
+[high availability cluster](/database-management/clustering/high-availability).
+It needs an Enterprise license,
+[multi-tenancy](/database-management/multi-tenancy) and MAGE.
+
+### Create the admin login
+
+Provisioning needs a login with Memgraph's built-in `admin` role, or with the
+privileges it uses granted directly. On a fresh instance with no users, `init`
+creates that login, named `cgadmin` unless you pass `--admin NAME`, and prints
+its password once as an `export` line:
+
+```bash
+context-graph-spaces --url bolt://memgraph.example.com:7687 init
+```
+
+On an instance that already has users, `init` creates nothing. Pass it an
+existing admin with `--user` and `--password`, or `MEMGRAPH_USER` and
+`MEMGRAPH_PASSWORD`, to run its checks. Either way, it then checks that the
+instance can host spaces:
+
+- **Enterprise license:** valid.
+- **Admin privileges:** the login has the `admin` role, or every privilege
+  provisioning uses, on every database.
+- **Embeddings:** MAGE's `embeddings.text` loads the model recall uses. If it
+  can't, `init` says why.
+- **Memory limit:** reported, so you can keep it below the container's limit.
+
+`init` exits with code 1 if a check fails. To make another login an admin, an
+existing admin gives it the role, or grants the privileges directly, replacing
+`LOGIN` with its name:
+
+```cypher template
+SET ROLE FOR LOGIN TO admin;
+```
+
+```cypher template
+GRANT CONFIG, STATS, AUTH, MULTI_DATABASE_EDIT, MULTI_DATABASE_USE, PROFILE_RESTRICTION,
+      MATCH, CREATE, MERGE, SET, DELETE, REMOVE, INDEX, CONSTRAINT TO LOGIN;
+GRANT DATABASE * TO LOGIN;
+```
+
+The admin login can't be named `admin`, the built-in role's name, or start with
+`u_`, `space_` or `cg_`, which `apply` manages. If the login lacks a
+privilege, `init`, `plan` and `apply` name it and print these commands.
+
+### Declare and apply the spaces
 
 Declare the members and spaces in a spec file, such as `spaces.toml`:
 
@@ -61,21 +146,24 @@ memory_limit_mb = 4096
   `labels` and `edge_types` set what members may write; the default is memory
   files only.
 
-Install the `context-graph-spaces` package and apply the spec as a Memgraph
-admin user:
+Apply the spec as the admin login:
 
 ```bash
-pip install context-graph-spaces
 export MEMGRAPH_URL=bolt://memgraph.example.com:7687
-export MEMGRAPH_USER=ADMIN_USER
+export MEMGRAPH_USER=cgadmin
 export MEMGRAPH_PASSWORD=ADMIN_PASSWORD
 context-graph-spaces plan spaces.toml
 context-graph-spaces apply spaces.toml
 ```
 
-`plan` prints what `apply` would change. `apply` creates what's missing and
-prints one-time setup lines for new users, including the password of the
-`cg_service` user. Running it again changes nothing.
+`plan` prints what `apply` would change. `apply` creates what's missing and,
+for each new login, prints a one-time `join` command with its password, and the
+password of the `cg_service` user. These lines are the only copy of the
+passwords.
+
+If `apply` fails partway, it still prints the lines for the logins it created,
+then the error. Run it again once the error is fixed, and it continues where it
+stopped. Running it again when nothing changed changes nothing.
 
 `apply` creates and maintains:
 
@@ -107,10 +195,45 @@ files left behind and extracts the changed memory files. It uses no LLM.
 Personal spaces are extracted on each user's machine, as in the Community
 edition.
 
+On a server from `compose`, add `CG_SERVICE_PASSWORD=SERVICE_PASSWORD` to
+`.env` and put the spec where `--spec` says. The `worker` service belongs to
+the Docker Compose `worker` profile, so Compose starts it only when you name
+that profile:
+
+```bash
+docker compose --profile worker up -d
+```
+
+The worker keeps its packages and model on a volume, so only its first start
+downloads them.
+
 <Callout type="info">
 Without the worker, shared memory files are still stored and read, but recall
 can't find them by meaning or through the knowledge graph.
 </Callout>
+
+### Run spaces on Kubernetes
+
+The MAGE image has no embedding model. The first time recall embeds text,
+Memgraph downloads the model into `$HOME/.cache/huggingface`. The
+[high availability Helm chart](/database-management/clustering/high-availability/setup-ha-cluster-k8s)
+runs data instances with a read-only root filesystem, so the download fails and
+recall times out in every space. Point the cache at the data volume on every
+data instance in the chart's values:
+
+```yaml
+extraEnv:
+  data:
+    - name: HF_HOME
+      value: /var/lib/memgraph/huggingface
+```
+
+If `extraEnv.data` is already set, add this entry to it. Each data instance
+needs outbound HTTPS to `huggingface.co` for its first download, about 130 MB.
+Without it, copy the model into that directory and set `HF_HUB_OFFLINE=1`.
+
+Every data instance needs the model, not only the current MAIN, or recall fails
+after a failover. `init` checks only the instance it connects to.
 
 ## Join as a user
 
@@ -129,11 +252,37 @@ you can read:
 ```plaintext copy=false
 Wrote /home/alice/.config/context-graph/config.toml: edition = enterprise, login 'alice'.
 Personal space: u_alice. Shared spaces: payments.
+Next: memgraph-context-graph setup <runtime> (e.g. claude-code) --memory-backend context-graph
+  Shared spaces are reached through the memory tool, which only that backend turns on.
 ```
 
-If this machine isn't set up yet, run
-[setup](/ai-ecosystem/ai-memory/get-started) next to connect
-your agents.
+Agents read and write shared memory files only through Context Graph's memory
+tool, so run [setup](/ai-ecosystem/ai-memory/get-started) next with
+`--memory-backend context-graph`. If Context Graph is already your agents'
+memory, `join` says so instead.
+
+For a [high availability cluster](/database-management/clustering/high-availability),
+join with the `neo4j://` URL of a coordinator. Writes through a `neo4j://` URL
+need `memgraph-context-graph` 0.12.5 or later.
+
+`join` writes the configuration file before it checks the login. If the check
+fails, it says why:
+
+- **Wrong password:**
+
+  ```plaintext copy=false
+  Wrote PATH, but the login doesn't work yet: Memgraph refused the login 'alice'; check its password
+  ```
+
+  `PATH` is the configuration file's path. Run `join` again with the right
+  password.
+- **A login that `apply` didn't provision:** the login has no personal space.
+  Ask your admin to add it to the spec's `members` and run `apply`.
+
+To use shared spaces from only some of your agents, add `--agent RUNTIME` for
+each one. The login then goes into a
+[configuration profile](/ai-ecosystem/ai-memory/configuration#send-one-agents-memory-to-another-memgraph)
+for those agents, and the others keep their Memgraph.
 
 In the [terminal viewer](/ai-ecosystem/ai-memory/graph#browse-the-graph),
 press `w` to switch to the next space you can read.

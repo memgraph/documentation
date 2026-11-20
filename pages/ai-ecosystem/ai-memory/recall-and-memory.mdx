@@ -44,9 +44,9 @@ memgraph-context-graph config set session_start.resume false
 
 ### What recall returns
 
-Recall returns raw data, not an answer: the dated messages and extracted
-facts that match the question, as text. The agent passes them to its model
-like any other tool result, and the model answers from them.
+Recall returns raw data, not an answer: the memory files and dated messages
+that match the question, as text. The agent passes them to its model like any
+other tool result, and the model answers from them.
 
 The results
 start with a short header that tells the model how to read them, for example
@@ -59,9 +59,23 @@ Recall combines several searches over your own sessions:
 | Memories | [Memory files](#memory) that match by meaning or by words, shown first |
 | Messages by meaning | Messages closest to the question, by vector search |
 | Messages by words | Messages that match the question's words, by text search |
-| Entities | People, projects and other entities that match, with their facts |
-| Facts | Extracted facts that match, with the messages they came from |
-| Facts about you | All facts of the types that match, for questions that count or list things |
+| Entities | People, projects and other entities that match, and the facts about them |
+| Facts | Extracted facts that match |
+| Facts about you | Facts of the types that match, for questions that count or list things |
+
+Matching memory files come first. Recall then groups the matching messages
+into **exchanges**: each message together with the messages next to it in the
+same session, so a question stays with its answer.
+
+Entities and facts aren't shown on their own. They rank the exchanges of the
+messages they came from, and add those messages if no other search found
+them. For a question about a problem, such as an error or a fix, recall also
+adds exchanges from the sessions it found that show how a problem was
+resolved.
+
+Memory files and exchanges share a budget of 6,000 tokens by default, counted per
+[shared space](/ai-ecosystem/ai-memory/shared-spaces) if you use them. Memory
+files take their part first, and the exchanges get what's left.
 
 Entities and facts come from the
 [knowledge graph](/ai-ecosystem/ai-memory/graph#add-a-knowledge-graph). Before
@@ -71,7 +85,8 @@ The searches by meaning need [MAGE](/advanced-algorithms), which computes the
 embeddings inside Memgraph. On Memgraph without MAGE, recall uses text search
 only and says so in its results.
 
-To change how many results each search returns, or to drop a search, see
+To change how many results each search returns, drop a search, change the
+token budget or get messages and facts as separate results, see
 [Recall configuration](/ai-ecosystem/ai-memory/configuration#recall-configuration).
 
 ## Memory
@@ -93,9 +108,15 @@ on, setup does three things for each agent:
 
 1. It imports the agent's existing memory, once. Claude Code's user and
    feedback memories go to `/memories/user/` and `/memories/feedback/`, and
-   project memories go to that project's folder. Codex's memory summary
-   becomes `/memories/user/codex-memory-summary.md`. A file already in the
-   graph is never overwritten.
+   project memories go to that project's folder. If two projects have a user
+   or feedback memory with the same name and different text, the second one
+   goes to its own project's folder.
+
+   Codex's memory summary and `MEMORY.md` become
+   `/memories/codex/memory-summary.md` and `/memories/codex/memory.md`. A file
+   already in the graph is never overwritten. Before `memgraph-context-graph`
+   0.12.1, the summary was imported as `/memories/user/codex-memory-summary.md`,
+   and it stays there.
 2. It turns off the agent's own memory, as listed in
    [Supported agents](/ai-ecosystem/ai-memory/agents#built-in-memory). Setup
    backs up each file it edits.
@@ -127,7 +148,23 @@ agent gets:
 - the full text of every file whose frontmatter has `pin: true`;
 - the name of the current project's folder.
 
-The index is built from the graph each time, so it's never out of date.
+The index is built from the graph each time, so it's never out of date. It
+lists the current project's files first, then the files in `/memories/` that
+were imported from this project, then the rest, newest first within each
+group.
+
+Files imported before `memgraph-context-graph` 0.12.4 don't record their
+project; run the setup command above again to add it, without rewriting the
+files. On Windows, `memgraph-context-graph` releases before 0.12.2 imported
+Claude Code project memories into the wrong folder, so the index didn't list
+them. Running the setup command again imports them into the right one.
+
+All of this fits in what the agent shows its model at the start of a session:
+10,000 characters, or 9,000 for Codex. Pinned files take at most half.
+
+When the index doesn't fit, files lower in the list lose their descriptions
+first. If even their paths don't fit, the index ends with how many files it
+left out, and the agent can list them with the `memory` tool.
 
 ### Rules for memory files
 
@@ -149,20 +186,45 @@ memgraph-context-graph setup claude-code --memory-backend native
 For Claude Code, setup first copies the graph's memories back into Claude
 Code's auto memory, so it continues from what the graph learned:
 
-- A project's files go to each Claude Code project folder for that project,
-  and `/memories/user/` and `/memories/feedback/` files go to every folder.
-- The graph's copy replaces an older copy there, and each folder's
-  `MEMORY.md` index is rebuilt.
+- A project's files go to the memory folder of that project's repository.
+  Claude Code keeps one folder per repository, shared by its worktrees.
+- `/memories/user/` and `/memories/feedback/` files go back to the folders
+  they were imported from. A file first written in the graph goes to the
+  repositories of the sessions that wrote it.
+- A file already in the folder is replaced only if it's an earlier version of
+  the graph's file. A file changed outside the graph is kept, and setup lists
+  it. Each folder that changed gets its `MEMORY.md` index rebuilt.
 - Files that Claude Code has no folder for stay in the graph only, such as a
-  project it never opened, another agent's files, or files directly in
-  `/memories/`. Setup lists them.
+  project it never opened, another agent's files, or a user-wide file no
+  recorded session wrote. Setup lists them.
 
 Then it turns the agent's own memory on again. The memories in the graph stay
 where they are, and recall still finds them. If Memgraph isn't reachable,
 setup changes nothing.
 
-Codex, GitHub Copilot CLI and Grok Build get nothing copied back, because
-their memory is generated or hosted by the agent itself.
+Codex rewrites its own memory files, so setup leaves each graph memory as a
+note in `~/.codex/memories/extensions/ad_hoc/notes/`, where Codex accepts
+notes from outside. Codex folds the notes into its memory, in its own words,
+the next time it consolidates, which happens only while its memories are on.
+
+Setup restores the Codex memory settings it changed when you switched. If it
+has no backup of them, for example after a switch made by a release before
+`memgraph-context-graph` 0.12.1, it keeps the current settings and tells you
+which ones to turn on.
+
+GitHub Copilot CLI and Grok Build get nothing copied back, because their
+memory is hosted by the agent or kept where only the agent can find it.
+
+The memory setting is shared by the agents that use the same Memgraph, so
+name every agent that uses the graph's memory in one command:
+
+```bash
+memgraph-context-graph setup claude-code codex --memory-backend native
+```
+
+An agent left out of that command gets nothing copied back. If copying back
+fails for one agent, setup stops and keeps the graph as the memory, so you can
+run the command again.
 
 `memgraph-context-graph uninstall` also gives memory back the same way. If
 Memgraph isn't reachable, it turns the agent's memory back on with what it

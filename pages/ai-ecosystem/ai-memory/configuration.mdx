@@ -10,6 +10,7 @@ import { Callout } from 'nextra/components'
 Context Graph keeps its settings in one configuration file. Setup writes it,
 and the `config` command changes it. This page also covers how to
 [use your own Memgraph](#use-your-own-memgraph),
+[send one agent's memory to another Memgraph](#send-one-agents-memory-to-another-memgraph),
 [run setup again](#run-setup-again) to change your choices,
 [choose what is recorded](#choose-what-is-recorded), and
 [update](#update-context-graph) or [uninstall](#uninstall-context-graph)
@@ -23,12 +24,15 @@ use another path.
 
 The file lists every key under a comment that says what it does. A key you
 haven't set is commented out, with its default, so you can see all settings
-in one place. Setup and `config set` rewrite the file: they keep your values
-and `[redact]` patterns, but not comments you add.
+in one place. Setup and `config set` rewrite the file: they keep your values,
+`[redact]` patterns, [profiles](#send-one-agents-memory-to-another-memgraph)
+and the file's line endings, but not comments you add.
 
 The hooks read their settings only from this file, not from environment
-variables, because agents run hooks without your shell's environment. Change
-settings with the `config` command:
+variables, because agents run hooks without your shell's environment. Only
+`CONTEXT_GRAPH_CONFIG` and `CONTEXT_GRAPH_PROFILE` are read, and they choose
+which file and which [profile](#send-one-agents-memory-to-another-memgraph)
+apply, never a setting's value. Change settings with the `config` command:
 
 ```bash
 memgraph-context-graph config show
@@ -56,7 +60,7 @@ so a typo doesn't break recording later. It takes these keys:
 | `capture.exclude_projects` | None | Directories in which nothing is recorded, by path or glob |
 | `memory.backend` | `native` | `context-graph` when Context Graph is the agents' [memory](/ai-ecosystem/ai-memory/recall-and-memory#memory), `native` when they keep their own. Set it with setup's `--memory-backend`, which also changes the agents' settings. |
 | `session_start.resume` | `true` | Whether a session starts with the [note on where you left off](/ai-ecosystem/ai-memory/recall-and-memory#recall) |
-| `recall.*` | See [Recall configuration](#recall-configuration) | The embedding model for recall, which searches run, and how many results each returns |
+| `recall.*` | See [Recall configuration](#recall-configuration) | The embedding model for recall, which searches run, how many results each returns, and how much text recall returns |
 | `reconcile.auto_reconcile` | `false` | Whether the [knowledge graph](/ai-ecosystem/ai-memory/graph#add-a-knowledge-graph) is built after each session |
 | `ontology.path` | The default ontology | An ontology file for the knowledge graph |
 | `ontology.derive` | `extend` | Whether Context Graph adds types to your ontology: `extend` or `off` |
@@ -78,11 +82,11 @@ creates it with permissions `0600`; keep it that way.
 ### Recall configuration
 
 The `recall.*` keys set which searches
-[recall](/ai-ecosystem/ai-memory/recall-and-memory#what-recall-returns) runs
-and how many results each returns:
+[recall](/ai-ecosystem/ai-memory/recall-and-memory#what-recall-returns) runs,
+how many results each returns, and how recall packs them into its answer:
 
 ```bash
-memgraph-context-graph config set recall.turns_k 12
+memgraph-context-graph config set recall.token_budget 8000
 memgraph-context-graph config set recall.lanes "memories, turns, text"
 ```
 
@@ -98,9 +102,37 @@ memgraph-context-graph config set recall.lanes "memories, turns, text"
 | `recall.facts_k` | `15` | Facts matched |
 | `recall.fact_turns_k` | `8` | Messages added for the matched facts |
 | `recall.user_fact_types` | `2` | Fact types gathered in full, for questions that count or list things |
-| `recall.user_facts_k` | `30` | Facts returned for those types |
+| `recall.user_facts_k` | `30` | Facts gathered for those types |
 | `recall.turn_chars` | `1500` | Characters shown per message |
 | `recall.query_instruction` | Depends on the model | Text added before the question when it's embedded. The English `bge` models get their retrieval instruction; other models get none |
+| `recall.packing` | `exchanges` | How results are returned: `exchanges` or `turns`. See below. |
+| `recall.token_budget` | `6000` | The most tokens `exchanges` packing returns from each space |
+| `recall.supplemental_search` | `true` | Whether `exchanges` packing also looks for exchanges where a problem was solved, for a question about a problem. See below. |
+
+With `exchanges` packing, recall groups the messages it found with the
+messages around them into exchanges. Extracted facts decide which exchanges
+rank first, instead of being listed on their own. Memory files come first and
+count against `recall.token_budget`, and the exchanges get what's left. The
+budget applies per space, counted with the `cl100k_base` encoding.
+
+To have enough messages to rank, `exchanges` packing raises `recall.turns_k`
+and `recall.text_k` to at least 24, and `recall.fact_turns_k` to at least 16.
+A smaller value has no effect, and `0` still turns that search off.
+
+Supplemental search runs only when the question has words such as issue,
+problem, error, fix, resolve, debug or troubleshoot. It searches by words in
+the sessions that the search by meaning found, so it needs both the `turns`
+and `text` searches, and doesn't run on Memgraph without MAGE.
+Supplemental exchanges take at most a quarter of the budget that the memory
+files leave.
+
+With `turns`, recall lists the messages and facts it found as separate rows,
+and `recall.token_budget` and `recall.supplemental_search` have no effect.
+Before `memgraph-context-graph` 0.12.0, recall always used `turns`.
+
+`exchanges` packing downloads the `cl100k_base` encoding the first time recall
+runs. Without network access, recall fails with an error that says how to
+preload it; set `recall.packing` to `turns` to recall without it.
 
 When you change `recall.embedding_model`, Context Graph computes the
 embeddings again with the new model, so embeddings from two models are never
@@ -140,7 +172,8 @@ memgraph-context-graph setup --memgraph-url bolt://memgraph.example.com:7687
 ```
 
 For a high availability cluster, use the `neo4j://` scheme with a coordinator's
-address, so the client routes writes to the MAIN instance:
+address, so the client routes writes to the MAIN instance. Writes through a
+`neo4j://` URL need `memgraph-context-graph` 0.12.5 or later:
 
 ```bash
 memgraph-context-graph config set memgraph.url neo4j://coordinator.example.com:7687
@@ -154,6 +187,85 @@ labels and properties with `SHOW SCHEMA INFO`, start it with
 Each user on a shared Memgraph should have their own `identity.user_id`. On a
 shared Memgraph with Memgraph Enterprise, [shared spaces](/ai-ecosystem/ai-memory/shared-spaces)
 give each user a database of their own.
+
+## Send one agent's memory to another Memgraph
+
+By default, every agent records to and recalls from the Memgraph at the top
+level of the configuration file. A **profile** is another Memgraph in the same
+file, and the `[agents]` table says which agents use it. Agents that aren't
+listed keep the top level.
+
+Profiles are available since `memgraph-context-graph` 0.13.0. The `recall`
+and `memory` tools of the Claude Code and Codex plugins follow a profile only
+from `memgraph-context-graph` 0.13.1 with the plugin updated to match, which
+`update` does. Before that, those tools use the top level.
+
+To move only Codex to a team's
+[shared spaces](/ai-ecosystem/ai-memory/shared-spaces) while the other agents
+stay on your own Memgraph, join with `--agent`, then set up Codex:
+
+```bash
+memgraph-context-graph join neo4j://memgraph.example.com:7687 alice --agent codex
+memgraph-context-graph setup codex --memory-backend context-graph
+```
+
+`join --agent` writes the login into a profile named after the URL's host, or
+the name you give with `--profile`, and maps the agent to it. Setup then turns
+on the profile's memory. The file afterwards holds:
+
+```toml
+[profiles.memgraph-example-com]
+edition = "enterprise"
+
+[profiles.memgraph-example-com.memgraph]
+url = "neo4j://memgraph.example.com:7687"
+user = "alice"
+password = "..."
+
+[profiles.memgraph-example-com.memory]
+backend = "context-graph"
+
+[agents]
+codex = "memgraph-example-com"
+```
+
+To move an agent to another Memgraph without shared spaces, name the profile in
+setup. If the instance has authentication, set the profile's user and password
+first:
+
+```bash
+CONTEXT_GRAPH_PROFILE=work memgraph-context-graph config set memgraph.user alice
+CONTEXT_GRAPH_PROFILE=work memgraph-context-graph config set memgraph.password
+memgraph-context-graph setup codex --profile work --memgraph-url bolt://memgraph.example.com:7687
+```
+
+`setup codex --profile default` moves Codex back to the top level.
+
+A profile works like this:
+
+- **It holds only where memory goes:** `edition`, the `memgraph.*` keys and
+  `memory.backend`. A key it leaves out takes its default, not the top level's
+  value. Any other key in a profile is ignored, and `doctor` reports it.
+- **Every other setting is shared.** `capture.*`, `[redact]`, `recall.*` and
+  the rest apply to all agents, so moving an agent can't turn redaction off.
+- **Agents on different profiles don't share memory.** An agent on the top
+  level doesn't recall what Codex saved on the team's Memgraph.
+- **Hooks and the MCP server pick the profile of their agent.** Setup
+  registers each agent's MCP server with `mcp --agent RUNTIME`. The Claude Code
+  and Codex plugins name their agent in the `CONTEXT_GRAPH_AGENT` environment
+  variable instead. If you register the MCP server yourself, pass `--agent`.
+- **`setup RUNTIME` and `doctor --runtime RUNTIME` use that agent's profile.**
+  One setup run can't set up agents on different profiles; run it once per
+  profile.
+- **Other commands use the top level.** Set `CONTEXT_GRAPH_PROFILE` to a
+  profile's name to point them at it. `config set` then writes the profile's
+  own keys into that profile:
+
+  ```bash
+  CONTEXT_GRAPH_PROFILE=memgraph-example-com memgraph-context-graph config show
+  ```
+
+A configuration file without profiles works as before.
 
 ## Run setup again
 
@@ -171,6 +283,7 @@ memgraph-context-graph setup codex --memgraph-url bolt://memgraph.example.com:76
 | `--memgraph-url URL` | The Memgraph to use, instead of setup's own container. |
 | `--user-id NAME` | Your user ID in the graph. The default is the configured one, then your git `user.name`. |
 | `--memory-backend BACKEND` | `context-graph` makes Context Graph the agents' memory; `native` gives memory back to the agent. |
+| `--profile NAME` | The [profile](#send-one-agents-memory-to-another-memgraph) the named agents use, created if it's new. `default` moves them back to the top level of the file. |
 | `--memgraph-container NAME` | Setup's own container, which it finds or starts. The default is `context-graph-memgraph`. |
 | `--no-viewer` | Don't install the terminal viewer. |
 | `--plan` | Print what setup would do and change nothing. |
@@ -224,19 +337,40 @@ It runs these steps in order:
 3. **Rewrites the hook files and MCP registrations** of the per-project agents,
    in the current directory or the `--project-dir` directories.
 4. **Creates the indexes and constraints** in Memgraph that are missing.
-5. **Checks the setup,** the same way as `doctor`.
+5. **Adds the events this machine kept** while the graph refused them (see
+   below), with their original times.
+6. **Checks the setup,** the same way as `doctor`.
 
 Then restart running agent sessions, because a session keeps the hooks it
 started with.
+
+Sometimes a newer Context Graph changes how the graph is stored, as when it
+stores an ontology in
+[version 2 of the HyGM format](/ai-ecosystem/ai-memory/graph#ontology). Older
+installs that use the same graph then stop writing, and if needed reading, the
+parts they don't know, so they can't damage them.
+
+The session-start note, `doctor` and the log of failed recordings say so,
+and the agents keep working. What they would have recorded is kept on your
+machine, redacted like any recording, in `refused-events.jsonl` in
+`~/.local/state/context-graph/`, next to the log of failed recordings. Run
+`update` to bring the install level with the graph and add those events.
 
 | Flag | What it does |
 | --- | --- |
 | `RUNTIME ...` | Update only these agents. The default is every connected agent. |
 | `--project-dir DIR` | A project whose per-project agents to update. Repeat it for more projects. The default is the current directory. |
-| `--no-upgrade` | Skip the package upgrade, and only refresh the plugins, hook files, registrations, indexes and constraints |
+| `--no-upgrade` | Skip the package upgrade, and run the other steps, including adding the kept events |
 
-`update` doesn't change your own hooks, the configuration file or the data in
-the graph, and running it twice changes nothing.
+`update` doesn't change your own hooks, the configuration file or the data
+already in the graph. It adds the kept events once, so running it twice
+changes nothing more.
+
+If another install already has the `sessions-graph` or `resources-graph`
+command on your `PATH`, such as a separate `uv tool install sessions-graph`,
+`update` leaves that command where it is and says what holds it. The hooks keep
+working. Remove the other install, then run `update` again to put Context
+Graph's command on the `PATH`.
 
 ### Update the plugins manually
 
@@ -300,11 +434,15 @@ answer yes:
   recordings.
 - **The tool:** the `memgraph-context-graph` command and its packages.
 
-To remove everything without questions, for example in a script:
+To remove all three without questions, for example in a script:
 
 ```bash
 memgraph-context-graph uninstall --all
 ```
+
+The configuration step keeps the events kept while the graph refused them,
+`refused-events.jsonl`, and the graph version cache, `graph-version.json`.
+Delete them by hand from `~/.local/state/context-graph/`.
 
 | Flag | What it does |
 | --- | --- |

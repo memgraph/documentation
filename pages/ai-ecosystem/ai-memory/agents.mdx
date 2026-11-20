@@ -56,6 +56,18 @@ without a person, for example in a script, refuses a tool that needs approval.
 Each file setup edits keeps the rest of its content and is backed up once, to
 `FILE_NAME.context-graph.bak` next to it.
 
+Setup registers the server with `--agent RUNTIME`, as in
+`memgraph-context-graph mcp --agent cursor`. The server uses that name to pick
+the agent's
+[profile](/ai-ecosystem/ai-memory/configuration#send-one-agents-memory-to-another-memgraph).
+If you register the server yourself, pass `--agent` with the name you give
+`setup`.
+
+The Claude Code and Codex plugins set the `CONTEXT_GRAPH_AGENT` environment
+variable to their agent instead, since `memgraph-context-graph` 0.13.1 and the
+plugin that comes with it. With an older release or plugin, their tools use
+the top level of the configuration file.
+
 ## Built-in memory
 
 When you make Context Graph the agents' memory, setup turns off the agent's
@@ -83,8 +95,10 @@ differently:
 - **Session-start note.** Every agent gets the note on where you left off at
   the start of a session. Grok Build's start hooks can't add text for the
   model, so it gets the note through the MCP server's instructions instead.
-  Codex limits hook text to about 2,500 tokens, so a long memory index is cut
-  from its end.
+- **Codex session-start note.** Codex shows the model less hook text than the
+  other agents, about 2,500 tokens. Its note is kept to 9,000 characters
+  instead of 10,000, so a long memory index lists fewer files with their
+  descriptions.
 - **Note before a tool call.** Only Claude Code and Codex can show the agent a
   note right before a tool runs, such as that a GitHub issue it's about to
   fetch is already in the graph. The other agents' pre-tool hooks can only
@@ -97,6 +111,11 @@ differently:
 - **Cursor:** the session-start note reaches the Cursor CLI. The agent window
   in the Cursor editor may not show it to the model.
 - **Codex** also reloads the memory index after it compacts the context.
+- **Codex tool results.** Codex runs its post-tool hook for only some of the
+  tool calls that succeed, so at the end of each turn Context Graph reads
+  whether each call completed or failed from the transcript Codex writes. A patch Codex
+  rejects before applying it and a `view_image` call leave nothing there, so
+  they're stored without a result.
 
 ## Connect an agent manually
 
@@ -120,6 +139,15 @@ codex plugin add context-graph@memgraph
 ```
 </Tabs.Tab>
 </Tabs>
+
+The plugin's hooks and MCP server run the `memgraph-context-graph` command,
+which the plugin doesn't install. Without it, nothing is recorded, and each
+session starts with a note that tells the agent the command is missing.
+
+The agent then offers to run the setup skill that comes with the plugin
+(`/context-graph:setup` in Claude Code), which installs the command and runs
+setup. Because that installs software and may start Memgraph in Docker, the
+skill asks you first.
 
 For the per-project agents, the `memgraph-context-graph hook init RUNTIME`
 command writes the hook file in the current directory, where `RUNTIME` is the
