@@ -17,7 +17,7 @@ needs write access to memgraph/documentation.
 --json writes the findings (to-do lists, labels to check, noticed items) for
 the report.
 """
-import argparse, datetime, json, re, subprocess, sys, tempfile
+import argparse, datetime, functools, json, re, subprocess, sys, tempfile
 
 MG, DOCS = 'memgraph/memgraph', 'memgraph/documentation'
 DOCS_LABELS = ('Docs needed', 'Docs - changelog only', 'Docs unnecessary')
@@ -73,6 +73,40 @@ for i in issues:
         continue  # closed without merging
     prs[i['number']] = dict(title=i['title'], author=i['user']['login'],
                             labels=[l['name'] for l in i['labels']], status=status)
+
+
+# Stacked PRs: a PR into another PR's branch ships with the PR that takes that
+# branch to master or a release branch, so it counts in that PR's milestone.
+@functools.cache
+def pr_for_branch(branch):
+    found = [p for p in gh('pr', 'list', '--repo', MG, '--head', branch, '--state', 'all',
+                           '--json', 'number,state,baseRefName,milestone') if p['state'] != 'CLOSED']
+    return found[0] if found else None
+
+
+def ships_via(base):
+    top, seen = None, set()
+    while base != 'master' and not base.startswith('release/') and base not in seen:
+        seen.add(base)
+        top = pr_for_branch(base)
+        if not top:
+            return 'none', None
+        base = top['baseRefName']
+    return (top['number'], (top.get('milestone') or {}).get('title')) if top else (None, None)
+
+
+bases = gh('pr', 'list', '--repo', MG, '--state', 'all', '--limit', '1000',
+           '--search', f'milestone:"{args.milestone}"', '--json', 'number,baseRefName')
+stacked_elsewhere, stacked_no_path = [], []
+for b in bases:
+    if b['number'] not in prs:
+        continue
+    top, ms = ships_via(b['baseRefName'])
+    if top == 'none':
+        stacked_no_path.append(dict(pr=b['number'], base=b['baseRefName']))
+    elif top and ms != args.milestone:
+        stacked_elsewhere.append(dict(pr=b['number'], ships_via=top, milestone=ms))
+        del prs[b['number']]
 merged = {n for n, p in prs.items() if p['status'] == 'merged'}
 has = lambda n, label: label in prs[n]['labels']
 
@@ -216,6 +250,8 @@ findings = dict(
     docs_prs_naming_prs_outside_milestone=[dict(docs_pr=d, product=p) for d, p in outside],
     docs_prs_without_milestone=sorted(d for d, i in docs_info.items() if i['base'] == branch and i['milestone'] != version),
     docs_prs_with_wrong_base=sorted(d for d, i in docs_info.items() if i['milestone'] == version and i['base'] != branch),
+    stacked_in_other_milestone=sorted(stacked_elsewhere, key=lambda s: s['pr']),
+    stacked_without_path_to_master=sorted(stacked_no_path, key=lambda s: s['pr']),
     missing_label=missing_label, several_labels=several_labels,
     questionable_labels=[dict(pr=n, reason=r, title=prs[n]['title'], labels=prs[n]['labels']) for n, r in questionable],
     noticed=[dict(docs_pr=d, item=i) for d, i in noticed],
