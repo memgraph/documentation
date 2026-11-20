@@ -58,6 +58,19 @@ guide.
   - Now: the same query raises an error that says to put the weight lambda
     first.
   - What to do: rewrite the filter as `(r, n | 1) (r, n | <filter>)`.
+- Promotion to MAIN no longer resumes a stopped TTL, so TTL can stay stopped
+  after upgrading until `ENABLE TTL` runs again.
+  [Time to live configuration](/querying/time-to-live#configuration)
+  [#5073](https://github.com/memgraph/memgraph/pull/5073)
+  - Before: every promotion to MAIN, after a failover or a restart, resumed
+    TTL.
+  - Now: promotion resumes TTL only where it was running, but a snapshot from
+    an earlier version can record a running TTL as stopped, so after
+    upgrading expired nodes can stop being deleted.
+  - What to do: once every instance runs the new version, run `ENABLE TTL;`
+    on MAIN in each database where TTL should run (after `USE DATABASE` for
+    one other than `memgraph`), which resumes it with its earlier
+    configuration.
 - `{*}` in a property privilege no longer removes the grants and denies on
   named properties in the same rule.
   [Wildcard and named properties in one rule](/database-management/authentication-and-authorization/role-based-access-control#wildcard-and-named-properties-in-one-rule)
@@ -98,6 +111,14 @@ guide.
   - Now: it loads only weights, so models saved by earlier versions can't be
     loaded.
   - What to do: train saved models again.
+- Database names have rules.
+  [#5336](https://github.com/memgraph/memgraph/pull/5336)
+  - Before: `CREATE DATABASE` and `RENAME DATABASE` accepted any name,
+    including an empty one or one with a newline.
+  - Now: they refuse a name that is empty, longer than 63 bytes, contains a
+    control character, or starts or ends with a space.
+  - What to do: change scripts that create such names. Existing databases
+    with such a name still load and can be renamed or dropped.
 
 {<h4 className="custom-header">
 ✨ New features</h4>}
@@ -145,6 +166,8 @@ guide.
 - `*KSHORTEST` no longer returns a path that ends at a node the user has no
   label permission to read.
   [#4860](https://github.com/memgraph/memgraph/pull/4860)
+- A running TTL keeps running after a restart.
+  [#5073](https://github.com/memgraph/memgraph/pull/5073)
 - `*KSHORTEST` under `USING HOPS LIMIT` returns only the paths it has proven to
   be the shortest, instead of sometimes returning a longer path in place of a
   shorter one.
@@ -178,6 +201,8 @@ guide.
 - A replica no longer deletes its users, roles and databases when MAIN's
   license becomes invalid.
   [#5195](https://github.com/memgraph/memgraph/pull/5195)
+- Time-to-live no longer deletes data while the license is invalid.
+  [#5205](https://github.com/memgraph/memgraph/pull/5205)
 - The metrics endpoints, in both JSON and OpenMetrics format, serve metrics
   only with a valid Enterprise license, as they did before Memgraph 3.11.
   [#5207](https://github.com/memgraph/memgraph/pull/5207)
@@ -193,12 +218,23 @@ guide.
   `SET n += {...}` and `SET n = {...}` on nodes apply
   `--storage-delta-on-identical-property-update` instead of its inverse.
   [#5229](https://github.com/memgraph/memgraph/pull/5229)
+- Invalid query input, such as `duration('PXYZ')`, is reported to Bolt
+  clients as a `ClientError`, so drivers no longer retry it.
+  [#5231](https://github.com/memgraph/memgraph/pull/5231)
+- A `USING HOPS LIMIT` query no longer crashes Memgraph when another
+  transaction changes the relationships of a node it reads.
+  [#5248](https://github.com/memgraph/memgraph/pull/5248)
 - Datetimes in the hour that daylight saving time skips or repeats convert
   instead of raising an error, cron schedules no longer run back to back
   through the repeated hour, and a scheduled task that fails is tried again at
   its next run instead of stopping Memgraph. A zoned datetime keeps the
   timezone it names.
   [#5298](https://github.com/memgraph/memgraph/pull/5298)
+- Profile limits apply to users whose names contain uppercase letters. If
+  older data assigns a user to several profiles under different spellings,
+  choose one with `SET PROFILE FOR <user> TO <profile>` before a rolling
+  upgrade.
+  [#5305](https://github.com/memgraph/memgraph/pull/5305)
 - A SYNC replica that replicated a transaction successfully is no longer
   marked as behind right after it.
   [#5307](https://github.com/memgraph/memgraph/pull/5307)
@@ -206,6 +242,9 @@ guide.
   Memgraph 3.13, fail with an error that points to `COORDINATOR_READ` and
   `COORDINATOR_WRITE` instead of a generic parse error.
   [#5327](https://github.com/memgraph/memgraph/pull/5327)
+- `DUMP DATABASE` writes floats so that importing the dump restores the same
+  values, including large, integral and non-finite ones.
+  [#5334](https://github.com/memgraph/memgraph/pull/5334)
 - An index scan no longer misses a node or relationship when another
   transaction writes the same value to its indexed property while the scan is
   running, and a unique constraint no longer accepts a duplicate value after
