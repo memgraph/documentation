@@ -380,6 +380,20 @@ used.
  | memgraph\_read\_queries\_total | Counter | Number of read-only queries executed. |
  | memgraph\_write\_queries\_total | Counter | Number of write-only queries executed. |
  | memgraph\_read\_write\_queries\_total | Counter | Number of read-write queries executed. |
+ | memgraph\_query\_duration\_seconds | Histogram | Server time per query, by `outcome`. |
+
+`memgraph_query_execution_latency_seconds` times only the execution of the query
+plan, and only for queries that succeed. `memgraph_query_duration_seconds` times
+each query from parsing to its last result or commit, including planning, lock
+waits, and the commit. The `outcome` label is `success`, `failure`, or
+`aborted`.
+
+The duration leaves out the time the client takes between pulls. In an
+[explicit transaction](/fundamentals/transactions#explicit-transactions), each
+statement, including `COMMIT`, is timed on its own. `SHOW METRICS INFO` reports
+the histogram in microseconds, as `QueryDurationSuccess_us_50p`,
+`QueryDurationSuccess_us_90p`, and `QueryDurationSuccess_us_99p`, and the same
+rows for `QueryDurationFailure` and `QueryDurationAborted`.
 
 #### Schema and storage info metrics
 
@@ -428,6 +442,28 @@ Session metrics are global; they are not scoped to any individual database.
  | memgraph\_successful\_queries\_total | Counter | Number of successful queries. |
  | memgraph\_transient\_errors\_total | Counter | Number of transient errors (errors which can be retried). |
  | memgraph\_write\_write\_conflicts\_total | Counter | Number of write-write conflicts (two transactions modifying the same node simultaneously). |
+ | memgraph\_aborted\_queries\_total | Counter | Number of aborted queries, by `reason`. |
+
+The `reason` label of `memgraph_aborted_queries_total` is one of:
+
+- **`memory_limit`:** the query hit a [memory limit](/fundamentals/storage-memory-usage#control-memory-usage).
+- **`timeout`:** the query ran past its time limit: the
+  [`--query-execution-timeout-sec`](/database-management/configuration#query)
+  flag, or the transaction timeout the client sets, whichever is lower.
+- **`terminated`:** [`TERMINATE TRANSACTIONS`](/fundamentals/transactions#terminate-transactions)
+  stopped the query, or [`TERMINATE SESSIONS`](/fundamentals/transactions#terminate-sessions)
+  closed its session during a transaction.
+- **`shutdown`:** Memgraph stopped the query while shutting down.
+
+A query whose procedure stops for a timeout, termination, or shutdown counts
+under that reason, and the client gets the same error as for any other aborted
+query. A memory limit hit inside a procedure counts as a failure, not as an
+abort.
+
+An aborted query also counts as a failed prepare or a failed pull. `SHOW METRICS
+INFO` reports the four reasons as `AbortedQueriesMemoryLimit`,
+`AbortedQueriesTimeout`, `AbortedQueriesTerminated`, and
+`AbortedQueriesShutdown`.
 
 #### Trigger metrics
 
