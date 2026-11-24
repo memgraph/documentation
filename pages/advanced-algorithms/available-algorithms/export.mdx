@@ -1,0 +1,229 @@
+---
+title: export
+description: Export a Memgraph graph as JSON in the standard interchange format, to a file or a stream, with the export module.
+---
+
+import { Callout } from 'nextra/components'
+import { Cards } from 'nextra/components'
+import GitHub from '/components/icons/GitHub'
+
+# export
+
+Module for exporting a graph as JSON in the standard interchange format — string
+element IDs, relationship endpoints inlined in full, and ISO-8601 temporals. Use
+it when the output is consumed by another system.
+
+<Callout type="info">
+For JSON that is read back into Memgraph with
+[`import_util`](/advanced-algorithms/available-algorithms/import_util), use
+[`export_util`](/advanced-algorithms/available-algorithms/export_util) instead.
+Its format is designed for that round trip and encodes temporal values so they
+can be restored as temporal types; `export` writes the interchange format, which
+`import_util` cannot read.
+</Callout>
+
+<Cards>
+  <Cards.Card
+    icon={<GitHub />}
+    title="Source code"
+    href="https://github.com/memgraph/memgraph/blob/master/src/mage/cpp/export_module/export_module.cpp"
+  />
+</Cards>
+
+| Trait               | Value      |
+| ------------------- | ---------- |
+| **Module type**     | util       |
+| **Implementation**  | C++        |
+| **Parallelism**     | sequential |
+
+Writing to a file uses constant memory regardless of how large the graph is, and
+the target is replaced only once the export has finished, so a failure part-way
+through leaves any previous export intact. Streaming to `data` holds the whole
+payload in memory, since a procedure returns it as a single value.
+
+## Procedures
+
+### `json_data()`
+
+Exports the given nodes and relationships.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `nodes: List[Node]` ➡ Nodes to export. `null` is treated as an empty list.
+- `rels: List[Relationship]` ➡ Relationships to export. `null` is treated as an empty list.
+- `file: string` ➡ Path the server writes to. Pass `null` or `""` to write no file.
+- `config: Map (default={})` ➡ Configuration, see [below](#configuration).
+
+{<h4 className="custom-header"> Output: </h4>}
+
+The 12 columns [described below](#output-columns).
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+Export a subgraph to a file:
+
+```cypher
+MATCH (p:Person)-[r:KNOWS]->(f:Person)
+WITH collect(DISTINCT p) + collect(DISTINCT f) AS nodes, collect(r) AS rels
+CALL export.json_data(nodes, rels, "/tmp/people.json", {})
+YIELD file, nodes AS exported, relationships
+RETURN file, exported, relationships;
+```
+
+Stream it back instead of writing a file:
+
+```cypher
+MATCH (p:Person)
+WITH collect(p) AS nodes
+CALL export.json_data(nodes, [], null, {stream: true})
+YIELD data
+RETURN data;
+```
+
+### `json_all()`
+
+Exports the whole database.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `file: string` ➡ Path the server writes to. Pass `null` or `""` to write no file.
+- `config: Map (default={})` ➡ Configuration, see [below](#configuration).
+
+{<h4 className="custom-header"> Output: </h4>}
+
+The 12 columns [described below](#output-columns).
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+CALL export.json_all("/tmp/graph.json", {})
+YIELD file, nodes, relationships, properties
+RETURN file, nodes, relationships, properties;
+```
+
+### `json_graph()`
+
+Exports a graph given as a map.
+
+{<h4 className="custom-header"> Input: </h4>}
+
+- `graph: Map` ➡ A map with a `nodes` key and either a `relationships` or an
+  `edges` key. `edges` is the key
+  [`project()`](/advanced-algorithms/run-algorithms#run-procedures-on-subgraph)
+  produces, so a projection can be passed through directly.
+- `file: string` ➡ Path the server writes to. Pass `null` or `""` to write no file.
+- `config: Map (default={})` ➡ Configuration, see [below](#configuration).
+
+{<h4 className="custom-header"> Output: </h4>}
+
+The 12 columns [described below](#output-columns).
+
+{<h4 className="custom-header"> Usage: </h4>}
+
+```cypher
+MATCH path = (:Person)-[:KNOWS]->(:Person)
+WITH project(path) AS graph
+CALL export.json_graph({nodes: graph.nodes, edges: graph.edges}, "/tmp/knows.json", {})
+YIELD file, nodes, relationships
+RETURN file, nodes, relationships;
+```
+
+## Configuration
+
+All three procedures take the same `config` map. Unrecognized keys are ignored.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `stream` | `false` | Return the payload in `data` instead of discarding it. Ignored when `file` is set — a file always wins. |
+| `jsonFormat` | `JSON_LINES` | Output shape, see [below](#output-shapes). Matched case-insensitively. |
+| `writeNodeProperties` | `true` | Write node properties, both for exported nodes and for inlined relationship endpoints. |
+| `writeRelationshipProperties` | value of `writeNodeProperties` | Write a relationship's own properties. Setting it explicitly overrides the fallback. |
+
+Boolean values accept `true`/`false`, `yes`/`no` and `1`/`0`, as booleans,
+integers or strings. Any other value is an error rather than being read as
+`false`, so a typo cannot silently change what is exported.
+
+`compression` and `charset` are not supported and are rejected, so a query
+asking for compression cannot silently receive uncompressed output.
+
+## Output shapes
+
+`jsonFormat` selects one of three shapes:
+
+```
+JSON_LINES (default)  {"type":"node",...}
+                      {"type":"relationship",...}
+
+JSON                  {"nodes":[{...}],"rels":[{...}]}
+
+JSON_ID_AS_KEYS       {"nodes":{"1":{...}},"rels":{"3":{...}}}
+```
+
+An empty export produces `""` under `JSON_LINES`, but the object shapes still
+emit their wrappers — `{"nodes":[],"rels":[]}` and `{"nodes":{},"rels":{}}` — so
+parsing an empty result works without a special case.
+
+Elements look like this:
+
+```json
+{"type":"node","id":"1","labels":["Person"],"properties":{"name":"Alice"}}
+{"type":"relationship","id":"0","label":"KNOWS","properties":{"since":2020},
+ "start":{"id":"1","labels":["Person"],"properties":{"name":"Alice"}},
+ "end":{"id":"2","labels":["Person"],"properties":{"name":"Bob"}}}
+```
+
+Element IDs are strings. Labels are sorted alphabetically. `labels` and
+`properties` are omitted entirely when empty. Relationship endpoints are always
+inlined in full, whether or not they are in the exported node set, and their
+properties follow `writeNodeProperties`.
+
+Temporal values are ISO-8601 with zero components elided (`09:15` rather than
+`09:15:00`), points become `{"crs":…}` objects with `x`/`y`/`z` for cartesian
+and `latitude`/`longitude`/`height` for WGS-84, and non-finite numbers are
+written as `"Infinity"`, `"-Infinity"` and `"NaN"`, since JSON has no literal
+for them.
+
+<Callout type="info">
+Enum properties cannot be exported and produce an error: the property values a
+query module receives do not carry the enum's type and value names.
+</Callout>
+
+## Output columns
+
+| Column | Description |
+| --- | --- |
+| `file` | The `file` argument, echoed back. |
+| `source` | What was exported, for example `data: nodes(3), rels(2)`. |
+| `format` | Always `json`. |
+| `nodes` | Number of exported nodes. |
+| `relationships` | Number of exported relationships. |
+| `properties` | Number of properties on the exported elements. Inlined endpoint properties are not counted, and the count ignores the write configuration. |
+| `time` | Elapsed milliseconds. |
+| `rows` | `nodes` + `relationships`. |
+| `batchSize` | Always `-1`. |
+| `batches` | Always `0`. |
+| `done` | Always `true`. |
+| `data` | The payload when `stream` is set and no file was written, otherwise `null`. |
+
+<Callout type="info">
+`YIELD *` returns these columns in alphabetical order. Name them explicitly —
+`YIELD file, source, format, …` — to get them in the order above.
+</Callout>
+
+## Compatibility aliases
+
+With [`query-callable-mappings-path`](/custom-query-modules/manage-query-modules)
+configured, `apoc.export.json.data`, `apoc.export.json.all` and
+`apoc.export.json.graph` resolve to these procedures.
+
+<Callout type="warning">
+`apoc.export.json.all` and `apoc.export.json.graph` previously resolved to
+`export_util.json` and `export_util.json_graph`. They now return the 12 columns
+above instead of `(path, data)`, and `.graph` takes a single graph map instead
+of two lists. Change `YIELD path` to `YIELD file`, or call `export_util.json` /
+`export_util.json_graph` by name to keep the previous behaviour.
+
+For the same reason, a file written through `apoc.export.json.all` can no longer
+be read back with `apoc.import.json`. Use `export_util.json` together with
+`import_util.json` for that round trip.
+</Callout>
