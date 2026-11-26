@@ -43,7 +43,9 @@ recommendations, writing notes, the noticed-fixes PR and the site checks.
 - **Stacked PRs:** a PR into another PR's branch ships with the PR that takes
   that branch to `master` or a release branch. The script follows the chain
   and leaves out PRs whose last PR is in another milestone; that PR carries
-  the docs label and release note.
+  the docs label and release note. A PR merged into a stacked branch counts
+  as merged only once every PR in its chain is merged: until then no build
+  has it, so its docs and release note wait.
 - **Docs labels:** every merged PR carries exactly one of `Docs needed`,
   `Docs - changelog only` or `Docs unnecessary`. `Docs needed` means a docs
   PR and a release note; `Docs - changelog only` means a release note;
@@ -317,7 +319,8 @@ report:
 - **Docs labels:** missing or questionable labels, the recommended label and
   a one-line reason.
 - **Stacked PRs:** PRs left out because they ship in another milestone (ask
-  to move them), and PRs whose branch has no PR toward `master`.
+  to move them), PRs whose branch has no PR toward `master`, and PRs merged
+  into a stacked branch that hasn't reached `master` yet (counted as open).
 - **Release notes:** PRs with no entry, breaking changes outside the Breaking
   section, `Docs needed` entries with no docs link, and docs PRs with release
   note corrections for entries already written (check the entry follows

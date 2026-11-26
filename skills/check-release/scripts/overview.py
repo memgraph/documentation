@@ -85,28 +85,37 @@ def pr_for_branch(branch):
 
 
 def ships_via(base):
-    top, seen = None, set()
+    """The PR that takes `base` to master or a release branch, its milestone,
+    and whether every PR on the way there is merged."""
+    top, seen, landed = None, set(), True
     while base != 'master' and not base.startswith('release/') and base not in seen:
         seen.add(base)
         top = pr_for_branch(base)
         if not top:
-            return 'none', None
+            return 'none', None, False
+        landed = landed and top['state'] == 'MERGED'
         base = top['baseRefName']
-    return (top['number'], (top.get('milestone') or {}).get('title')) if top else (None, None)
+    return ((top['number'], (top.get('milestone') or {}).get('title'), landed) if top
+            else (None, None, True))
 
 
 bases = gh('pr', 'list', '--repo', MG, '--state', 'all', '--limit', '1000',
            '--search', f'milestone:"{args.milestone}"', '--json', 'number,baseRefName')
-stacked_elsewhere, stacked_no_path = [], []
+stacked_elsewhere, stacked_no_path, stacked_not_landed = [], [], []
 for b in bases:
     if b['number'] not in prs:
         continue
-    top, ms = ships_via(b['baseRefName'])
+    top, ms, landed = ships_via(b['baseRefName'])
     if top == 'none':
         stacked_no_path.append(dict(pr=b['number'], base=b['baseRefName']))
     elif top and ms != args.milestone:
         stacked_elsewhere.append(dict(pr=b['number'], ships_via=top, milestone=ms))
         del prs[b['number']]
+    elif top and not landed and prs[b['number']]['status'] == 'merged':
+        # Merged into a stacked branch that hasn't reached master yet: no build
+        # has it, so its docs and release note can't be done yet.
+        stacked_not_landed.append(dict(pr=b['number'], ships_via=top))
+        prs[b['number']]['status'] = 'open'
 merged = {n for n, p in prs.items() if p['status'] == 'merged'}
 has = lambda n, label: label in prs[n]['labels']
 
@@ -252,6 +261,7 @@ findings = dict(
     docs_prs_with_wrong_base=sorted(d for d, i in docs_info.items() if i['milestone'] == version and i['base'] != branch),
     stacked_in_other_milestone=sorted(stacked_elsewhere, key=lambda s: s['pr']),
     stacked_without_path_to_master=sorted(stacked_no_path, key=lambda s: s['pr']),
+    stacked_merged_not_in_master=sorted(stacked_not_landed, key=lambda s: s['pr']),
     missing_label=missing_label, several_labels=several_labels,
     questionable_labels=[dict(pr=n, reason=r, title=prs[n]['title'], labels=prs[n]['labels']) for n, r in questionable],
     noticed=[dict(docs_pr=d, item=i) for d, i in noticed],
