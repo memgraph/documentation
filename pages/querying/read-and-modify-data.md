@@ -218,17 +218,25 @@ For example, ordering by first name descending and last name ascending:
 MATCH (n:Person) RETURN n ORDER BY n.name DESC, n.lastName;
 ```
 
-Note that `ORDER BY` sees only the variable names as carried over by `RETURN`.
-This means that the following will result in an error.
+`ORDER BY` can use the variables from before `RETURN` as well as the aliases
+`RETURN` defines, so both of these queries work:
 
 ```cypher
 MATCH (old:Person) RETURN old AS new ORDER BY old.name;
+MATCH (old:Person) RETURN old AS new ORDER BY new.name;
 ```
 
-Instead, the `new` variable must be used:
+If `RETURN` aggregates, `ORDER BY` can use only the returned columns. The
+following query fails with `Unbound variable: n`:
 
 ```cypher
-MATCH (old:Person) RETURN old AS new ORDER BY new.name;
+MATCH (n:Person) RETURN n.name AS name, count(*) AS c ORDER BY n.age;
+```
+
+Order by a returned column instead:
+
+```cypher
+MATCH (n:Person) RETURN n.name AS name, count(*) AS c ORDER BY name;
 ```
 
 The `ORDER BY` sub-clause may come in handy with `SKIP` and/or `LIMIT`
