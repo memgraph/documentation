@@ -333,13 +333,19 @@ function buildTree(dir, routePrefix) {
   const nodes = []
 
   for (const slug of orderedSlugs(dir, meta)) {
+    // A folder's index.mdx is the folder's own page (see below), not a child.
+    if (routePrefix && slug === 'index') continue
     const { label, hidden } = metaEntry(meta, slug)
     if (hidden) continue
 
-    const file = pageFileFor(dir, slug)
     const subdir = path.join(dir, slug)
     const hasChildren =
       fs.existsSync(subdir) && fs.statSync(subdir).isDirectory()
+    // The folder's page is either a sibling (querying.mdx) or the folder's own
+    // index (memgraph-zero/index.mdx). Both are served at the folder's route, so
+    // both are written to <route>.md.
+    const file =
+      pageFileFor(dir, slug) ?? (hasChildren ? pageFileFor(subdir, 'index') : null)
     const route = `${routePrefix}/${slug}`
 
     let title = label

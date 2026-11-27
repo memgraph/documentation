@@ -311,7 +311,10 @@ for (const dir of [PAGES, ...walk(PAGES).map(path.dirname)].filter((d, i, a) => 
     if (key === '*' || key.startsWith('--')) continue
     const isLink = value && typeof value === 'object' && (value.href || value.type === 'separator' || value.type === 'menu')
     if (!isLink && !names.has(key)) report(metaFile, lineOf(key), `"${key}" is in the sidebar but there is no page or folder with that name`)
-    if (value && typeof value === 'object' && value.display === 'hidden' && names.has(key)) {
+    // The docs home (pages/index.mdx) is hidden from the sidebar on purpose: it
+    // presents every product and is reached from the product switcher.
+    const isDocsHome = metaFile === path.join(PAGES, '_meta.ts') && key === 'index'
+    if (value && typeof value === 'object' && value.display === 'hidden' && names.has(key) && !isDocsHome) {
       report(metaFile, lineOf(key), `"${key}" is hidden from the sidebar but still published; list it, or delete it and add a redirect`)
     }
   }
