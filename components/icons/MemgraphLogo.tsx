@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 
 // Product tabs preview: the upper-left corner is a product switcher. One button
 // shows the product you're in (logo, name and chevron) and opens a menu with
-// every product; each menu item opens that product's overview.
+// every product; each menu item opens that product's overview. The docs home
+// (/docs) belongs to no product, so there the button reads "Docs" and the menu
+// marks "All products" as current.
 
 type Product = {
   key: string;
@@ -21,7 +23,7 @@ const PRODUCTS: Product[] = [
   {
     key: "memgraph",
     prefix: "/",
-    href: "/",
+    href: "/memgraph",
     light: "/docs/memgraph-logo-navigation.svg",
     dark: "/docs/memgraph-logo-navigation.svg",
     alt: "Memgraph logo",
@@ -48,6 +50,15 @@ const PRODUCTS: Product[] = [
   },
 ];
 
+const HOME: Product = {
+  ...PRODUCTS[0],
+  key: "home",
+  href: "/",
+  alt: "Memgraph logo",
+  label: "Docs",
+  description: "",
+};
+
 const Logo = ({ product, height }: { product: Product; height: string }) => {
   const style = { height, width: "auto" };
   return (
@@ -68,9 +79,11 @@ const Logo = ({ product, height }: { product: Product; height: string }) => {
 
 export const MemgraphLogo = () => {
   const { pathname } = useRouter();
-  // Memgraph is the default: every page outside Zero and Lore.
+  // The docs home is neutral; Memgraph is every other page outside Zero and Lore.
   const current =
-    PRODUCTS.find((p) => p.prefix !== "/" && pathname.startsWith(p.prefix)) ?? PRODUCTS[0];
+    pathname === "/"
+      ? HOME
+      : PRODUCTS.find((p) => p.prefix !== "/" && pathname.startsWith(p.prefix)) ?? PRODUCTS[0];
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -97,7 +110,7 @@ export const MemgraphLogo = () => {
         className="nextra-focus product-switcher-button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`${current.label ?? current.alt.replace(/ logo$/, "")}: switch product`}
+        aria-label={`${current.key === "home" ? "Memgraph docs" : current.label ?? current.alt.replace(/ logo$/, "")}: switch product`}
         onClick={() => setOpen((o) => !o)}
       >
         <Logo product={current} height="24px" />
@@ -109,6 +122,15 @@ export const MemgraphLogo = () => {
 
       {open && (
         <div role="menu" className="product-switcher-menu">
+          <NextLink
+            href="/"
+            role="menuitem"
+            className={`product-switcher-item${current.key === "home" ? " is-current" : ""}`}
+          >
+            <span className="product-switcher-all">All products</span>
+            <span className="product-switcher-description">Overview of the Memgraph docs</span>
+          </NextLink>
+          <div className="product-switcher-divider" />
           <p className="product-switcher-heading">Products</p>
           {PRODUCTS.map((p) => (
             <NextLink

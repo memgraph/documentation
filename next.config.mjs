@@ -1365,11 +1365,6 @@ export default withNextra({
         permanent: true
       },
       {
-        source: '/memgraph',
-        destination: '/getting-started',
-        permanent: true
-      },
-      {
         source: '/memgraph/connect-to-memgraph/mgconsole',
         destination: '/getting-started/cli',
         permanent: true

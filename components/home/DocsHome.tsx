@@ -28,7 +28,7 @@ const ProductLogo = ({ name }: { name: "zero" | "lore" }) => {
 const PRODUCTS: Product[] = [
   {
     name: "Memgraph",
-    href: "/getting-started",
+    href: "/memgraph",
     logo: (
       <span className="flex items-center gap-2">
         <img className="h-7 w-auto" src="/docs/memgraph-logo-navigation.svg" alt="Memgraph logo" />

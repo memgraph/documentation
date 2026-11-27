@@ -10,6 +10,8 @@ export default {
       layout: "full",
     },
   },
+  // Memgraph overview, the database product's own landing page.
+  "memgraph": "Overview",
   "getting-started": "Getting started",
   "ai-ecosystem": "AI applications",
   "client-libraries": "Client libraries",
