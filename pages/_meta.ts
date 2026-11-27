@@ -1,5 +1,6 @@
 export default {
-  "index": "Home",
+  // Memgraph (the database) is the default product and lives at the root, as before.
+  "index": "Overview",
   "getting-started": "Getting started",
   "ai-ecosystem": "AI applications",
   "client-libraries": "Client libraries",
@@ -15,12 +16,15 @@ export default {
   "memgraph-agent": "Memgraph Agent",
   "help-center": "Help center",
   "release-notes": "Release notes",
-  "--": {
-    type: "separator",
-  },
-  "memgraph-zero": "Memgraph Zero",
-  "---": {
-    type: "separator",
-  },
   "coming-soon": "What's coming soon to Memgraph?",
+  // Other products, each with its own sidebar. Their navbar links are hidden
+  // in globals.css; the product switcher in the logo replaces them.
+  "memgraph-zero": {
+    title: "Memgraph Zero",
+    type: "page",
+  },
+  "memgraph-lore": {
+    title: "Memgraph Lore",
+    type: "page",
+  },
 }

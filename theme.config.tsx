@@ -9,7 +9,8 @@ import { MemgraphLogo } from "./components/icons/MemgraphLogo";
 const config: DocsThemeConfig = {
   logo: MemgraphLogo,
   darkMode: true,
-  logoLink: "https://memgraph.com",
+  // Product tabs preview: the logo is the product switcher button, so Nextra doesn't wrap it in a link.
+  logoLink: false,
   project: {
     link: "https://github.com/memgraph/memgraph",
   },
