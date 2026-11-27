@@ -1,6 +1,15 @@
 export default {
   // Memgraph (the database) is the default product and lives at the root, as before.
-  "index": "Overview",
+  // The docs home at /docs presents every product: hidden from the sidebar and
+  // shown full width.
+  "index": {
+    title: "Home",
+    display: "hidden",
+    theme: {
+      sidebar: false,
+      layout: "full",
+    },
+  },
   "getting-started": "Getting started",
   "ai-ecosystem": "AI applications",
   "client-libraries": "Client libraries",
